@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/view_topbar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/replacementTopRow"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRefreshReplacement"
+            style="@style/Widget.Rabbit.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="刷新列表" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnConvertReplacement"
+            style="@style/Widget.Rabbit.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="转后备兔"
+            android:layout_marginStart="@dimen/rabbit_space_s" />
+    </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/cbForceExitBatch"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="如仍在活跃批次中则强制退出"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/replacementTopRow"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTargetCageId"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="目标后备笼位（默认自动）"
+        android:inputType="none"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_s"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/cbForceExitBatch"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnPickTargetCage" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPickTargetCage"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="选择笼位"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toTopOf="@id/etTargetCageId"
+        app:layout_constraintBottom_toBottomOf="@id/etTargetCageId"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/tvReplacementResult"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        android:textAppearance="@style/TextAppearance.Rabbit.Result"
+        app:layout_constraintTop_toBottomOf="@id/etTargetCageId"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ListView
+        android:id="@+id/lvReplacement"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        android:layout_marginBottom="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/tvReplacementResult"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <ProgressBar
+        android:id="@+id/pbReplacementLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <include
+        layout="@layout/view_state_panel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

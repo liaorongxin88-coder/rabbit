@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.PrepartumRecordMapper">
+    <resultMap id="PrepartumRecordMap" type="com.rabbit.app.model.PrepartumRecord">
+        <id column="id" property="id"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="action_date" property="actionDate"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into prepartum_records (batch_id, rabbit_id, action_date, remark, create_by, update_by)
+        values (#{batchId}, #{rabbitId}, #{actionDate}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectByHouse" resultMap="PrepartumRecordMap">
+        select pr.*
+        from prepartum_records pr
+        join batches b on b.id = pr.batch_id
+        where b.house_id = #{houseId}
+        <if test="batchId != null">
+            and pr.batch_id = #{batchId}
+        </if>
+        <if test="rabbitId != null">
+            and pr.rabbit_id = #{rabbitId}
+        </if>
+        order by pr.action_date desc, pr.id desc
+    </select>
+</mapper>

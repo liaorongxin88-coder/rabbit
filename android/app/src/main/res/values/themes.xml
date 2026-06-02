@@ -1,0 +1,30 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <style name="Theme.Rabbit" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/rabbit_primary</item>
+        <item name="colorPrimaryVariant">@color/rabbit_primary_dark</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/rabbit_secondary</item>
+        <item name="colorSecondaryVariant">@color/rabbit_primary_dark</item>
+        <item name="colorOnSecondary">@android:color/white</item>
+        <item name="colorSurface">@color/rabbit_surface</item>
+        <item name="android:windowBackground">@drawable/bg_screen</item>
+        <item name="android:statusBarColor">@color/rabbit_primary_dark</item>
+
+        <item name="materialButtonStyle">@style/Widget.Rabbit.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Rabbit.Button.Outlined</item>
+        <item name="materialButtonTextStyle">@style/Widget.Rabbit.Button.Text</item>
+        <item name="materialCardViewStyle">@style/Widget.Rabbit.Card</item>
+        <item name="android:editTextStyle">@style/Widget.Rabbit.EditText</item>
+        <item name="android:textColorPrimary">@color/rabbit_text_primary</item>
+        <item name="android:textColorSecondary">@color/rabbit_text_secondary</item>
+    </style>
+
+    <style name="Theme.Rabbit.Dialog" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+</resources>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.WeaningRecordMapper">
+    <resultMap id="Map" type="com.rabbit.app.model.WeaningRecord">
+        <id column="id" property="id"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="target_cage_id" property="targetCageId"/>
+        <result column="target_cage_number" property="targetCageNumber"/>
+        <result column="in_cage_id" property="inCageId"/>
+        <result column="in_cage_number" property="inCageNumber"/>
+        <result column="alloc_summary" property="allocSummary"/>
+        <result column="weaning_date" property="weaningDate"/>
+        <result column="weaning_count" property="weaningCount"/>
+        <result column="waiting_count" property="waitingCount"/>
+        <result column="avg_weight" property="avgWeight"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into weaning_records (batch_id, rabbit_id, target_cage_id, in_cage_id, weaning_date, weaning_count, waiting_count, avg_weight, remark, create_by, update_by)
+        values (#{batchId}, #{rabbitId}, #{targetCageId}, #{inCageId}, #{weaningDate}, #{weaningCount}, #{waitingCount}, #{avgWeight}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectByBatch" resultMap="Map">
+        select w.id, w.batch_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
+               group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
+               w.weaning_date, w.weaning_count, w.waiting_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+        from weaning_records w
+        inner join batches b on b.id = w.batch_id
+        left join cages ct on ct.id = w.target_cage_id and ct.house_id = b.house_id
+        left join cages ci on ci.id = w.in_cage_id and ci.house_id = b.house_id
+        left join weaning_record_allocations a on a.weaning_record_id = w.id
+        left join cages ca on ca.id = a.cage_id and ca.house_id = b.house_id
+        where b.house_id = #{houseId} and w.batch_id = #{batchId}
+        group by w.id
+        order by w.id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectByRabbit" resultMap="Map">
+        select w.id, w.batch_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
+               group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
+               w.weaning_date, w.weaning_count, w.waiting_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+        from weaning_records w
+        inner join rabbits r on r.id = w.rabbit_id
+        left join cages ct on ct.id = w.target_cage_id and ct.house_id = r.house_id
+        left join cages ci on ci.id = w.in_cage_id and ci.house_id = r.house_id
+        left join weaning_record_allocations a on a.weaning_record_id = w.id
+        left join cages ca on ca.id = a.cage_id and ca.house_id = r.house_id
+        where r.house_id = #{houseId} and w.rabbit_id = #{rabbitId}
+        group by w.id
+        order by w.id desc
+        limit #{limit}
+    </select>
+</mapper>

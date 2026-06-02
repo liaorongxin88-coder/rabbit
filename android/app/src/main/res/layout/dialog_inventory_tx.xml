@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/rabbit_space_l">
+
+    <EditText
+        android:id="@+id/etInvDelta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="数量变更(正数入库/负数出库)"
+        android:inputType="numberDecimal" />
+
+    <EditText
+        android:id="@+id/etInvTxRemark"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="备注(可选)"
+        android:layout_marginTop="@dimen/rabbit_space_s" />
+</LinearLayout>

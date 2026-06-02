@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.EventReminderLogMapper">
+    <resultMap id="EventReminderLogMap" type="com.rabbit.app.model.EventReminderLog">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="category" property="category"/>
+        <result column="record_id" property="recordId"/>
+        <result column="event_date" property="eventDate"/>
+        <result column="notify_date" property="notifyDate"/>
+        <result column="notify_time" property="notifyTime"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insertDueBatchEventLogs">
+        insert ignore into event_reminder_logs (house_id, category, record_id, event_date, notify_date, notify_time)
+        select b.house_id, '生产', br.id, br.next_event_date, curdate(), now()
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        where b.house_id = #{houseId}
+          and br.is_active = true
+          and br.next_event_date is not null
+          and br.next_event_date &lt;= #{today}
+          and br.is_event_notified = false
+    </insert>
+
+    <insert id="insertDueReplacementLogs">
+        insert ignore into event_reminder_logs (house_id, category, record_id, event_date, notify_date, notify_time)
+        select house_id, '后备成熟', id, expected_mature_date, curdate(), now()
+        from replacement_records
+        where house_id = #{houseId}
+          and is_mature_notified = false
+          and expected_mature_date &lt;= #{today}
+    </insert>
+
+    <select id="selectByHouseAndDateRange" resultMap="EventReminderLogMap">
+        select *
+        from event_reminder_logs
+        where house_id = #{houseId}
+        <if test="from != null">
+            and notify_time &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and notify_time &lt;= #{to}
+        </if>
+        order by notify_time desc, id desc
+        <if test="limit != null">
+            limit #{limit}
+        </if>
+    </select>
+</mapper>

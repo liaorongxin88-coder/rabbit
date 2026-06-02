@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/view_topbar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTreatmentSelected"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="未选择兔子"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        android:background="@drawable/bg_pill_outline"
+        android:textAppearance="@style/TextAppearance.Rabbit.Body"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnPickTreatmentRabbit"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="选择兔子"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/tvTreatmentSelected"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentStartDate"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="开始日期(yyyy-MM-dd)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnPickTreatmentRabbit"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentDiagnosis"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="症状/诊断(可选)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentStartDate"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentDrug"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="药品(可选)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentDiagnosis"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentDose"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="剂量/用法(可选)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentDrug"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentDays"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="用药天数(可选)"
+        android:inputType="number"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentDose"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentNextReview"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="复查日期(yyyy-MM-dd，可选)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentDays"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText
+        android:id="@+id/etTreatmentRemark"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:hint="备注(可选)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentNextReview"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSubmitTreatment"
+        style="@style/Widget.Rabbit.Button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="提交治疗记录"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/etTreatmentRemark"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTreatmentResult"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        android:textAppearance="@style/TextAppearance.Rabbit.Result"
+        app:layout_constraintTop_toBottomOf="@id/btnSubmitTreatment"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ListView
+        android:id="@+id/lvTreatmentHistory"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        android:layout_marginBottom="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/tvTreatmentResult"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <include
+        layout="@layout/view_state_panel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_xl"
+        android:layout_marginEnd="@dimen/rabbit_space_xl"
+        app:layout_constraintTop_toBottomOf="@id/tvTreatmentResult"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ProgressBar
+        android:id="@+id/pbTreatmentLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

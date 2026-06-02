@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/view_topbar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/rabbit_space_l">
+
+            <TextView
+                android:id="@+id/tvCycleInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textAppearance="@style/TextAppearance.Rabbit.Caption" />
+
+            <EditText
+                android:id="@+id/etAphrodisiacDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="催情天数 aphrodisiacDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_m" />
+
+            <EditText
+                android:id="@+id/etPalpationDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="摸胎天数 palpationDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etPrepartumDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="备产天数 prepartumDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etWeaningDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="断奶天数 weaningDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etPostpartumDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="产后间隔 postpartumDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etSaleDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="育肥出栏 saleDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etReplacementDays"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="后备成熟 replacementDays"
+                android:inputType="number"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <EditText
+                android:id="@+id/etSettingRemark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="备注 remark(可选)"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCycleSave"
+                style="@style/Widget.Rabbit.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="保存"
+                android:layout_marginTop="@dimen/rabbit_space_l" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCycleReload"
+                style="@style/Widget.Rabbit.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="重新加载"
+                android:layout_marginTop="@dimen/rabbit_space_s" />
+
+            <ProgressBar
+                android:id="@+id/pbCycleLoading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:layout_marginTop="@dimen/rabbit_space_m" />
+
+            <TextView
+                android:id="@+id/tvCycleResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:textAppearance="@style/TextAppearance.Rabbit.Result" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <include
+        layout="@layout/view_state_panel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

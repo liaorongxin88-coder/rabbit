@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.NfcTagMapper">
+    <resultMap id="NfcTagMap" type="com.rabbit.app.model.NfcTag">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="tag_uid" property="tagUid"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="record_id" property="recordId"/>
+        <result column="request_id" property="requestId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="upsert">
+        insert into nfc_tags (house_id, tag_uid, target_type, target_id, rabbit_id, record_id, request_id, remark, create_by, update_by)
+        values (#{item.houseId}, #{item.tagUid}, #{item.targetType}, #{item.targetId}, #{item.rabbitId}, #{item.recordId}, #{item.requestId}, #{item.remark}, #{item.createBy}, #{item.updateBy})
+        on duplicate key update
+            house_id = values(house_id),
+            tag_uid = values(tag_uid),
+            target_type = values(target_type),
+            target_id = values(target_id),
+            rabbit_id = values(rabbit_id),
+            record_id = values(record_id),
+            request_id = values(request_id),
+            remark = values(remark),
+            update_by = values(update_by),
+            update_time = now()
+    </insert>
+
+    <select id="selectByHouseAndUid" resultMap="NfcTagMap">
+        select id, house_id, tag_uid, target_type, target_id, rabbit_id, record_id, request_id, remark, create_by, create_time, update_by, update_time
+        from nfc_tags
+        where house_id = #{houseId}
+          and tag_uid = #{tagUid}
+        limit 1
+    </select>
+
+    <resultMap id="NfcTagViewMap" type="com.rabbit.app.dto.NfcTagView">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="tag_uid" property="tagUid"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="record_id" property="recordId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="target_name" property="targetName"/>
+    </resultMap>
+
+    <select id="selectViewPage" resultMap="NfcTagViewMap">
+        select t.id,
+               t.house_id,
+               t.tag_uid,
+               t.target_type,
+               t.target_id,
+               t.rabbit_id,
+               t.record_id,
+               t.remark,
+               t.create_time,
+               t.update_time,
+               case
+                   when t.target_type = 'CAGE' then c.cage_number
+                   when t.target_type = 'FEED' then '投喂'
+                   when t.target_type = 'SALE' then '销售'
+                   when t.target_type = 'TREATMENT' then concat('兔#', t.rabbit_id)
+                   else null
+                   end as target_name
+        from nfc_tags t
+                 left join cages c on c.id = t.target_id and t.target_type = 'CAGE'
+        where t.house_id = #{houseId}
+        <if test="tagUid != null and tagUid != ''">
+            and t.tag_uid = #{tagUid}
+        </if>
+        <if test="targetType != null and targetType != ''">
+            and t.target_type = #{targetType}
+        </if>
+        <if test="targetId != null">
+            and t.target_id = #{targetId}
+        </if>
+        order by t.update_time desc, t.id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <delete id="deleteByHouseAndUid">
+        delete from nfc_tags
+        where house_id = #{houseId}
+          and tag_uid = #{tagUid}
+    </delete>
+</mapper>

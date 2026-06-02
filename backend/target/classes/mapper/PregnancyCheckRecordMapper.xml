@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.PregnancyCheckRecordMapper">
+    <resultMap id="Map" type="com.rabbit.app.model.PregnancyCheckRecord">
+        <id column="id" property="id"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="check_date" property="checkDate"/>
+        <result column="result" property="result"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into pregnancy_check_records (batch_id, rabbit_id, check_date, result, remark, create_by, update_by)
+        values (#{batchId}, #{rabbitId}, #{checkDate}, #{result}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectByBatch" resultMap="Map">
+        select p.id, p.batch_id, p.rabbit_id, p.check_date, p.result, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
+        from pregnancy_check_records p
+        inner join batches b on b.id = p.batch_id
+        where b.house_id = #{houseId} and p.batch_id = #{batchId}
+        order by p.id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectByRabbit" resultMap="Map">
+        select p.id, p.batch_id, p.rabbit_id, p.check_date, p.result, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
+        from pregnancy_check_records p
+        inner join rabbits r on r.id = p.rabbit_id
+        where r.house_id = #{houseId} and p.rabbit_id = #{rabbitId}
+        order by p.id desc
+        limit #{limit}
+    </select>
+</mapper>

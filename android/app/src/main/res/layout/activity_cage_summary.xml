@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#66000000">
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.Rabbit.Card"
+        android:id="@+id/cardCageSummary"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_xl"
+        android:layout_marginEnd="@dimen/rabbit_space_xl"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/rabbit_space_l">
+
+            <TextView
+                android:id="@+id/tvCageSummaryTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="笼位概要"
+                android:textAppearance="@style/TextAppearance.Rabbit.Title" />
+
+            <TextView
+                android:id="@+id/tvCageSummaryMain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:text="笼位：-"
+                android:background="@drawable/bg_pill_outline"
+                android:textAppearance="@style/TextAppearance.Rabbit.Body" />
+
+            <TextView
+                android:id="@+id/tvCageSummaryInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:text=""
+                android:textAppearance="@style/TextAppearance.Rabbit.Body" />
+
+            <ProgressBar
+                android:id="@+id/pbCageSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvCageSummaryResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:text=""
+                android:textAppearance="@style/TextAppearance.Rabbit.Result" />
+
+            <include
+                layout="@layout/view_state_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_l"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCageSummaryEnter"
+                    style="@style/Widget.Rabbit.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="进入笼位" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCageSummaryFeed"
+                    style="@style/Widget.Rabbit.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/rabbit_space_s"
+                    android:layout_weight="1"
+                    android:text="去投喂" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_s"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCageSummaryAbnormal"
+                    style="@style/Widget.Rabbit.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="看异常" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCageSummaryClose"
+                    style="@style/Widget.Rabbit.Button.Text"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/rabbit_space_s"
+                    android:layout_weight="1"
+                    android:text="关闭" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.RabbitAbnormalConditionMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into rabbit_abnormal_conditions (rabbit_id, house_id, warning_status, warning_time, img_url, remark, is_deal, create_by, update_by)
+        values (#{rabbitId}, #{houseId}, #{warningStatus}, #{warningTime}, #{imgUrl}, #{remark}, #{isDeal}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectByHouse" resultType="com.rabbit.app.model.RabbitAbnormalCondition">
+        select *
+        from rabbit_abnormal_conditions
+        where house_id = #{houseId}
+        <if test="isDeal != null">
+            and is_deal = #{isDeal}
+        </if>
+        order by warning_time desc, id desc
+    </select>
+
+    <update id="markDeal">
+        update rabbit_abnormal_conditions
+        set is_deal = #{deal},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id} and house_id = #{houseId}
+    </update>
+
+    <select id="countUndealByCage" resultType="int">
+        select count(1)
+        from rabbit_abnormal_conditions a
+                 join rabbits r on r.id = a.rabbit_id and r.house_id = a.house_id
+        where a.house_id = #{houseId}
+          and r.cage_id = #{cageId}
+          and a.is_deal = false
+    </select>
+
+    <select id="selectLatestByCage" resultType="com.rabbit.app.model.RabbitAbnormalCondition">
+        select a.*
+        from rabbit_abnormal_conditions a
+                 join rabbits r on r.id = a.rabbit_id and r.house_id = a.house_id
+        where a.house_id = #{houseId}
+          and r.cage_id = #{cageId}
+        order by a.warning_time desc, a.id desc
+        limit 1
+    </select>
+</mapper>

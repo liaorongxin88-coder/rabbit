@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/rabbit_space_l">
+
+    <EditText
+        android:id="@+id/etInvName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="物料名称(例如 饲料A)" />
+
+    <EditText
+        android:id="@+id/etInvUnit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="单位(例如 kg/袋/瓶)"
+        android:layout_marginTop="@dimen/rabbit_space_s" />
+
+    <EditText
+        android:id="@+id/etInvInitQty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="初始库存(数字)"
+        android:inputType="numberDecimal"
+        android:layout_marginTop="@dimen/rabbit_space_s" />
+
+    <EditText
+        android:id="@+id/etInvLowStock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="低库存阈值(可选)"
+        android:inputType="numberDecimal"
+        android:layout_marginTop="@dimen/rabbit_space_s" />
+
+    <EditText
+        android:id="@+id/etInvRemark"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="备注(可选)"
+        android:layout_marginTop="@dimen/rabbit_space_s" />
+</LinearLayout>

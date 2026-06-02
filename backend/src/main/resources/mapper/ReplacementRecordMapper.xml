@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.ReplacementRecordMapper">
+    <resultMap id="ReplacementRecordMap" type="com.rabbit.app.model.ReplacementRecord">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="original_type" property="originalType"/>
+        <result column="replacement_date" property="replacementDate"/>
+        <result column="expected_mature_date" property="expectedMatureDate"/>
+        <result column="is_mature_notified" property="isMatureNotified"/>
+        <result column="mature_notify_date" property="matureNotifyDate"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into replacement_records (house_id, rabbit_id, original_type, replacement_date, expected_mature_date, is_mature_notified, mature_notify_date, remark, create_by, update_by)
+        values (#{houseId}, #{rabbitId}, #{originalType}, #{replacementDate}, #{expectedMatureDate}, #{isMatureNotified}, #{matureNotifyDate}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectDue" resultMap="ReplacementRecordMap">
+        select *
+        from replacement_records
+        where house_id = #{houseId}
+          and expected_mature_date &lt;= #{today}
+        order by expected_mature_date asc, id asc
+    </select>
+
+    <select id="selectDueUnnotified" resultMap="ReplacementRecordMap">
+        select *
+        from replacement_records
+        where house_id = #{houseId}
+          and expected_mature_date &lt;= #{today}
+          and is_mature_notified = false
+        order by expected_mature_date asc, id asc
+    </select>
+
+    <select id="selectByHouse" resultMap="ReplacementRecordMap">
+        select *
+        from replacement_records
+        where house_id = #{houseId}
+        <if test="matureNotified != null">
+            and is_mature_notified = #{matureNotified}
+        </if>
+        <if test="from != null">
+            and expected_mature_date &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and expected_mature_date &lt;= #{to}
+        </if>
+        order by expected_mature_date desc, id desc
+        <if test="limit != null and offset != null">
+            limit #{limit} offset #{offset}
+        </if>
+        <if test="limit != null and offset == null">
+            limit #{limit}
+        </if>
+    </select>
+
+    <update id="markDueAsNotified">
+        update replacement_records
+        set is_mature_notified = true,
+            mature_notify_date = now(),
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and is_mature_notified = false
+          and expected_mature_date &lt;= #{today}
+    </update>
+
+    <update id="markNotified">
+        update replacement_records
+        set is_mature_notified = true,
+            mature_notify_date = #{notifyDate},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id} and house_id = #{houseId}
+    </update>
+</mapper>

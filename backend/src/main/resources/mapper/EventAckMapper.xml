@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.EventAckMapper">
+    <resultMap id="EventAckMap" type="com.rabbit.app.model.EventAck">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="user_id" property="userId"/>
+        <result column="category" property="category"/>
+        <result column="record_id" property="recordId"/>
+        <result column="action" property="action"/>
+        <result column="snooze_until" property="snoozeUntil"/>
+        <result column="ack_time" property="ackTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="upsert" useGeneratedKeys="true" keyProperty="id">
+        insert into event_acks (house_id, user_id, category, record_id, action, snooze_until, ack_time, remark)
+        values (#{houseId}, #{userId}, #{category}, #{recordId}, #{action}, #{snoozeUntil}, now(), #{remark})
+        on duplicate key update
+            action = values(action),
+            snooze_until = values(snooze_until),
+            ack_time = now(),
+            remark = values(remark),
+            update_time = now()
+    </insert>
+
+    <select id="selectOne" resultMap="EventAckMap">
+        select *
+        from event_acks
+        where user_id = #{userId} and house_id = #{houseId} and category = #{category} and record_id = #{recordId}
+        limit 1
+    </select>
+
+    <select id="selectByUserAndHouse" resultMap="EventAckMap">
+        select *
+        from event_acks
+        where user_id = #{userId} and house_id = #{houseId}
+        order by id desc
+    </select>
+
+    <select id="selectSuppressedRecordIds" resultType="long">
+        select record_id
+        from event_acks
+        where user_id = #{userId}
+          and house_id = #{houseId}
+          and category = #{category}
+          and (
+              action in ('ack', 'ignore')
+              or (action = 'snooze' and snooze_until is not null and snooze_until &gt; #{now})
+          )
+    </select>
+
+    <select id="selectProdAckSummary" resultType="com.rabbit.app.dto.EventAckSummary">
+        select '生产' as category,
+               sum(case when ea.action = 'ack' then 1 else 0 end) as ackCount,
+               sum(case when ea.action = 'ignore' then 1 else 0 end) as ignoreCount,
+               sum(case when ea.action = 'snooze' then 1 else 0 end) as snoozeCount,
+               avg(case when ea.action = 'ack' then timestampdiff(minute, br.next_event_date, ea.ack_time) / 60.0 end) as avgHandleHours
+        from event_acks ea
+        join batch_rabbits br on br.id = ea.record_id
+        join batches b on b.id = br.batch_id
+        where ea.house_id = #{houseId}
+          and ea.category = '生产'
+          and b.house_id = #{houseId}
+        <if test="from != null">
+            and ea.ack_time &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and ea.ack_time &lt;= #{to}
+        </if>
+    </select>
+
+    <select id="selectReplacementAckSummary" resultType="com.rabbit.app.dto.EventAckSummary">
+        select '后备成熟' as category,
+               sum(case when ea.action = 'ack' then 1 else 0 end) as ackCount,
+               sum(case when ea.action = 'ignore' then 1 else 0 end) as ignoreCount,
+               sum(case when ea.action = 'snooze' then 1 else 0 end) as snoozeCount,
+               avg(case when ea.action = 'ack' then timestampdiff(minute, rr.expected_mature_date, ea.ack_time) / 60.0 end) as avgHandleHours
+        from event_acks ea
+        join replacement_records rr on rr.id = ea.record_id
+        where ea.house_id = #{houseId}
+          and ea.category = '后备成熟'
+          and rr.house_id = #{houseId}
+        <if test="from != null">
+            and ea.ack_time &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and ea.ack_time &lt;= #{to}
+        </if>
+    </select>
+</mapper>

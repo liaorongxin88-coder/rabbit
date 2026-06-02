@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.mapper.BatchMapper">
+    <resultMap id="BatchMap" type="com.rabbit.app.model.Batch">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="batch_code" property="batchCode"/>
+        <result column="status" property="status"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="request_id" property="requestId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into batches (house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, update_by)
+        values (#{houseId}, #{batchCode}, #{status}, #{startDate}, #{endDate}, #{requestId}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectById" resultMap="BatchMap">
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        from batches
+        where house_id = #{houseId} and id = #{id}
+    </select>
+
+    <select id="selectByHouse" resultMap="BatchMap">
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        from batches
+        where house_id = #{houseId}
+        order by id desc
+    </select>
+
+    <select id="selectPageByHouse" resultMap="BatchMap">
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        from batches
+        where house_id = #{houseId}
+        <if test="q != null and q != ''">
+            and batch_code like concat('%', #{q}, '%')
+        </if>
+        order by id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectByHouseAndRequestId" resultMap="BatchMap">
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        from batches
+        where house_id = #{houseId} and request_id = #{requestId}
+        limit 1
+    </select>
+
+    <update id="updateStatusAndDates">
+        update batches
+        set status = #{status},
+            start_date = #{startDate},
+            end_date = #{endDate},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+</mapper>

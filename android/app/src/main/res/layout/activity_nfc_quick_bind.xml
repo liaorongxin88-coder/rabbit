@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/view_topbar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.Rabbit.Card"
+        android:id="@+id/cardNfcQuickBind"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_xl"
+        android:layout_marginEnd="@dimen/rabbit_space_xl"
+        android:layout_marginTop="@dimen/rabbit_space_xl"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/rabbit_space_l">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="NFC 快捷绑定"
+                android:textAppearance="@style/TextAppearance.Rabbit.Title" />
+
+            <Spinner
+                android:id="@+id/spNfcTarget"
+                style="@style/Widget.Rabbit.Spinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m" />
+
+            <TextView
+                android:id="@+id/tvNfcRabbitSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:text="兔：未选择"
+                android:background="@drawable/bg_pill_outline"
+                android:visibility="gone"
+                android:textAppearance="@style/TextAppearance.Rabbit.Body" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPickNfcRabbit"
+                style="@style/Widget.Rabbit.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_s"
+                android:text="选择兔子"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvNfcHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_l"
+                android:text="选择要直达的页面，然后把手机靠近NFC标签。读取到后会立刻绑定。"
+                android:textAppearance="@style/TextAppearance.Rabbit.Caption" />
+
+            <TextView
+                android:id="@+id/tvNfcBindResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/rabbit_space_m"
+                android:text=""
+                android:textAppearance="@style/TextAppearance.Rabbit.Result" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <ProgressBar
+        android:id="@+id/pbNfcQuickBindLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <include
+        layout="@layout/view_state_panel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

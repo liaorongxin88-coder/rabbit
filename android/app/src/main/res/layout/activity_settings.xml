@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/view_topbar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/tvSettingsInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:padding="@dimen/rabbit_space_m"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnServerUrl"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="服务器地址"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_m"
+        app:layout_constraintTop_toBottomOf="@id/tvSettingsInfo"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnBreedingPerformance"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="繁殖性能"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnServerUrl"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCycleSettings"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="周期设置"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnBreedingPerformance"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnRabbitHistory"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="兔状态历史"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnCycleSettings"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnRabbitEventTool"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="死亡/淘汰/隔离"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnRabbitHistory"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDepartureRecords"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="离场记录"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnRabbitEventTool"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnTreatmentTool"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="治疗/复查"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnDepartureRecords"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSaleTool"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="销售出栏(按重量)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnTreatmentTool"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnInventoryTool"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="库存管理"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnSaleTool"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnHouseMembers"
+        style="@style/Widget.Rabbit.Button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="成员与权限"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_l"
+        app:layout_constraintTop_toBottomOf="@id/btnInventoryTool"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNfcQuickBind"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="NFC 快捷绑定"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnHouseMembers"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNfcManage"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="NFC 绑定管理"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnNfcQuickBind"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnFeedLogBackfill"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="投喂历史修复"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnNfcManage"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnEventScan"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="提醒扫描(手动触发)"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnFeedLogBackfill"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnEventReminderLogs"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="提醒扫描日志"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnEventScan"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAuditLogs"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="审计日志"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnEventReminderLogs"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnHardwareControl"
+        style="@style/Widget.Rabbit.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="硬件控制"
+        android:layout_marginStart="@dimen/rabbit_space_l"
+        android:layout_marginEnd="@dimen/rabbit_space_l"
+        android:layout_marginTop="@dimen/rabbit_space_s"
+        app:layout_constraintTop_toBottomOf="@id/btnAuditLogs"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
