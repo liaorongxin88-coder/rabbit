@@ -1,0 +1,12 @@
+packages:
+  - .
+
+overrides:
+  node-releases: 2.0.49
+  rolldown: 1.1.2
+
+onlyBuiltDependencies:
+  - esbuild
+
+allowBuilds:
+  esbuild: true

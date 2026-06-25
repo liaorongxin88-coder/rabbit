@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.rabbit.mapper.RabbitMapper">
+    <resultMap id="RabbitMap" type="com.rabbit.app.modules.rabbit.entity.Rabbit">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="cage_id" property="cageId"/>
+        <result column="mother_id" property="motherId"/>
+        <result column="type" property="type"/>
+        <result column="gender" property="gender"/>
+        <result column="breed" property="breed"/>
+        <result column="arrival_method" property="arrivalMethod"/>
+        <result column="arrival_date" property="arrivalDate"/>
+        <result column="weight" property="weight"/>
+        <result column="is_active" property="isActive"/>
+        <result column="is_quarantined" property="isQuarantined"/>
+        <result column="quarantine_time" property="quarantineTime"/>
+        <result column="quarantine_reason" property="quarantineReason"/>
+        <result column="request_id" property="requestId"/>
+        <result column="departure_date" property="departureDate"/>
+        <result column="departure_reason" property="departureReason"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into rabbits (house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
+        values (#{houseId}, #{cageId}, #{motherId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectById" resultMap="RabbitMap">
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+               is_quarantined, quarantine_time, quarantine_reason,
+               request_id,
+               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        from rabbits
+        where house_id = #{houseId} and id = #{id}
+    </select>
+
+    <select id="selectByHouse" resultMap="RabbitMap">
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+               is_quarantined, quarantine_time, quarantine_reason,
+               request_id,
+               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        from rabbits
+        where house_id = #{houseId}
+        <if test="cageId != null">
+            and cage_id = #{cageId}
+        </if>
+        <if test="type != null and type != ''">
+            and type = #{type}
+        </if>
+        <if test="active != null">
+            and is_active = #{active}
+        </if>
+        order by id desc
+    </select>
+
+    <select id="selectPageByHouse" resultMap="RabbitMap">
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+               is_quarantined, quarantine_time, quarantine_reason,
+               request_id,
+               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        from rabbits
+        where house_id = #{houseId}
+        <if test="cageId != null">
+            and cage_id = #{cageId}
+        </if>
+        <if test="type != null and type != ''">
+            and type = #{type}
+        </if>
+        <if test="active != null">
+            and is_active = #{active}
+        </if>
+        order by id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectByHouseAndRequestId" resultMap="RabbitMap">
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+               is_quarantined, quarantine_time, quarantine_reason,
+               request_id,
+               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        from rabbits
+        where house_id = #{houseId} and request_id = #{requestId}
+        limit 1
+    </select>
+
+    <update id="updateTypeAndCage">
+        update rabbits
+        set type = #{type},
+            cage_id = #{cageId},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateDeparture">
+        update rabbits
+        set is_active = false,
+            departure_date = #{departureDate},
+            departure_reason = #{departureReason},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateQuarantine">
+        update rabbits
+        set is_quarantined = #{isQuarantined},
+            quarantine_time = #{quarantineTime},
+            quarantine_reason = #{quarantineReason},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateWeight">
+        update rabbits
+        set weight = #{weight},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateBaseInfo">
+        update rabbits
+        set cage_id = #{cageId},
+            mother_id = #{motherId},
+            breed = #{breed},
+            arrival_method = #{arrivalMethod},
+            arrival_date = #{arrivalDate},
+            weight = #{weight},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <select id="countActiveByCage" resultType="int">
+        select count(1)
+        from rabbits
+        where house_id = #{houseId} and cage_id = #{cageId} and is_active = true
+    </select>
+
+    <select id="selectActiveCountsByCage" resultType="com.rabbit.app.modules.cage.dto.CageCountRow">
+        select cage_id as cageId, count(1) as rabbitCount
+        from rabbits
+        where house_id = #{houseId} and is_active = true
+        group by cage_id
+    </select>
+
+    <select id="selectCageIdsByIds" resultType="com.rabbit.app.modules.rabbit.dto.RabbitCageRow">
+        select id as id, cage_id as cageId
+        from rabbits
+        where house_id = #{houseId}
+        <if test="ids != null and ids.size() > 0">
+            and id in
+            <foreach collection="ids" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        <if test="ids == null or ids.size() == 0">
+            and 1 = 0
+        </if>
+    </select>
+</mapper>

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.feed.mapper.FeedLogMapper">
+    <resultMap id="FeedLogMap" type="com.rabbit.app.modules.feed.entity.FeedLog">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="item_id" property="itemId"/>
+        <result column="feeding_rabbits" property="feedingRabbits"/>
+        <result column="feed_time" property="feedTime"/>
+        <result column="feed_type" property="feedType"/>
+        <result column="unit" property="unit"/>
+        <result column="request_id" property="requestId"/>
+        <result column="amount" property="amount"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="FeedSummaryMap" type="com.rabbit.app.modules.feed.dto.FeedSummary">
+        <result column="record_count" property="recordCount"/>
+        <result column="total_amount" property="totalAmount"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into feed_logs (house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, update_by)
+        values (#{houseId}, #{itemId}, #{feedingRabbits}, #{feedTime}, #{feedType}, #{unit}, #{requestId}, #{amount}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectByHouse" resultMap="FeedLogMap">
+        select *
+        from feed_logs
+        where house_id = #{houseId}
+        order by feed_time desc, id desc
+    </select>
+
+    <select id="selectPageByHouse" resultMap="FeedLogMap">
+        select *
+        from feed_logs
+        where house_id = #{houseId}
+        <if test="from != null">
+            and feed_time &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and feed_time &lt;= #{to}
+        </if>
+        order by feed_time desc, id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectSummary" resultMap="FeedSummaryMap">
+        select count(1) as record_count,
+               ifnull(sum(amount), 0) as total_amount
+        from feed_logs
+        where house_id = #{houseId}
+        <if test="from != null">
+            and feed_time &gt;= #{from}
+        </if>
+        <if test="to != null">
+            and feed_time &lt;= #{to}
+        </if>
+    </select>
+
+    <select id="selectLatestByCage" resultMap="FeedLogMap">
+        select *
+        from (
+            (select fl.*
+             from feed_logs fl
+             inner join feed_log_rabbits flr on flr.feed_log_id = fl.id
+             where fl.house_id = #{houseId} and flr.cage_id = #{cageId}
+             order by fl.feed_time desc, fl.id desc
+             limit 1)
+            union all
+            (select fl.*
+             from feed_logs fl
+             where fl.house_id = #{houseId}
+               and not exists (select 1 from feed_log_rabbits flr2 where flr2.feed_log_id = fl.id)
+               and exists (
+                 select 1
+                 from rabbits r
+                 where r.house_id = fl.house_id
+                   and r.cage_id = #{cageId}
+                   and find_in_set(cast(r.id as char), fl.feeding_rabbits) &gt; 0
+               )
+             order by fl.feed_time desc, fl.id desc
+             limit 1)
+        ) t
+        order by t.feed_time desc, t.id desc
+        limit 1
+    </select>
+
+    <select id="selectWithoutRabbits" resultMap="FeedLogMap">
+        select id, house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, create_time, update_by, update_time
+        from feed_logs fl
+        where fl.house_id = #{houseId}
+          and fl.feeding_rabbits is not null
+          and fl.feeding_rabbits &lt;&gt; ''
+          and not exists (select 1 from feed_log_rabbits flr where flr.feed_log_id = fl.id)
+        order by fl.id asc
+        limit #{limit}
+    </select>
+</mapper>

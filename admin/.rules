@@ -1,0 +1,183 @@
+# admin/.rules
+
+> Canonical rules for `admin/`. `DESIGN.md` is the source of truth for visual style and interaction details; keep this file focused on engineering and product constraints.
+
+`AGENTS.md` and `CLAUDE.md` are compatibility entrypoints for agent tooling. They must point back to this file instead of duplicating rules. Edit this file first when changing admin engineering rules.
+
+## Design Document
+
+`DESIGN.md` exists and must be read before changing any visible UI, layout, copy, motion, Tailwind token, shadcn-style component composition, responsive behavior, empty state, dialog, table, form, or status presentation.
+
+Use `DESIGN.md` to decide how the admin should look and behave. Use this `.rules` file to decide where code belongs, which APIs and libraries are allowed, and how to validate changes.
+
+If a requested UI change conflicts with `DESIGN.md`, either preserve the design document and choose the closest compliant implementation, or update `DESIGN.md` in the same change when the new pattern should become durable.
+
+## Product Scope
+
+`admin/` is the Rabbit SaaS platform management console. It serves platform staff, not merchant business users.
+
+First-version scope stays narrow:
+
+- Platform admin login and logout.
+- Merchant list, create, edit, and enable / disable.
+- Merchant user binding and unbinding by existing business user ID.
+- Read-only merchant overview for rabbit houses, cages, rabbits, and recent audit records.
+
+Do not add billing, package plans, merchant self-registration, customer support impersonation, cross-merchant business data editing, or platform operation modules unless the task explicitly requests them.
+
+## Engineering Boundaries
+
+- Do not modify backend API contracts from admin UI work unless the user explicitly asks for backend support.
+- Do not modify Flutter or Android clients for admin UI tasks.
+- Do not bypass the backend SaaS boundaries: platform admin APIs use `/api/admin/**`; merchant business APIs remain under existing `/api/**` flows.
+- Preserve read-only boundaries for business production data. Admin may inspect summaries and previews, but must not edit rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
+- Merchant enable / disable is the only high-risk write operation in the first version.
+
+## Tech Stack
+
+- Package manager: `pnpm`.
+- Runtime / build: React + TypeScript + Vite.
+- Styling: Tailwind CSS and shadcn-style source components.
+- UI primitives: Radix UI where already present.
+- Icons: `lucide-react`.
+- Request layer: `alova`.
+- Toasts: `sonner`.
+- Lint: `oxlint`.
+
+Keep Vite on the current newer main major already configured in `package.json`; do not downgrade to avoid transient dependency issues unless a concrete build failure proves it is necessary.
+
+## Directory Responsibilities
+
+- `src/App.tsx`: route tree, authenticated shell wiring, and session-level navigation.
+- `src/pages/`: route-level pages only. Pages compose API calls and components, but should not contain reusable UI primitives.
+- `src/components/`: domain and layout components shared by admin pages.
+- `src/components/ui/`: shadcn-style primitive components. Keep them generic and prop-driven.
+- `src/api/`: business API methods. Components must import request functions from here instead of calling raw HTTP clients.
+- `src/lib/request.ts`: single alova instance, base URL, token injection, `ApiResponse<T>` unwrapping, and common error handling.
+- `src/lib/auth.ts`: platform admin session storage and token access.
+- `src/types/`: API and domain TypeScript types.
+- `src/index.css`: Tailwind import, semantic color tokens, motion tokens, and global reusable animation classes.
+- `DESIGN.md`: canonical visual and interaction design rules.
+
+## API Rules
+
+- Admin login uses `POST /api/admin/auth/login`; do not reuse merchant business login.
+- Admin requests must send `Authorization: Bearer <token>` through the alova wrapper.
+- Admin requests must not send or require `X-House-Id`.
+- API response wrappers with `code !== 0` are business failures and must surface a clear toast or page state.
+- `401` clears the admin session and should lead the user back to login through existing route guards.
+- Components must not use bare `fetch`, ad hoc `axios`, or inline base URLs.
+- Vite development should proxy `/api` to the local backend container, currently `http://127.0.0.1:8080`, unless `VITE_API_BASE_URL` is intentionally provided for another environment.
+
+## UI And Design Rules
+
+Follow `DESIGN.md` before adding any new screen or UI pattern.
+
+Baseline direction:
+
+- Operational SaaS console, not a marketing page.
+- Calm, dense, readable, and trustworthy.
+- Fixed desktop sidebar, compact mobile header, content constrained to `max-w-7xl`.
+- Cards are for contained tools, repeated metrics, tables, dialogs, and empty states only.
+- No page sections styled as floating cards inside cards.
+- No decorative gradients, blobs, bokeh, oversized hero sections, or illustration-first layouts.
+
+Use semantic Tailwind tokens:
+
+- Prefer `bg-background`, `bg-card`, `bg-secondary`, `text-muted-foreground`, `border`, `bg-primary`, `text-destructive`.
+- Do not scatter raw status colors in page code.
+- Amber is for warnings; red is for errors and destructive actions.
+- Main card radius should stay at 8px or less.
+- Letter spacing stays `0` or `tracking-normal`.
+
+## Component Rules
+
+- Prefer existing `src/components/ui` primitives before creating custom markup.
+- Forms use `FieldGroup`, `Field`, `FieldLabel`, `Input`, `Textarea`, and `Select` patterns.
+- Dialogs must include `DialogHeader`, `DialogTitle`, and meaningful `DialogDescription`.
+- In the fixed-sidebar shell, desktop dialog content must be centered in the main content pane via the dialog layout viewport and `--admin-sidebar-width`. Do not center dialogs with both `left/top` and `translate(-50%, -50%)`.
+- Long dialog forms keep header and footer visible while only the field body scrolls.
+- Data display uses `Table`, `Card`, `Badge`, `MetricCard`, `Skeleton`, and `Empty`.
+- Buttons use `variant`, `size`, and `asChild` instead of one-off class-heavy button markup.
+- Use lucide icons in buttons with `data-icon`; do not manually size button icons unless the shared icon rule changes.
+- Loading states should use existing `Skeleton` or `Spinner`.
+- Empty states should explain what makes data appear and only show actions available in the current view.
+
+## Motion Rules
+
+- Motion must clarify hierarchy and state changes, not decorate the product.
+- Use the global classes from `src/index.css`: `motion-page`, `motion-section`, `motion-list`, `motion-card`, `motion-press`, `motion-dialog-overlay`, and `motion-dialog-content`.
+- New animations must preserve `prefers-reduced-motion`.
+- Avoid looping, bouncing, parallax, large translation, or long staged sequences.
+- Cards may lift by 1px on hover; layout-critical surfaces must not move more than 2px.
+- Do not create page-local keyframes unless the workflow has a specific need and the rule is added back to `DESIGN.md`.
+
+## Interaction Rules
+
+- Search fields should not query on every keystroke unless debounce, loading feedback, and cancellation behavior are deliberately implemented.
+- Filter forms with inline actions must align buttons with the input/select row. Helper or description text belongs in a separate row below the controls when it would push buttons out of alignment.
+- Pagination, filters, tabs, and table actions must remain reachable on narrow screens.
+- Destructive or high-risk actions use destructive styling and clear verbs, for example `停用商户`, `解绑`, or `删除`.
+- Merchant status changes should show a clear success toast naming the completed action.
+- Long merchant names, contact fields, OpenID, and IDs must truncate or wrap predictably without overlapping controls.
+- Do not add in-app text explaining the UI design, animations, implementation details, or keyboard shortcuts.
+
+## State And React Rules
+
+- Keep route-level data loading inside pages or page-specific hooks.
+- Use `useCallback` for async loaders referenced by `useEffect`.
+- Keep derived values in `useMemo` only when it improves clarity or prevents repeated non-trivial work.
+- Avoid duplicating server state into multiple local states unless the UI explicitly needs staged edits.
+- Form dialogs should reset local form state when opening for create / edit.
+- Async write actions must guard against duplicate submission through `disabled` or equivalent saving state.
+
+## Dependency And Package Rules
+
+- Use `pnpm --dir admin ...` from the repository root, or run `pnpm ...` inside `admin/`.
+- Keep package policy settings in `admin/pnpm-workspace.yaml`, not in the deprecated `pnpm` field in `package.json`.
+- Do not relax pnpm supply-chain policies just to pass a transient install. Prefer pinned safe versions or fresh resolution when needed.
+- Do not introduce another UI library, CSS framework, request library, or state manager unless the task explicitly requires it.
+- Avoid adding dependencies for behavior that is already covered by React, Radix, shadcn-style components, alova, lucide, or existing utilities.
+
+## Validation
+
+Default checks after admin code changes:
+
+```bash
+pnpm --dir admin lint
+pnpm --dir admin build
+```
+
+When changing request behavior or auth:
+
+```bash
+pnpm --dir admin dev --host 127.0.0.1
+curl -s -H 'Content-Type: application/json' \
+  -d '{"userName":"admin","password":"admin123456"}' \
+  http://127.0.0.1:5173/api/admin/auth/login
+```
+
+When changing layout, animation, dialogs, tables, or responsive behavior, verify in a browser at desktop and narrow mobile widths. Check for:
+
+- Console errors.
+- Horizontal overflow.
+- Text overlap.
+- Dialog positioning.
+- Table action reachability.
+- Reduced-motion behavior where relevant.
+
+Existing acceptable lint warnings may include shadcn Fast Refresh warnings for primitive files that export both component and variant helpers. Do not ignore new warnings without checking the cause.
+
+## Copy Rules
+
+- Use concise operational Chinese.
+- Prefer precise verbs over promotional copy.
+- Labels should name the business object, not backend table names.
+- Error messages and empty states should point to the next practical step.
+
+## Change Discipline
+
+- Keep changes scoped to `admin/` for admin UI tasks.
+- Do not reformat unrelated files.
+- Do not commit generated `dist/`, `node_modules/`, or local cache changes unless the user explicitly asks.
+- If the worktree contains unrelated dirty files, leave them untouched.

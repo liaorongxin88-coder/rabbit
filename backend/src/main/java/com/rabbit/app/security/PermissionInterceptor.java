@@ -1,12 +1,13 @@
 package com.rabbit.app.security;
 
 import com.rabbit.app.common.BizException;
-import com.rabbit.app.service.HouseService;
+import com.rabbit.app.modules.house.service.HouseService;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 public class PermissionInterceptor implements HandlerInterceptor {
     private final HouseService houseService;
@@ -17,6 +18,9 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if (DispatcherType.ASYNC.equals(request.getDispatcherType())) {
+            return true;
+        }
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }

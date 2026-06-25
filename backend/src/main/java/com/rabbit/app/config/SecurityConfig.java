@@ -1,6 +1,8 @@
 package com.rabbit.app.config;
 
 import com.rabbit.app.common.TraceIdFilter;
+import com.rabbit.app.security.PlatformAdminAuthenticationFilter;
+import com.rabbit.app.security.PlatformAdminJwtUtil;
 import com.rabbit.app.security.JwtAuthenticationFilter;
 import com.rabbit.app.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,13 +33,23 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtUtil jwtUtil) throws Exception {
-        http.csrf().disable();
-        http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
-        http.authorizeRequests()
-                .antMatchers("/api/auth/**").permitAll()
-                .anyRequest().permitAll();
-        http.addFilterBefore(new TraceIdFilter(), JwtAuthenticationFilter.class);
+    public PlatformAdminJwtUtil platformAdminJwtUtil(
+            @Value("${app.admin.jwt.secret:${app.jwt.secret}}") String secret,
+            @Value("${app.admin.jwt.expire-seconds:${app.jwt.expire-seconds}}") long expireSeconds
+    ) {
+        return new PlatformAdminJwtUtil(secret, expireSeconds);
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtUtil jwtUtil, PlatformAdminJwtUtil platformAdminJwtUtil) throws Exception {
+        http.csrf(csrf -> csrf.disable());
+        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        http.authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/admin/auth/login").permitAll()
+                .anyRequest().permitAll());
+        http.addFilterBefore(new TraceIdFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new PlatformAdminAuthenticationFilter(platformAdminJwtUtil), UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(new JwtAuthenticationFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -15,6 +15,36 @@ ALTER TABLE rabbit_abnormal_conditions
 ALTER TABLE rabbit_status_history
   ADD INDEX idx_rsh_rabbit_time_id (rabbit_id, change_time, id);
 
+ALTER TABLE rabbit_status_history
+  ADD INDEX idx_rsh_house_rabbit_time (house_id, rabbit_id, change_time, id);
+
+ALTER TABLE rabbit_status_history
+  ADD INDEX idx_rsh_house_batch_time (house_id, batch_id, change_time, id);
+
+ALTER TABLE pregnancy_check_records
+  ADD INDEX idx_pcr_house_batch (house_id, batch_id, id);
+
+ALTER TABLE pregnancy_check_records
+  ADD INDEX idx_pcr_house_rabbit (house_id, rabbit_id, id);
+
+ALTER TABLE parturition_records
+  ADD INDEX idx_pr_house_batch (house_id, batch_id, id);
+
+ALTER TABLE parturition_records
+  ADD INDEX idx_pr_house_rabbit (house_id, rabbit_id, id);
+
+ALTER TABLE prepartum_records
+  ADD INDEX idx_ppr_house_batch (house_id, batch_id, id);
+
+ALTER TABLE prepartum_records
+  ADD INDEX idx_ppr_house_rabbit (house_id, rabbit_id, id);
+
+ALTER TABLE weaning_records
+  ADD INDEX idx_wr_house_batch (house_id, batch_id, id);
+
+ALTER TABLE weaning_records
+  ADD INDEX idx_wr_house_rabbit (house_id, rabbit_id, id);
+
 ALTER TABLE batch_rabbits
   ADD INDEX idx_br_batch_rabbit_active_id (batch_id, rabbit_id, is_active, id);
 

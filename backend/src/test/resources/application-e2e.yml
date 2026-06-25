@@ -1,0 +1,66 @@
+server:
+  port: 0
+
+spring:
+  task:
+    scheduling:
+      enabled: false
+  datasource:
+    url: ${E2E_DATASOURCE_URL:jdbc:mysql://localhost:3306/rabbit_app_e2e?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${E2E_DATASOURCE_USERNAME:root}
+    password: ${E2E_DATASOURCE_PASSWORD:rabbit_root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    clean-disabled: false
+    baseline-on-migrate: true
+    baseline-version: 0
+
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  jwt:
+    secret: rabbit-app-e2e-secret-change-me-32bytes
+    expire-seconds: 604800
+  admin:
+    jwt:
+      secret: rabbit-app-e2e-admin-secret-change-me
+      expire-seconds: 604800
+    bootstrap:
+      enabled: true
+      username: admin
+      password: admin123456
+  wechat:
+    enabled: false
+  hardware:
+    enabled: false
+    gateway: noop
+    http:
+      base-url:
+      token:
+      connect-timeout-ms: 3000
+      read-timeout-ms: 5000
+  breeding-performance:
+    recalc:
+      enabled: false
+  cage:
+    commodity-capacity: 10
+  mybatis:
+    write-guard:
+      max-affected-rows: 2000
+      ignore-row-limit-ids:
+      ignore-no-where-ids:
+    select-guard:
+      enabled: true
+      ignore-ids: com.rabbit.app.modules.house.mapper.RabbitHouseMapper.selectById
+  inventory:
+    forbid-negative: true
+    cas-retry-times: 5
+
+logging:
+  level:
+    root: WARN
+    com.rabbit.app: INFO

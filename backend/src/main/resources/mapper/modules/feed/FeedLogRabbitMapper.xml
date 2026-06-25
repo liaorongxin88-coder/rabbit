@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.feed.mapper.FeedLogRabbitMapper">
+    <insert id="insertBatch">
+        insert into feed_log_rabbits (house_id, feed_log_id, rabbit_id, cage_id)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.houseId}, #{item.feedLogId}, #{item.rabbitId}, #{item.cageId})
+        </foreach>
+    </insert>
+</mapper>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.auth.mapper.SysUserMapper">
+    <resultMap id="SysUserMap" type="com.rabbit.app.modules.auth.entity.SysUser">
+        <id column="user_id" property="userId"/>
+        <result column="user_name" property="userName"/>
+        <result column="password" property="password"/>
+        <result column="openid" property="openid"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByUserName" resultMap="SysUserMap">
+        select user_id, user_name, password, openid, create_time, update_time
+        from sys_user
+        where user_name = #{userName}
+    </select>
+
+    <select id="selectByOpenid" resultMap="SysUserMap">
+        select user_id, user_name, password, openid, create_time, update_time
+        from sys_user
+        where openid = #{openid}
+    </select>
+
+    <select id="selectById" resultMap="SysUserMap">
+        select user_id, user_name, password, openid, create_time, update_time
+        from sys_user
+        where user_id = #{userId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="userId">
+        insert into sys_user (user_name, password, openid)
+        values (#{userName}, #{password}, #{openid})
+    </insert>
+
+    <update id="updateOpenid">
+        update sys_user
+        set openid = #{openid},
+            update_time = now()
+        where user_id = #{userId}
+          and (openid is null or openid = '')
+    </update>
+</mapper>

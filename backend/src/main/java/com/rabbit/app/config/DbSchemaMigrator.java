@@ -3,7 +3,7 @@ package com.rabbit.app.config;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 @Component
 public class DbSchemaMigrator {
@@ -15,12 +15,19 @@ public class DbSchemaMigrator {
 
     @PostConstruct
     public void migrate() {
+        ensureColumn("sys_user", "openid", "alter table sys_user add column openid varchar(128) null after password");
         ensureColumn("rabbit_houses", "is_deleted", "alter table rabbit_houses add column is_deleted boolean not null default false");
         ensureColumn("cages", "is_enabled", "alter table cages add column is_enabled boolean not null default true");
+        ensureColumn("pregnancy_check_records", "house_id", "alter table pregnancy_check_records add column house_id bigint null after id");
+        ensureColumn("parturition_records", "house_id", "alter table parturition_records add column house_id bigint null after id");
+        ensureColumn("prepartum_records", "house_id", "alter table prepartum_records add column house_id bigint null after id");
+        ensureColumn("weaning_records", "house_id", "alter table weaning_records add column house_id bigint null after id");
+        ensureColumn("rabbit_status_history", "house_id", "alter table rabbit_status_history add column house_id bigint null after id");
         ensureColumn("weaning_records", "target_cage_id", "alter table weaning_records add column target_cage_id bigint");
         ensureColumn("weaning_records", "in_cage_id", "alter table weaning_records add column in_cage_id bigint");
         ensureColumn("batch_rabbits", "is_event_notified", "alter table batch_rabbits add column is_event_notified boolean not null default false");
         ensureColumn("batch_rabbits", "event_notify_date", "alter table batch_rabbits add column event_notify_date datetime");
+        backfillCoreIdentityColumns();
         jdbcTemplate.execute("create table if not exists feed_log_rabbits (" +
                 "id bigint primary key auto_increment," +
                 "house_id bigint not null," +
@@ -76,6 +83,27 @@ public class DbSchemaMigrator {
                 ") engine=InnoDB default charset=utf8mb4");
         ensureColumn("audit_logs", "api_code", "alter table audit_logs add column api_code int");
         ensureColumn("audit_logs", "api_message", "alter table audit_logs add column api_message varchar(255)");
+        ensureIndex("sys_user", "uk_sys_user_openid", "alter table sys_user add unique key uk_sys_user_openid (openid)");
+        ensureIndex("pregnancy_check_records", "idx_pcr_house_batch", "alter table pregnancy_check_records add index idx_pcr_house_batch (house_id, batch_id, id)");
+        ensureIndex("pregnancy_check_records", "idx_pcr_house_rabbit", "alter table pregnancy_check_records add index idx_pcr_house_rabbit (house_id, rabbit_id, id)");
+        ensureIndex("parturition_records", "idx_pr_house_batch", "alter table parturition_records add index idx_pr_house_batch (house_id, batch_id, id)");
+        ensureIndex("parturition_records", "idx_pr_house_rabbit", "alter table parturition_records add index idx_pr_house_rabbit (house_id, rabbit_id, id)");
+        ensureIndex("prepartum_records", "idx_ppr_house_batch", "alter table prepartum_records add index idx_ppr_house_batch (house_id, batch_id, id)");
+        ensureIndex("prepartum_records", "idx_ppr_house_rabbit", "alter table prepartum_records add index idx_ppr_house_rabbit (house_id, rabbit_id, id)");
+        ensureIndex("weaning_records", "idx_wr_house_batch", "alter table weaning_records add index idx_wr_house_batch (house_id, batch_id, id)");
+        ensureIndex("weaning_records", "idx_wr_house_rabbit", "alter table weaning_records add index idx_wr_house_rabbit (house_id, rabbit_id, id)");
+        ensureIndex("rabbit_status_history", "idx_rsh_house_rabbit_time", "alter table rabbit_status_history add index idx_rsh_house_rabbit_time (house_id, rabbit_id, change_time, id)");
+        ensureIndex("rabbit_status_history", "idx_rsh_house_batch_time", "alter table rabbit_status_history add index idx_rsh_house_batch_time (house_id, batch_id, change_time, id)");
+    }
+
+    private void backfillCoreIdentityColumns() {
+        executeQuietly("update sys_user set openid = substring(user_name, 4) where (openid is null or openid = '') and user_name like 'wx!_%' escape '!'");
+        executeQuietly("update pregnancy_check_records p join batches b on b.id = p.batch_id set p.house_id = b.house_id where p.house_id is null");
+        executeQuietly("update parturition_records p join batches b on b.id = p.batch_id set p.house_id = b.house_id where p.house_id is null");
+        executeQuietly("update prepartum_records p join batches b on b.id = p.batch_id set p.house_id = b.house_id where p.house_id is null");
+        executeQuietly("update weaning_records w join batches b on b.id = w.batch_id set w.house_id = b.house_id where w.house_id is null");
+        executeQuietly("update rabbit_status_history h join batches b on b.id = h.batch_id set h.house_id = b.house_id where h.house_id is null and h.batch_id is not null");
+        executeQuietly("update rabbit_status_history h join rabbits r on r.id = h.rabbit_id set h.house_id = r.house_id where h.house_id is null");
     }
 
     private void ensureColumn(String table, String column, String alterSql) {
@@ -86,6 +114,25 @@ public class DbSchemaMigrator {
             if (cnt == null || cnt <= 0) {
                 jdbcTemplate.execute(alterSql);
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void ensureIndex(String table, String index, String alterSql) {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "select count(1) from information_schema.statistics where table_schema = database() and table_name = ? and index_name = ?",
+                    Integer.class, table, index);
+            if (cnt == null || cnt <= 0) {
+                jdbcTemplate.execute(alterSql);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void executeQuietly(String sql) {
+        try {
+            jdbcTemplate.execute(sql);
         } catch (Exception ignored) {
         }
     }

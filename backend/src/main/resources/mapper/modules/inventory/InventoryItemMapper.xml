@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.inventory.mapper.InventoryItemMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.inventory.entity.InventoryItem">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="name" property="name"/>
+        <result column="unit" property="unit"/>
+        <result column="current_qty" property="currentQty"/>
+        <result column="low_stock_qty" property="lowStockQty"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into inventory_items (house_id, name, unit, current_qty, low_stock_qty, remark, create_by, update_by)
+        values (#{houseId}, #{name}, #{unit}, #{currentQty}, #{lowStockQty}, #{remark}, #{createBy}, #{updateBy})
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select id, house_id, name, unit, current_qty, low_stock_qty, remark, create_by, create_time, update_by, update_time
+        from inventory_items
+        where house_id = #{houseId} and id = #{id}
+    </select>
+
+    <select id="selectByHouseAndName" resultMap="Map">
+        select id, house_id, name, unit, current_qty, low_stock_qty, remark, create_by, create_time, update_by, update_time
+        from inventory_items
+        where house_id = #{houseId} and name = #{name}
+        limit 1
+    </select>
+
+    <select id="selectByHouse" resultMap="Map">
+        select id, house_id, name, unit, current_qty, low_stock_qty, remark, create_by, create_time, update_by, update_time
+        from inventory_items
+        where house_id = #{houseId}
+        order by id desc
+    </select>
+
+    <update id="updateQtyDelta">
+        update inventory_items
+        set current_qty = current_qty + #{delta},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id}
+          and house_id = #{houseId}
+    </update>
+
+    <update id="updateQtyDeltaIfCurrent">
+        update inventory_items
+        set current_qty = current_qty + #{delta},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id}
+          and house_id = #{houseId}
+          and current_qty = #{expectedQty}
+        <if test="forbidNegative">
+          and current_qty + #{delta} &gt;= 0
+        </if>
+    </update>
+</mapper>

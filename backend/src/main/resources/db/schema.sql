@@ -5,8 +5,10 @@ CREATE TABLE IF NOT EXISTS sys_user (
   user_id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_name VARCHAR(64) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  openid VARCHAR(128),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sys_user_openid (openid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS rabbit_houses (
@@ -220,6 +222,7 @@ CREATE TABLE IF NOT EXISTS batch_rabbits (
 
 CREATE TABLE IF NOT EXISTS pregnancy_check_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT,
   batch_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
   check_date DATETIME NOT NULL,
@@ -229,6 +232,8 @@ CREATE TABLE IF NOT EXISTS pregnancy_check_records (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_pcr_house_batch (house_id, batch_id, id),
+  KEY idx_pcr_house_rabbit (house_id, rabbit_id, id),
   KEY idx_pcr_batch (batch_id),
   KEY idx_pcr_rabbit (rabbit_id),
   CONSTRAINT fk_pcr_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
@@ -237,6 +242,7 @@ CREATE TABLE IF NOT EXISTS pregnancy_check_records (
 
 CREATE TABLE IF NOT EXISTS parturition_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT,
   batch_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
   birth_date DATETIME NOT NULL,
@@ -247,6 +253,8 @@ CREATE TABLE IF NOT EXISTS parturition_records (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_pr_house_batch (house_id, batch_id, id),
+  KEY idx_pr_house_rabbit (house_id, rabbit_id, id),
   KEY idx_pr_batch (batch_id),
   KEY idx_pr_rabbit (rabbit_id),
   CONSTRAINT fk_pr_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
@@ -255,6 +263,7 @@ CREATE TABLE IF NOT EXISTS parturition_records (
 
 CREATE TABLE IF NOT EXISTS prepartum_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT,
   batch_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
   action_date DATETIME NOT NULL,
@@ -263,6 +272,8 @@ CREATE TABLE IF NOT EXISTS prepartum_records (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_ppr_house_batch (house_id, batch_id, id),
+  KEY idx_ppr_house_rabbit (house_id, rabbit_id, id),
   KEY idx_ppr_batch (batch_id),
   KEY idx_ppr_rabbit (rabbit_id),
   CONSTRAINT fk_ppr_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
@@ -271,6 +282,7 @@ CREATE TABLE IF NOT EXISTS prepartum_records (
 
 CREATE TABLE IF NOT EXISTS weaning_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT,
   batch_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
   target_cage_id BIGINT,
@@ -284,6 +296,8 @@ CREATE TABLE IF NOT EXISTS weaning_records (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_wr_house_batch (house_id, batch_id, id),
+  KEY idx_wr_house_rabbit (house_id, rabbit_id, id),
   KEY idx_wr_batch (batch_id),
   KEY idx_wr_rabbit (rabbit_id),
   KEY idx_wr_target_cage (target_cage_id),
@@ -382,6 +396,7 @@ CREATE TABLE IF NOT EXISTS inventory_txs (
 
 CREATE TABLE IF NOT EXISTS rabbit_status_history (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT,
   rabbit_id BIGINT NOT NULL,
   batch_id BIGINT,
   from_status VARCHAR(50),
@@ -394,6 +409,8 @@ CREATE TABLE IF NOT EXISTS rabbit_status_history (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_rsh_house_rabbit_time (house_id, rabbit_id, change_time, id),
+  KEY idx_rsh_house_batch_time (house_id, batch_id, change_time, id),
   KEY idx_rsh_rabbit (rabbit_id),
   KEY idx_rsh_batch (batch_id),
   KEY idx_rsh_time (change_time),

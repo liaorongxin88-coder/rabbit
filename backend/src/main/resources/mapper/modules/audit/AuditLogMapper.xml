@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.audit.mapper.AuditLogMapper">
+    <resultMap id="AuditLogMap" type="com.rabbit.app.modules.audit.entity.AuditLog">
+        <id column="id" property="id"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="user_id" property="userId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="method" property="method"/>
+        <result column="path" property="path"/>
+        <result column="query_string" property="queryString"/>
+        <result column="status" property="status"/>
+        <result column="api_code" property="apiCode"/>
+        <result column="api_message" property="apiMessage"/>
+        <result column="cost_ms" property="costMs"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="ip" property="ip"/>
+        <result column="user_agent" property="userAgent"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="item.id">
+        insert into audit_logs (trace_id, user_id, house_id, method, path, query_string, status, api_code, api_message, cost_ms, error_message, ip, user_agent)
+        values (#{item.traceId}, #{item.userId}, #{item.houseId}, #{item.method}, #{item.path}, #{item.queryString}, #{item.status}, #{item.apiCode}, #{item.apiMessage}, #{item.costMs}, #{item.errorMessage}, #{item.ip}, #{item.userAgent})
+    </insert>
+
+    <select id="selectPage" resultMap="AuditLogMap">
+        select *
+        from audit_logs
+        where house_id = #{houseId}
+        <if test="userId != null">
+            and user_id = #{userId}
+        </if>
+        <if test="path != null and path != ''">
+            and path like concat('%', #{path}, '%')
+        </if>
+        <if test="status != null">
+            and status = #{status}
+        </if>
+        <if test="from != null">
+            and create_time <![CDATA[>=]]> #{from}
+        </if>
+        <if test="to != null">
+            and create_time <![CDATA[<=]]> #{to}
+        </if>
+        order by id desc
+        limit #{offset}, #{limit}
+    </select>
+</mapper>

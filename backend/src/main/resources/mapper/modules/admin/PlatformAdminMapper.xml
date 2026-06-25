@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.admin.mapper.PlatformAdminMapper">
+    <resultMap id="PlatformAdminMap" type="com.rabbit.app.modules.admin.entity.PlatformAdmin">
+        <id column="id" property="id"/>
+        <result column="user_name" property="userName"/>
+        <result column="password" property="password"/>
+        <result column="role" property="role"/>
+        <result column="enabled" property="enabled"/>
+        <result column="last_login_time" property="lastLoginTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="PlatformAdminMap">
+        select id, user_name, password, role, enabled, last_login_time, create_time, update_time
+        from platform_admins
+        where id = #{id}
+    </select>
+
+    <select id="selectByUserName" resultMap="PlatformAdminMap">
+        select id, user_name, password, role, enabled, last_login_time, create_time, update_time
+        from platform_admins
+        where user_name = #{userName}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into platform_admins (user_name, password, role, enabled)
+        values (#{userName}, #{password}, #{role}, #{enabled})
+    </insert>
+
+    <update id="updateLastLoginTime">
+        update platform_admins
+        set last_login_time = now(),
+            update_time = now()
+        where id = #{id}
+    </update>
+</mapper>

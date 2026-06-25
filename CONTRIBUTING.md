@@ -41,14 +41,17 @@
 
 推荐 scope（按模块）：
 - `backend`
-- `android`
+- `flutter`
+- `admin`
 - `db`
 - `docker`
+- `docs`
 - `tools`
 
 示例：
 - `feat(backend): export audit logs csv`
-- `fix(android): retry pending PUT ops`
+- `fix(flutter): keep rabbit creation tied to cage context`
+- `feat(admin): add merchant status filters`
 - `chore(db): add flyway migration for indexes`
 
 禁止：
@@ -73,10 +76,25 @@ mvn -DskipTests package
 - `tools/demo_flow.ps1`
 - `tools/demo_flow_full.ps1`
 
-### Android
+### Flutter Android 客户端
 
-- 至少在 Android Studio 能编译并安装（Debug）
-- 若改了网络/鉴权/离线缓存/待提交重试，需走一次核心链路回归（登录→选兔舍→关键写操作→断网/重试）
+```bash
+cd flutter_app
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+若只改 UI，可至少运行 `flutter analyze`；若改 model、repository、provider 或业务逻辑，应运行 `flutter test`。
+
+### 平台管理后台
+
+```bash
+pnpm --dir admin lint
+pnpm --dir admin build
+```
+
+若改了登录、请求层、布局、弹窗、表格或响应式行为，需要在浏览器中做一次人工验证。
 
 ---
 
@@ -114,4 +132,3 @@ mvn -DskipTests package
 
 - 禁止提交 `.env`、密钥、token、生产连接串
 - 禁止在日志中打印 Authorization token / 密码
-

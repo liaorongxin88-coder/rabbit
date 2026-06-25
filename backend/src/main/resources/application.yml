@@ -13,7 +13,7 @@ spring:
     baseline-version: 0
 
 mybatis:
-  mapper-locations: classpath:mapper/*.xml
+  mapper-locations: classpath*:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
 
@@ -21,6 +21,14 @@ app:
   jwt:
     secret: rabbit-app-dev-secret-change-me
     expire-seconds: 604800
+  admin:
+    jwt:
+      secret: ${APP_ADMIN_JWT_SECRET:rabbit-app-admin-dev-secret-change-me}
+      expire-seconds: ${APP_ADMIN_JWT_EXPIRE_SECONDS:${app.jwt.expire-seconds}}
+    bootstrap:
+      enabled: ${APP_ADMIN_BOOTSTRAP_ENABLED:true}
+      username: ${APP_ADMIN_BOOTSTRAP_USERNAME:admin}
+      password: ${APP_ADMIN_BOOTSTRAP_PASSWORD:admin123456}
   wechat:
     enabled: false
     appid:
@@ -45,7 +53,7 @@ app:
       ignore-no-where-ids:
     select-guard:
       enabled: true
-      ignore-ids:
+      ignore-ids: com.rabbit.app.modules.house.mapper.RabbitHouseMapper.selectById
   inventory:
     forbid-negative: false
     cas-retry-times: 5

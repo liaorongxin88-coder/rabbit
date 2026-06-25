@@ -1,8 +1,8 @@
 package com.rabbit.app.config;
 
-import com.rabbit.app.hardware.HardwareGateway;
-import com.rabbit.app.hardware.HttpHardwareGateway;
-import com.rabbit.app.hardware.NoopHardwareGateway;
+import com.rabbit.app.modules.hardware.gateway.HardwareGateway;
+import com.rabbit.app.modules.hardware.gateway.HttpHardwareGateway;
+import com.rabbit.app.modules.hardware.gateway.NoopHardwareGateway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

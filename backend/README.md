@@ -1,114 +1,143 @@
-# rabbit-backend
+# Rabbit Backend
 
-## 环境
+Rabbit 后端提供业务 REST API、平台管理 API、权限隔离、Flyway 迁移、审计、提醒扫描和硬件网关适配。
 
-- JDK 8
-- Maven 3
-- MySQL 8（或兼容版本）
+## 技术栈
 
-## 数据库初始化
+- JDK 21
+- Spring Boot 3.5
+- MyBatis
+- MySQL 8
+- Flyway
+- Maven 3.9+
 
-1. 创建并进入数据库：`rabbit_app`
-2. 执行建表脚本：
-   - [schema.sql](file:///d:/rabbit%20app/backend/src/main/resources/db/schema.sql)
-3. （可选）执行索引与约束优化脚本：
-   - [index.sql](file:///d:/rabbit%20app/backend/src/main/resources/db/index.sql)
-4. （可选）导入演示数据脚本（建议先通过接口注册 demo 用户，或保证库里已有 id=1 的用户）：
-   - [seed_demo.sql](file:///d:/rabbit%20app/backend/src/main/resources/db/seed_demo.sql)
+## 本地运行
 
-默认连接配置见：
-- [application.yml](file:///d:/rabbit%20app/backend/src/main/resources/application.yml)
+```bash
+cd backend
+mvn spring-boot:run
+```
 
-## 迁移体系（Flyway）
+默认端口：`8080`。
 
-已引入 Flyway，用于对后续数据库变更做“可追踪版本”迁移：
-- 版本脚本目录：`backend/src/main/resources/db/migration/`
-- 默认开启 `baseline-on-migrate=true`，用于把既有库作为基线后继续演进
+macOS + Homebrew 建议固定 JDK 21：
 
-## 启动
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+```
 
-- `mvn spring-boot:run`
-- 默认端口：`8080`
+## Docker
 
-## 打包
+仓库根目录：
 
-- `mvn -DskipTests package`
-- 产物：`target/rabbit-backend-0.0.1-SNAPSHOT.jar`
-- 运行：`java -jar target/rabbit-backend-0.0.1-SNAPSHOT.jar`
+```bash
+docker compose up -d --build
+```
 
-## Docker 部署
+只刷新 backend 且保留 MySQL：
 
-仓库根目录提供 `docker-compose.yml`（MySQL + backend）：
+```bash
+docker compose up -d --build --no-deps backend
+```
 
-- 启动：`docker compose up -d --build`
-- 后端端口：`http://localhost:8080`
-- MySQL 端口：`localhost:3306`（root / rabbit_root）
+## 数据库
 
-初始化：
-- 首次启动由 Flyway 自动执行版本迁移（`db/migration/`），完成建表与索引初始化
+- 迁移目录：`src/main/resources/db/migration/`
+- 当前结构参考：`src/main/resources/db/schema.sql`
+- 演示数据参考：`src/main/resources/db/seed_demo.sql`
 
-配置：
-- 可在 `docker-compose.yml` 修改：
-  - `APP_JWT_SECRET`（对应 `app.jwt.secret`）
-  - `SPRING_DATASOURCE_*`
+首次启动由 Flyway 自动执行迁移。任何 schema 变更都必须新增 Flyway 迁移脚本。
 
-## 一键演示脚本
+## 配置
 
-仓库根目录提供 [demo_flow.ps1](file:///d:/rabbit%20app/tools/demo_flow.ps1)，用于自动跑通：
-- 注册/登录 → 创建兔舍 → 初始化周期(全部 0 天) → 建公母兔 → 建批次/配种 → 转后备 → 拉取提醒
+默认配置：`src/main/resources/application.yml`。
+
+常用环境变量：
+
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `APP_JWT_SECRET`
+- `APP_ADMIN_JWT_SECRET`
+- `APP_ADMIN_BOOTSTRAP_ENABLED`
+- `APP_ADMIN_BOOTSTRAP_USERNAME`
+- `APP_ADMIN_BOOTSTRAP_PASSWORD`
+
+开发默认平台管理员为 `admin / admin123456`。生产环境必须覆盖或关闭 bootstrap。
+
+## 模块
+
+业务模块位于 `src/main/java/com/rabbit/app/modules/`：
+
+- `auth`、`house`、`cage`、`rabbit`、`batch`
+- `event`、`feed`、`treatment`、`weight`
+- `inventory`、`sale`、`nfc`
+- `audit`、`dedup`、`hardware`
+- `admin`、`report`、`setting`
+
+详细边界见 [../docs/backend/README.md](../docs/backend/README.md) 和 [../docs/common/architecture.md](../docs/common/architecture.md)。
 
 ## 请求约定
 
-- `Authorization: Bearer <token>`
-- `X-House-Id: <houseId>`
+普通业务 API：
 
-## 主要接口
+- `Authorization: Bearer <token>`
+- `X-House-Id: <houseId>` 用于兔舍域请求
+- 权限分为 `view`、`edit`、`control`
+
+平台管理 API：
+
+- 路径前缀 `/api/admin/**`
+- 使用平台管理员 JWT
+- 不使用 `X-House-Id`
+
+写接口优先支持 `requestId` 幂等，避免重复提交造成重复数据。
+
+## 常用接口
+
+认证和兔舍：
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/wechat-login`
 - `GET /api/houses`
 - `POST /api/houses`
 - `GET /api/house-members`
-- `POST /api/house-members`
-- `PUT /api/house-members/{memberUserId}`
-- `DELETE /api/house-members/{memberUserId}`
+
+生产业务：
+
 - `GET /api/cages`
 - `POST /api/rabbits`
 - `GET /api/rabbits`
-- `GET /api/rabbits/{id}`
-- `PUT /api/rabbits/{id}`
-- `POST /api/rabbits/replacement`
 - `GET /api/batches`
 - `POST /api/batches`
-- `GET /api/batches/{batchId}/batch-rabbits`
-- `POST /api/batches/{batchId}/mating`
-- `POST /api/batches/{batchId}/aphrodisiac/start`
-- `POST /api/batches/{batchId}/aphrodisiac/finish`
-- `POST /api/batches/{batchId}/pregnancy-check`
-- `POST /api/batches/{batchId}/prepartum/finish`
-- `POST /api/batches/{batchId}/parturition`
-- `POST /api/batches/{batchId}/weaning`
-- `POST /api/batches/{batchId}/sale`
-- `GET /api/prepartum-records`
 - `GET /api/events`
 - `POST /api/events/ack`
-- `GET /api/event-reminder-logs`
-- `GET /api/hardware/status`
-- `POST /api/hardware/aphrodisiac/start`
-- `POST /api/hardware/aphrodisiac/finish`
-- `GET /api/reports/feed-summary`
-- `GET /api/reports/feed-logs.csv`
-- `GET /api/reports/breeding-summary`
-- `GET /api/reports/event-ack-summary`
-- `GET /api/reports/event-ack-summary.csv`
-- `GET /api/settings`
-- `PUT /api/settings`
 - `POST /api/maintenance/events/scan`
-- `GET /api/breeding-performance`
-- `GET /api/rabbit-status-history`
-- `POST /api/feed-logs`
-- `GET /api/feed-logs`
-- `GET /api/abnormal`
-- `POST /api/abnormal/{id}/deal`
-- `POST /api/replacement-records/mark-notified`
-- `GET /api/replacement-records`
+
+平台管理：
+
+- `POST /api/admin/auth/login`
+- `GET /api/admin/merchants`
+- `POST /api/admin/merchants`
+- `PUT /api/admin/merchants/{id}`
+- `GET /api/admin/merchants/{id}`
+
+## 验证
+
+```bash
+cd backend
+mvn -DskipTests package
+mvn -Pe2e verify
+```
+
+E2E 说明见 [../docs/common/testing.md](../docs/common/testing.md)。
+
+## 更多文档
+
+- [../docs/backend/README.md](../docs/backend/README.md)
+- [../docs/common/development.md](../docs/common/development.md)
+- [../docs/common/testing.md](../docs/common/testing.md)
+- [../docs/common/operations.md](../docs/common/operations.md)
+- [../docs/common/business-baseline.md](../docs/common/business-baseline.md)

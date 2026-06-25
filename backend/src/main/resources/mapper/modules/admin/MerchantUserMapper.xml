@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.admin.mapper.MerchantUserMapper">
+    <resultMap id="MerchantUserMap" type="com.rabbit.app.modules.admin.entity.MerchantUser">
+        <id column="id" property="id"/>
+        <result column="merchant_id" property="merchantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="MerchantUserItemMap" type="com.rabbit.app.modules.admin.dto.MerchantUserItem">
+        <id column="user_id" property="userId"/>
+        <result column="user_name" property="userName"/>
+        <result column="openid" property="openid"/>
+        <result column="create_time" property="createTime"/>
+        <result column="bind_time" property="bindTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into merchant_users (merchant_id, user_id, create_by, update_by)
+        values (#{merchantId}, #{userId}, #{createBy}, #{updateBy})
+    </insert>
+
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        insert ignore into merchant_users (merchant_id, user_id, create_by, update_by)
+        values (#{merchantId}, #{userId}, #{createBy}, #{updateBy})
+    </insert>
+
+    <delete id="delete">
+        delete from merchant_users
+        where merchant_id = #{merchantId} and user_id = #{userId}
+    </delete>
+
+    <select id="selectByMerchantAndUser" resultMap="MerchantUserMap">
+        select id, merchant_id, user_id, create_by, create_time, update_by, update_time
+        from merchant_users
+        where merchant_id = #{merchantId} and user_id = #{userId}
+    </select>
+
+    <select id="selectSingleMerchantIdByUser" resultType="long">
+        select case when count(distinct merchant_id) = 1 then min(merchant_id) else null end
+        from merchant_users
+        where user_id = #{userId}
+    </select>
+
+    <select id="selectUsersByMerchant" resultMap="MerchantUserItemMap">
+        select u.user_id, u.user_name, u.openid, u.create_time, mu.create_time as bind_time
+        from merchant_users mu
+        join sys_user u on u.user_id = mu.user_id
+        where mu.merchant_id = #{merchantId}
+        order by mu.create_time desc, u.user_id desc
+    </select>
+
+    <select id="countUsersByMerchant" resultType="long">
+        select count(1)
+        from merchant_users
+        where merchant_id = #{merchantId}
+    </select>
+</mapper>

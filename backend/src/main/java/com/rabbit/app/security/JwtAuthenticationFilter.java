@@ -2,10 +2,10 @@ package com.rabbit.app.security;
 
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -19,6 +19,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String auth = request.getHeader("Authorization");
+        String uri = request.getRequestURI();
+        if (uri != null && uri.startsWith("/api/admin/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         if (auth != null && auth.startsWith("Bearer ")) {
             String token = auth.substring("Bearer ".length());
             try {

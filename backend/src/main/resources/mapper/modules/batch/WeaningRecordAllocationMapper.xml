@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.batch.mapper.WeaningRecordAllocationMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.batch.entity.WeaningRecordAllocation">
+        <id column="id" property="id"/>
+        <result column="weaning_record_id" property="weaningRecordId"/>
+        <result column="cage_id" property="cageId"/>
+        <result column="alloc_count" property="allocCount"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert ignore into weaning_record_allocations (weaning_record_id, cage_id, alloc_count)
+        values
+        <foreach collection="rows" item="r" separator=",">
+            (#{r.weaningRecordId}, #{r.cageId}, #{r.allocCount})
+        </foreach>
+    </insert>
+
+    <select id="selectByWeaningRecordId" resultMap="Map">
+        select *
+        from weaning_record_allocations
+        where weaning_record_id = #{weaningRecordId}
+        order by id asc
+    </select>
+</mapper>
+
