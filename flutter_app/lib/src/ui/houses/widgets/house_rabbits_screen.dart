@@ -78,6 +78,7 @@ class _RabbitsContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = AppPalette.of(context);
     final rabbits = ref.watch(houseRabbitsProvider(house.id));
     final cages = ref.watch(houseCagesProvider(house.id));
 
@@ -130,12 +131,12 @@ class _RabbitsContent extends ConsumerWidget {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.softGreen,
+                        color: palette.successSoft,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.cruelty_free,
-                        color: AppColors.green,
+                        color: palette.success,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -156,7 +157,7 @@ class _RabbitsContent extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: AppColors.line),
+              Divider(height: 1, color: palette.line),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: cages.when(
@@ -195,6 +196,7 @@ class _AddHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return SectionCard(
       child: Row(
         children: [
@@ -202,10 +204,10 @@ class _AddHint extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.softBlue,
+              color: palette.primarySoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.touch_app_outlined, color: AppColors.blue),
+            child: Icon(Icons.touch_app_outlined, color: palette.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -276,12 +278,13 @@ class _RabbitListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Row(
         children: [
@@ -289,10 +292,10 @@ class _RabbitListTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.softGreen,
+              color: palette.successSoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.cruelty_free, color: AppColors.green),
+            child: Icon(Icons.cruelty_free, color: palette.success),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -349,17 +352,18 @@ class _CompactEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Column(
         children: [
-          Icon(icon, color: AppColors.muted),
+          Icon(icon, color: palette.muted),
           const SizedBox(height: 8),
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -406,17 +410,18 @@ class _InlineError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.softRed,
+        color: palette.dangerSoft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: AppColors.red),
+          Icon(Icons.error_outline, color: palette.danger),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

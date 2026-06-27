@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-
 class AppPage extends StatelessWidget {
   const AppPage({
     super.key,
@@ -24,7 +22,7 @@ class AppPage extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: ColoredBox(
-          color: AppColors.background,
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: child,
         ),
       ),

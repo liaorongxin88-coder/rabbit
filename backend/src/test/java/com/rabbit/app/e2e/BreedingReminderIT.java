@@ -15,7 +15,7 @@ public class BreedingReminderIT extends E2eTestSupport {
         long houseId = createHouse(owner, "breeding_house", 1, 6, 1);
         List<Long> cages = cageIds(owner, houseId);
 
-        api.putOk("/api/settings", owner.token, houseId, obj(
+        api.putOk("/api/settings", owner.token, null, obj(
                 "aphrodisiacDays", 0,
                 "palpationDays", 0,
                 "prepartumDays", 0,
@@ -26,6 +26,34 @@ public class BreedingReminderIT extends E2eTestSupport {
                 "remark", "all due immediately",
                 "requestId", requestId("settings")
         ));
+
+        long secondHouseId = createHouse(owner, "breeding_second_house", 1, 2, 1);
+        JsonNode sharedSettings = api.getOk("/api/settings", owner.token, null);
+        Assertions.assertEquals(0, sharedSettings.get("palpationDays").asInt(),
+                "production settings should be shared by all houses of the user");
+        JsonNode sharedSettingsWithHouseHeader = api.getOk("/api/settings", owner.token, secondHouseId);
+        Assertions.assertEquals(0, sharedSettingsWithHouseHeader.get("palpationDays").asInt(),
+                "settings endpoint should ignore house context and use the current user");
+        JsonNode inheritedHouseSettings = api.getOk("/api/house-settings", owner.token, secondHouseId);
+        Assertions.assertFalse(inheritedHouseSettings.get("customized").asBoolean(),
+                "new house should inherit user default setting until customized");
+        Assertions.assertEquals(0, inheritedHouseSettings.get("setting").get("palpationDays").asInt());
+        api.putOk("/api/house-settings", owner.token, secondHouseId, obj(
+                "aphrodisiacDays", 5,
+                "palpationDays", 7,
+                "prepartumDays", 6,
+                "weaningDays", 22,
+                "postpartumDays", 9,
+                "saleDays", 33,
+                "replacementDays", 44,
+                "remark", "second house override",
+                "requestId", requestId("house_settings")
+        ));
+        JsonNode customizedHouseSettings = api.getOk("/api/house-settings", owner.token, secondHouseId);
+        Assertions.assertTrue(customizedHouseSettings.get("customized").asBoolean());
+        Assertions.assertEquals(7, customizedHouseSettings.get("setting").get("palpationDays").asInt());
+        Assertions.assertEquals(0, api.getOk("/api/settings", owner.token, null).get("palpationDays").asInt(),
+                "house setting should not mutate user default setting");
 
         long femaleId = createRabbit(owner, houseId, cages.get(0), "0", "0", "female");
         long maleId = createRabbit(owner, houseId, cages.get(1), "0", "1", "male");

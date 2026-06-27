@@ -16,7 +16,7 @@ DELETE FROM replacement_records WHERE house_id = @old_house_id;
 DELETE FROM breeding_performance WHERE house_id = @old_house_id;
 DELETE FROM rabbits WHERE house_id = @old_house_id;
 DELETE FROM cages WHERE house_id = @old_house_id;
-DELETE FROM global_setting WHERE house_id = @old_house_id;
+DELETE FROM global_setting WHERE house_id = @old_house_id OR user_id = @demo_user_id;
 DELETE FROM house_users WHERE house_id = @old_house_id;
 DELETE FROM rabbit_houses WHERE id = @old_house_id;
 
@@ -28,8 +28,8 @@ SET @house_id = LAST_INSERT_ID();
 INSERT INTO house_users(house_id, user_id, perms, is_admin)
 VALUES (@house_id, @demo_user_id, 'control', TRUE);
 
-INSERT INTO global_setting(house_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days, remark, create_by, update_by)
-VALUES (@house_id, 7, 10, 3, 25, 10, 90, 120, 'demo 设置', 'system', 'system');
+INSERT INTO global_setting(house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days, remark, create_by, update_by)
+VALUES (NULL, @demo_user_id, 7, 10, 3, 25, 10, 90, 120, 'demo 设置', 'system', 'system');
 
 INSERT INTO cages(house_id, cage_number, status, rabbit_count, is_fed, remark, create_by, update_by)
 VALUES

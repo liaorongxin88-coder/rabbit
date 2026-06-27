@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -48,6 +49,15 @@ class HouseDetailScreen extends ConsumerWidget {
               onAction: () => context.go('/houses'),
             );
           }
+          final selectedHouseId =
+              ref.read(authControllerProvider).valueOrNull?.houseId ?? 0;
+          if (selectedHouseId != house.id) {
+            Future.microtask(
+              () => ref
+                  .read(authControllerProvider.notifier)
+                  .setHouseId(house.id),
+            );
+          }
           return _HouseDetailContent(house: house);
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -76,6 +86,7 @@ class _HouseDetailContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final palette = AppPalette.of(context);
     final cages = ref.watch(houseCagesProvider(house.id));
     final rabbits = ref.watch(houseRabbitsProvider(house.id));
 
@@ -128,8 +139,8 @@ class _HouseDetailContent extends ConsumerWidget {
         const SizedBox(height: 12),
         _DetailEntryCard(
           icon: Icons.grid_view_rounded,
-          iconColor: AppColors.blue,
-          iconBackground: AppColors.softBlue,
+          iconColor: palette.primary,
+          iconBackground: palette.primarySoft,
           title: '笼位管理',
           message: '新增笼位、搜索笼位，并从具体笼位录入兔子。',
           actionLabel: '进入笼位',
@@ -138,12 +149,24 @@ class _HouseDetailContent extends ConsumerWidget {
         const SizedBox(height: 10),
         _DetailEntryCard(
           icon: Icons.cruelty_free,
-          iconColor: AppColors.green,
-          iconBackground: AppColors.softGreen,
+          iconColor: palette.success,
+          iconBackground: palette.successSoft,
           title: '兔只管理',
           message: '查看当前兔舍兔只档案；新增兔子请先进入笼位。',
           actionLabel: '查看兔只',
           onTap: () => context.go('/houses/${house.id}/rabbits'),
+        ),
+        const SizedBox(height: 10),
+        _DetailEntryCard(
+          icon: Icons.calendar_month_outlined,
+          iconColor: palette.warning,
+          iconBackground: palette.warningSoft,
+          title: '生产设置',
+          message: '为当前兔舍单独配置生产周期；未保存时使用默认配置。',
+          actionLabel: '配置',
+          onTap: () => context.go(
+            '/houses/${house.id}/settings/production?name=${Uri.encodeComponent(house.name)}',
+          ),
         ),
       ],
     );
@@ -191,12 +214,13 @@ class _MetricBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,11 +255,12 @@ class _DetailEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Material(
-      color: AppColors.surface,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: InkWell(
         onTap: onTap,

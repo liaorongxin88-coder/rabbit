@@ -17,7 +17,7 @@ import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
 import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
-import com.rabbit.app.modules.setting.mapper.GlobalSettingMapper;
+import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
 import java.util.Date;
 import java.util.List;
@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RabbitService {
     private final RabbitMapper rabbitMapper;
     private final CageMapper cageMapper;
-    private final GlobalSettingMapper globalSettingMapper;
+    private final SettingService settingService;
     private final ReplacementRecordMapper replacementRecordMapper;
     private final BatchRabbitMapper batchRabbitMapper;
     private final BatchMapper batchMapper;
@@ -40,7 +40,7 @@ public class RabbitService {
     public RabbitService(
             RabbitMapper rabbitMapper,
             CageMapper cageMapper,
-            GlobalSettingMapper globalSettingMapper,
+            SettingService settingService,
             ReplacementRecordMapper replacementRecordMapper,
             BatchRabbitMapper batchRabbitMapper,
             BatchMapper batchMapper,
@@ -50,7 +50,7 @@ public class RabbitService {
     ) {
         this.rabbitMapper = rabbitMapper;
         this.cageMapper = cageMapper;
-        this.globalSettingMapper = globalSettingMapper;
+        this.settingService = settingService;
         this.replacementRecordMapper = replacementRecordMapper;
         this.batchRabbitMapper = batchRabbitMapper;
         this.batchMapper = batchMapper;
@@ -226,10 +226,7 @@ public class RabbitService {
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
-        GlobalSetting gs = globalSettingMapper.selectByHouseId(houseId);
-        if (gs == null) {
-            throw new BizException(400, "兔舍未初始化周期配置");
-        }
+        GlobalSetting gs = settingService.getEffectiveSetting(userId, houseId);
         Date now = DateUtil.now();
 
         Cage targetCage = null;

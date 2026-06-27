@@ -11,12 +11,13 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
+    final palette = AppPalette.of(context);
 
     return Scaffold(
       body: child,
       bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.line)),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: palette.line)),
         ),
         child: NavigationBar(
           selectedIndex: _indexFor(location),

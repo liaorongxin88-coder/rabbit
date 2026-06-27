@@ -32,6 +32,10 @@ public class PlatformAdminBootstrap implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        ensureBootstrapAdmin();
+    }
+
+    public void ensureBootstrapAdmin() {
         if (!enabled || userName == null || userName.trim().isEmpty() || password == null || password.trim().isEmpty()) {
             return;
         }

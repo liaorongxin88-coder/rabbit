@@ -11,8 +11,6 @@ import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
-import com.rabbit.app.modules.setting.entity.GlobalSetting;
-import com.rabbit.app.modules.setting.mapper.GlobalSettingMapper;
 import com.rabbit.app.security.HouseContext;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +24,6 @@ public class HouseService {
     private final HouseUserMapper houseUserMapper;
     private final CageMapper cageMapper;
     private final MerchantUserMapper merchantUserMapper;
-    private final GlobalSettingMapper globalSettingMapper;
     private final RequestDedupService requestDedupService;
 
     public HouseService(
@@ -34,14 +31,12 @@ public class HouseService {
             HouseUserMapper houseUserMapper,
             CageMapper cageMapper,
             MerchantUserMapper merchantUserMapper,
-            GlobalSettingMapper globalSettingMapper,
             RequestDedupService requestDedupService
     ) {
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.houseUserMapper = houseUserMapper;
         this.cageMapper = cageMapper;
         this.merchantUserMapper = merchantUserMapper;
-        this.globalSettingMapper = globalSettingMapper;
         this.requestDedupService = requestDedupService;
     }
 
@@ -158,19 +153,6 @@ public class HouseService {
                 }
             }
             cageMapper.insertBatch(cages);
-
-            GlobalSetting setting = new GlobalSetting();
-            setting.setHouseId(house.getId());
-            setting.setAphrodisiacDays(2);
-            setting.setPalpationDays(12);
-            setting.setPrepartumDays(3);
-            setting.setWeaningDays(25);
-            setting.setPostpartumDays(10);
-            setting.setSaleDays(30);
-            setting.setReplacementDays(45);
-            setting.setCreateBy(createBy);
-            setting.setUpdateBy(createBy);
-            globalSettingMapper.insert(setting);
 
             requestDedupService.markDone(0L, userId, api, requestId);
             return house;

@@ -20,13 +20,14 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: AppColors.line),
+            Icon(icon, size: 56, color: palette.line),
             const SizedBox(height: 18),
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),

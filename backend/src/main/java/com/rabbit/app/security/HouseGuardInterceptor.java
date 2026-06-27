@@ -3,29 +3,37 @@ package com.rabbit.app.security;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.admin.entity.Merchant;
 import com.rabbit.app.modules.admin.mapper.MerchantMapper;
-import com.rabbit.app.modules.house.mapper.HouseUserMapper;
-import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
 import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
-import org.springframework.web.servlet.HandlerInterceptor;
-
+import com.rabbit.app.modules.house.mapper.HouseUserMapper;
+import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.servlet.HandlerInterceptor;
 
 public class HouseGuardInterceptor implements HandlerInterceptor {
+
     private final HouseUserMapper houseUserMapper;
     private final RabbitHouseMapper rabbitHouseMapper;
     private final MerchantMapper merchantMapper;
 
-    public HouseGuardInterceptor(HouseUserMapper houseUserMapper, RabbitHouseMapper rabbitHouseMapper, MerchantMapper merchantMapper) {
+    public HouseGuardInterceptor(
+        HouseUserMapper houseUserMapper,
+        RabbitHouseMapper rabbitHouseMapper,
+        MerchantMapper merchantMapper
+    ) {
         this.houseUserMapper = houseUserMapper;
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.merchantMapper = merchantMapper;
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+    public boolean preHandle(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        Object handler
+    ) {
         if (DispatcherType.ASYNC.equals(request.getDispatcherType())) {
             return true;
         }
@@ -40,6 +48,9 @@ public class HouseGuardInterceptor implements HandlerInterceptor {
             return true;
         }
         if ("/api/houses".equals(uri)) {
+            return true;
+        }
+        if ("/api/settings".equals(uri)) {
             return true;
         }
 
@@ -81,7 +92,12 @@ public class HouseGuardInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+    public void afterCompletion(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        Object handler,
+        Exception ex
+    ) {
         HouseContext.clear();
     }
 }

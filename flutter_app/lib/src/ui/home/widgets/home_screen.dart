@@ -145,6 +145,7 @@ class _AlertHeader extends StatelessWidget {
     final overdue = events.where((event) => event.isOverdue).length;
     final due = events.where((event) => event.isDue).length;
     final upcoming = events.length - overdue - due;
+    final palette = AppPalette.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +157,7 @@ class _AlertHeader extends StatelessWidget {
               child: Text(
                 '今日预警!',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: AppColors.blue,
+                      color: palette.primary,
                       fontWeight: FontWeight.w700,
                       fontSize: 32,
                     ),
@@ -173,20 +174,20 @@ class _AlertHeader extends StatelessWidget {
             _StatusChip(
               label: '逾期',
               count: overdue,
-              color: AppColors.red,
-              background: AppColors.softRed,
+              color: palette.danger,
+              background: palette.dangerSoft,
             ),
             _StatusChip(
               label: '到期',
               count: due,
-              color: AppColors.blue,
-              background: AppColors.softBlue,
+              color: palette.primary,
+              background: palette.primarySoft,
             ),
             _StatusChip(
               label: '未到期',
               count: upcoming < 0 ? 0 : upcoming,
-              color: AppColors.green,
-              background: AppColors.softGreen,
+              color: palette.success,
+              background: palette.successSoft,
             ),
           ],
         ),
@@ -202,17 +203,18 @@ class _AlertCountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: count > 0 ? AppColors.ink : AppColors.surface,
+        color: count > 0 ? palette.text : palette.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Text(
         '$count 条',
         style: TextStyle(
-          color: count > 0 ? Colors.white : AppColors.muted,
+          color: count > 0 ? palette.background : palette.muted,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -235,12 +237,13 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Text(
         '$label $count',
@@ -263,16 +266,17 @@ class _FlowTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.line)),
       ),
       child: TabBar(
         controller: tabController,
         isScrollable: true,
-        labelColor: AppColors.ink,
-        unselectedLabelColor: AppColors.ink,
-        indicatorColor: AppColors.red,
+        labelColor: palette.text,
+        unselectedLabelColor: palette.muted,
+        indicatorColor: palette.danger,
         indicatorWeight: 3,
         tabAlignment: TabAlignment.start,
         labelStyle: const TextStyle(
@@ -311,16 +315,17 @@ class _TinyCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.softRed,
+        color: palette.dangerSoft,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         '$count',
-        style: const TextStyle(
-          color: AppColors.red,
+        style: TextStyle(
+          color: palette.danger,
           fontSize: 11,
           fontWeight: FontWeight.w900,
         ),
@@ -361,11 +366,12 @@ class _EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     final color = event.isOverdue
-        ? AppColors.red
+        ? palette.danger
         : event.isDue
-            ? AppColors.blue
-            : AppColors.green;
+            ? palette.primary
+            : palette.success;
 
     return SectionCard(
       child: Row(

@@ -29,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -40,13 +41,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 width: 54,
                 height: 54,
                 decoration: BoxDecoration(
-                  color: AppColors.softGreen,
+                  color: palette.successSoft,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.line),
+                  border: Border.all(color: palette.line),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.agriculture_outlined,
-                  color: AppColors.green,
+                  color: palette.success,
                   size: 30,
                 ),
               ),
@@ -163,23 +164,24 @@ class _BackendHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.softBlue,
+        color: palette.primarySoft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.blue, size: 20),
+          Icon(Icons.info_outline, color: palette.primary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               '模拟器默认连接 http://10.0.2.2:8080，请先启动后端服务。',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.ink,
+                    color: palette.text,
                   ),
             ),
           ),

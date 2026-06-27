@@ -13,6 +13,10 @@ import 'package:rabbit_flutter/src/ui/houses/widgets/house_rabbits_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
 import 'package:rabbit_flutter/src/ui/profile/widgets/profile_screen.dart';
 import 'package:rabbit_flutter/src/ui/settings/widgets/settings_screen.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/local_app_settings_controller.dart';
+import 'package:rabbit_flutter/src/ui/settings/widgets/account_settings_screen.dart';
+import 'package:rabbit_flutter/src/ui/settings/widgets/app_settings_screen.dart';
+import 'package:rabbit_flutter/src/ui/settings/widgets/production_settings_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -23,7 +27,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/',
+    initialLocation:
+        ref.read(localAppSettingsControllerProvider).valueOrNull?.startRoute ??
+            '/',
     refreshListenable: notifier,
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
@@ -94,6 +100,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/houses/:houseId/settings/production',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final houseName = state.uri.queryParameters['name'];
+              return NoTransitionPage(
+                child: ProductionSettingsScreen(
+                  houseId: houseId,
+                  houseName: houseName,
+                ),
+              );
+            },
+          ),
+          GoRoute(
             path: '/dashboard',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: DashboardScreen(),
@@ -109,6 +129,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/settings',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: SettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/account',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: AccountSettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/app',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: AppSettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/production',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ProductionSettingsScreen(),
             ),
           ),
         ],

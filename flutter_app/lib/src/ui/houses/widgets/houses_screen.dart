@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -40,13 +41,13 @@ class HousesScreen extends ConsumerWidget {
   }
 }
 
-class _HousesContent extends StatelessWidget {
+class _HousesContent extends ConsumerWidget {
   const _HousesContent({required this.houses});
 
   final List<RabbitHouse> houses;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (houses.isEmpty) {
       return EmptyState(
         icon: Icons.storefront_outlined,
@@ -70,7 +71,7 @@ class _HousesContent extends StatelessWidget {
                     Text('兔舍列表', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(
-                      '进入兔舍后管理笼位、兔只和生产流程。',
+                      '共 ${houses.length} 个兔舍，进入后切换当前业务上下文。',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -88,7 +89,10 @@ class _HousesContent extends StatelessWidget {
         for (final house in houses) ...[
           _HouseListCard(
             house: house,
-            onTap: () => context.go('/houses/${house.id}'),
+            onTap: () {
+              ref.read(authControllerProvider.notifier).setHouseId(house.id);
+              context.go('/houses/${house.id}');
+            },
           ),
           const SizedBox(height: 10),
         ],
@@ -118,11 +122,12 @@ class _HouseListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Material(
-      color: AppColors.surface,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: InkWell(
         onTap: onTap,
@@ -135,12 +140,12 @@ class _HouseListCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.background,
+                  color: palette.surfaceSubtle,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.storefront_outlined,
-                  color: AppColors.muted,
+                  color: palette.muted,
                 ),
               ),
               const SizedBox(width: 12),
@@ -156,7 +161,9 @@ class _HouseListCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      house.remark.isEmpty ? house.layoutLabel : house.remark,
+                      house.remark.isEmpty
+                          ? '${house.layoutLabel} · 点击进入管理'
+                          : '${house.remark} · 点击进入管理',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -165,7 +172,7 @@ class _HouseListCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, color: AppColors.muted),
+              Icon(Icons.chevron_right, color: palette.muted),
             ],
           ),
         ),
@@ -293,6 +300,7 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
       if (mounted) {
         Navigator.of(context).pop();
         if (widget.hostContext.mounted) {
+          ref.read(authControllerProvider.notifier).setHouseId(house.id);
           widget.hostContext.go('/houses/${house.id}');
         }
       }

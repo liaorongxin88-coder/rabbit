@@ -45,6 +45,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final panel = ref.watch(_dashboardPanelProvider);
+    final palette = AppPalette.of(context);
 
     return AppPage(
       title: '数据面板',
@@ -82,14 +83,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(height: 12),
                 _MonthlyChartCard(
                   title: '每月出生兔子数量',
-                  color: AppColors.blue,
+                  color: palette.primary,
                   values: data.monthlyBirths(_selectedYear),
                 ),
                 const SizedBox(height: 22),
                 Text(
                   '$_selectedYear年每月满月兔子数量',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: AppColors.blue,
+                        color: palette.primary,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
                       ),
@@ -97,7 +98,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(height: 12),
                 _MonthlyChartCard(
                   title: '每月满月兔子数量',
-                  color: AppColors.green,
+                  color: palette.success,
                   values: data.monthlyWeaned(_selectedYear),
                 ),
               ],
@@ -236,12 +237,13 @@ class _DashboardHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,14 +254,14 @@ class _DashboardHero extends StatelessWidget {
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
                   ),
-              children: const [
+              children: [
                 TextSpan(
                   text: '兔群统计',
-                  style: TextStyle(color: AppColors.blue),
+                  style: TextStyle(color: palette.primary),
                 ),
                 TextSpan(
                   text: '数据',
-                  style: TextStyle(color: AppColors.green),
+                  style: TextStyle(color: palette.success),
                 ),
               ],
             ),
@@ -294,13 +296,14 @@ class _HeroNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.background,
+          color: palette.surfaceSubtle,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.line),
+          border: Border.all(color: palette.line),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,7 +313,7 @@ class _HeroNumber extends StatelessWidget {
             Text(
               valueText ?? '${value ?? 0}',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: AppColors.blue,
+                    color: palette.primary,
                     fontSize: 26,
                   ),
             ),
@@ -363,31 +366,32 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
-        boxShadow: const [
+        border: Border.all(color: palette.line),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x14000000),
+            color: palette.shadow,
             blurRadius: 14,
-            offset: Offset(0, 6),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(item.icon, color: AppColors.muted, size: 22),
+          Icon(item.icon, color: palette.muted, size: 22),
           const Spacer(),
           Text(
             item.label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: AppColors.muted,
+                  color: palette.muted,
                   fontSize: 13,
                 ),
           ),
@@ -395,7 +399,7 @@ class _MetricCard extends StatelessWidget {
           Text(
             '${item.value}',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppColors.blue,
+                  color: palette.primary,
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
                 ),
@@ -418,6 +422,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final years = [DateTime.now().year - 1, DateTime.now().year];
+    final palette = AppPalette.of(context);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -426,7 +431,7 @@ class _SectionTitle extends StatelessWidget {
           child: Text(
             '$year年每月出生兔子数量',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppColors.blue,
+                  color: palette.primary,
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                 ),
@@ -437,9 +442,9 @@ class _SectionTitle extends StatelessWidget {
           height: 42,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.line),
+            border: Border.all(color: palette.line),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
@@ -475,13 +480,14 @@ class _MonthlyChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       height: 270,
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Column(
         children: [
@@ -490,7 +496,13 @@ class _MonthlyChartCard extends StatelessWidget {
               children: [
                 Positioned.fill(
                   child: CustomPaint(
-                    painter: _MonthChartPainter(values: values, color: color),
+                    painter: _MonthChartPainter(
+                      values: values,
+                      color: color,
+                      axisColor: palette.muted,
+                      guideColor: palette.line,
+                      labelColor: palette.muted,
+                    ),
                   ),
                 ),
                 if (values.every((value) => value == 0))
@@ -507,7 +519,7 @@ class _MonthlyChartCard extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.muted,
+                  color: palette.muted,
                 ),
           ),
         ],
@@ -520,10 +532,16 @@ class _MonthChartPainter extends CustomPainter {
   const _MonthChartPainter({
     required this.values,
     required this.color,
+    required this.axisColor,
+    required this.guideColor,
+    required this.labelColor,
   });
 
   final List<int> values;
   final Color color;
+  final Color axisColor;
+  final Color guideColor;
+  final Color labelColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -536,10 +554,10 @@ class _MonthChartPainter extends CustomPainter {
     final axisY = top + chartHeight;
 
     final axisPaint = Paint()
-      ..color = AppColors.muted
+      ..color = axisColor
       ..strokeWidth = 1.1;
     final guidePaint = Paint()
-      ..color = AppColors.line
+      ..color = guideColor
       ..strokeWidth = 0.8;
 
     for (var i = 0; i < 3; i++) {
@@ -563,8 +581,8 @@ class _MonthChartPainter extends CustomPainter {
       final label = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
-          style: const TextStyle(
-            color: AppColors.muted,
+          style: TextStyle(
+            color: labelColor,
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -588,6 +606,10 @@ class _MonthChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MonthChartPainter oldDelegate) {
-    return oldDelegate.values != values || oldDelegate.color != color;
+    return oldDelegate.values != values ||
+        oldDelegate.color != color ||
+        oldDelegate.axisColor != axisColor ||
+        oldDelegate.guideColor != guideColor ||
+        oldDelegate.labelColor != labelColor;
   }
 }

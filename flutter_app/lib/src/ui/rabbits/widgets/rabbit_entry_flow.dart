@@ -507,10 +507,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   }
 
   Widget _buildActionBar(BuildContext context) {
+    final palette = AppPalette.of(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(top: BorderSide(color: palette.line)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -657,6 +658,7 @@ class _RabbitTypeChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.circular(8),
@@ -673,7 +675,7 @@ class _RabbitTypeChoice extends StatelessWidget {
                   onChanged(value);
                 }
               },
-              activeColor: AppColors.green,
+              activeColor: palette.success,
             ),
             Text(label, style: Theme.of(context).textTheme.titleMedium),
           ],
@@ -698,6 +700,7 @@ class _RadioChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return InkWell(
       onTap: () => onChanged(value),
       borderRadius: BorderRadius.circular(8),
@@ -712,7 +715,7 @@ class _RadioChoice extends StatelessWidget {
                 onChanged(value);
               }
             },
-            activeColor: AppColors.green,
+            activeColor: palette.success,
           ),
           Text(label, style: Theme.of(context).textTheme.titleMedium),
         ],
@@ -766,18 +769,19 @@ class _ReadOnlyInfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: AppColors.muted),
+          Icon(icon, size: 18, color: palette.muted),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -798,18 +802,19 @@ class _CageTypeWarning extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.softAmber,
+        color: palette.warningSoft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Text(
         '当前笼位用途为${cage.usageLabel}，选择其他类型时后端会拒绝提交。',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.amber,
+              color: palette.warning,
               fontWeight: FontWeight.w800,
             ),
       ),

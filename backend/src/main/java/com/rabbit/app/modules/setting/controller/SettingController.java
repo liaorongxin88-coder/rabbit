@@ -3,69 +3,82 @@ package com.rabbit.app.modules.setting.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
-import com.rabbit.app.modules.house.service.HouseService;
+import com.rabbit.app.modules.setting.dto.HouseSettingResponse;
 import com.rabbit.app.modules.setting.dto.UpdateSettingRequest;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
-import com.rabbit.app.modules.setting.mapper.GlobalSettingMapper;
+import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.security.AuthContext;
+import com.rabbit.app.security.HouseContext;
 import com.rabbit.app.security.HousePerm;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
 public class SettingController {
-    private final HouseService houseService;
-    private final GlobalSettingMapper globalSettingMapper;
+    private static final Long USER_SETTING_DEDUP_HOUSE_ID = 0L;
+
+    private final SettingService settingService;
     private final RequestDedupService requestDedupService;
 
-    public SettingController(HouseService houseService, GlobalSettingMapper globalSettingMapper, RequestDedupService requestDedupService) {
-        this.houseService = houseService;
-        this.globalSettingMapper = globalSettingMapper;
+    public SettingController(SettingService settingService, RequestDedupService requestDedupService) {
+        this.settingService = settingService;
         this.requestDedupService = requestDedupService;
     }
 
     @GetMapping("/settings")
-    public ApiResponse<GlobalSetting> get(@RequestHeader("X-House-Id") Long houseId) {
+    public ApiResponse<GlobalSetting> get() {
         Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "view");
-        return ApiResponse.ok(globalSettingMapper.selectByHouseId(houseId));
+        return ApiResponse.ok(settingService.getOrCreateUserSetting(userId));
     }
 
     @PutMapping("/settings")
-    @HousePerm("edit")
-    public ApiResponse<Void> update(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody UpdateSettingRequest req) {
+    public ApiResponse<Void> update(@Valid @RequestBody UpdateSettingRequest req) {
         Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
         String api = "settings.update";
+        if (requestDedupService.shouldSkipAsDone(USER_SETTING_DEDUP_HOUSE_ID, userId, api, req.getRequestId())) {
+            return ApiResponse.ok(null);
+        }
+        requestDedupService.markProcessing(USER_SETTING_DEDUP_HOUSE_ID, userId, api, req.getRequestId());
+        try {
+            settingService.updateUserSetting(userId, req);
+            requestDedupService.markDone(USER_SETTING_DEDUP_HOUSE_ID, userId, api, req.getRequestId());
+            return ApiResponse.ok(null);
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(USER_SETTING_DEDUP_HOUSE_ID, userId, api, req.getRequestId(), e.getMessage());
+            throw e;
+        }
+    }
+
+    @GetMapping("/house-settings")
+    @HousePerm("view")
+    public ApiResponse<HouseSettingResponse> getHouseSetting() {
+        Long userId = requireLogin();
+        Long houseId = requireHouse();
+        boolean customized = settingService.hasHouseSetting(houseId);
+        return ApiResponse.ok(HouseSettingResponse.of(
+                settingService.getHouseSettingOrDefault(userId, houseId),
+                customized));
+    }
+
+    @PutMapping("/house-settings")
+    @HousePerm("control")
+    public ApiResponse<Void> updateHouseSetting(@Valid @RequestBody UpdateSettingRequest req) {
+        Long userId = requireLogin();
+        Long houseId = requireHouse();
+        String api = "house-settings.update";
         if (requestDedupService.shouldSkipAsDone(houseId, userId, api, req.getRequestId())) {
             return ApiResponse.ok(null);
         }
         requestDedupService.markProcessing(houseId, userId, api, req.getRequestId());
         try {
-            GlobalSetting gs = new GlobalSetting();
-            gs.setHouseId(houseId);
-            gs.setAphrodisiacDays(req.getAphrodisiacDays());
-            gs.setPalpationDays(req.getPalpationDays());
-            gs.setPrepartumDays(req.getPrepartumDays());
-            gs.setWeaningDays(req.getWeaningDays());
-            gs.setPostpartumDays(req.getPostpartumDays());
-            gs.setSaleDays(req.getSaleDays());
-            gs.setReplacementDays(req.getReplacementDays());
-            gs.setRemark(req.getRemark());
-            gs.setUpdateBy(String.valueOf(userId));
-            int n = globalSettingMapper.updateByHouse(gs);
-            if (n == 0) {
-                throw new BizException(400, "兔舍未初始化周期配置");
-            }
+            settingService.updateHouseSetting(userId, houseId, req);
             requestDedupService.markDone(houseId, userId, api, req.getRequestId());
             return ApiResponse.ok(null);
         } catch (RuntimeException e) {
@@ -80,5 +93,14 @@ public class SettingController {
             throw new BizException(401, "未登录");
         }
         return userId;
+    }
+
+    private Long requireHouse() {
+        HouseContext context = HouseContext.get();
+        Long houseId = context == null ? null : context.getHouseId();
+        if (houseId == null || houseId <= 0) {
+            throw new BizException(400, "缺少X-House-Id");
+        }
+        return houseId;
     }
 }

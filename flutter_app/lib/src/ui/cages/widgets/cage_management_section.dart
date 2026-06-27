@@ -54,6 +54,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   Widget build(BuildContext context) {
     final houseId = widget.house.id;
     final cages = ref.watch(houseCagesProvider(houseId));
+    final palette = AppPalette.of(context);
 
     return SectionCard(
       padding: EdgeInsets.zero,
@@ -68,7 +69,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
               onRefresh: () => ref.invalidate(houseCagesProvider(houseId)),
             ),
           ),
-          const Divider(height: 1, color: AppColors.line),
+          Divider(height: 1, color: palette.line),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -197,16 +198,17 @@ class _CageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.softBlue,
+            color: palette.primarySoft,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.grid_view_rounded, color: AppColors.blue),
+          child: Icon(Icons.grid_view_rounded, color: palette.primary),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -253,13 +255,14 @@ class _CageTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final occupied = cage.rabbitCount > 0;
     final title = occupied ? '在栏 ${cage.rabbitCount} 只' : '空笼';
-    final titleColor = occupied ? AppColors.green : AppColors.ink;
+    final palette = AppPalette.of(context);
+    final titleColor = occupied ? palette.success : palette.text;
 
     return Material(
-      color: AppColors.surface,
+      color: palette.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppColors.line),
+        side: BorderSide(color: palette.line),
       ),
       child: InkWell(
         onTap: onTap,
@@ -285,15 +288,15 @@ class _CageTile extends StatelessWidget {
                 ),
               ),
             ),
-            const Divider(height: 1, color: AppColors.line),
+            Divider(height: 1, color: palette.line),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
               child: Text(
                 cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.muted,
+                style: TextStyle(
+                  color: palette.muted,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -601,10 +604,11 @@ class _FieldHelpText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Text(
       text,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.muted,
+            color: palette.muted,
             fontWeight: FontWeight.w700,
           ),
     );
@@ -618,17 +622,18 @@ class _PreviewLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: AppColors.ink,
+        style: TextStyle(
+          color: palette.text,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -644,17 +649,18 @@ class _CageMetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Text(
         '$label $value',
-        style: const TextStyle(
-          color: AppColors.ink,
+        style: TextStyle(
+          color: palette.text,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -677,17 +683,18 @@ class _CageEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: palette.surfaceSubtle,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Column(
         children: [
-          const Icon(Icons.grid_view_outlined, color: AppColors.muted),
+          Icon(Icons.grid_view_outlined, color: palette.muted),
           const SizedBox(height: 8),
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -739,17 +746,18 @@ class _InlineSectionError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.softRed,
+        color: palette.dangerSoft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: palette.line),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: AppColors.red),
+          Icon(Icons.error_outline, color: palette.danger),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

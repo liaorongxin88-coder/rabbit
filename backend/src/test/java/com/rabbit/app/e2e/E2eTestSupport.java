@@ -1,6 +1,7 @@
 package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.rabbit.app.modules.admin.service.PlatformAdminBootstrap;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,12 +28,16 @@ public abstract class E2eTestSupport {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private PlatformAdminBootstrap platformAdminBootstrap;
+
     protected E2eApiClient api;
 
     @BeforeEach
     void resetDatabase() {
         flyway.clean();
         flyway.migrate();
+        platformAdminBootstrap.ensureBootstrapAdmin();
         api = new E2eApiClient(restTemplate, "http://localhost:" + port);
     }
 

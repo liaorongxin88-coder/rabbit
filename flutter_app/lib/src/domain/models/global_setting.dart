@@ -1,6 +1,7 @@
 class GlobalSetting {
   const GlobalSetting({
     required this.id,
+    required this.userId,
     required this.houseId,
     required this.aphrodisiacDays,
     required this.palpationDays,
@@ -13,6 +14,7 @@ class GlobalSetting {
   });
 
   final int id;
+  final int userId;
   final int houseId;
   final int aphrodisiacDays;
   final int palpationDays;
@@ -23,10 +25,11 @@ class GlobalSetting {
   final int replacementDays;
   final String remark;
 
-  static GlobalSetting defaultsForHouse(int houseId) {
-    return GlobalSetting(
+  static GlobalSetting defaults() {
+    return const GlobalSetting(
       id: 0,
-      houseId: houseId,
+      userId: 0,
+      houseId: 0,
       aphrodisiacDays: 2,
       palpationDays: 12,
       prepartumDays: 3,
@@ -38,10 +41,11 @@ class GlobalSetting {
     );
   }
 
-  static GlobalSetting fromJson(Map<String, dynamic> json, {int? houseId}) {
+  static GlobalSetting fromJson(Map<String, dynamic> json) {
     return GlobalSetting(
       id: _intValue(json['id']),
-      houseId: _intValue(json['houseId'], fallback: houseId ?? 0),
+      userId: _intValue(json['userId']),
+      houseId: _intValue(json['houseId']),
       aphrodisiacDays: _intValue(json['aphrodisiacDays'], fallback: 2),
       palpationDays: _intValue(json['palpationDays'], fallback: 12),
       prepartumDays: _intValue(json['prepartumDays'], fallback: 3),
@@ -78,5 +82,25 @@ class GlobalSetting {
       return int.tryParse(value) ?? fallback;
     }
     return fallback;
+  }
+}
+
+class HouseSettingState {
+  const HouseSettingState({
+    required this.setting,
+    required this.customized,
+  });
+
+  final GlobalSetting setting;
+  final bool customized;
+
+  static HouseSettingState fromJson(Map<String, dynamic> json) {
+    final settingJson = json['setting'];
+    return HouseSettingState(
+      setting: settingJson is Map
+          ? GlobalSetting.fromJson(Map<String, dynamic>.from(settingJson))
+          : GlobalSetting.defaults(),
+      customized: json['customized'] == true,
+    );
   }
 }

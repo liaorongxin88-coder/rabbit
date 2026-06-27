@@ -7,6 +7,8 @@
 - `Authorization: Bearer <token>`
 - 兔舍域请求带 `X-House-Id: <houseId>`
 
+正式业务 JWT 只应发给已绑定手机号的用户。手机号一键登录、微信快捷登录和旧登录兼容流程见 [auth-phone-wechat.md](auth-phone-wechat.md)。
+
 权限模型：
 
 - `view`：可查看。
@@ -41,6 +43,9 @@
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/wechat-login`
+- `POST /api/auth/phone-one-tap-login`
+- `POST /api/auth/wechat-quick-login`
+- `POST /api/auth/bind-phone`
 - `GET /api/houses`
 - `POST /api/houses`
 - `GET /api/house-members`

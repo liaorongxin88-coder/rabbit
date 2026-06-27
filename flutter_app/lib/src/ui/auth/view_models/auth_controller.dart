@@ -52,8 +52,17 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     if (current == null) {
       return;
     }
-    await _sessionStore.saveHouseId(houseId);
+    await _sessionStore.saveHouseId(current.userId, houseId);
     state = AsyncValue.data(current.copyWith(houseId: houseId));
+  }
+
+  Future<void> setUserName(String userName) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+    await _sessionStore.saveUserName(userName);
+    state = AsyncValue.data(current.copyWith(userName: userName));
   }
 
   Future<void> logout() async {

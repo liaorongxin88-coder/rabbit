@@ -12,6 +12,7 @@ Flutter Android 客户端是当前移动端重构方向，源码位于 `flutter_
 ## 模块索引
 
 - [modules/rabbit-management-flow.md](modules/rabbit-management-flow.md)：兔舍、笼位、兔只的多级流程和新增兔只规则。
+- [modules/auth-phone-wechat-flow.md](modules/auth-phone-wechat-flow.md)：手机号一键登录、微信快捷登录和绑定手机号页面流程。
 
 ## 常用命令
 

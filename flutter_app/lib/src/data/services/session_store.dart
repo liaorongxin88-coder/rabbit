@@ -13,11 +13,16 @@ class SessionStore {
 
   Future<SessionSnapshot> readSession() async {
     final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt(_userIdKey);
     return SessionSnapshot(
       token: await _secureStorage.read(key: _tokenKey),
-      userId: prefs.getInt(_userIdKey),
+      userId: userId,
       userName: prefs.getString(_userNameKey),
-      houseId: prefs.getInt(_houseIdKey) ?? 0,
+      houseId: userId == null
+          ? 0
+          : prefs.getInt(_houseIdKeyFor(userId)) ??
+              prefs.getInt(_houseIdKey) ??
+              0,
     );
   }
 
@@ -32,18 +37,30 @@ class SessionStore {
     await prefs.setString(_userNameKey, userName);
   }
 
-  Future<void> saveHouseId(int houseId) async {
+  Future<void> saveHouseId(int userId, int houseId) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_houseIdKeyFor(userId), houseId);
     await prefs.setInt(_houseIdKey, houseId);
   }
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt(_userIdKey);
     await _secureStorage.delete(key: _tokenKey);
     await prefs.remove(_userIdKey);
     await prefs.remove(_userNameKey);
     await prefs.remove(_houseIdKey);
+    if (userId != null) {
+      await prefs.remove(_houseIdKeyFor(userId));
+    }
   }
+
+  Future<void> saveUserName(String userName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userNameKey, userName);
+  }
+
+  static String _houseIdKeyFor(int userId) => '$_houseIdKey.$userId';
 }
 
 class SessionSnapshot {

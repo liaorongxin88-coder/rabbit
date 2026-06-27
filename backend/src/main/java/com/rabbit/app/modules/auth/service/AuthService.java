@@ -2,6 +2,7 @@ package com.rabbit.app.modules.auth.service;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
+import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.security.JwtUtil;
@@ -73,8 +74,62 @@ public class AuthService {
         return new AuthTokenResponse(token, u.getUserId(), u.getUserName());
     }
 
+    public UserProfileResponse getProfile(Long userId) {
+        SysUser user = requireUser(userId);
+        return new UserProfileResponse(user);
+    }
+
+    public UserProfileResponse updateUserName(Long userId, String userName) {
+        SysUser user = requireUser(userId);
+        String nextName = normalizeUserName(userName);
+        SysUser existing = sysUserMapper.selectByUserName(nextName);
+        if (existing != null && !existing.getUserId().equals(userId)) {
+            throw new BizException(400, "用户名已存在");
+        }
+        if (!nextName.equals(user.getUserName())) {
+            int updated = sysUserMapper.updateUserName(userId, nextName);
+            if (updated == 0) {
+                throw new BizException(404, "用户不存在");
+            }
+        }
+        return getProfile(userId);
+    }
+
+    public void updatePassword(Long userId, String oldPassword, String newPassword) {
+        SysUser user = requireUser(userId);
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BizException(400, "旧密码不正确");
+        }
+        int updated = sysUserMapper.updatePassword(userId, passwordEncoder.encode(newPassword));
+        if (updated == 0) {
+            throw new BizException(404, "用户不存在");
+        }
+    }
+
     private String buildWechatUserName(String openid) {
         String suffix = UUID.nameUUIDFromBytes(openid.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
         return "wx_" + suffix;
+    }
+
+    private SysUser requireUser(Long userId) {
+        if (userId == null) {
+            throw new BizException(401, "未登录");
+        }
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        return user;
+    }
+
+    private String normalizeUserName(String userName) {
+        String trimmed = userName == null ? "" : userName.trim();
+        if (trimmed.isEmpty()) {
+            throw new BizException(400, "用户名不能为空");
+        }
+        if (trimmed.length() > 64) {
+            throw new BizException(400, "用户名过长");
+        }
+        return trimmed;
     }
 }

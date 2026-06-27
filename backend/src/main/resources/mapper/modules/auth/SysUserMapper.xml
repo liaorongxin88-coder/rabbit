@@ -42,4 +42,18 @@
         where user_id = #{userId}
           and (openid is null or openid = '')
     </update>
+
+    <update id="updateUserName">
+        update sys_user
+        set user_name = #{userName},
+            update_time = now()
+        where user_id = #{userId}
+    </update>
+
+    <update id="updatePassword">
+        update sys_user
+        set password = #{password},
+            update_time = now()
+        where user_id = #{userId}
+    </update>
 </mapper>

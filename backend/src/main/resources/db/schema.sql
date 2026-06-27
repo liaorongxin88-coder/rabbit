@@ -104,7 +104,8 @@ CREATE TABLE IF NOT EXISTS nfc_tags (
 
 CREATE TABLE IF NOT EXISTS global_setting (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  house_id BIGINT NOT NULL,
+  house_id BIGINT,
+  user_id BIGINT,
   aphrodisiac_days INT NOT NULL,
   palpation_days INT NOT NULL,
   prepartum_days INT NOT NULL,
@@ -118,7 +119,9 @@ CREATE TABLE IF NOT EXISTS global_setting (
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_setting_house (house_id),
-  CONSTRAINT fk_setting_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id)
+  UNIQUE KEY uk_setting_user (user_id),
+  CONSTRAINT fk_setting_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_setting_user FOREIGN KEY (user_id) REFERENCES sys_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS rabbits (

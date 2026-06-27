@@ -15,4 +15,8 @@ public interface SysUserMapper {
     int insert(SysUser user);
 
     int updateOpenid(@Param("userId") Long userId, @Param("openid") String openid);
+
+    int updateUserName(@Param("userId") Long userId, @Param("userName") String userName);
+
+    int updatePassword(@Param("userId") Long userId, @Param("password") String password);
 }

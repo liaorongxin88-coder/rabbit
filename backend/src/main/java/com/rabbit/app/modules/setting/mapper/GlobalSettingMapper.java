@@ -8,7 +8,13 @@ import org.apache.ibatis.annotations.Param;
 public interface GlobalSettingMapper {
     int insert(GlobalSetting setting);
 
+    GlobalSetting selectByUserId(@Param("userId") Long userId);
+
+    GlobalSetting selectFirstByUserHouse(@Param("userId") Long userId);
+
     GlobalSetting selectByHouseId(@Param("houseId") Long houseId);
+
+    int updateByUser(GlobalSetting setting);
 
     int updateByHouse(GlobalSetting setting);
 }

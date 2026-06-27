@@ -5,6 +5,7 @@ import java.util.Date;
 public class GlobalSetting {
     private Long id;
     private Long houseId;
+    private Long userId;
     private Integer aphrodisiacDays;
     private Integer palpationDays;
     private Integer prepartumDays;
@@ -32,6 +33,14 @@ public class GlobalSetting {
 
     public void setHouseId(Long houseId) {
         this.houseId = houseId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public Integer getAphrodisiacDays() {
