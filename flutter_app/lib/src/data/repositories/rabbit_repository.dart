@@ -26,6 +26,14 @@ final houseRabbitsProvider =
   return ref.watch(rabbitRepositoryProvider).listRabbits(houseId);
 });
 
+final allActiveHouseRabbitsProvider =
+    FutureProvider.family<List<Rabbit>, int>((ref, houseId) async {
+  if (houseId <= 0) {
+    return const <Rabbit>[];
+  }
+  return ref.watch(rabbitRepositoryProvider).listAllActiveRabbits(houseId);
+});
+
 class RabbitRepository {
   RabbitRepository(this._api);
 
@@ -50,10 +58,37 @@ class RabbitRepository {
   }
 
   Future<List<Rabbit>> listRabbits(int houseId) {
+    return listRabbitsPage(houseId: houseId, page: 1, pageSize: 50);
+  }
+
+  Future<List<Rabbit>> listAllActiveRabbits(int houseId) async {
+    const pageSize = 200;
+    final rabbits = <Rabbit>[];
+    var page = 1;
+
+    while (true) {
+      final batch = await listRabbitsPage(
+        houseId: houseId,
+        page: page,
+        pageSize: pageSize,
+      );
+      rabbits.addAll(batch);
+      if (batch.length < pageSize) {
+        return rabbits;
+      }
+      page += 1;
+    }
+  }
+
+  Future<List<Rabbit>> listRabbitsPage({
+    required int houseId,
+    required int page,
+    required int pageSize,
+  }) {
     return _api.get<List<Rabbit>>(
       '/api/rabbits',
       houseId: houseId,
-      query: const {'active': true, 'page': 1, 'pageSize': 50},
+      query: {'active': true, 'page': page, 'pageSize': pageSize},
       decode: (data) {
         if (data is! List) {
           throw const ApiException('兔只列表格式不正确');

@@ -17,6 +17,14 @@ final currentHouseReportProvider = FutureProvider<DashboardReport>((ref) async {
   return ref.watch(reportRepositoryProvider).loadDashboard(houseId);
 });
 
+final houseReportProvider =
+    FutureProvider.family<DashboardReport, int>((ref, houseId) async {
+  if (houseId <= 0) {
+    return DashboardReport.empty();
+  }
+  return ref.watch(reportRepositoryProvider).loadDashboard(houseId);
+});
+
 class DashboardReport {
   const DashboardReport({
     required this.feed,
@@ -36,6 +44,43 @@ class DashboardReport {
         totalWeaned: 0,
         successBreedingCount: 0,
         failedBreedingCount: 0,
+      ),
+    );
+  }
+
+  factory DashboardReport.sum(Iterable<DashboardReport> reports) {
+    var feedRecordCount = 0;
+    var feedTotalAmount = 0.0;
+    var totalLitters = 0;
+    var totalKits = 0;
+    var totalLiveKits = 0;
+    var totalWeaned = 0;
+    var successBreedingCount = 0;
+    var failedBreedingCount = 0;
+
+    for (final report in reports) {
+      feedRecordCount += report.feed.recordCount;
+      feedTotalAmount += report.feed.totalAmount;
+      totalLitters += report.breeding.totalLitters;
+      totalKits += report.breeding.totalKits;
+      totalLiveKits += report.breeding.totalLiveKits;
+      totalWeaned += report.breeding.totalWeaned;
+      successBreedingCount += report.breeding.successBreedingCount;
+      failedBreedingCount += report.breeding.failedBreedingCount;
+    }
+
+    return DashboardReport(
+      feed: FeedSummary(
+        recordCount: feedRecordCount,
+        totalAmount: feedTotalAmount,
+      ),
+      breeding: BreedingSummary(
+        totalLitters: totalLitters,
+        totalKits: totalKits,
+        totalLiveKits: totalLiveKits,
+        totalWeaned: totalWeaned,
+        successBreedingCount: successBreedingCount,
+        failedBreedingCount: failedBreedingCount,
       ),
     );
   }

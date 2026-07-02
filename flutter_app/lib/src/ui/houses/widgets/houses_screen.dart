@@ -71,7 +71,7 @@ class _HousesContent extends ConsumerWidget {
                     Text('兔舍列表', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(
-                      '共 ${houses.length} 个兔舍，进入后切换当前业务上下文。',
+                      '共 ${houses.length} 个兔舍，点击兔舍进入管理。',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],

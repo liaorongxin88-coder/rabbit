@@ -4,33 +4,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 
+final _selectedDashboardHouseProvider = StateProvider<int?>((ref) => null);
+
 final _dashboardPanelProvider =
     FutureProvider<_DashboardPanelData>((ref) async {
-  final houseId = ref.watch(authControllerProvider).valueOrNull?.houseId ?? 0;
-  if (houseId <= 0) {
-    return _DashboardPanelData.empty();
+  final selectedHouseId = ref.watch(_selectedDashboardHouseProvider);
+  final houses = await ref.watch(housesProvider.future);
+  final selectedHouse = _findHouse(houses, selectedHouseId);
+  final effectiveSelectedHouseId = selectedHouse?.id;
+  final visibleHouses =
+      selectedHouse == null ? houses : <RabbitHouse>[selectedHouse];
+  if (visibleHouses.isEmpty) {
+    return _DashboardPanelData.empty(
+      selectedHouseId: effectiveSelectedHouseId,
+      houses: houses,
+    );
   }
 
-  final report = await ref.watch(currentHouseReportProvider.future);
-  final rabbits = await ref.watch(houseRabbitsProvider(houseId).future);
-  final batches = await ref.watch(currentHouseBatchesProvider.future);
+  final reports = await Future.wait([
+    for (final house in visibleHouses)
+      ref.watch(houseReportProvider(house.id).future),
+  ]);
+  final rabbitsByHouse = await Future.wait([
+    for (final house in visibleHouses)
+      ref.watch(allActiveHouseRabbitsProvider(house.id).future),
+  ]);
+  final batchesByHouse = await Future.wait([
+    for (final house in visibleHouses)
+      ref.watch(houseBatchesProvider(house.id).future),
+  ]);
 
   return _DashboardPanelData(
-    houseId: houseId,
-    report: report,
-    rabbits: rabbits,
-    batches: batches,
+    selectedHouseId: effectiveSelectedHouseId,
+    houses: houses,
+    report: DashboardReport.sum(reports),
+    rabbits: rabbitsByHouse.expand((items) => items).toList(),
+    batches: batchesByHouse.expand((items) => items).toList(),
   );
 });
+
+RabbitHouse? _findHouse(List<RabbitHouse> houses, int? houseId) {
+  if (houseId == null) {
+    return null;
+  }
+  for (final house in houses) {
+    if (house.id == houseId) {
+      return house;
+    }
+  }
+  return null;
+}
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -45,11 +78,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final panel = ref.watch(_dashboardPanelProvider);
+    final selectedHouseId = ref.watch(_selectedDashboardHouseProvider);
     final palette = AppPalette.of(context);
 
     return AppPage(
       title: '数据面板',
       actions: [
+        panel.maybeWhen(
+          data: (data) => _HouseFilterMenu(
+            houses: data.houses,
+            selectedHouseId: selectedHouseId,
+            onChanged: (houseId) {
+              ref.read(_selectedDashboardHouseProvider.notifier).state =
+                  houseId;
+            },
+          ),
+          orElse: () => const SizedBox.shrink(),
+        ),
         IconButton(
           tooltip: '刷新',
           onPressed: () => _refresh(ref),
@@ -58,11 +103,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ],
       child: panel.when(
         data: (data) {
-          if (data.houseId <= 0) {
+          if (data.houses.isEmpty) {
             return const EmptyState(
               icon: Icons.storefront_outlined,
-              title: '请选择兔舍',
-              message: '进入兔舍列表选择当前兔舍后，这里会展示兔群统计和繁殖数据。',
+              title: '暂无兔舍',
+              message: '创建兔舍后，这里会默认汇总所有兔舍的兔群统计和繁殖数据。',
             );
           }
           return RefreshIndicator(
@@ -70,6 +115,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
               children: [
+                _DashboardScopeBanner(data: data),
+                const SizedBox(height: 12),
                 _DashboardHero(stats: data.stats),
                 const SizedBox(height: 18),
                 _MetricGrid(metrics: data.metrics),
@@ -115,12 +162,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _refresh(WidgetRef ref) async {
-    final houseId = ref.read(authControllerProvider).valueOrNull?.houseId ?? 0;
+    final data = ref.read(_dashboardPanelProvider).valueOrNull;
     ref.invalidate(_dashboardPanelProvider);
-    ref.invalidate(currentHouseReportProvider);
-    ref.invalidate(currentHouseBatchesProvider);
-    if (houseId > 0) {
-      ref.invalidate(houseRabbitsProvider(houseId));
+    ref.invalidate(housesProvider);
+    if (data != null) {
+      for (final house in data.visibleHouses) {
+        ref.invalidate(houseReportProvider(house.id));
+        ref.invalidate(houseBatchesProvider(house.id));
+        ref.invalidate(houseRabbitsProvider(house.id));
+        ref.invalidate(allActiveHouseRabbitsProvider(house.id));
+      }
     }
     await ref.read(_dashboardPanelProvider.future);
   }
@@ -128,24 +179,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
 class _DashboardPanelData {
   const _DashboardPanelData({
-    required this.houseId,
+    required this.selectedHouseId,
+    required this.houses,
     required this.report,
     required this.rabbits,
     required this.batches,
   });
 
-  final int houseId;
+  final int? selectedHouseId;
+  final List<RabbitHouse> houses;
   final DashboardReport report;
   final List<Rabbit> rabbits;
   final List<Batch> batches;
 
-  factory _DashboardPanelData.empty() {
+  factory _DashboardPanelData.empty({
+    required int? selectedHouseId,
+    required List<RabbitHouse> houses,
+  }) {
     return _DashboardPanelData(
-      houseId: 0,
+      selectedHouseId: selectedHouseId,
+      houses: houses,
       report: DashboardReport.empty(),
       rabbits: const [],
       batches: const [],
     );
+  }
+
+  bool get isAllHouses => selectedHouseId == null;
+
+  List<RabbitHouse> get visibleHouses {
+    if (selectedHouseId == null) {
+      return houses;
+    }
+    return houses.where((house) => house.id == selectedHouseId).toList();
+  }
+
+  String get scopeTitle {
+    if (isAllHouses) {
+      return '全部兔舍';
+    }
+    final visible = visibleHouses;
+    return visible.isEmpty ? '已选择兔舍' : visible.first.name;
+  }
+
+  String get scopeDescription {
+    if (isAllHouses) {
+      return '已汇总 ${houses.length} 个兔舍';
+    }
+    return '仅显示当前选择的兔舍';
   }
 
   _RabbitStats get stats => _RabbitStats.from(rabbits, batches, report);
@@ -226,6 +307,139 @@ class _RabbitStats {
       replacementRabbits:
           activeRabbits.where((rabbit) => rabbit.type == '1').length,
       liveRate: report.breeding.liveRate,
+    );
+  }
+}
+
+class _HouseFilterMenu extends StatelessWidget {
+  const _HouseFilterMenu({
+    required this.houses,
+    required this.selectedHouseId,
+    required this.onChanged,
+  });
+
+  final List<RabbitHouse> houses;
+  final int? selectedHouseId;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedValue = selectedHouseId ?? 0;
+    return PopupMenuButton<int>(
+      tooltip: '选择兔舍',
+      enabled: houses.isNotEmpty,
+      initialValue: selectedValue,
+      onSelected: (value) => onChanged(value == 0 ? null : value),
+      itemBuilder: (context) => [
+        PopupMenuItem<int>(
+          value: 0,
+          child: _HouseFilterMenuItem(
+            selected: selectedHouseId == null,
+            title: '全部兔舍',
+          ),
+        ),
+        for (final house in houses)
+          PopupMenuItem<int>(
+            value: house.id,
+            child: _HouseFilterMenuItem(
+              selected: selectedHouseId == house.id,
+              title: house.name,
+            ),
+          ),
+      ],
+      icon: const Icon(Icons.filter_list_rounded),
+    );
+  }
+}
+
+class _HouseFilterMenuItem extends StatelessWidget {
+  const _HouseFilterMenuItem({
+    required this.selected,
+    required this.title,
+  });
+
+  final bool selected;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          selected ? Icons.check_rounded : Icons.storefront_outlined,
+          size: 20,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashboardScopeBanner extends StatelessWidget {
+  const _DashboardScopeBanner({required this.data});
+
+  final _DashboardPanelData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.line),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color:
+                  data.isAllHouses ? palette.primarySoft : palette.successSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              data.isAllHouses
+                  ? Icons.grid_view_rounded
+                  : Icons.storefront_outlined,
+              color: data.isAllHouses ? palette.primary : palette.success,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.scopeTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  data.scopeDescription,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.muted,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

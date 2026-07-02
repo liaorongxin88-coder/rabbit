@@ -18,6 +18,14 @@ final currentHouseBatchesProvider = FutureProvider<List<Batch>>((ref) async {
   return ref.watch(batchRepositoryProvider).listBatches(houseId);
 });
 
+final houseBatchesProvider =
+    FutureProvider.family<List<Batch>, int>((ref, houseId) async {
+  if (houseId <= 0) {
+    return const <Batch>[];
+  }
+  return ref.watch(batchRepositoryProvider).listBatches(houseId);
+});
+
 class BatchRepository {
   BatchRepository(this._api);
 
