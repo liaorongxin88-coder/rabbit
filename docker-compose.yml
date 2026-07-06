@@ -6,16 +6,25 @@ services:
       MYSQL_ROOT_PASSWORD: rabbit_root
       MYSQL_DATABASE: rabbit_app
       TZ: Asia/Shanghai
-    ports:
-      - "3306:3306"
+    #    ports:
+    #      - "3306:3306"
     volumes:
       - rabbit_mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prabbit_root"]
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-uroot",
+          "-prabbit_root",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
+    restart: always
 
   backend:
     image: rabbit-backend:java21
@@ -28,15 +37,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: rabbit_root
       APP_JWT_SECRET: rabbit-app-prod-secret-change-me
       APP_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top
-      APP_CORS_ALLOWED_ORIGIN_PATTERNS: https://*.dzht.top
       JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
       TZ: Asia/Shanghai
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       mysql:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
 
 volumes:
   rabbit_mysql_data:

@@ -70,7 +70,7 @@ DEPLOY_HOST=your.server.example.com DEPLOY_PATH=/var/www/rabbit-admin pnpm --dir
 DEPLOY_API_BASE_URL=https://api.example.com pnpm --dir admin deploy
 ```
 
-当前线上配置为 `DEPLOY_API_BASE_URL=https://api.dzht.top`。后端跨域白名单通过 `APP_CORS_ALLOWED_ORIGINS` 配置，默认包含 `https://admin.dzht.top` 和 `https://rabbit.host.dzht.top`；同域名族可通过 `APP_CORS_ALLOWED_ORIGIN_PATTERNS=https://*.dzht.top` 放行。
+当前线上配置为 `DEPLOY_API_BASE_URL=https://api.dzht.top`。后端跨域白名单只通过 `APP_CORS_ALLOWED_ORIGINS` 配置，默认包含 `https://admin.dzht.top` 和 `https://rabbit.host.dzht.top`。
 
 服务器 Nginx 静态目录应指向 `DEPLOY_PATH`，并为前端路由配置 `try_files $uri $uri/ /index.html;`。如果使用同源 `/api`，还需要在同一个 server block 中把 `/api/` 反向代理到后端服务。
 

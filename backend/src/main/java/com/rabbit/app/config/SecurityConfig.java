@@ -8,11 +8,8 @@ import com.rabbit.app.security.JwtUtil;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -22,7 +19,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -50,12 +46,10 @@ public class SecurityConfig {
 
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource(
-            @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}") String allowedOrigins,
-            @Value("${app.cors.allowed-origin-patterns:https://*.dzht.top}") String allowedOriginPatterns
+            @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}") String allowedOrigins
     ) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(splitCsv(allowedOrigins));
-        config.setAllowedOriginPatterns(splitCsv(allowedOriginPatterns));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-House-Id", "X-Trace-Id", "X-Requested-With"));
         config.setExposedHeaders(List.of("X-Trace-Id"));
@@ -64,13 +58,6 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
         return source;
-    }
-
-    @Bean
-    public FilterRegistrationBean<CorsFilter> corsFilterRegistration(UrlBasedCorsConfigurationSource corsConfigurationSource) {
-        FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(corsConfigurationSource));
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        return registration;
     }
 
     private static List<String> splitCsv(String value) {
@@ -91,7 +78,6 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable());
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/admin/auth/login").permitAll()
                 .anyRequest().permitAll());
