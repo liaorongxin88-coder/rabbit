@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +13,9 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/settings_repository.dart';
+import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/local_app_settings_store.dart';
+import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
@@ -33,6 +37,44 @@ void main() {
     expect(find.text('检测手机号'), findsOneWidget);
     expect(find.text('账号'), findsOneWidget);
     expect(find.textContaining('模拟器默认连接'), findsNothing);
+  });
+
+  testWidgets('does not load protected home while auth restore is pending',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final pendingSession = Completer<SessionSnapshot>();
+    final houseRepository = _RecordingHouseRepository();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          sessionStoreProvider.overrideWithValue(
+            _PendingSessionStore(pendingSession.future),
+          ),
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('今日预警!'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(houseRepository.calls, 0);
+
+    pendingSession.complete(
+      const SessionSnapshot(
+        token: null,
+        userId: null,
+        userName: null,
+        houseId: 0,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('手机号一键进入'), findsOneWidget);
+    expect(houseRepository.calls, 0);
   });
 
   testWidgets('login methods switch by horizontal swipe', (tester) async {
@@ -386,5 +428,26 @@ class ProviderScopeWrapper extends StatelessWidget {
       overrides: overrides,
       child: const RabbitManagerApp(),
     );
+  }
+}
+
+class _PendingSessionStore extends SessionStore {
+  _PendingSessionStore(this._snapshot);
+
+  final Future<SessionSnapshot> _snapshot;
+
+  @override
+  Future<SessionSnapshot> readSession() => _snapshot;
+}
+
+class _RecordingHouseRepository extends HouseRepository {
+  _RecordingHouseRepository() : super(ApiClient(SessionStore()));
+
+  int calls = 0;
+
+  @override
+  Future<List<RabbitHouse>> listHouses() async {
+    calls += 1;
+    return const <RabbitHouse>[];
   }
 }

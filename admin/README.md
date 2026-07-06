@@ -33,6 +33,47 @@ pnpm --dir admin dev
 
 默认开发代理访问 `http://127.0.0.1:8080` 的后端。需要指向其它后端时设置 `VITE_API_BASE_URL`。
 
+## 线上部署
+
+Admin 前端按静态资源部署。脚本会先执行生产构建，再通过 SSH 和 rsync 将 `admin/dist/` 同步到服务器指定路径。
+
+首次配置：
+
+```bash
+cp admin/.env.deploy.example admin/.env.deploy
+```
+
+编辑 `admin/.env.deploy`：
+
+```bash
+DEPLOY_HOST=your.server.example.com
+DEPLOY_PATH=/var/www/rabbit-admin
+DEPLOY_USER=root
+DEPLOY_PORT=22
+```
+
+一键部署：
+
+```bash
+pnpm --dir admin deploy
+```
+
+也可以不写 `.env.deploy`，直接通过环境变量部署：
+
+```bash
+DEPLOY_HOST=your.server.example.com DEPLOY_PATH=/var/www/rabbit-admin pnpm --dir admin deploy
+```
+
+默认构建会使用同源 `/api`。如果 admin 静态站和后端 API 不在同一域名下，部署时设置：
+
+```bash
+DEPLOY_API_BASE_URL=https://api.example.com pnpm --dir admin deploy
+```
+
+当前线上配置为 `DEPLOY_API_BASE_URL=https://api.dzht.top`。后端跨域白名单通过 `APP_CORS_ALLOWED_ORIGINS` 配置，默认包含 `https://rabbit.host.dzht.top`。
+
+服务器 Nginx 静态目录应指向 `DEPLOY_PATH`，并为前端路由配置 `try_files $uri $uri/ /index.html;`。如果使用同源 `/api`，还需要在同一个 server block 中把 `/api/` 反向代理到后端服务。
+
 ## 登录
 
 后端开发默认会 bootstrap 平台管理员：

@@ -20,6 +20,7 @@ import 'package:rabbit_flutter/src/ui/settings/widgets/production_settings_scree
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
+const _authLoadingPath = '/auth-loading';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier(ref);
@@ -33,12 +34,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
-      final isLoading = authState.isLoading;
+      final isLoading = authState.isLoading && authState.valueOrNull == null;
       final isLoggedIn = authState.valueOrNull != null;
       final isLoginRoute = state.matchedLocation == '/login';
+      final isLoadingRoute = state.matchedLocation == _authLoadingPath;
 
       if (isLoading) {
-        return null;
+        if (isLoginRoute || isLoadingRoute) {
+          return null;
+        }
+        final from = Uri.encodeComponent(state.uri.toString());
+        return '$_authLoadingPath?from=$from';
+      }
+      if (isLoadingRoute) {
+        if (!isLoggedIn) {
+          return '/login';
+        }
+        final from = state.uri.queryParameters['from'];
+        if (_isSafeProtectedLocation(from)) {
+          return from;
+        }
+        return '/';
       }
       if (!isLoggedIn && !isLoginRoute) {
         return '/login';
@@ -49,6 +65,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: _authLoadingPath,
+        builder: (context, state) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        },
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
@@ -154,6 +178,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+bool _isSafeProtectedLocation(String? location) {
+  if (location == null || location.isEmpty) {
+    return false;
+  }
+  final uri = Uri.tryParse(location);
+  if (uri == null || uri.hasScheme || uri.hasAuthority) {
+    return false;
+  }
+  final path = uri.path;
+  return path.startsWith('/') && path != '/login' && path != _authLoadingPath;
+}
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {

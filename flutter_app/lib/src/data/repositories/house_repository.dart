@@ -4,12 +4,17 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 
 final houseRepositoryProvider = Provider<HouseRepository>((ref) {
   return HouseRepository(ref.watch(apiClientProvider));
 });
 
 final housesProvider = FutureProvider<List<RabbitHouse>>((ref) {
+  final session = ref.watch(authControllerProvider).valueOrNull;
+  if (session == null) {
+    return Future.value(const <RabbitHouse>[]);
+  }
   return ref.watch(houseRepositoryProvider).listHouses();
 });
 

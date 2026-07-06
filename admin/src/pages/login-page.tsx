@@ -5,7 +5,7 @@ import { Building2Icon, ShieldCheckIcon, UsersIcon, type LucideIcon } from 'luci
 import { loginAdmin } from '@/api/admin'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { getSession, setSession } from '@/lib/auth'
@@ -13,8 +13,8 @@ import { getSession, setSession } from '@/lib/auth'
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [userName, setUserName] = useState('admin')
-  const [password, setPassword] = useState('admin123456')
+  const [userName, setUserName] = useState('')
+  const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const session = getSession()
 
@@ -78,6 +78,9 @@ export function LoginPage() {
                     id="user-name"
                     value={userName}
                     autoComplete="username"
+                    placeholder="请输入用户名"
+                    required
+                    autoFocus
                     onChange={(event) => setUserName(event.target.value)}
                   />
                 </Field>
@@ -88,11 +91,10 @@ export function LoginPage() {
                     type="password"
                     value={password}
                     autoComplete="current-password"
+                    placeholder="请输入密码"
+                    required
                     onChange={(event) => setPassword(event.target.value)}
                   />
-                  <FieldDescription>
-                    开发默认账号为 admin / admin123456，生产环境请通过配置覆盖。
-                  </FieldDescription>
                 </Field>
               </FieldGroup>
               <Button type="submit" disabled={submitting}>

@@ -57,6 +57,7 @@ Keep Vite on the current newer main major already configured in `package.json`; 
 - `src/lib/auth.ts`: platform admin session storage and token access.
 - `src/types/`: API and domain TypeScript types.
 - `src/index.css`: Tailwind import, semantic color tokens, motion tokens, and global reusable animation classes.
+- `scripts/deploy.sh`: one-command static asset build and rsync deployment for `admin/dist/`.
 - `DESIGN.md`: canonical visual and interaction design rules.
 
 ## API Rules

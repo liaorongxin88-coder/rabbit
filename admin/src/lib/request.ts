@@ -9,6 +9,23 @@ type JsonBody = object | string
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
+async function parseApiResponse(response: Response) {
+  const text = await response.text()
+  if (!text.trim()) {
+    throw new Error(`服务返回空响应：HTTP ${response.status}`)
+  }
+
+  try {
+    return JSON.parse(text) as ApiResponse<unknown>
+  } catch {
+    const proxyHint =
+      response.status === 404
+        ? '，请检查 VITE_API_BASE_URL 或服务器 /api 反向代理配置'
+        : ''
+    throw new Error(`服务返回非 JSON 响应：HTTP ${response.status}${proxyHint}`)
+  }
+}
+
 const alova = createAlova({
   baseURL: API_BASE_URL,
   requestAdapter: adapterFetch(),
@@ -23,7 +40,7 @@ const alova = createAlova({
   },
   responded: {
     async onSuccess(response) {
-      const payload = (await response.json()) as ApiResponse<unknown>
+      const payload = await parseApiResponse(response)
       if (!payload || typeof payload.code !== 'number') {
         throw new Error('响应格式不合法')
       }

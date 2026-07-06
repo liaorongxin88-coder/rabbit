@@ -21,12 +21,43 @@ android {
 
     defaultConfig {
         applicationId = "com.rabbit.app.flutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders += [
+            appLabel: "智能兔管家",
+            usesCleartextTraffic: "true"
+        ]
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        dev {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家 Dev",
+                usesCleartextTraffic: "true"
+            ]
+        }
+        staging {
+            dimension = "environment"
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家 Test",
+                usesCleartextTraffic: "true"
+            ]
+        }
+        releaseEnv {
+            dimension = "environment"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家",
+                usesCleartextTraffic: "false"
+            ]
+        }
     }
 
     buildTypes {

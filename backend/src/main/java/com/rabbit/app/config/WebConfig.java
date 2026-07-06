@@ -10,7 +10,10 @@ import com.rabbit.app.security.PermissionInterceptor;
 import com.rabbit.app.security.PlatformAdminGuardInterceptor;
 import com.rabbit.app.modules.audit.service.AuditLogService;
 import com.rabbit.app.modules.house.service.HouseService;
+import java.util.Arrays;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -22,14 +25,37 @@ public class WebConfig implements WebMvcConfigurer {
     private final PlatformAdminMapper platformAdminMapper;
     private final AuditLogService auditLogService;
     private final HouseService houseService;
+    private final String[] allowedOrigins;
 
-    public WebConfig(HouseUserMapper houseUserMapper, RabbitHouseMapper rabbitHouseMapper, MerchantMapper merchantMapper, PlatformAdminMapper platformAdminMapper, AuditLogService auditLogService, HouseService houseService) {
+    public WebConfig(
+            HouseUserMapper houseUserMapper,
+            RabbitHouseMapper rabbitHouseMapper,
+            MerchantMapper merchantMapper,
+            PlatformAdminMapper platformAdminMapper,
+            AuditLogService auditLogService,
+            HouseService houseService,
+            @Value("${app.cors.allowed-origins}") String allowedOrigins
+    ) {
         this.houseUserMapper = houseUserMapper;
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.merchantMapper = merchantMapper;
         this.platformAdminMapper = platformAdminMapper;
         this.auditLogService = auditLogService;
         this.houseService = houseService;
+        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toArray(String[]::new);
+    }
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins(allowedOrigins)
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .allowedHeaders("Authorization", "Content-Type", "X-House-Id", "X-Trace-Id", "X-Requested-With")
+                .exposedHeaders("X-Trace-Id")
+                .maxAge(3600);
     }
 
     @Override
