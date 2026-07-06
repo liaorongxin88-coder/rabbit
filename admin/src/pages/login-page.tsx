@@ -31,6 +31,8 @@ export function LoginPage() {
       toast.success('登录成功')
       const from = (location.state as { from?: Location } | null)?.from?.pathname
       navigate(from || '/dashboard', { replace: true })
+    } catch {
+      // The shared request layer already shows the actionable error toast.
     } finally {
       setSubmitting(false)
     }

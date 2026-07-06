@@ -33,6 +33,7 @@ Optional environment variables:
   DEPLOY_ENV_FILE=admin/.env.deploy Load a custom env file before deploying.
 
 The target directory is synchronized with admin/dist by rsync --delete-delay.
+Host-managed files such as /.user.ini are preserved.
 EOF
 }
 
@@ -83,6 +84,9 @@ fi
 REMOTE="${DEPLOY_USER}@${DEPLOY_HOST}"
 REMOTE_PATH="${DEPLOY_PATH%/}"
 REMOTE_PATH_QUOTED="$(quote "${REMOTE_PATH}")"
+RSYNC_PROTECTED_FILTERS=(
+  "--exclude=/.user.ini"
+)
 
 echo "deploy: admin dir  ${ADMIN_DIR}"
 echo "deploy: target     ${REMOTE}:${REMOTE_PATH}/"
@@ -111,6 +115,7 @@ rsync \
   --human-readable \
   --info=stats2 \
   --chmod=D755,F644 \
+  "${RSYNC_PROTECTED_FILTERS[@]}" \
   -e "${SSH_CMD}" \
   "${DIST_DIR}/" \
   "${REMOTE}:${REMOTE_PATH}/"

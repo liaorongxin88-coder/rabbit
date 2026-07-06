@@ -20,6 +20,7 @@ mybatis:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:https://*.dzht.top}
   jwt:
     secret: rabbit-app-dev-secret-change-me
     expire-seconds: 604800

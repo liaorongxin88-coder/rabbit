@@ -26,6 +26,7 @@ public class WebConfig implements WebMvcConfigurer {
     private final AuditLogService auditLogService;
     private final HouseService houseService;
     private final String[] allowedOrigins;
+    private final String[] allowedOriginPatterns;
 
     public WebConfig(
             HouseUserMapper houseUserMapper,
@@ -34,7 +35,8 @@ public class WebConfig implements WebMvcConfigurer {
             PlatformAdminMapper platformAdminMapper,
             AuditLogService auditLogService,
             HouseService houseService,
-            @Value("${app.cors.allowed-origins}") String allowedOrigins
+            @Value("${app.cors.allowed-origins}") String allowedOrigins,
+            @Value("${app.cors.allowed-origin-patterns}") String allowedOriginPatterns
     ) {
         this.houseUserMapper = houseUserMapper;
         this.rabbitHouseMapper = rabbitHouseMapper;
@@ -42,20 +44,26 @@ public class WebConfig implements WebMvcConfigurer {
         this.platformAdminMapper = platformAdminMapper;
         this.auditLogService = auditLogService;
         this.houseService = houseService;
-        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .filter(origin -> !origin.isEmpty())
-                .toArray(String[]::new);
+        this.allowedOrigins = splitCsv(allowedOrigins);
+        this.allowedOriginPatterns = splitCsv(allowedOriginPatterns);
     }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins)
+                .allowedOriginPatterns(allowedOriginPatterns)
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type", "X-House-Id", "X-Trace-Id", "X-Requested-With")
                 .exposedHeaders("X-Trace-Id")
                 .maxAge(3600);
+    }
+
+    private static String[] splitCsv(String value) {
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .toArray(String[]::new);
     }
 
     @Override

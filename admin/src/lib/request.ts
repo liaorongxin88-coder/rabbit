@@ -9,6 +9,13 @@ type JsonBody = object | string
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
+function getRequestErrorMessage(error: unknown) {
+  if (error instanceof TypeError && error.message === 'Failed to fetch') {
+    return '无法连接 API 服务，请检查网络或跨域配置'
+  }
+  return error instanceof Error ? error.message : '网络请求失败'
+}
+
 async function parseApiResponse(response: Response) {
   const text = await response.text()
   if (!text.trim()) {
@@ -53,9 +60,9 @@ const alova = createAlova({
       return payload.data
     },
     onError(error) {
-      const message = error instanceof Error ? error.message : '网络请求失败'
+      const message = getRequestErrorMessage(error)
       toast.error(message)
-      throw error
+      throw new Error(message)
     },
   },
 })
