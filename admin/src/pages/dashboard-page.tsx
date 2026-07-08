@@ -6,6 +6,7 @@ import {
   CircleOffIcon,
   Clock3Icon,
   PlusIcon,
+  UserCogIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { listMerchants } from '@/api/merchants'
@@ -18,11 +19,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { Merchant, PageResult } from '@/types/api'
+import type { AdminSession, Merchant, PageResult } from '@/types/api'
 
 const DASHBOARD_PAGE_SIZE = 8
 
-export function DashboardPage() {
+export function DashboardPage({ session }: { session: AdminSession }) {
   const [data, setData] = useState<PageResult<Merchant> | null>(null)
   const [enabledTotal, setEnabledTotal] = useState(0)
   const [disabledTotal, setDisabledTotal] = useState(0)
@@ -168,14 +169,29 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>平台边界</CardTitle>
-            <CardDescription>管理端当前只处理商户层动作。</CardDescription>
+            <CardTitle>常用操作</CardTitle>
+            <CardDescription>进入商户和账号管理。</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col gap-3 text-sm">
-              <BoundaryItem title="可写操作" text="创建商户、维护资料、启用或停用商户、绑定或解绑商户用户。" />
-              <BoundaryItem title="只读数据" text="兔舍、笼位、兔只和审计记录只做概览展示，不在平台端编辑。" />
-              <BoundaryItem title="客户端保持独立" text="业务用户仍通过客户端和兔舍权限访问生产数据。" />
+            <div className="flex flex-col gap-2">
+              <Button className="justify-start" variant="outline" asChild>
+                <Link to="/merchants">
+                  <Building2Icon data-icon="inline-start" />
+                  商户管理
+                </Link>
+              </Button>
+              {session.role === 'SUPER_ADMIN' ? (
+                <Button className="justify-start" variant="outline" asChild>
+                  <Link to="/accounts">
+                    <UserCogIcon data-icon="inline-start" />
+                    账号管理
+                  </Link>
+                </Button>
+              ) : null}
+              <Button className="justify-start" onClick={() => setDialogOpen(true)}>
+                <PlusIcon data-icon="inline-start" />
+                新增商户
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -211,15 +227,6 @@ function SummaryCard({
         <div className="truncate text-2xl font-semibold">{value}</div>
       </CardContent>
     </Card>
-  )
-}
-
-function BoundaryItem({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <p className="font-medium">{title}</p>
-      <p className="mt-1 text-muted-foreground">{text}</p>
-    </div>
   )
 }
 

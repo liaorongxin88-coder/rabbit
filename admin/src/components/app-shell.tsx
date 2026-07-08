@@ -3,6 +3,7 @@ import {
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
+  UserCogIcon,
 } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { to: '/dashboard', label: '运营概览', icon: LayoutDashboardIcon },
   { to: '/merchants', label: '商户管理', icon: Building2Icon },
+  { to: '/accounts', label: '账号管理', icon: UserCogIcon, superOnly: true },
 ]
 
 export function AppShell({
@@ -24,6 +26,10 @@ export function AppShell({
   session: AdminSession
   onLogout: () => void
 }) {
+  const visibleNavItems = navItems.filter(
+    (item) => !item.superOnly || session.role === 'SUPER_ADMIN',
+  )
+
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-card lg:flex lg:flex-col">
@@ -38,7 +44,7 @@ export function AppShell({
         </div>
         <Separator />
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.label}
               to={item.to}

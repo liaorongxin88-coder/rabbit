@@ -26,10 +26,63 @@
         where user_name = #{userName}
     </select>
 
+    <select id="selectByUserNameExceptId" resultMap="PlatformAdminMap">
+        select id, user_name, password, role, enabled, last_login_time, create_time, update_time
+        from platform_admins
+        where user_name = #{userName}
+          and id != #{id}
+    </select>
+
+    <select id="selectPage" resultMap="PlatformAdminMap">
+        select id, user_name, password, role, enabled, last_login_time, create_time, update_time
+        from platform_admins
+        <where>
+            <if test="keyword != null and keyword != ''">
+                user_name like concat('%', #{keyword}, '%')
+            </if>
+        </where>
+        order by id asc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(1)
+        from platform_admins
+        <where>
+            <if test="keyword != null and keyword != ''">
+                user_name like concat('%', #{keyword}, '%')
+            </if>
+        </where>
+    </select>
+
+    <select id="countEnabledSuperAdmins" resultType="long">
+        select count(1)
+        from platform_admins
+        where role = 'SUPER_ADMIN'
+          and enabled = 1
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         insert into platform_admins (user_name, password, role, enabled)
         values (#{userName}, #{password}, #{role}, #{enabled})
     </insert>
+
+    <update id="update">
+        update platform_admins
+        set user_name = #{userName},
+            <if test="password != null and password != ''">
+                password = #{password},
+            </if>
+            role = #{role},
+            enabled = #{enabled},
+            update_time = now()
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from platform_admins
+        where id = #{id}
+    </delete>
 
     <update id="updateLastLoginTime">
         update platform_admins

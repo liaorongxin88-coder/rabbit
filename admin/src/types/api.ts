@@ -1,6 +1,6 @@
 export type MerchantStatus = 'ENABLED' | 'DISABLED'
 
-export type AdminRole = 'SUPER_ADMIN' | 'OPERATOR'
+export type AdminRole = 'SUPER_ADMIN' | 'ADMIN'
 
 export interface ApiResponse<T> {
   code: number
@@ -20,6 +20,27 @@ export interface AdminSession {
   adminId: number
   userName: string
   role: AdminRole
+}
+
+export interface AdminAccount {
+  id: number
+  userName: string
+  role: AdminRole
+  enabled: boolean
+  lastLoginTime?: string | null
+  createTime?: string | null
+  updateTime?: string | null
+}
+
+export interface MerchantAccount {
+  userId: number
+  userName: string
+  openid?: string | null
+  merchantCount: number
+  merchantNames?: string | null
+  createTime?: string | null
+  updateTime?: string | null
+  bindTime?: string | null
 }
 
 export interface Merchant {

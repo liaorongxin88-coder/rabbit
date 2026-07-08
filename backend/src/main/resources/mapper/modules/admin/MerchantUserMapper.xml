@@ -21,6 +21,17 @@
         <result column="bind_time" property="bindTime"/>
     </resultMap>
 
+    <resultMap id="MerchantAccountItemMap" type="com.rabbit.app.modules.admin.dto.MerchantAccountItem">
+        <id column="user_id" property="userId"/>
+        <result column="user_name" property="userName"/>
+        <result column="openid" property="openid"/>
+        <result column="merchant_count" property="merchantCount"/>
+        <result column="merchant_names" property="merchantNames"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="bind_time" property="bindTime"/>
+    </resultMap>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         insert into merchant_users (merchant_id, user_id, create_by, update_by)
         values (#{merchantId}, #{userId}, #{createBy}, #{updateBy})
@@ -60,5 +71,73 @@
         select count(1)
         from merchant_users
         where merchant_id = #{merchantId}
+    </select>
+
+    <select id="countUserBindings" resultType="long">
+        select count(1)
+        from merchant_users
+        where user_id = #{userId}
+    </select>
+
+    <select id="countMerchantAccounts" resultType="long">
+        select count(distinct u.user_id)
+        from sys_user u
+        join merchant_users mu on mu.user_id = u.user_id
+        join merchants m on m.id = mu.merchant_id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    u.user_name like concat('%', #{keyword}, '%')
+                    or u.openid like concat('%', #{keyword}, '%')
+                    or cast(u.user_id as char) like concat('%', #{keyword}, '%')
+                    or m.name like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+    </select>
+
+    <select id="selectMerchantAccounts" resultMap="MerchantAccountItemMap">
+        select
+            u.user_id,
+            u.user_name,
+            u.openid,
+            count(distinct mu.merchant_id) as merchant_count,
+            group_concat(distinct m.name order by m.name separator ', ') as merchant_names,
+            u.create_time,
+            u.update_time,
+            min(mu.create_time) as bind_time
+        from sys_user u
+        join merchant_users mu on mu.user_id = u.user_id
+        join merchants m on m.id = mu.merchant_id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    u.user_name like concat('%', #{keyword}, '%')
+                    or u.openid like concat('%', #{keyword}, '%')
+                    or cast(u.user_id as char) like concat('%', #{keyword}, '%')
+                    or m.name like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        group by u.user_id, u.user_name, u.openid, u.create_time, u.update_time
+        order by bind_time desc, u.user_id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectMerchantAccountByUserId" resultMap="MerchantAccountItemMap">
+        select
+            u.user_id,
+            u.user_name,
+            u.openid,
+            count(distinct mu.merchant_id) as merchant_count,
+            group_concat(distinct m.name order by m.name separator ', ') as merchant_names,
+            u.create_time,
+            u.update_time,
+            min(mu.create_time) as bind_time
+        from sys_user u
+        join merchant_users mu on mu.user_id = u.user_id
+        join merchants m on m.id = mu.merchant_id
+        where u.user_id = #{userId}
+        group by u.user_id, u.user_name, u.openid, u.create_time, u.update_time
     </select>
 </mapper>

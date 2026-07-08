@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Building2Icon, ShieldCheckIcon, UsersIcon, type LucideIcon } from 'lucide-react'
+import { Building2Icon, ShieldCheckIcon, UserCogIcon, UsersIcon, type LucideIcon } from 'lucide-react'
 import { loginAdmin } from '@/api/admin'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -56,13 +56,13 @@ export function LoginPage() {
               商户、用户关系和业务概览的统一入口
             </h1>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              平台管理员在这里维护商户资料、处理启停状态，并只读查看商户下兔舍、笼位和兔只规模。
+              平台管理员在这里维护商户资料、账号权限和业务运营状态。
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <LoginSignal icon={Building2Icon} title="商户资料" text="创建、筛选和维护商户基础信息" />
             <LoginSignal icon={UsersIcon} title="用户绑定" text="按现有业务用户 ID 维护归属关系" />
-            <LoginSignal icon={ShieldCheckIcon} title="只读边界" text="业务生产数据保持客户端权限模型" />
+            <LoginSignal icon={UserCogIcon} title="账号权限" text="维护管理端账号和角色" />
           </div>
         </section>
 

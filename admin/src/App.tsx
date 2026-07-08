@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { clearSession, getSession } from '@/lib/auth'
 import type { AdminSession } from '@/types/api'
 import { AppShell } from '@/components/app-shell'
+import { AccountsPage } from '@/pages/accounts-page'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { LoginPage } from '@/pages/login-page'
 import { MerchantDetailPage } from '@/pages/merchant-detail-page'
@@ -32,9 +33,19 @@ function ShellRoutes() {
     <AppShell session={session} onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage session={session} />} />
         <Route path="/merchants" element={<MerchantsPage />} />
         <Route path="/merchants/:merchantId" element={<MerchantDetailPage />} />
+        <Route
+          path="/accounts"
+          element={
+            session.role === 'SUPER_ADMIN' ? (
+              <AccountsPage currentAdminId={session.adminId} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AppShell>

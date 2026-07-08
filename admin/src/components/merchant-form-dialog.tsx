@@ -92,9 +92,7 @@ export function MerchantFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{merchant ? '编辑商户' : '新增商户'}</DialogTitle>
-          <DialogDescription>
-            维护商户基础资料，业务数据仍由客户端按兔舍权限管理。
-          </DialogDescription>
+          <DialogDescription>维护商户名称、联系人和备注信息。</DialogDescription>
         </DialogHeader>
         <form className="flex min-h-0 flex-1 flex-col gap-5" onSubmit={handleSubmit}>
           <FieldGroup className="min-h-0 overflow-y-auto pr-1">

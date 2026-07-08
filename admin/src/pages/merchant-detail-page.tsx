@@ -196,7 +196,7 @@ export function MerchantDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>兔舍概览</CardTitle>
-              <CardDescription>只读展示商户下最近创建的兔舍。</CardDescription>
+              <CardDescription>展示商户下最近创建的兔舍。</CardDescription>
             </CardHeader>
             <CardContent>
               {overview && overview.houses.length > 0 ? (

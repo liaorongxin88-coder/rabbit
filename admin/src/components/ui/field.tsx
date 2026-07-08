@@ -12,7 +12,7 @@ function Field({ className, ...props }: React.ComponentProps<'div'>) {
 function FieldLabel({ className, ...props }: React.ComponentProps<'label'>) {
   return (
     <label
-      className={cn('text-sm font-medium leading-none', className)}
+      className={cn('text-sm font-medium leading-5', className)}
       {...props}
     />
   )

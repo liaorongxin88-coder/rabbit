@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.admin.mapper;
 
 import com.rabbit.app.modules.admin.dto.MerchantUserItem;
+import com.rabbit.app.modules.admin.dto.MerchantAccountItem;
 import com.rabbit.app.modules.admin.entity.MerchantUser;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -21,4 +22,14 @@ public interface MerchantUserMapper {
     List<MerchantUserItem> selectUsersByMerchant(@Param("merchantId") Long merchantId);
 
     long countUsersByMerchant(@Param("merchantId") Long merchantId);
+
+    long countUserBindings(@Param("userId") Long userId);
+
+    long countMerchantAccounts(@Param("keyword") String keyword);
+
+    List<MerchantAccountItem> selectMerchantAccounts(@Param("keyword") String keyword,
+                                                     @Param("offset") int offset,
+                                                     @Param("limit") int limit);
+
+    MerchantAccountItem selectMerchantAccountByUserId(@Param("userId") Long userId);
 }
