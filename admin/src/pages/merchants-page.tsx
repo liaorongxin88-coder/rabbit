@@ -76,7 +76,7 @@ export function MerchantsPage() {
     <>
       <PageHeader
         title="商户管理"
-        description="管理 SaaS 商户基础资料、启停状态和商户用户绑定。"
+        description="管理 SaaS 商户基础资料、启停状态和商户登录账号。"
         actions={
           <Button onClick={() => setDialogOpen(true)}>
             <PlusIcon data-icon="inline-start" />
@@ -235,7 +235,7 @@ export function MerchantsPage() {
               <EmptyDescription>
                 {hasActiveFilters
                   ? '调整关键词或状态后重新查询。'
-                  : '创建第一个商户后，可以绑定业务用户并查看运营数据。'}
+                  : '创建第一个商户及其初始账号后，可以查看运营数据。'}
               </EmptyDescription>
               {hasActiveFilters ? (
                 <Button variant="outline" size="sm" onClick={handleReset}>

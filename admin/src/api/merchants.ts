@@ -1,9 +1,9 @@
-import { deleteJson, getJson, postJson, putJson } from '@/lib/request'
+import { getJson, postJson, putJson } from '@/lib/request'
 import type {
   Merchant,
   MerchantOverview,
   MerchantStatus,
-  MerchantUser,
+  MerchantAccountSummary,
   PageResult,
 } from '@/types/api'
 
@@ -14,11 +14,23 @@ export interface MerchantListParams {
   status?: MerchantStatus | 'ALL'
 }
 
-export interface MerchantPayload {
+export interface MerchantBasicPayload {
   name: string
   contactName?: string
   contactPhone?: string
   remark?: string
+}
+
+export interface CreateMerchantPayload extends MerchantBasicPayload {
+  userName: string
+  password: string
+  confirmPassword: string
+}
+
+export interface CreateMerchantAccountPayload {
+  userName: string
+  password: string
+  confirmPassword: string
 }
 
 export function listMerchants(params: MerchantListParams) {
@@ -34,11 +46,11 @@ export function getMerchant(merchantId: number) {
   return getJson<Merchant>(`/api/admin/merchants/${merchantId}`).send()
 }
 
-export function createMerchant(payload: MerchantPayload) {
+export function createMerchant(payload: CreateMerchantPayload) {
   return postJson<Merchant>('/api/admin/merchants', payload).send()
 }
 
-export function updateMerchant(merchantId: number, payload: MerchantPayload) {
+export function updateMerchant(merchantId: number, payload: MerchantBasicPayload) {
   return putJson<Merchant>(`/api/admin/merchants/${merchantId}`, payload).send()
 }
 
@@ -51,21 +63,19 @@ export function updateMerchantStatus(
   }).send()
 }
 
-export function listMerchantUsers(merchantId: number) {
-  return getJson<MerchantUser[]>(
-    `/api/admin/merchants/${merchantId}/users`,
+export function listMerchantAccounts(merchantId: number) {
+  return getJson<MerchantAccountSummary[]>(
+    `/api/admin/merchants/${merchantId}/accounts`,
   ).send()
 }
 
-export function addMerchantUser(merchantId: number, userId: number) {
-  return postJson<void>(`/api/admin/merchants/${merchantId}/users`, {
-    userId,
-  }).send()
-}
-
-export function removeMerchantUser(merchantId: number, userId: number) {
-  return deleteJson<void>(
-    `/api/admin/merchants/${merchantId}/users/${userId}`,
+export function createMerchantAccount(
+  merchantId: number,
+  payload: CreateMerchantAccountPayload,
+) {
+  return postJson<void>(
+    `/api/admin/merchants/${merchantId}/accounts`,
+    payload,
   ).send()
 }
 

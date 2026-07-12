@@ -28,7 +28,7 @@
 
 第一版平台管理边界：
 
-- 可管理商户、商户状态和商户业务用户绑定。
+- 可管理商户、商户状态，并在商户下创建业务账号。
 - 可查看商户概览。
 - 不直接编辑兔舍、笼位、兔只、投喂、用药、繁殖或销售数据。
 
@@ -68,3 +68,7 @@
 - `POST /api/admin/merchants`
 - `PUT /api/admin/merchants/{id}`
 - `GET /api/admin/merchants/{id}`
+- `GET /api/admin/merchants/{id}/accounts`
+- `POST /api/admin/merchants/{id}/accounts`
+- `GET /api/admin/accounts/merchant-accounts`
+- `PUT /api/admin/accounts/merchant-accounts/{userId}`

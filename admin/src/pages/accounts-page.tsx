@@ -182,7 +182,7 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
       <Tabs defaultValue="admins">
         <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="admins">管理员账号</TabsTrigger>
-          <TabsTrigger value="merchant-users">商户账号</TabsTrigger>
+          <TabsTrigger value="merchant-accounts">商户账号</TabsTrigger>
         </TabsList>
         <TabsContent value="admins">
           <Card>
@@ -333,7 +333,7 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
         </CardContent>
       </Card>
         </TabsContent>
-        <TabsContent value="merchant-users">
+        <TabsContent value="merchant-accounts">
           <Card>
             <CardHeader>
               <CardTitle>商户账号</CardTitle>
@@ -387,7 +387,7 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
                         <TableHead>所属商户</TableHead>
                         <TableHead>OpenID</TableHead>
                         <TableHead>最近更新</TableHead>
-                        <TableHead>首次绑定</TableHead>
+                        <TableHead>创建时间</TableHead>
                         <TableHead className="text-right">操作</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -409,9 +409,9 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
                           </TableCell>
                           <TableCell>
                             <div className="min-w-48 max-w-80">
-                              <p className="truncate">{account.merchantNames || '-'}</p>
+                              <p className="truncate">{account.merchantName || '-'}</p>
                               <p className="text-xs text-muted-foreground">
-                                共 {account.merchantCount} 个商户
+                                商户 ID {account.merchantId}
                               </p>
                             </div>
                           </TableCell>
@@ -422,7 +422,7 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
                             {formatTime(account.updateTime)}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted-foreground">
-                            {formatTime(account.bindTime)}
+                            {formatTime(account.createTime)}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -470,7 +470,7 @@ export function AccountsPage({ currentAdminId }: { currentAdminId: number }) {
                   <EmptyDescription>
                     {hasActiveMerchantFilters
                       ? '调整关键词后重新查询。'
-                      : '商户绑定业务用户后，会在这里集中展示。'}
+                      : '创建商户或在商户详情新增账号后，会在这里集中展示。'}
                   </EmptyDescription>
                   {hasActiveMerchantFilters ? (
                     <Button variant="outline" size="sm" onClick={handleMerchantReset}>

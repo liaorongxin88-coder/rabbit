@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.admin.mapper.MerchantAccountMapper">
+    <resultMap id="MerchantAccountSummaryMap" type="com.rabbit.app.modules.admin.dto.MerchantAccountSummary">
+        <id column="user_id" property="userId"/>
+        <result column="user_name" property="userName"/>
+        <result column="openid" property="openid"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <resultMap id="MerchantAccountItemMap" type="com.rabbit.app.modules.admin.dto.MerchantAccountItem">
+        <id column="user_id" property="userId"/>
+        <result column="merchant_id" property="merchantId"/>
+        <result column="merchant_name" property="merchantName"/>
+        <result column="user_name" property="userName"/>
+        <result column="openid" property="openid"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="AccountFilter">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    u.user_name like concat('%', #{keyword}, '%')
+                    or u.openid like concat('%', #{keyword}, '%')
+                    or cast(u.user_id as char) like concat('%', #{keyword}, '%')
+                    or m.name like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectByMerchantId" resultMap="MerchantAccountSummaryMap">
+        select u.user_id, u.user_name, u.openid, u.create_time
+        from sys_user u
+        where u.merchant_id = #{merchantId}
+        order by u.create_time desc, u.user_id desc
+    </select>
+
+    <select id="countByMerchantId" resultType="long">
+        select count(1)
+        from sys_user
+        where merchant_id = #{merchantId}
+    </select>
+
+    <select id="countAccounts" resultType="long">
+        select count(1)
+        from sys_user u
+        join merchants m on m.id = u.merchant_id
+        <include refid="AccountFilter"/>
+    </select>
+
+    <select id="selectAccounts" resultMap="MerchantAccountItemMap">
+        select
+            u.user_id,
+            u.merchant_id,
+            m.name as merchant_name,
+            u.user_name,
+            u.openid,
+            u.create_time,
+            u.update_time
+        from sys_user u
+        join merchants m on m.id = u.merchant_id
+        <include refid="AccountFilter"/>
+        order by u.create_time desc, u.user_id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectAccountByUserId" resultMap="MerchantAccountItemMap">
+        select
+            u.user_id,
+            u.merchant_id,
+            m.name as merchant_name,
+            u.user_name,
+            u.openid,
+            u.create_time,
+            u.update_time
+        from sys_user u
+        join merchants m on m.id = u.merchant_id
+        where u.user_id = #{userId}
+    </select>
+</mapper>

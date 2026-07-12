@@ -21,6 +21,9 @@ interface FormState {
   contactName: string
   contactPhone: string
   remark: string
+  userName: string
+  password: string
+  confirmPassword: string
 }
 
 const emptyForm: FormState = {
@@ -28,6 +31,9 @@ const emptyForm: FormState = {
   contactName: '',
   contactPhone: '',
   remark: '',
+  userName: '',
+  password: '',
+  confirmPassword: '',
 }
 
 export function MerchantFormDialog({
@@ -46,6 +52,10 @@ export function MerchantFormDialog({
   const [submitted, setSubmitted] = useState(false)
 
   const nameError = submitted && !form.name.trim()
+  const userNameError = submitted && !merchant && !form.userName.trim()
+  const passwordError = submitted && !merchant && form.password.length < 6
+  const confirmPasswordError =
+    submitted && !merchant && form.password !== form.confirmPassword
 
   useEffect(() => {
     if (!open) {
@@ -59,6 +69,9 @@ export function MerchantFormDialog({
             contactName: merchant.contactName ?? '',
             contactPhone: merchant.contactPhone ?? '',
             remark: merchant.remark ?? '',
+            userName: '',
+            password: '',
+            confirmPassword: '',
           }
         : emptyForm,
     )
@@ -71,10 +84,27 @@ export function MerchantFormDialog({
       toast.error('商户名称不能为空')
       return
     }
+    if (!merchant && !form.userName.trim()) {
+      toast.error('登录用户名不能为空')
+      return
+    }
+    if (!merchant && (form.password.length < 6 || form.password.length > 64)) {
+      toast.error('初始密码长度需为 6-64 个字符')
+      return
+    }
+    if (!merchant && form.password !== form.confirmPassword) {
+      toast.error('两次输入的密码不一致')
+      return
+    }
     setSubmitting(true)
     try {
       const saved = merchant
-        ? await updateMerchant(merchant.id, form)
+        ? await updateMerchant(merchant.id, {
+            name: form.name,
+            contactName: form.contactName,
+            contactPhone: form.contactPhone,
+            remark: form.remark,
+          })
         : await createMerchant(form)
       toast.success(merchant ? '商户已更新' : '商户已创建')
       onSaved({
@@ -92,12 +122,18 @@ export function MerchantFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{merchant ? '编辑商户' : '新增商户'}</DialogTitle>
-          <DialogDescription>维护商户名称、联系人和备注信息。</DialogDescription>
+          <DialogDescription>
+            {merchant
+              ? '维护商户名称、联系人和备注信息。'
+              : '填写商户资料，并创建该商户的首个登录账号。'}
+          </DialogDescription>
         </DialogHeader>
         <form className="flex min-h-0 flex-1 flex-col gap-5" onSubmit={handleSubmit}>
           <FieldGroup className="min-h-0 overflow-y-auto pr-1">
             <Field data-invalid={nameError ? true : undefined}>
-              <FieldLabel htmlFor="merchant-name">商户名称</FieldLabel>
+              <FieldLabel htmlFor="merchant-name">
+                商户名称 <span className="text-destructive">*</span>
+              </FieldLabel>
               <Input
                 id="merchant-name"
                 value={form.name}
@@ -159,6 +195,83 @@ export function MerchantFormDialog({
               />
               <FieldDescription>{form.remark.length} / 1000</FieldDescription>
             </Field>
+            {!merchant ? (
+              <>
+                <div className="border-t pt-5">
+                  <p className="text-sm font-medium">登录账号</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    账号创建后将直接归属当前商户。
+                  </p>
+                </div>
+                <Field data-invalid={userNameError ? true : undefined}>
+                  <FieldLabel htmlFor="merchant-user-name">
+                    登录用户名 <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <Input
+                    id="merchant-user-name"
+                    value={form.userName}
+                    aria-invalid={userNameError ? true : undefined}
+                    autoComplete="username"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        userName: event.target.value,
+                      }))
+                    }
+                    maxLength={64}
+                  />
+                  <FieldDescription>
+                    用于商户登录业务端，创建后可在账号管理中修改。
+                  </FieldDescription>
+                </Field>
+                <Field data-invalid={passwordError ? true : undefined}>
+                  <FieldLabel htmlFor="merchant-password">
+                    初始密码 <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <Input
+                    id="merchant-password"
+                    type="password"
+                    value={form.password}
+                    aria-invalid={passwordError ? true : undefined}
+                    autoComplete="new-password"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        password: event.target.value,
+                      }))
+                    }
+                    minLength={6}
+                    maxLength={64}
+                  />
+                  <FieldDescription>密码长度为 6-64 个字符。</FieldDescription>
+                </Field>
+                <Field data-invalid={confirmPasswordError ? true : undefined}>
+                  <FieldLabel htmlFor="merchant-confirm-password">
+                    确认密码 <span className="text-destructive">*</span>
+                  </FieldLabel>
+                  <Input
+                    id="merchant-confirm-password"
+                    type="password"
+                    value={form.confirmPassword}
+                    aria-invalid={confirmPasswordError ? true : undefined}
+                    autoComplete="new-password"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        confirmPassword: event.target.value,
+                      }))
+                    }
+                    minLength={6}
+                    maxLength={64}
+                  />
+                  {confirmPasswordError ? (
+                    <FieldDescription className="text-destructive">
+                      两次输入的密码不一致。
+                    </FieldDescription>
+                  ) : null}
+                </Field>
+              </>
+            ) : null}
           </FieldGroup>
           <DialogFooter>
             <Button

@@ -53,13 +53,6 @@
         limit 1
     </select>
 
-    <select id="selectDefaultMerchantId" resultType="long">
-        select id
-        from merchants
-        order by id asc
-        limit 1
-    </select>
-
     <update id="updateBasic">
         update rabbit_houses
         set name = #{name},

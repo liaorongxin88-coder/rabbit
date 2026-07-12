@@ -34,13 +34,12 @@ export interface AdminAccount {
 
 export interface MerchantAccount {
   userId: number
+  merchantId: number
+  merchantName: string
   userName: string
   openid?: string | null
-  merchantCount: number
-  merchantNames?: string | null
   createTime?: string | null
   updateTime?: string | null
-  bindTime?: string | null
 }
 
 export interface Merchant {
@@ -56,12 +55,11 @@ export interface Merchant {
   updateTime?: string | null
 }
 
-export interface MerchantUser {
+export interface MerchantAccountSummary {
   userId: number
   userName: string
   openid?: string | null
   createTime?: string | null
-  bindTime?: string | null
 }
 
 export interface RabbitHouse {

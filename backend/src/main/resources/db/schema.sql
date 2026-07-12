@@ -1,18 +1,53 @@
 CREATE DATABASE IF NOT EXISTS rabbit_app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE rabbit_app;
 
+CREATE TABLE IF NOT EXISTS merchants (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  contact_name VARCHAR(64),
+  contact_phone VARCHAR(32),
+  status VARCHAR(20) NOT NULL DEFAULT 'ENABLED',
+  remark TEXT,
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by VARCHAR(64),
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_merchants_status_id (status, id),
+  KEY idx_merchants_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO merchants (name, contact_name, contact_phone, status, remark, create_by, update_by)
+SELECT '默认商户', '系统初始化', '', 'ENABLED', '结构初始化创建', 'schema', 'schema'
+WHERE NOT EXISTS (SELECT 1 FROM merchants);
+
 CREATE TABLE IF NOT EXISTS sys_user (
   user_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  merchant_id BIGINT NOT NULL,
   user_name VARCHAR(64) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
   openid VARCHAR(128),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_sys_user_openid (openid)
+  UNIQUE KEY uk_sys_user_openid (openid),
+  KEY idx_sys_user_merchant (merchant_id, user_id),
+  CONSTRAINT fk_sys_user_merchant FOREIGN KEY (merchant_id) REFERENCES merchants (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS platform_admins (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_name VARCHAR(64) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'SUPER_ADMIN',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_time DATETIME,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_platform_admin_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS rabbit_houses (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  merchant_id BIGINT,
   name VARCHAR(100) NOT NULL,
   layout_rows INT NOT NULL DEFAULT 0,
   layout_cols INT NOT NULL DEFAULT 0,
@@ -24,7 +59,9 @@ CREATE TABLE IF NOT EXISTS rabbit_houses (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_house_creator_req (create_by, request_id)
+  UNIQUE KEY uk_house_creator_req (create_by, request_id),
+  KEY idx_rabbit_houses_merchant (merchant_id, is_deleted, id),
+  CONSTRAINT fk_rabbit_houses_merchant FOREIGN KEY (merchant_id) REFERENCES merchants (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS house_users (

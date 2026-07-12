@@ -19,8 +19,8 @@ If a requested UI change conflicts with `DESIGN.md`, either preserve the design 
 First-version scope stays narrow:
 
 - Platform admin login and logout.
-- Merchant list, create, edit, and enable / disable.
-- Merchant user binding and unbinding by existing business user ID.
+- Merchant list, create, edit, and enable / disable; creating a merchant also provisions its required initial business login account.
+- Merchant account creation inside a merchant; each business account belongs to exactly one merchant and every merchant retains at least one account.
 - Read-only merchant overview for rabbit houses, cages, rabbits, and recent audit records.
 
 Do not add billing, package plans, merchant self-registration, customer support impersonation, cross-merchant business data editing, or platform operation modules unless the task explicitly requests them.
@@ -118,7 +118,7 @@ Use semantic Tailwind tokens:
 - Search fields should not query on every keystroke unless debounce, loading feedback, and cancellation behavior are deliberately implemented.
 - Filter forms with inline actions must align buttons with the input/select row. Helper or description text belongs in a separate row below the controls when it would push buttons out of alignment.
 - Pagination, filters, tabs, and table actions must remain reachable on narrow screens.
-- Destructive or high-risk actions use destructive styling and clear verbs, for example `停用商户`, `解绑`, or `删除`.
+- Destructive or high-risk actions use destructive styling and clear verbs, for example `停用商户` or `删除`.
 - Merchant status changes should show a clear success toast naming the completed action.
 - Long merchant names, contact fields, OpenID, and IDs must truncate or wrap predictably without overlapping controls.
 - Do not add in-app text explaining the UI design, animations, implementation details, or keyboard shortcuts.

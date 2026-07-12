@@ -17,8 +17,6 @@ public interface RabbitHouseMapper {
 
     RabbitHouse selectByCreatorAndRequestId(@Param("createBy") String createBy, @Param("requestId") String requestId);
 
-    Long selectDefaultMerchantId();
-
     int updateBasic(@Param("houseId") Long houseId, @Param("name") String name, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
     int markDeleted(@Param("houseId") Long houseId, @Param("updateBy") String updateBy);

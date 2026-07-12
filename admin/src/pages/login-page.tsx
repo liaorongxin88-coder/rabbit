@@ -61,7 +61,7 @@ export function LoginPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <LoginSignal icon={Building2Icon} title="商户资料" text="创建、筛选和维护商户基础信息" />
-            <LoginSignal icon={UsersIcon} title="用户绑定" text="按现有业务用户 ID 维护归属关系" />
+            <LoginSignal icon={UsersIcon} title="商户账号" text="在商户上下文创建和维护登录账号" />
             <LoginSignal icon={UserCogIcon} title="账号权限" text="维护管理端账号和角色" />
           </div>
         </section>

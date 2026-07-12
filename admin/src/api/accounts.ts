@@ -47,7 +47,7 @@ export function deleteAdminAccount(accountId: number) {
 }
 
 export function listMerchantAccounts(params: MerchantAccountListParams) {
-  return getJson<PageResult<MerchantAccount>>('/api/admin/accounts/merchant-users', {
+  return getJson<PageResult<MerchantAccount>>('/api/admin/accounts/merchant-accounts', {
     page: params.page,
     pageSize: params.pageSize,
     keyword: params.keyword || undefined,
@@ -55,5 +55,5 @@ export function listMerchantAccounts(params: MerchantAccountListParams) {
 }
 
 export function updateMerchantAccount(userId: number, payload: MerchantAccountPayload) {
-  return putJson<MerchantAccount>(`/api/admin/accounts/merchant-users/${userId}`, payload).send()
+  return putJson<MerchantAccount>(`/api/admin/accounts/merchant-accounts/${userId}`, payload).send()
 }

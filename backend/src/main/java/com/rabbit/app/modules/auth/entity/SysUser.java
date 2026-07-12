@@ -4,6 +4,7 @@ import java.util.Date;
 
 public class SysUser {
     private Long userId;
+    private Long merchantId;
     private String userName;
     private String password;
     private String openid;
@@ -16,6 +17,14 @@ public class SysUser {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(Long merchantId) {
+        this.merchantId = merchantId;
     }
 
     public String getUserName() {

@@ -43,14 +43,14 @@ public class AdminAccountController {
         return ApiResponse.ok(platformAdminAccountService.list(keyword, page, pageSize));
     }
 
-    @GetMapping("/merchant-users")
+    @GetMapping("/merchant-accounts")
     public ApiResponse<PageResult<MerchantAccountItem>> listMerchantAccounts(@RequestParam(value = "page", required = false) Integer page,
                                                                              @RequestParam(value = "pageSize", required = false) Integer pageSize,
                                                                              @RequestParam(value = "keyword", required = false) String keyword) {
         return ApiResponse.ok(merchantAccountAdminService.list(keyword, page, pageSize));
     }
 
-    @PutMapping("/merchant-users/{userId}")
+    @PutMapping("/merchant-accounts/{userId}")
     public ApiResponse<MerchantAccountItem> updateMerchantAccount(@PathVariable("userId") Long userId,
                                                                   @Valid @RequestBody UpdateMerchantAccountRequest req) {
         return ApiResponse.ok(merchantAccountAdminService.update(userId, req.getUserName(), req.getPassword(), req.getConfirmPassword()));

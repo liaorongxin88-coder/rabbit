@@ -5,6 +5,7 @@
 <mapper namespace="com.rabbit.app.modules.auth.mapper.SysUserMapper">
     <resultMap id="SysUserMap" type="com.rabbit.app.modules.auth.entity.SysUser">
         <id column="user_id" property="userId"/>
+        <result column="merchant_id" property="merchantId"/>
         <result column="user_name" property="userName"/>
         <result column="password" property="password"/>
         <result column="openid" property="openid"/>
@@ -13,26 +14,26 @@
     </resultMap>
 
     <select id="selectByUserName" resultMap="SysUserMap">
-        select user_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid, create_time, update_time
         from sys_user
         where user_name = #{userName}
     </select>
 
     <select id="selectByOpenid" resultMap="SysUserMap">
-        select user_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid, create_time, update_time
         from sys_user
         where openid = #{openid}
     </select>
 
     <select id="selectById" resultMap="SysUserMap">
-        select user_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid, create_time, update_time
         from sys_user
         where user_id = #{userId}
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="userId">
-        insert into sys_user (user_name, password, openid)
-        values (#{userName}, #{password}, #{openid})
+        insert into sys_user (merchant_id, user_name, password, openid)
+        values (#{merchantId}, #{userName}, #{password}, #{openid})
     </insert>
 
     <update id="updateOpenid">

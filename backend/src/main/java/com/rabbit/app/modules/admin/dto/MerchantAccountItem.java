@@ -4,13 +4,12 @@ import java.util.Date;
 
 public class MerchantAccountItem {
     private Long userId;
+    private Long merchantId;
+    private String merchantName;
     private String userName;
     private String openid;
-    private Long merchantCount;
-    private String merchantNames;
     private Date createTime;
     private Date updateTime;
-    private Date bindTime;
 
     public Long getUserId() {
         return userId;
@@ -18,6 +17,22 @@ public class MerchantAccountItem {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(Long merchantId) {
+        this.merchantId = merchantId;
+    }
+
+    public String getMerchantName() {
+        return merchantName;
+    }
+
+    public void setMerchantName(String merchantName) {
+        this.merchantName = merchantName;
     }
 
     public String getUserName() {
@@ -36,22 +51,6 @@ public class MerchantAccountItem {
         this.openid = openid;
     }
 
-    public Long getMerchantCount() {
-        return merchantCount;
-    }
-
-    public void setMerchantCount(Long merchantCount) {
-        this.merchantCount = merchantCount;
-    }
-
-    public String getMerchantNames() {
-        return merchantNames;
-    }
-
-    public void setMerchantNames(String merchantNames) {
-        this.merchantNames = merchantNames;
-    }
-
     public Date getCreateTime() {
         return createTime;
     }
@@ -68,11 +67,4 @@ public class MerchantAccountItem {
         this.updateTime = updateTime;
     }
 
-    public Date getBindTime() {
-        return bindTime;
-    }
-
-    public void setBindTime(Date bindTime) {
-        this.bindTime = bindTime;
-    }
 }

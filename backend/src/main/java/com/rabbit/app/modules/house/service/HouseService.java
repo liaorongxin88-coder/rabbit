@@ -1,8 +1,8 @@
 package com.rabbit.app.modules.house.service;
 
 import com.rabbit.app.common.BizException;
-import com.rabbit.app.modules.admin.entity.MerchantUser;
-import com.rabbit.app.modules.admin.mapper.MerchantUserMapper;
+import com.rabbit.app.modules.auth.entity.SysUser;
+import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
@@ -23,20 +23,20 @@ public class HouseService {
     private final RabbitHouseMapper rabbitHouseMapper;
     private final HouseUserMapper houseUserMapper;
     private final CageMapper cageMapper;
-    private final MerchantUserMapper merchantUserMapper;
+    private final SysUserMapper sysUserMapper;
     private final RequestDedupService requestDedupService;
 
     public HouseService(
             RabbitHouseMapper rabbitHouseMapper,
             HouseUserMapper houseUserMapper,
             CageMapper cageMapper,
-            MerchantUserMapper merchantUserMapper,
+            SysUserMapper sysUserMapper,
             RequestDedupService requestDedupService
     ) {
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.houseUserMapper = houseUserMapper;
         this.cageMapper = cageMapper;
-        this.merchantUserMapper = merchantUserMapper;
+        this.sysUserMapper = sysUserMapper;
         this.requestDedupService = requestDedupService;
     }
 
@@ -119,13 +119,6 @@ public class HouseService {
                 throw e;
             }
 
-            MerchantUser mu = new MerchantUser();
-            mu.setMerchantId(merchantId);
-            mu.setUserId(userId);
-            mu.setCreateBy(createBy);
-            mu.setUpdateBy(createBy);
-            merchantUserMapper.insertIgnore(mu);
-
             HouseUser hu = new HouseUser();
             hu.setHouseId(house.getId());
             hu.setUserId(userId);
@@ -163,15 +156,14 @@ public class HouseService {
     }
 
     private Long resolveMerchantIdForNewHouse(Long userId) {
-        Long merchantId = merchantUserMapper.selectSingleMerchantIdByUser(userId);
-        if (merchantId != null) {
-            return merchantId;
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
         }
-        Long defaultMerchantId = rabbitHouseMapper.selectDefaultMerchantId();
-        if (defaultMerchantId == null) {
-            throw new BizException(500, "默认商户不存在");
+        if (user.getMerchantId() == null) {
+            throw new BizException(500, "用户未归属商户");
         }
-        return defaultMerchantId;
+        return user.getMerchantId();
     }
 
     public void assertHousePermission(Long userId, Long houseId, String requiredPerm) {

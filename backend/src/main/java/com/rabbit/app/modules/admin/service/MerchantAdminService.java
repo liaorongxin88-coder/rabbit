@@ -2,37 +2,41 @@ package com.rabbit.app.modules.admin.service;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.admin.dto.MerchantOverview;
-import com.rabbit.app.modules.admin.dto.MerchantUserItem;
+import com.rabbit.app.modules.admin.dto.MerchantAccountSummary;
 import com.rabbit.app.modules.admin.dto.PageResult;
 import com.rabbit.app.modules.admin.entity.Merchant;
-import com.rabbit.app.modules.admin.entity.MerchantUser;
+import com.rabbit.app.modules.admin.mapper.MerchantAccountMapper;
 import com.rabbit.app.modules.admin.mapper.MerchantMapper;
 import com.rabbit.app.modules.admin.mapper.MerchantOverviewMapper;
-import com.rabbit.app.modules.admin.mapper.MerchantUserMapper;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.security.PlatformAdminContext;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MerchantAdminService {
     private final MerchantMapper merchantMapper;
-    private final MerchantUserMapper merchantUserMapper;
+    private final MerchantAccountMapper merchantAccountMapper;
     private final MerchantOverviewMapper merchantOverviewMapper;
     private final SysUserMapper sysUserMapper;
+    private final PasswordEncoder passwordEncoder;
 
     public MerchantAdminService(
             MerchantMapper merchantMapper,
-            MerchantUserMapper merchantUserMapper,
+            MerchantAccountMapper merchantAccountMapper,
             MerchantOverviewMapper merchantOverviewMapper,
-            SysUserMapper sysUserMapper
+            SysUserMapper sysUserMapper,
+            PasswordEncoder passwordEncoder
     ) {
         this.merchantMapper = merchantMapper;
-        this.merchantUserMapper = merchantUserMapper;
+        this.merchantAccountMapper = merchantAccountMapper;
         this.merchantOverviewMapper = merchantOverviewMapper;
         this.sysUserMapper = sysUserMapper;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public PageResult<Merchant> list(String keyword, String status, Integer page, Integer pageSize) {
@@ -58,7 +62,15 @@ public class MerchantAdminService {
     }
 
     @Transactional
-    public Merchant create(String name, String contactName, String contactPhone, String remark) {
+    public Merchant create(
+            String name,
+            String contactName,
+            String contactPhone,
+            String remark,
+            String userName,
+            String password,
+            String confirmPassword
+    ) {
         Merchant merchant = new Merchant();
         merchant.setName(trim(name));
         merchant.setContactName(trim(contactName));
@@ -68,6 +80,8 @@ public class MerchantAdminService {
         merchant.setCreateBy(operator());
         merchant.setUpdateBy(operator());
         merchantMapper.insert(merchant);
+
+        createBusinessUser(merchant.getId(), userName, password, confirmPassword);
         return merchantMapper.selectById(merchant.getId());
     }
 
@@ -90,38 +104,22 @@ public class MerchantAdminService {
         return merchantMapper.selectById(merchantId);
     }
 
-    public List<MerchantUserItem> listUsers(Long merchantId) {
+    public List<MerchantAccountSummary> listAccounts(Long merchantId) {
         ensureExists(merchantId);
-        return merchantUserMapper.selectUsersByMerchant(merchantId);
+        return merchantAccountMapper.selectByMerchantId(merchantId);
     }
 
-    public void addUser(Long merchantId, Long userId) {
+    @Transactional
+    public void createAccount(Long merchantId, String userName, String password, String confirmPassword) {
         ensureExists(merchantId);
-        SysUser user = sysUserMapper.selectById(userId);
-        if (user == null) {
-            throw new BizException(404, "用户不存在");
-        }
-        MerchantUser mu = new MerchantUser();
-        mu.setMerchantId(merchantId);
-        mu.setUserId(userId);
-        mu.setCreateBy(operator());
-        mu.setUpdateBy(operator());
-        merchantUserMapper.insertIgnore(mu);
-    }
-
-    public void removeUser(Long merchantId, Long userId) {
-        ensureExists(merchantId);
-        int n = merchantUserMapper.delete(merchantId, userId);
-        if (n <= 0) {
-            throw new BizException(404, "商户用户关系不存在");
-        }
+        createBusinessUser(merchantId, userName, password, confirmPassword);
     }
 
     public MerchantOverview overview(Long merchantId) {
         ensureExists(merchantId);
         MerchantOverview overview = new MerchantOverview();
         overview.setHouseCount(merchantOverviewMapper.countHouses(merchantId));
-        overview.setUserCount(merchantUserMapper.countUsersByMerchant(merchantId));
+        overview.setUserCount(merchantAccountMapper.countByMerchantId(merchantId));
         overview.setCageCount(merchantOverviewMapper.countCages(merchantId));
         overview.setRabbitCount(merchantOverviewMapper.countRabbits(merchantId));
         overview.setHouses(merchantOverviewMapper.selectHouses(merchantId, 10));
@@ -157,6 +155,46 @@ public class MerchantAdminService {
     private String operator() {
         Long adminId = PlatformAdminContext.getAdminId();
         return adminId == null ? "platform" : String.valueOf(adminId);
+    }
+
+    private String normalizeUserName(String userName) {
+        String value = trim(userName);
+        if (value == null || value.isEmpty()) {
+            throw new BizException(400, "登录用户名不能为空");
+        }
+        if (value.length() > 64) {
+            throw new BizException(400, "登录用户名不能超过64个字符");
+        }
+        return value;
+    }
+
+    private SysUser createBusinessUser(Long merchantId, String userName, String password, String confirmPassword) {
+        String normalizedUserName = normalizeUserName(userName);
+        String normalizedPassword = normalizePassword(password, confirmPassword);
+        if (sysUserMapper.selectByUserName(normalizedUserName) != null) {
+            throw new BizException(400, "用户名已存在");
+        }
+
+        SysUser user = new SysUser();
+        user.setMerchantId(merchantId);
+        user.setUserName(normalizedUserName);
+        user.setPassword(passwordEncoder.encode(normalizedPassword));
+        try {
+            sysUserMapper.insert(user);
+        } catch (DuplicateKeyException ex) {
+            throw new BizException(400, "用户名已存在");
+        }
+        return user;
+    }
+
+    private String normalizePassword(String password, String confirmPassword) {
+        if (password == null || password.length() < 6 || password.length() > 64) {
+            throw new BizException(400, "初始密码长度需为6-64个字符");
+        }
+        if (!password.equals(confirmPassword)) {
+            throw new BizException(400, "两次输入的密码不一致");
+        }
+        return password;
     }
 
     private String trim(String value) {

@@ -1,6 +1,6 @@
 ---
 name: Rabbit SaaS Admin
-description: Operational console for platform staff managing SaaS merchants, merchant users, and read-only business summaries.
+description: Operational console for platform staff managing SaaS merchants, merchant accounts, and read-only business summaries.
 status: canonical
 owners: admin frontend
 framework: React + TypeScript + Vite
@@ -40,7 +40,7 @@ This document is the source of truth for the `admin/` frontend visual and intera
 
 ## Overview
 
-Rabbit SaaS Admin is an operational console for platform staff. The first version focuses on managing merchants, merchant users, merchant enablement state, and read-only business data summaries.
+Rabbit SaaS Admin is an operational console for platform staff. The first version focuses on managing merchants, merchant accounts, merchant enablement state, and read-only business data summaries.
 
 The interface should feel like a quiet control room for a production SaaS platform: clear hierarchy, low visual noise, stable controls, and enough density for repeated daily work. It is not a marketing site, a merchant self-service portal, or a business data editor.
 
@@ -59,9 +59,10 @@ Primary users are internal platform operators. They work across merchants and ne
 Core jobs:
 
 - Find a merchant by name, contact, phone, status, or ID.
-- Create or update merchant profile information.
+- Create a merchant together with its initial login account, or update merchant profile information.
+- Add merchant login accounts and keep at least one account bound to every merchant.
 - Enable or disable a merchant with clear risk signaling.
-- Bind and unbind existing business users.
+- Inspect and edit accounts that belong directly to a single merchant.
 - Inspect merchant scale through counts, rabbit house previews, user lists, and audit previews.
 
 Non-goals:
@@ -229,7 +230,7 @@ Rules:
 - Icons inside buttons use `data-icon`; do not manually size them in page code.
 - Dialogs must include a useful description, especially for create, edit, bind, and destructive flows.
 - Forms should group labels, inputs, validation hints, and descriptions consistently.
-- Toasts should name the completed action, such as `商户已启用` or `用户已解绑`.
+- Toasts should name the completed action, such as `商户已启用` or `账号已创建`.
 
 ## Tables And Data Display
 
@@ -269,7 +270,7 @@ Rules:
 - `DISABLED` should read as restricted/high attention, but red should be reserved for the destructive action itself or error state.
 - `停用商户` uses destructive styling.
 - `启用商户` uses primary/default styling.
-- User binding and unbinding must be obvious and reversible from the current screen.
+- Merchant account creation must happen in merchant context; do not expose cross-merchant binding controls.
 - Platform admin screens must not imply merchant-level permission controls unless the backend supports them.
 
 ## Copy
@@ -280,7 +281,7 @@ Rules:
 
 - Prefer precise verbs over promotional copy.
 - Labels name the object being edited, not the backend concept.
-- A control should say exactly what happens: `新增商户`, `查询`, `编辑`, `停用商户`, `启用商户`, `绑定用户`, `解绑`.
+- A control should say exactly what happens: `新增商户`, `新增账号`, `查询`, `编辑`, `停用商户`, `启用商户`.
 - Toast vocabulary should match the action vocabulary.
 - Empty copy should explain what makes data appear and provide an action only when the operator can perform it here.
 - Error copy should direct the operator to the next practical step.

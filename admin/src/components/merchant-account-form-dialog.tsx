@@ -121,9 +121,9 @@ export function MerchantAccountFormDialog({
               </Field>
               <Field>
                 <FieldLabel>所属商户</FieldLabel>
-                <Input value={account.merchantNames || '-'} disabled />
+                <Input value={account.merchantName || '-'} disabled />
                 <FieldDescription>
-                  共绑定 {account.merchantCount} 个商户，绑定关系在商户详情中维护。
+                  商户 ID {account.merchantId}，账号归属不可跨商户变更。
                 </FieldDescription>
               </Field>
               <Field>

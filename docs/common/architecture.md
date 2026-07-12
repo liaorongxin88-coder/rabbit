@@ -44,7 +44,7 @@ Rabbit 当前由三块主要应用组成：
 - 使用 `/api/admin/**`。
 - 使用平台管理员 JWT。
 - 不发送 `X-House-Id`。
-- 第一版只能管理商户、绑定用户和查看概览，不直接编辑商户生产数据。
+- 第一版只能管理商户及其业务账号并查看概览，不直接编辑商户生产数据。
 
 ## Flutter 客户端
 
@@ -76,7 +76,7 @@ Admin 位于 `admin/`，是 React + TypeScript + Vite 应用。它只服务平�
 - 请求统一走 `src/lib/request.ts` 和 `src/api/`。
 - 平台登录使用 `POST /api/admin/auth/login`。
 - 商户业务数据以只读概览为主。
-- 可写操作集中在商户创建、编辑、启停，以及用户绑定/解绑。
+- 可写操作集中在商户创建、编辑、启停，以及在商户下新增业务账号。
 
 UI 和工程规则分别见 `admin/DESIGN.md` 与 `admin/.rules`。
 

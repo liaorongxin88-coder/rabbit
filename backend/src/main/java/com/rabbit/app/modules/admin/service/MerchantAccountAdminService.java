@@ -3,7 +3,7 @@ package com.rabbit.app.modules.admin.service;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.admin.dto.MerchantAccountItem;
 import com.rabbit.app.modules.admin.dto.PageResult;
-import com.rabbit.app.modules.admin.mapper.MerchantUserMapper;
+import com.rabbit.app.modules.admin.mapper.MerchantAccountMapper;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.security.PlatformAdminContext;
@@ -16,16 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class MerchantAccountAdminService {
     private static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
 
-    private final MerchantUserMapper merchantUserMapper;
+    private final MerchantAccountMapper merchantAccountMapper;
     private final SysUserMapper sysUserMapper;
     private final PasswordEncoder passwordEncoder;
 
     public MerchantAccountAdminService(
-            MerchantUserMapper merchantUserMapper,
+            MerchantAccountMapper merchantAccountMapper,
             SysUserMapper sysUserMapper,
             PasswordEncoder passwordEncoder
     ) {
-        this.merchantUserMapper = merchantUserMapper;
+        this.merchantAccountMapper = merchantAccountMapper;
         this.sysUserMapper = sysUserMapper;
         this.passwordEncoder = passwordEncoder;
     }
@@ -39,15 +39,15 @@ public class MerchantAccountAdminService {
         }
         String normalizedKeyword = trim(keyword);
         int offset = (p - 1) * ps;
-        long total = merchantUserMapper.countMerchantAccounts(normalizedKeyword);
-        List<MerchantAccountItem> items = merchantUserMapper.selectMerchantAccounts(normalizedKeyword, offset, ps);
+        long total = merchantAccountMapper.countAccounts(normalizedKeyword);
+        List<MerchantAccountItem> items = merchantAccountMapper.selectAccounts(normalizedKeyword, offset, ps);
         return new PageResult<MerchantAccountItem>(items, total, p, ps);
     }
 
     @Transactional
     public MerchantAccountItem update(Long userId, String userName, String password, String confirmPassword) {
         ensureSuperAdmin();
-        SysUser user = getExistingMerchantUser(userId);
+        SysUser user = getExistingMerchantAccount(userId);
         String normalizedUserName = normalizeUserName(userName);
         ensureUserNameAvailable(normalizedUserName, user.getUserId());
 
@@ -64,15 +64,15 @@ public class MerchantAccountAdminService {
             }
         }
 
-        return merchantUserMapper.selectMerchantAccountByUserId(user.getUserId());
+        return merchantAccountMapper.selectAccountByUserId(user.getUserId());
     }
 
-    private SysUser getExistingMerchantUser(Long userId) {
+    private SysUser getExistingMerchantAccount(Long userId) {
         if (userId == null || userId.longValue() <= 0) {
             throw new BizException(400, "用户ID不能为空");
         }
         SysUser user = sysUserMapper.selectById(userId);
-        if (user == null || merchantUserMapper.countUserBindings(userId) <= 0) {
+        if (user == null || user.getMerchantId() == null) {
             throw new BizException(404, "商户账号不存在");
         }
         return user;
