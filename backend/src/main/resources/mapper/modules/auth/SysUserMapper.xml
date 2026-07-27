@@ -57,4 +57,19 @@
             update_time = now()
         where user_id = #{userId}
     </update>
+
+    <select id="searchByMerchant" resultMap="SysUserMap">
+        select user_id, merchant_id, user_name, password, openid, create_time, update_time
+        from sys_user
+        where merchant_id = #{merchantId}
+          and user_name like concat('%', #{keyword}, '%')
+        <if test="excludeUserIds != null and excludeUserIds.size() > 0">
+            and user_id not in
+            <foreach collection="excludeUserIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        order by user_name asc
+        limit #{limit}
+    </select>
 </mapper>

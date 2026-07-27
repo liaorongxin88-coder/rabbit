@@ -200,6 +200,13 @@ public class HouseService {
         throw new BizException(403, "权限不足");
     }
 
+    public void assertHouseAdmin(Long userId, Long houseId) {
+        HousePermissionInfo info = getMyHousePermission(userId, houseId);
+        if (info.getIsAdmin() == null || !info.getIsAdmin()) {
+            throw new BizException(403, "仅管理员可操作");
+        }
+    }
+
     public HousePermissionInfo getMyHousePermission(Long userId, Long houseId) {
         HouseContext ctx = HouseContext.get();
         if (ctx != null && userId != null && houseId != null && userId.equals(ctx.getUserId()) && houseId.equals(ctx.getHouseId())) {

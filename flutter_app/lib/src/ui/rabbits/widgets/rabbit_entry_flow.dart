@@ -121,6 +121,10 @@ class _RabbitTypeSheetState extends ConsumerState<_RabbitTypeSheet> {
             const SizedBox(height: 14),
             _CageTypeWarning(cage: widget.cage),
           ],
+          if (!widget.cage.acceptsMoreRabbits) ...[
+            const SizedBox(height: 14),
+            _CageCapacityWarning(cage: widget.cage),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [
@@ -133,7 +137,7 @@ class _RabbitTypeSheetState extends ConsumerState<_RabbitTypeSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _continue,
+                  onPressed: widget.cage.acceptsMoreRabbits ? _continue : null,
                   child: const Text('确定'),
                 ),
               ),
@@ -149,6 +153,13 @@ class _RabbitTypeSheetState extends ConsumerState<_RabbitTypeSheet> {
   }
 
   void _continue() {
+    final blocked = widget.cage.entryBlockedReason;
+    if (blocked != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blocked)),
+      );
+      return;
+    }
     Navigator.of(context).pop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!widget.hostContext.mounted) {
@@ -197,14 +208,11 @@ class _CreateRabbitSheet extends ConsumerStatefulWidget {
 class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   final _formKey = GlobalKey<FormState>();
   final _breedController = TextEditingController();
-  final _colorController = TextEditingController();
   final _weightController = TextEditingController();
-  final _remarkController = TextEditingController();
   late String _type;
   late int _selectedCageId;
   var _gender = '0';
   var _arrivalMethod = '0';
-  var _health = 'normal';
   var _saving = false;
 
   bool get _isEdit => widget.rabbit != null;
@@ -240,9 +248,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   @override
   void dispose() {
     _breedController.dispose();
-    _colorController.dispose();
     _weightController.dispose();
-    _remarkController.dispose();
     super.dispose();
   }
 
@@ -351,22 +357,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             ],
           ),
           const SizedBox(height: 18),
-          const _RequiredLabel('生育状态'),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: _type,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              hintText: '请选择生育状态',
-            ),
-            items: const [
-              DropdownMenuItem(value: '0', child: Text('待配种')),
-              DropdownMenuItem(value: '1', child: Text('后备兔')),
-              DropdownMenuItem(value: '2', child: Text('商品兔')),
-            ],
-            onChanged: _saving
-                ? null
-                : (value) => setState(() => _type = value ?? _type),
+          _ReadOnlyInfoBox(
+            icon: Icons.category_outlined,
+            text: '兔子类型：${_typeOptionLabel(_type)}（已在上一页选择）',
           ),
           const SizedBox(height: 18),
         ],
@@ -393,33 +386,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           const SizedBox(height: 18),
         ],
         if (!_isEdit) ...[
-          const _SectionLabel('健康状况'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _RadioChoice(
-                value: 'excellent',
-                groupValue: _health,
-                label: '优秀',
-                onChanged: (value) => setState(() => _health = value),
-              ),
-              _RadioChoice(
-                value: 'normal',
-                groupValue: _health,
-                label: '正常',
-                onChanged: (value) => setState(() => _health = value),
-              ),
-              _RadioChoice(
-                value: 'poor',
-                groupValue: _health,
-                label: '差',
-                onChanged: (value) => setState(() => _health = value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
         ],
         _ResponsiveFieldRow(
           children: [
@@ -442,14 +409,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               },
             ),
             if (!_isEdit)
-              TextFormField(
-                controller: _colorController,
-                decoration: const InputDecoration(
-                  labelText: '颜色',
-                  hintText: '请输入颜色',
-                ),
-                textInputAction: TextInputAction.next,
-              ),
+              const SizedBox.shrink(),
           ],
         ),
         const SizedBox(height: 12),
@@ -486,22 +446,6 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             ),
           ],
         ),
-        if (!_isEdit) ...[
-          const SizedBox(height: 18),
-          const _SectionLabel('备注'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _remarkController,
-            decoration: const InputDecoration(hintText: '请输入备注'),
-            minLines: 3,
-            maxLines: 4,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '颜色、健康状况和备注为界面预留项，当前后端兔只档案暂未落库。',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
       ],
     );
   }
@@ -640,6 +584,20 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   String _createCageName() {
     final cage = _createCage;
     return cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
+  }
+
+  /// 兔子档案类型（rabbits.type），与批次内生育状态（batch_rabbits.current_status）无关。
+  String _typeOptionLabel(String type) {
+    switch (type) {
+      case '0':
+        return _gender == '0' ? '种母兔' : '种公兔';
+      case '1':
+        return '后备兔';
+      case '2':
+        return '商品兔';
+      default:
+        return type;
+    }
   }
 }
 
@@ -815,6 +773,33 @@ class _CageTypeWarning extends StatelessWidget {
         '当前笼位用途为${cage.usageLabel}，选择其他类型时后端会拒绝提交。',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: palette.warning,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
+    );
+  }
+}
+
+class _CageCapacityWarning extends StatelessWidget {
+  const _CageCapacityWarning({required this.cage});
+
+  final Cage cage;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.dangerSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.line),
+      ),
+      child: Text(
+        cage.entryBlockedReason ?? '该笼位已满，不能再录入兔子。',
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: palette.danger,
               fontWeight: FontWeight.w800,
             ),
       ),

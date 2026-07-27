@@ -62,6 +62,7 @@ flutter:
   assets:
     - config/env/dev.env
     - config/env/test.env
+    - assets/images/app_logo.jpg
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

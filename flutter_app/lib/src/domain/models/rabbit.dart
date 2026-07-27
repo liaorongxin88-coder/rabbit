@@ -28,6 +28,12 @@ class Rabbit {
   String get typeLabel {
     switch (type) {
       case '0':
+        if (gender == '1') {
+          return '种公兔';
+        }
+        if (gender == '0') {
+          return '种母兔';
+        }
         return '种兔';
       case '1':
         return '后备兔';

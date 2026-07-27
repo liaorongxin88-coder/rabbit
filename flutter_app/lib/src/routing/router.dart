@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/ui/dashboard/widgets/dashboard_screen.dart';
 import 'package:rabbit_flutter/src/ui/home/widgets/home_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_cages_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_detail_screen.dart';
+import 'package:rabbit_flutter/src/ui/houses/widgets/house_members_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_rabbits_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
 import 'package:rabbit_flutter/src/ui/profile/widgets/profile_screen.dart';
@@ -110,6 +111,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
                 child: HouseCagesScreen(houseId: houseId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/members',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final houseName = state.uri.queryParameters['name'] ?? '';
+              return NoTransitionPage(
+                child: HouseMembersScreen(
+                  houseId: houseId,
+                  houseName: houseName,
+                ),
               );
             },
           ),

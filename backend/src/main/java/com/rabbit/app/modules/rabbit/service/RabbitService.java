@@ -21,6 +21,7 @@ import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
 import java.util.Date;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class RabbitService {
     private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final RabbitDepartureRecordMapper rabbitDepartureRecordMapper;
     private final RequestDedupService requestDedupService;
+    private final int commodityCageCapacity;
 
     public RabbitService(
             RabbitMapper rabbitMapper,
@@ -46,7 +48,8 @@ public class RabbitService {
             BatchMapper batchMapper,
             RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
             RabbitDepartureRecordMapper rabbitDepartureRecordMapper,
-            RequestDedupService requestDedupService
+            RequestDedupService requestDedupService,
+            @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
         this.rabbitMapper = rabbitMapper;
         this.cageMapper = cageMapper;
@@ -57,6 +60,8 @@ public class RabbitService {
         this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.rabbitDepartureRecordMapper = rabbitDepartureRecordMapper;
         this.requestDedupService = requestDedupService;
+        this.commodityCageCapacity =
+            commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
     }
 
     @Transactional
@@ -88,6 +93,8 @@ public class RabbitService {
             if (Boolean.FALSE.equals(cage.getIsEnabled())) {
                 throw new BizException(400, "笼位已停用");
             }
+
+            assertCageHasCapacityForNewRabbit(cage, rabbit.getType());
 
             String targetCageStatus = typeToCageStatus(rabbit.getType());
             if (!"0".equals(cage.getStatus()) && !targetCageStatus.equals(cage.getStatus())) {
@@ -196,6 +203,7 @@ public class RabbitService {
 
             Cage oldCage = cageMapper.selectById(houseId, r.getCageId());
             if (oldCage != null && !oldCage.getId().equals(newCageId)) {
+                assertCageHasCapacityForNewRabbit(newCage, r.getType());
                 int newCount = (oldCage.getRabbitCount() == null ? 0 : oldCage.getRabbitCount()) - 1;
                 if (newCount < 0) {
                     newCount = 0;
@@ -241,6 +249,7 @@ public class RabbitService {
             if (!"0".equals(targetCage.getStatus()) && !"2".equals(targetCage.getStatus())) {
                 throw new BizException(400, "目标笼位不是后备兔笼");
             }
+            assertCageHasCapacityForNewRabbit(targetCage, "1");
         }
 
         for (Long rabbitId : rabbitIds) {
@@ -277,6 +286,7 @@ public class RabbitService {
             }
 
             Cage finalTargetCage = targetCage != null ? targetCage : pickReplacementCage(houseId);
+            assertCageHasCapacityForNewRabbit(finalTargetCage, "1");
             int newTargetCount = (finalTargetCage.getRabbitCount() == null ? 0 : finalTargetCage.getRabbitCount()) + 1;
             String newTargetStatus = "0".equals(finalTargetCage.getStatus()) ? "2" : finalTargetCage.getStatus();
             cageMapper.updateRabbitCountAndStatus(houseId, finalTargetCage.getId(), newTargetCount, newTargetStatus, String.valueOf(userId));
@@ -331,16 +341,34 @@ public class RabbitService {
     private Cage pickReplacementCage(Long houseId) {
         List<Cage> cages = cageMapper.selectByHouseId(houseId);
         for (Cage c : cages) {
-            if ("2".equals(c.getStatus())) {
+            if ("2".equals(c.getStatus()) && cageRabbitCount(c) < 1) {
                 return c;
             }
         }
         for (Cage c : cages) {
-            if ("0".equals(c.getStatus())) {
+            if ("0".equals(c.getStatus()) && cageRabbitCount(c) < 1) {
                 return c;
             }
         }
         throw new BizException(400, "没有可用后备兔笼位");
+    }
+
+    private void assertCageHasCapacityForNewRabbit(Cage cage, String rabbitType) {
+        if ("1".equals(cage.getStatus()) || "2".equals(cage.getStatus())) {
+            if (cageRabbitCount(cage) >= 1) {
+                throw new BizException(400, "该笼位已有兔子，不能再存放");
+            }
+            return;
+        }
+        if ("2".equals(rabbitType)
+                && ("3".equals(cage.getStatus()) || "0".equals(cage.getStatus()))
+                && cageRabbitCount(cage) >= commodityCageCapacity) {
+            throw new BizException(400, "商品兔笼已满");
+        }
+    }
+
+    private int cageRabbitCount(Cage cage) {
+        return cage.getRabbitCount() == null ? 0 : cage.getRabbitCount();
     }
 
     private String typeToCageStatus(String type) {

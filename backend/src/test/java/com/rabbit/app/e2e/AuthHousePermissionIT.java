@@ -124,16 +124,40 @@ public class AuthHousePermissionIT extends E2eTestSupport {
         ));
         long rabbitId = createRabbit(member, houseId, cages.get(0), "0", "0", "member_can_edit");
         Assertions.assertTrue(rabbitId > 0);
-        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "权限不足");
-        api.expectError("/api/audit-logs", HttpMethod.GET, member.token, houseId, null, 403, "权限不足");
+        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅管理员");
 
         api.putOk("/api/house-members/" + member.userId, owner.token, houseId, obj(
                 "perms", "control",
                 "isAdmin", false,
                 "requestId", requestId("member_control")
         ));
-        Assertions.assertTrue(api.getOk("/api/house-members", member.token, houseId).size() >= 2);
+        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅管理员");
         JsonNode hardware = api.getOk("/api/hardware/status", member.token, houseId);
         Assertions.assertFalse(hardware.get("enabled").asBoolean());
+    }
+
+    @Test
+    void houseMemberLeaveAndControlMember() {
+        UserSession owner = register("owner_leave");
+        UserSession member = register("member_leave");
+        long houseId = createHouse(owner, "leave_house", 1, 3, 1);
+
+        api.postOk("/api/house-members", owner.token, houseId, obj(
+                "userName", member.userName,
+                "perms", "control",
+                "isAdmin", false,
+                "requestId", requestId("member_control_add")
+        ));
+
+        JsonNode members = api.getOk("/api/house-members", owner.token, houseId);
+        Assertions.assertTrue(members.size() >= 2);
+
+        api.postOk(
+                "/api/house-members/leave?requestId=" + requestId("member_leave"),
+                member.token,
+                houseId,
+                null
+        );
+        api.expectError("/api/cages", HttpMethod.GET, member.token, houseId, null, 403, "无兔舍权限");
     }
 }

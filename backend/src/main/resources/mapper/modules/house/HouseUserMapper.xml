@@ -62,4 +62,20 @@
         from house_users
         where house_id = #{houseId} and is_admin = 1
     </select>
+
+    <update id="clearOtherAdmins">
+        update house_users
+        set is_admin = 0,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and user_id != #{exceptUserId}
+          and is_admin = 1
+    </update>
+
+    <select id="selectMemberUserIds" resultType="long">
+        select user_id
+        from house_users
+        where house_id = #{houseId}
+    </select>
 </mapper>

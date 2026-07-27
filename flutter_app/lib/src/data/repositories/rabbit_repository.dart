@@ -161,6 +161,23 @@ class RabbitRepository {
     );
   }
 
+  Future<Rabbit> moveRabbitToCage({
+    required int houseId,
+    required Rabbit rabbit,
+    required int targetCageId,
+  }) {
+    return updateRabbit(
+      houseId: houseId,
+      rabbitId: rabbit.id,
+      cageId: targetCageId,
+      motherId: rabbit.motherId,
+      breed: rabbit.breed,
+      arrivalMethod: rabbit.arrivalMethod,
+      arrivalDate: rabbit.arrivalDate,
+      weight: rabbit.weight,
+    );
+  }
+
   Future<Rabbit> updateRabbit({
     required int houseId,
     required int rabbitId,
@@ -199,6 +216,25 @@ class RabbitRepository {
           throw const ApiException('编辑兔只结果格式不正确');
         }
         return Rabbit.fromJson(Map<String, dynamic>.from(data));
+      },
+    );
+  }
+
+  Future<void> convertToReplacement({
+    required int houseId,
+    required List<int> rabbitIds,
+    int? targetCageId,
+    bool forceExitBatch = true,
+  }) {
+    return _api.post<void>(
+      '/api/rabbits/replacement',
+      houseId: houseId,
+      body: {
+        'rabbitIds': rabbitIds,
+        'forceExitBatch': forceExitBatch,
+        'requestId': _uuid.v4(),
+        if (targetCageId != null && targetCageId > 0)
+          'targetCageId': targetCageId,
       },
     );
   }
