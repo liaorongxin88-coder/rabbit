@@ -46,6 +46,7 @@ class ApiClient {
     String path, {
     int? houseId,
     Object? body,
+    Map<String, dynamic>? query,
     required T Function(Object? data) decode,
   }) async {
     final options = await _options(houseId: houseId);
@@ -53,6 +54,7 @@ class ApiClient {
       () => _dio.post<Object?>(
         path,
         data: body ?? const <String, dynamic>{},
+        queryParameters: query,
         options: options,
       ),
       decode,
@@ -70,6 +72,23 @@ class ApiClient {
       () => _dio.put<Object?>(
         path,
         data: body ?? const <String, dynamic>{},
+        options: options,
+      ),
+      decode,
+    );
+  }
+
+  Future<T> delete<T>(
+    String path, {
+    int? houseId,
+    Map<String, dynamic>? query,
+    required T Function(Object? data) decode,
+  }) async {
+    final options = await _options(houseId: houseId);
+    return _request(
+      () => _dio.delete<Object?>(
+        path,
+        queryParameters: query,
         options: options,
       ),
       decode,

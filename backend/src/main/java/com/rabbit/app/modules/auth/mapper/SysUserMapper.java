@@ -4,6 +4,8 @@ import com.rabbit.app.modules.auth.entity.SysUser;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 @Mapper
 public interface SysUserMapper {
     SysUser selectByUserName(@Param("userName") String userName);
@@ -11,6 +13,11 @@ public interface SysUserMapper {
     SysUser selectByOpenid(@Param("openid") String openid);
 
     SysUser selectById(@Param("userId") Long userId);
+
+    List<SysUser> searchByMerchant(@Param("merchantId") Long merchantId,
+                                   @Param("keyword") String keyword,
+                                   @Param("excludeUserIds") List<Long> excludeUserIds,
+                                   @Param("limit") int limit);
 
     int insert(SysUser user);
 

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/weaning_sheet.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -58,16 +60,16 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _HomeContent extends StatefulWidget {
+class _HomeContent extends ConsumerStatefulWidget {
   const _HomeContent({required this.events});
 
   final List<EventItem> events;
 
   @override
-  State<_HomeContent> createState() => _HomeContentState();
+  ConsumerState<_HomeContent> createState() => _HomeContentState();
 }
 
-class _HomeContentState extends State<_HomeContent>
+class _HomeContentState extends ConsumerState<_HomeContent>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -112,6 +114,7 @@ class _HomeContentState extends State<_HomeContent>
                 _FlowPanel(
                   title: tab.label,
                   events: _eventsFor(tab, events),
+                  onEventTap: _handleEventTap,
                 ),
             ],
           ),
@@ -132,6 +135,36 @@ class _HomeContentState extends State<_HomeContent>
       return event.isProduction &&
           tab.keywords.any((keyword) => event.eventType.contains(keyword));
     }).toList();
+  }
+
+  Future<void> _handleEventTap(EventItem event) async {
+    if (!eventIsActionable(event)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该提醒暂不支持在此处理')),
+      );
+      return;
+    }
+
+    final houseId = event.sourceHouseId;
+    if (houseId == null || houseId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法识别兔舍，请刷新后重试')),
+      );
+      return;
+    }
+
+    final permission = await ref.read(housePermissionProvider(houseId).future);
+    if (!permission.canEdit) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前为只读权限，无法执行生产操作')),
+      );
+      return;
+    }
+
+    await showProductionEventSheet(context: context, event: event);
   }
 }
 
@@ -335,24 +368,38 @@ class _TinyCount extends StatelessWidget {
 }
 
 class _FlowPanel extends StatelessWidget {
-  const _FlowPanel({required this.title, required this.events});
+  const _FlowPanel({
+    required this.title,
+    required this.events,
+    required this.onEventTap,
+  });
 
   final String title;
   final List<EventItem> events;
+  final Future<void> Function(EventItem event) onEventTap;
 
   @override
   Widget build(BuildContext context) {
     if (events.isEmpty) {
-      return const EmptyState(
+      final message = title == '配种'
+          ? '创建兔舍 → 笼位录入种母兔 → 兔舍详情创建生产批次 → 系统将提醒配种'
+          : title == '断奶'
+              ? '创建兔舍后，在笼位管理点击空笼录入种兔；'
+                  '分娩后到期提醒会出现在此，点击可断奶并放入商品兔笼。'
+              : '创建兔舍-添加兔子-创建批次-自动提醒配种.摸胎.备产.断奶';
+      return EmptyState(
         icon: Icons.inventory_2_outlined,
         title: '系统使用步骤',
-        message: '创建兔舍-添加兔子-自动提醒配种.摸胎.备产.断奶',
+        message: message,
       );
     }
 
     return ListView.separated(
       padding: const EdgeInsets.only(top: 18, bottom: 22),
-      itemBuilder: (context, index) => _EventCard(event: events[index]),
+      itemBuilder: (context, index) => _EventCard(
+        event: events[index],
+        onTap: () => onEventTap(events[index]),
+      ),
       separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemCount: events.length,
     );
@@ -360,9 +407,16 @@ class _FlowPanel extends StatelessWidget {
 }
 
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.event});
+  const _EventCard({
+    required this.event,
+    required this.onTap,
+  });
 
   final EventItem event;
+  final VoidCallback onTap;
+
+  bool get _actionable => eventIsActionable(event);
+  String get _actionHint => productionActionHint(event);
 
   @override
   Widget build(BuildContext context) {
@@ -374,54 +428,70 @@ class _EventCard extends StatelessWidget {
             : palette.success;
 
     return SectionCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _actionable ? onTap : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.notifications_active_outlined, color: color),
             ),
-            child: Icon(Icons.notifications_active_outlined, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        event.eventType.isEmpty
-                            ? event.category
-                            : event.eventType,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          event.eventType.isEmpty
+                              ? event.category
+                              : event.eventType,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                       ),
-                    ),
+                      Text(
+                        event.statusLabel,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${event.houseLabel} · ${event.dateLabel} · ${event.targetLabel}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (_actionable) ...[
+                    const SizedBox(height: 8),
                     Text(
-                      event.statusLabel,
+                      _actionHint,
                       style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w900,
+                        color: palette.primary,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${event.houseLabel} · ${event.dateLabel} · ${event.targetLabel}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            if (_actionable)
+              Icon(Icons.chevron_right, color: palette.muted),
+          ],
+        ),
       ),
     );
   }

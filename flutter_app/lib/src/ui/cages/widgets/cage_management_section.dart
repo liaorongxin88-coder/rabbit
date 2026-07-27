@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
+import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -54,6 +56,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   Widget build(BuildContext context) {
     final houseId = widget.house.id;
     final cages = ref.watch(houseCagesProvider(houseId));
+    final permission = ref.watch(housePermissionProvider(houseId));
     final palette = AppPalette.of(context);
 
     return SectionCard(
@@ -63,10 +66,34 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: _CageHeader(
-              house: widget.house,
-              onCreate: () => _showCreateCagesSheet(context),
-              onRefresh: () => ref.invalidate(houseCagesProvider(houseId)),
+            child: permission.when(
+              data: (perm) => _CageHeader(
+                house: widget.house,
+                canManageCages: perm.canControl,
+                showEntryHint: perm.canEdit,
+                onCreate: perm.canControl
+                    ? () => _showCreateCagesSheet(context)
+                    : null,
+                onRefresh: () {
+                  ref.invalidate(houseCagesProvider(houseId));
+                  ref.invalidate(housePermissionProvider(houseId));
+                },
+              ),
+              loading: () => _CageHeader(
+                house: widget.house,
+                canManageCages: false,
+                onCreate: null,
+                onRefresh: () => ref.invalidate(houseCagesProvider(houseId)),
+              ),
+              error: (_, __) => _CageHeader(
+                house: widget.house,
+                canManageCages: false,
+                onCreate: null,
+                onRefresh: () {
+                  ref.invalidate(houseCagesProvider(houseId));
+                  ref.invalidate(housePermissionProvider(houseId));
+                },
+              ),
             ),
           ),
           Divider(height: 1, color: palette.line),
@@ -91,7 +118,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 ),
                 const SizedBox(height: 14),
                 cages.when(
-                  data: _buildCageGrid,
+                  data: (items) => _buildCageGrid(context, items, permission),
                   loading: () => const _CageLoading(),
                   error: (error, _) => _InlineSectionError(
                     message: error.toString(),
@@ -106,7 +133,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     );
   }
 
-  Widget _buildCageGrid(List<Cage> cages) {
+  Widget _buildCageGrid(
+    BuildContext context,
+    List<Cage> cages,
+    AsyncValue<HousePermission> permission,
+  ) {
+    final canEdit = permission.valueOrNull?.canEdit == true;
     final keyword = _keyword.toLowerCase();
     final filtered = keyword.isEmpty
         ? cages
@@ -115,11 +147,14 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             .toList();
 
     if (cages.isEmpty) {
+      final canControl = permission.valueOrNull?.canControl == true;
       return _CageEmptyState(
         title: '暂无笼位',
-        message: '点击“新增笼位”，按整排编号、层数和每排位置批量生成。',
-        actionLabel: '新增笼位',
-        onAction: () => _showCreateCagesSheet(context),
+        message: canControl
+            ? '点击“新增笼位”，按整排编号、层数和每排位置批量生成。'
+            : '当前兔舍还没有笼位，请联系管理员添加。',
+        actionLabel: canControl ? '新增笼位' : null,
+        onAction: canControl ? () => _showCreateCagesSheet(context) : null,
       );
     }
 
@@ -159,13 +194,29 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 childAspectRatio: columns >= 4 ? 1.45 : 1.18,
               ),
               itemBuilder: (context, index) {
+                final cage = filtered[index];
                 return _CageTile(
-                  cage: filtered[index],
-                  onTap: () => showRabbitEntryTypeSheet(
-                    context: context,
-                    houseId: widget.house.id,
-                    cage: filtered[index],
-                  ),
+                  cage: cage,
+                  onTap: () {
+                    if (!canEdit) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('当前为只读权限，无法录入兔子')),
+                      );
+                      return;
+                    }
+                    final blocked = cage.entryBlockedReason;
+                    if (blocked != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(blocked)),
+                      );
+                      return;
+                    }
+                    showRabbitEntryTypeSheet(
+                      context: context,
+                      houseId: widget.house.id,
+                      cage: cage,
+                    );
+                  },
                 );
               },
             );
@@ -188,12 +239,16 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
 class _CageHeader extends StatelessWidget {
   const _CageHeader({
     required this.house,
+    required this.canManageCages,
     required this.onCreate,
     required this.onRefresh,
+    this.showEntryHint = false,
   });
 
   final RabbitHouse house;
-  final VoidCallback onCreate;
+  final bool canManageCages;
+  final bool showEntryHint;
+  final VoidCallback? onCreate;
   final VoidCallback onRefresh;
 
   @override
@@ -223,6 +278,15 @@ class _CageHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
+              if (showEntryHint) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '点击笼位可录入新兔子（兔场初始化）',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.muted,
+                      ),
+                ),
+              ],
             ],
           ),
         ),

@@ -23,4 +23,10 @@ public interface HouseUserMapper {
     int deleteMember(@Param("houseId") Long houseId, @Param("userId") Long userId);
 
     int countAdmins(@Param("houseId") Long houseId);
+
+    int clearOtherAdmins(@Param("houseId") Long houseId,
+                         @Param("exceptUserId") Long exceptUserId,
+                         @Param("updateBy") String updateBy);
+
+    List<Long> selectMemberUserIds(@Param("houseId") Long houseId);
 }

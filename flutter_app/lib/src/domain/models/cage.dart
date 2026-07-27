@@ -1,4 +1,7 @@
 class Cage {
+  /// 与后端 `app.cage.commodity-capacity` 默认值一致。
+  static const commodityCapacity = 10;
+
   const Cage({
     required this.id,
     required this.houseId,
@@ -45,6 +48,87 @@ class Cage {
         return '2';
       default:
         return '0';
+    }
+  }
+
+  /// 种兔笼、后备兔笼仅允许存放 1 只；商品兔笼最多 [commodityCapacity] 只。
+  bool get acceptsMoreRabbits {
+    if (!isEnabled) {
+      return false;
+    }
+    if (status == '1' || status == '2') {
+      return rabbitCount < 1;
+    }
+    if (status == '3') {
+      return rabbitCount < commodityCapacity;
+    }
+    return true;
+  }
+
+  String? get entryBlockedReason {
+    if (!isEnabled) {
+      return '笼位已停用';
+    }
+    if ((status == '1' || status == '2') && rabbitCount >= 1) {
+      return '该笼位已有兔子，不能再录入';
+    }
+    if (status == '3' && rabbitCount >= commodityCapacity) {
+      return '该商品兔笼已满（最多 $commodityCapacity 只）';
+    }
+    return null;
+  }
+
+  /// 笼位用途是否匹配兔子类型。
+  bool acceptsRabbitType(String rabbitType) {
+    if (status == '0') {
+      return true;
+    }
+    return status == _cageStatusForRabbitType(rabbitType);
+  }
+
+  bool get isCommodityCage => status == '0' || status == '3';
+
+  int get commodityRemainingCapacity {
+    if (!isCommodityCage) {
+      return 0;
+    }
+    return (commodityCapacity - rabbitCount).clamp(0, commodityCapacity);
+  }
+
+  bool canAcceptCommodityCount(int count) {
+    if (!isEnabled || count <= 0) {
+      return false;
+    }
+    return commodityRemainingCapacity >= count;
+  }
+
+  /// 目标笼位能否接收该兔子（含单兔笼容量限制）。
+  bool canAcceptRabbit(String rabbitType, {int? exceptRabbitCageId}) {
+    if (!isEnabled || !acceptsRabbitType(rabbitType)) {
+      return false;
+    }
+    if (exceptRabbitCageId != null && id == exceptRabbitCageId) {
+      return true;
+    }
+    if (status == '1' || status == '2') {
+      return rabbitCount < 1;
+    }
+    if (status == '3') {
+      return rabbitCount < commodityCapacity;
+    }
+    return true;
+  }
+
+  static String _cageStatusForRabbitType(String type) {
+    switch (type) {
+      case '0':
+        return '1';
+      case '1':
+        return '2';
+      case '2':
+        return '3';
+      default:
+        return '';
     }
   }
 

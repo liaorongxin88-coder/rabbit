@@ -36,6 +36,8 @@ void main() {
     expect(find.text('手机号一键进入'), findsOneWidget);
     expect(find.text('检测手机号'), findsOneWidget);
     expect(find.text('账号'), findsOneWidget);
+    expect(find.text('《隐私政策》'), findsOneWidget);
+    expect(find.text('《用户协议》'), findsOneWidget);
     expect(find.textContaining('模拟器默认连接'), findsNothing);
   });
 
@@ -92,7 +94,8 @@ void main() {
 
     expect(find.text('用户名'), findsOneWidget);
     expect(find.text('密码'), findsOneWidget);
-    expect(find.text('创建新账号'), findsOneWidget);
+    expect(find.text('创建新账号'), findsNothing);
+    expect(find.text('登录'), findsOneWidget);
   });
 
   testWidgets('restores session and opens shell without duplicate keys',
@@ -396,6 +399,24 @@ void main() {
     expect(find.text('测试1'), findsOneWidget);
     expect(find.text('仅显示当前选择的兔舍'), findsOneWidget);
     expect(find.text('2'), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('blocks account login when legal consent is unchecked', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(PageView), const Offset(-420, 0));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).first, 'demo_user');
+    await tester.enterText(find.byType(TextFormField).last, 'password');
+    await tester.tap(find.text('登录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请阅读并同意《隐私政策》与《用户协议》'), findsOneWidget);
   });
 
   test('persists and clears local app settings', () async {

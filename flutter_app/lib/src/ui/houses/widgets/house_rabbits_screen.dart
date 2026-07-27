@@ -11,6 +11,7 @@ import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_move_cage_sheet.dart';
 
 class HouseRabbitsScreen extends ConsumerWidget {
   const HouseRabbitsScreen({super.key, required this.houseId});
@@ -162,11 +163,26 @@ class _RabbitsContent extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 child: cages.when(
                   data: (cageItems) => rabbits.when(
-                    data: (rabbitItems) => _RabbitListBody(
-                      houseId: house.id,
-                      rabbits: rabbitItems,
-                      cages: cageItems,
-                    ),
+                    data: (rabbitItems) {
+                      final permission =
+                          ref.watch(housePermissionProvider(house.id));
+                      return permission.when(
+                        data: (perm) => _RabbitListBody(
+                          houseId: house.id,
+                          rabbits: rabbitItems,
+                          cages: cageItems,
+                          canEdit: perm.canEdit,
+                        ),
+                        loading: () =>
+                            const _SectionLoading(label: '加载权限中...'),
+                        error: (error, _) => _InlineError(
+                          message: error.toString(),
+                          onRetry: () => ref.invalidate(
+                            housePermissionProvider(house.id),
+                          ),
+                        ),
+                      );
+                    },
                     loading: () => const _SectionLoading(label: '加载兔只中...'),
                     error: (error, _) => _InlineError(
                       message: error.toString(),
@@ -232,11 +248,13 @@ class _RabbitListBody extends StatelessWidget {
     required this.houseId,
     required this.rabbits,
     required this.cages,
+    required this.canEdit,
   });
 
   final int houseId;
   final List<Rabbit> rabbits;
   final List<Cage> cages;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -257,6 +275,7 @@ class _RabbitListBody extends StatelessWidget {
             houseId: houseId,
             rabbit: rabbit,
             cages: cages,
+            canEdit: canEdit,
           ),
           const SizedBox(height: 8),
         ],
@@ -270,11 +289,24 @@ class _RabbitListTile extends StatelessWidget {
     required this.houseId,
     required this.rabbit,
     required this.cages,
+    required this.canEdit,
   });
 
   final int houseId;
   final Rabbit rabbit;
   final List<Cage> cages;
+  final bool canEdit;
+
+  String _cageDisplay() {
+    for (final cage in cages) {
+      if (cage.id == rabbit.cageId) {
+        final name =
+            cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
+        return name;
+      }
+    }
+    return '#${rabbit.cageId}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +342,7 @@ class _RabbitListTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '笼位 #${rabbit.cageId} · ${rabbit.breed.isEmpty ? '品种未填' : rabbit.breed} · ${rabbit.weightLabel}',
+                  '笼位 ${_cageDisplay()} · ${rabbit.breed.isEmpty ? '品种未填' : rabbit.breed} · ${rabbit.weightLabel}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -318,17 +350,28 @@ class _RabbitListTile extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: '编辑兔子',
-            onPressed: () => showRabbitEditSheet(
-              context: context,
-              houseId: houseId,
-              rabbit: rabbit,
-              cages: cages,
+          if (canEdit) ...[
+            IconButton(
+              tooltip: '换笼位',
+              onPressed: () => showRabbitMoveCageSheet(
+                context: context,
+                houseId: houseId,
+                rabbit: rabbit,
+                cages: cages,
+              ),
+              icon: const Icon(Icons.move_down_outlined),
             ),
-            icon: const Icon(Icons.edit_outlined),
-          ),
+            IconButton(
+              tooltip: '编辑兔子',
+              onPressed: () => showRabbitEditSheet(
+                context: context,
+                houseId: houseId,
+                rabbit: rabbit,
+                cages: cages,
+              ),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ],
         ],
       ),
     );

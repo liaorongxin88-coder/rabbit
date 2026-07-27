@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:rabbit_flutter/src/domain/legal_documents.dart';
+import 'package:rabbit_flutter/src/ui/auth/widgets/legal_document_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -44,6 +46,44 @@ class SettingsScreen extends StatelessWidget {
                   title: '兔舍生产设置',
                   subtitle: '配置所有兔舍共用的生产周期',
                   onTap: () => context.go('/settings/production'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            child: Column(
+              children: [
+                _SettingsEntry(
+                  icon: Icons.privacy_tip_outlined,
+                  iconColor: palette.primary,
+                  iconBackground: palette.primarySoft,
+                  title: '隐私政策',
+                  subtitle: LegalDocuments.privacyPolicyUpdatedAt,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => LegalDocumentScreen(
+                        title: LegalDocuments.privacyPolicyTitle,
+                        body: LegalDocuments.privacyPolicy,
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                _SettingsEntry(
+                  icon: Icons.description_outlined,
+                  iconColor: palette.success,
+                  iconBackground: palette.successSoft,
+                  title: '用户协议',
+                  subtitle: LegalDocuments.userAgreementUpdatedAt,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => LegalDocumentScreen(
+                        title: LegalDocuments.userAgreementTitle,
+                        body: LegalDocuments.userAgreement,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
