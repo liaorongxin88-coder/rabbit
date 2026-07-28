@@ -9,8 +9,7 @@ class HousePermission {
 
   bool get canView => true;
 
-  bool get canEdit =>
-      isAdmin || perms == 'edit' || perms == 'control';
+  bool get canEdit => isAdmin || perms == 'edit' || perms == 'control';
 
   bool get canControl => isAdmin || perms == 'control';
 

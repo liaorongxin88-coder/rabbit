@@ -128,6 +128,7 @@ class BatchRepository {
         if (avgWeight != null) 'avgWeight': avgWeight,
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
+      decode: (_) {},
     );
   }
 
@@ -147,6 +148,7 @@ class BatchRepository {
         'matingDate': _formatDate(matingDate),
         'requestId': _uuid.v4(),
       },
+      decode: (_) {},
     );
   }
 
@@ -168,6 +170,7 @@ class BatchRepository {
         'requestId': _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
+      decode: (_) {},
     );
   }
 
@@ -187,6 +190,7 @@ class BatchRepository {
         'requestId': _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
+      decode: (_) {},
     );
   }
 
@@ -212,6 +216,7 @@ class BatchRepository {
         'requestId': _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
+      decode: (_) {},
     );
   }
 
@@ -231,6 +236,7 @@ class BatchRepository {
         'requestId': _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
+      decode: (_) {},
     );
   }
 

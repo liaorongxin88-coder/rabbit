@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
+import 'package:rabbit_flutter/src/ui/cages/widgets/cage_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_shell.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/widgets/dashboard_screen.dart';
 import 'package:rabbit_flutter/src/ui/home/widgets/home_screen.dart';
@@ -13,6 +14,9 @@ import 'package:rabbit_flutter/src/ui/houses/widgets/house_members_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_rabbits_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
 import 'package:rabbit_flutter/src/ui/profile/widgets/profile_screen.dart';
+import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_error_screen.dart';
+import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_screen.dart';
+import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_setup_screen.dart';
 import 'package:rabbit_flutter/src/ui/settings/widgets/settings_screen.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/local_app_settings_controller.dart';
 import 'package:rabbit_flutter/src/ui/settings/widgets/account_settings_screen.dart';
@@ -78,6 +82,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/login',
         builder: (context, state) => const LoginScreen(),
       ),
+      GoRoute(
+        path: '/houses/:houseId/nfc/write/session',
+        builder: (context, state) {
+          final houseId =
+              int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+          return NfcWriteScreen(houseId: houseId);
+        },
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AppShell(child: child),
@@ -127,6 +139,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ),
               );
             },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/cages/:cageId',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final cageId =
+                  int.tryParse(state.pathParameters['cageId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: CageDetailScreen(houseId: houseId, cageId: cageId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/nfc/write',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: NfcWriteSetupScreen(houseId: houseId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/nfc/error',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: NfcErrorScreen(
+                message: state.uri.queryParameters['message'] ?? '标签无法识别',
+              ),
+            ),
           ),
           GoRoute(
             path: '/houses/:houseId/rabbits',

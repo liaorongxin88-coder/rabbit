@@ -173,8 +173,7 @@ class _RabbitsContent extends ConsumerWidget {
                           cages: cageItems,
                           canEdit: perm.canEdit,
                         ),
-                        loading: () =>
-                            const _SectionLoading(label: '加载权限中...'),
+                        loading: () => const _SectionLoading(label: '加载权限中...'),
                         error: (error, _) => _InlineError(
                           message: error.toString(),
                           onRetry: () => ref.invalidate(
@@ -300,8 +299,7 @@ class _RabbitListTile extends StatelessWidget {
   String _cageDisplay() {
     for (final cage in cages) {
       if (cage.id == rabbit.cageId) {
-        final name =
-            cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
+        final name = cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
         return name;
       }
     }

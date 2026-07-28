@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.nfc.mapper;
 
 import com.rabbit.app.modules.nfc.dto.NfcTagView;
+import com.rabbit.app.modules.nfc.dto.NfcCageQueueRow;
 import com.rabbit.app.modules.nfc.entity.NfcTag;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -12,6 +13,12 @@ public interface NfcTagMapper {
 
     NfcTag selectByHouseAndUid(@Param("houseId") Long houseId, @Param("tagUid") String tagUid);
 
+    NfcTag selectByHouseAndTarget(@Param("houseId") Long houseId,
+                                  @Param("targetType") String targetType,
+                                  @Param("targetId") Long targetId);
+
+    List<NfcCageQueueRow> selectCageQueue(@Param("houseId") Long houseId);
+
     List<NfcTagView> selectViewPage(@Param("houseId") Long houseId,
                                    @Param("tagUid") String tagUid,
                                    @Param("targetType") String targetType,
@@ -20,4 +27,8 @@ public interface NfcTagMapper {
                                    @Param("limit") int limit);
 
     int deleteByHouseAndUid(@Param("houseId") Long houseId, @Param("tagUid") String tagUid);
+
+    int deleteByHouseAndTarget(@Param("houseId") Long houseId,
+                               @Param("targetType") String targetType,
+                               @Param("targetId") Long targetId);
 }

@@ -11,7 +11,11 @@ public interface CageNfcTagMapper {
 
     CageNfcTag selectByHouseAndUid(@Param("houseId") Long houseId, @Param("tagUid") String tagUid);
 
+    CageNfcTag selectByHouseAndCage(@Param("houseId") Long houseId, @Param("cageId") Long cageId);
+
     Cage selectCageByHouseAndUid(@Param("houseId") Long houseId, @Param("tagUid") String tagUid);
 
     int deleteByHouseAndUid(@Param("houseId") Long houseId, @Param("tagUid") String tagUid);
+
+    int deleteByHouseAndCage(@Param("houseId") Long houseId, @Param("cageId") Long cageId);
 }

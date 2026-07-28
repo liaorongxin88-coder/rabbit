@@ -158,9 +158,8 @@ class _HouseDetailContent extends ConsumerWidget {
             iconColor: palette.success,
             iconBackground: palette.successSoft,
             title: '兔只管理',
-            message: perm.canEdit
-                ? '查看当前兔舍兔只档案；新增兔子请先进入笼位。'
-                : '您当前为只读权限，仅可查看兔只档案。',
+            message:
+                perm.canEdit ? '查看当前兔舍兔只档案；新增兔子请先进入笼位。' : '您当前为只读权限，仅可查看兔只档案。',
             actionLabel: '查看兔只',
             onTap: () => context.go('/houses/${house.id}/rabbits'),
           ),

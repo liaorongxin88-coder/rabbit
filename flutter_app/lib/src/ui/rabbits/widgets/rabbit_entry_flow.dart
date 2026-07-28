@@ -408,8 +408,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 return null;
               },
             ),
-            if (!_isEdit)
-              const SizedBox.shrink(),
+            if (!_isEdit) const SizedBox.shrink(),
           ],
         ),
         const SizedBox(height: 12),

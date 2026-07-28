@@ -63,8 +63,10 @@ docker compose up -d --build --no-deps backend
 - `APP_ADMIN_BOOTSTRAP_ENABLED`
 - `APP_ADMIN_BOOTSTRAP_USERNAME`
 - `APP_ADMIN_BOOTSTRAP_PASSWORD`
+- `APP_NFC_TAG_ACTIVE_KEY_ID`
+- `APP_NFC_TAG_SIGNING_KEYS`，必填，格式为 `1=<base64url-key>,2=<base64url-key>`
 
-开发默认平台管理员为 `admin / admin123456`。生产环境必须覆盖或关闭 bootstrap。
+开发默认平台管理员为 `admin / admin123456`。生产环境必须覆盖或关闭 bootstrap，并替换 NFC 标签签名密钥；轮换时保留旧 key，只提升 active key id。
 
 ## 模块
 
@@ -115,6 +117,9 @@ docker compose up -d --build --no-deps backend
 - `GET /api/events`
 - `POST /api/events/ack`
 - `POST /api/maintenance/events/scan`
+- `GET /api/nfc/cages/write-queue`
+- `POST /api/nfc/cages/bind`
+- `POST /api/nfc/cages/resolve`
 
 平台管理：
 

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
-import 'package:rabbit_flutter/src/ui/batches/widgets/weaning_sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
@@ -154,10 +153,10 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     }
 
     final permission = await ref.read(housePermissionProvider(houseId).future);
+    if (!mounted) {
+      return;
+    }
     if (!permission.canEdit) {
-      if (!mounted) {
-        return;
-      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('当前为只读权限，无法执行生产操作')),
       );
@@ -488,8 +487,7 @@ class _EventCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (_actionable)
-              Icon(Icons.chevron_right, color: palette.muted),
+            if (_actionable) Icon(Icons.chevron_right, color: palette.muted),
           ],
         ),
       ),

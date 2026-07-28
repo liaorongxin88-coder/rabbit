@@ -87,10 +87,7 @@ Future<void> showProductionEventSheet({
 
   final houseId = event.sourceHouseId;
   final rabbitId = event.rabbitId;
-  if (houseId == null ||
-      houseId <= 0 ||
-      rabbitId == null ||
-      rabbitId <= 0) {
+  if (houseId == null || houseId <= 0 || rabbitId == null || rabbitId <= 0) {
     return Future<void>.value();
   }
 
@@ -319,7 +316,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final rabbitsAsync = ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
+    final rabbitsAsync =
+        ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
     final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     final dateLabel = DateFormat('yyyy-MM-dd').format(_actionDate);
@@ -373,7 +371,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                     backupCages.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _selectedBackupCageId == null) {
-                      setState(() => _selectedBackupCageId = backupCages.first.id);
+                      setState(
+                          () => _selectedBackupCageId = backupCages.first.id);
                     }
                   });
                 }
@@ -417,8 +416,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                             contentPadding: EdgeInsets.zero,
                             title: const Text('日期'),
                             subtitle: Text(dateLabel),
-                            trailing:
-                                const Icon(Icons.calendar_today_outlined),
+                            trailing: const Icon(Icons.calendar_today_outlined),
                             onTap: _saving ? null : _pickDate,
                           ),
                           if (widget.kind == ProductionKind.mating) ...[
@@ -461,7 +459,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 onChanged: _saving
                                     ? null
                                     : (value) => setState(
-                                          () => _pregnancyResult = value ?? result,
+                                          () => _pregnancyResult =
+                                              value ?? result,
                                         ),
                                 title: Text(result),
                               ),
@@ -497,13 +496,13 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                               value: _parturitionFailed,
                               onChanged: _saving
                                   ? null
-                                  : (value) =>
-                                      setState(() => _parturitionFailed = value),
+                                  : (value) => setState(
+                                      () => _parturitionFailed = value),
                             ),
                           ],
                           if (widget.kind == ProductionKind.replacement) ...[
                             const SizedBox(height: 8),
-                            _InfoBox(
+                            const _InfoBox(
                               text: '将把商品兔转为后备兔，并放入后备兔笼位。',
                             ),
                             SwitchListTile(
@@ -527,7 +526,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                     onChanged: _saving
                                         ? null
                                         : (value) => setState(
-                                              () => _selectedBackupCageId = value,
+                                              () =>
+                                                  _selectedBackupCageId = value,
                                             ),
                                     title: Text(
                                       cage.cageNumber.isEmpty
@@ -565,8 +565,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed:
-                                    _saving ? null : () => Navigator.pop(context),
+                                onPressed: _saving
+                                    ? null
+                                    : () => Navigator.pop(context),
                                 child: const Text('取消'),
                               ),
                             ),

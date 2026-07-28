@@ -95,7 +95,7 @@ public class AuthHousePermissionIT extends E2eTestSupport {
     @Test
     void housePermissionsProgressFromNoAccessToViewEditAndControl() {
         UserSession owner = register("owner");
-        UserSession member = register("member");
+        UserSession member = createMerchantAccount(owner, "member");
         long houseId = createHouse(owner, "perm_house", 1, 4, 1);
         List<Long> cages = cageIds(owner, houseId);
 
@@ -139,7 +139,7 @@ public class AuthHousePermissionIT extends E2eTestSupport {
     @Test
     void houseMemberLeaveAndControlMember() {
         UserSession owner = register("owner_leave");
-        UserSession member = register("member_leave");
+        UserSession member = createMerchantAccount(owner, "member_leave");
         long houseId = createHouse(owner, "leave_house", 1, 3, 1);
 
         api.postOk("/api/house-members", owner.token, houseId, obj(

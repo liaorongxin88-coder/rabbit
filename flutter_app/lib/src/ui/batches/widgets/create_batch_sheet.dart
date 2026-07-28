@@ -48,8 +48,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   @override
   void initState() {
     super.initState();
-    _codeController.text =
-        'B${DateFormat('yyyyMMdd').format(DateTime.now())}';
+    _codeController.text = 'B${DateFormat('yyyyMMdd').format(DateTime.now())}';
   }
 
   @override
@@ -60,9 +59,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   }
 
   List<Rabbit> _femaleBreeders(List<Rabbit> rabbits) {
-    return rabbits
-        .where((r) => r.type == '0' && r.gender == '0')
-        .toList()
+    return rabbits.where((r) => r.type == '0' && r.gender == '0').toList()
       ..sort((a, b) => a.id.compareTo(b.id));
   }
 
@@ -90,7 +87,8 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）')),
+          SnackBar(
+              content: Text('批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）')),
         );
       }
     } catch (error) {
@@ -114,7 +112,8 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final rabbitsAsync = ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
+    final rabbitsAsync =
+        ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
 
     return AnimatedPadding(
@@ -162,7 +161,8 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                           ),
                         ),
                         IconButton(
-                          onPressed: _saving ? null : () => Navigator.pop(context),
+                          onPressed:
+                              _saving ? null : () => Navigator.pop(context),
                           icon: const Icon(Icons.close),
                         ),
                       ],
@@ -172,7 +172,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                       children: [
-                        _InfoBox(
+                        const _InfoBox(
                           text: '批次用于驱动配种、摸胎、分娩、断奶等生产提醒。'
                               '请先在笼位录入种母兔，再创建批次。',
                         ),
@@ -218,7 +218,8 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                                         }
                                       });
                                     },
-                              title: Text('兔 #${rabbit.id} · ${rabbit.breed.isEmpty ? '未填品种' : rabbit.breed}'),
+                              title: Text(
+                                  '兔 #${rabbit.id} · ${rabbit.breed.isEmpty ? '未填品种' : rabbit.breed}'),
                               subtitle: Text('笼位 #${rabbit.cageId}'),
                               contentPadding: EdgeInsets.zero,
                             );
@@ -238,14 +239,16 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: _saving ? null : () => Navigator.pop(context),
+                              onPressed:
+                                  _saving ? null : () => Navigator.pop(context),
                               child: const Text('取消'),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: _saving || females.isEmpty ? null : _submit,
+                              onPressed:
+                                  _saving || females.isEmpty ? null : _submit,
                               child: _saving
                                   ? const SizedBox.square(
                                       dimension: 20,

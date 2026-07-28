@@ -29,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   final _phoneFocusNode = FocusNode();
   var _mode = _LoginMode.phone;
+  var _passwordVisible = false;
   var _submitting = false;
   var _detectingPhone = false;
   var _phoneFocused = false;
@@ -206,11 +207,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 14),
               TextFormField(
+                key: const ValueKey('account-password-field'),
                 controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: !_passwordVisible,
+                decoration: InputDecoration(
                   hintText: '密码',
-                  prefixIcon: Icon(Icons.lock_outline),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    key: const ValueKey('password-visibility-toggle'),
+                    tooltip: _passwordVisible ? '隐藏密码' : '显示密码',
+                    onPressed: () {
+                      setState(() => _passwordVisible = !_passwordVisible);
+                    },
+                    icon: Icon(
+                      _passwordVisible
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
+                  ),
                   floatingLabelBehavior: FloatingLabelBehavior.never,
                 ),
                 validator: (value) {
@@ -402,7 +416,7 @@ class _LegalConsentRow extends StatelessWidget {
 class _LoginHeader extends StatelessWidget {
   const _LoginHeader();
 
-  static const _logoAsset = 'assets/images/app_logo.jpg';
+  static const _logoAsset = 'assets/branding/hongtu_logo.png';
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +427,7 @@ class _LoginHeader extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Image.asset(
             _logoAsset,
+            key: const ValueKey('hongtu-logo'),
             width: 72,
             height: 72,
             fit: BoxFit.cover,

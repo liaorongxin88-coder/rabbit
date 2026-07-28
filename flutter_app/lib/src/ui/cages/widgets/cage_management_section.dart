@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
@@ -11,7 +13,6 @@ import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
 
 class CageManagementSection extends ConsumerStatefulWidget {
   const CageManagementSection({
@@ -102,6 +103,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _NfcStatusBand(houseId: houseId),
+                const SizedBox(height: 14),
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -138,7 +141,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     List<Cage> cages,
     AsyncValue<HousePermission> permission,
   ) {
-    final canEdit = permission.valueOrNull?.canEdit == true;
     final keyword = _keyword.toLowerCase();
     final filtered = keyword.isEmpty
         ? cages
@@ -150,9 +152,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
       final canControl = permission.valueOrNull?.canControl == true;
       return _CageEmptyState(
         title: '暂无笼位',
-        message: canControl
-            ? '点击“新增笼位”，按整排编号、层数和每排位置批量生成。'
-            : '当前兔舍还没有笼位，请联系管理员添加。',
+        message:
+            canControl ? '点击“新增笼位”，按整排编号、层数和每排位置批量生成。' : '当前兔舍还没有笼位，请联系管理员添加。',
         actionLabel: canControl ? '新增笼位' : null,
         onAction: canControl ? () => _showCreateCagesSheet(context) : null,
       );
@@ -197,26 +198,9 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 final cage = filtered[index];
                 return _CageTile(
                   cage: cage,
-                  onTap: () {
-                    if (!canEdit) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('当前为只读权限，无法录入兔子')),
-                      );
-                      return;
-                    }
-                    final blocked = cage.entryBlockedReason;
-                    if (blocked != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(blocked)),
-                      );
-                      return;
-                    }
-                    showRabbitEntryTypeSheet(
-                      context: context,
-                      houseId: widget.house.id,
-                      cage: cage,
-                    );
-                  },
+                  onTap: () => context.go(
+                    '/houses/${widget.house.id}/cages/${cage.id}',
+                  ),
                 );
               },
             );
@@ -232,6 +216,57 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _CreateCagesSheet(houseId: widget.house.id),
+    );
+  }
+}
+
+class _NfcStatusBand extends ConsumerWidget {
+  const _NfcStatusBand({required this.houseId});
+
+  final int houseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = AppPalette.of(context);
+    final queue = ref.watch(nfcCageWriteQueueProvider(houseId));
+    return queue.when(
+      data: (items) {
+        final bound = items.where((item) => item.isBound).length;
+        final conflicts = items.where((item) => item.hasConflict).length;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          decoration: BoxDecoration(
+            color: conflicts > 0 ? palette.warningSoft : palette.primarySoft,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                conflicts > 0 ? Icons.warning_amber : Icons.nfc,
+                color: conflicts > 0 ? palette.warning : palette.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  conflicts > 0
+                      ? 'NFC 已绑定 $bound · 异常 $conflicts'
+                      : 'NFC 已绑定 $bound / ${items.length}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton(
+                tooltip: '批量写标签',
+                onPressed: () => context.go('/houses/$houseId/nfc/write'),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const LinearProgressIndicator(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

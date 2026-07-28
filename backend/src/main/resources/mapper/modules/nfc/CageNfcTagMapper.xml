@@ -52,6 +52,14 @@
         limit 1
     </select>
 
+    <select id="selectByHouseAndCage" resultMap="CageNfcTagMap">
+        select id, house_id, cage_id, tag_uid, request_id, remark, create_by, create_time, update_by, update_time
+        from cage_nfc_tags
+        where house_id = #{houseId}
+          and cage_id = #{cageId}
+        limit 1
+    </select>
+
     <select id="selectCageByHouseAndUid" resultMap="CageMap">
         select c.id, c.house_id, c.cage_number, c.status, c.rabbit_count, c.is_fed, c.is_enabled, c.remark, c.create_by, c.create_time, c.update_by, c.update_time
         from cage_nfc_tags t
@@ -65,5 +73,11 @@
         delete from cage_nfc_tags
         where house_id = #{houseId}
           and tag_uid = #{tagUid}
+    </delete>
+
+    <delete id="deleteByHouseAndCage">
+        delete from cage_nfc_tags
+        where house_id = #{houseId}
+          and cage_id = #{cageId}
     </delete>
 </mapper>

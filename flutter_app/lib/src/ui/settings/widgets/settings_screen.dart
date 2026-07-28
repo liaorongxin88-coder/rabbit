@@ -62,7 +62,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: LegalDocuments.privacyPolicyUpdatedAt,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) => LegalDocumentScreen(
+                      builder: (context) => const LegalDocumentScreen(
                         title: LegalDocuments.privacyPolicyTitle,
                         body: LegalDocuments.privacyPolicy,
                       ),
@@ -78,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: LegalDocuments.userAgreementUpdatedAt,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) => LegalDocumentScreen(
+                      builder: (context) => const LegalDocumentScreen(
                         title: LegalDocuments.userAgreementTitle,
                         body: LegalDocuments.userAgreement,
                       ),
