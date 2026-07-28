@@ -3,8 +3,13 @@ package com.rabbit.app.modules.nfc.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.nfc.dto.BindNfcTagRequest;
+import com.rabbit.app.modules.nfc.dto.BindNfcCageRequest;
+import com.rabbit.app.modules.nfc.dto.NfcCageBindingView;
+import com.rabbit.app.modules.nfc.dto.NfcCageQueueItem;
 import com.rabbit.app.modules.nfc.dto.NfcResolvedTarget;
 import com.rabbit.app.modules.nfc.dto.NfcTagView;
+import com.rabbit.app.modules.nfc.dto.ResolveNfcCageRequest;
+import com.rabbit.app.modules.nfc.service.NfcCageService;
 import com.rabbit.app.modules.nfc.service.NfcTagAdminService;
 import com.rabbit.app.modules.nfc.service.NfcTagService;
 import com.rabbit.app.security.AuthContext;
@@ -27,10 +32,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class NfcController {
     private final NfcTagService nfcTagService;
     private final NfcTagAdminService nfcTagAdminService;
+    private final NfcCageService nfcCageService;
 
-    public NfcController(NfcTagService nfcTagService, NfcTagAdminService nfcTagAdminService) {
+    public NfcController(NfcTagService nfcTagService, NfcTagAdminService nfcTagAdminService, NfcCageService nfcCageService) {
         this.nfcTagService = nfcTagService;
         this.nfcTagAdminService = nfcTagAdminService;
+        this.nfcCageService = nfcCageService;
     }
 
     @PostMapping("/nfc/tags")
@@ -38,6 +45,30 @@ public class NfcController {
     public ApiResponse<Object> bind(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody BindNfcTagRequest req) {
         Long userId = requireLogin();
         return ApiResponse.ok(nfcTagService.bind(userId, houseId, req.getTagUid(), req.getTargetType(), req.getTargetId(), req.getRabbitId(), req.getRecordId(), req.getRemark(), req.getRequestId()));
+    }
+
+    @GetMapping("/nfc/cages/write-queue")
+    @HousePerm("control")
+    public ApiResponse<List<NfcCageQueueItem>> cageWriteQueue(@RequestHeader("X-House-Id") Long houseId) {
+        return ApiResponse.ok(nfcCageService.listWriteQueue(requireLogin(), houseId));
+    }
+
+    @PostMapping("/nfc/cages/bind")
+    @HousePerm("control")
+    public ApiResponse<NfcCageBindingView> bindCage(
+            @RequestHeader("X-House-Id") Long houseId,
+            @Valid @RequestBody BindNfcCageRequest request
+    ) {
+        return ApiResponse.ok(nfcCageService.bind(requireLogin(), houseId, request));
+    }
+
+    @PostMapping("/nfc/cages/resolve")
+    @HousePerm("view")
+    public ApiResponse<NfcCageBindingView> resolveCage(
+            @RequestHeader("X-House-Id") Long houseId,
+            @Valid @RequestBody ResolveNfcCageRequest request
+    ) {
+        return ApiResponse.ok(nfcCageService.resolve(requireLogin(), houseId, request));
     }
 
     @GetMapping("/nfc/resolve")

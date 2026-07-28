@@ -80,7 +80,8 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   List<Cage> get _targetCages {
     final keyword = _keyword.toLowerCase();
     return widget.cages.where((cage) {
-      if (!cage.canAcceptRabbit(_rabbit.type, exceptRabbitCageId: _rabbit.cageId)) {
+      if (!cage.canAcceptRabbit(_rabbit.type,
+          exceptRabbitCageId: _rabbit.cageId)) {
         return false;
       }
       if (keyword.isEmpty) {
@@ -198,7 +199,8 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                             onChanged: _saving
                                 ? null
                                 : (value) => setState(
-                                      () => _selectedCageId = value ?? _selectedCageId,
+                                      () => _selectedCageId =
+                                          value ?? _selectedCageId,
                                     ),
                             title: Text(_cageLabel(cage)),
                             subtitle: Text(cage.usageLabel),
@@ -219,16 +221,18 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: _saving ? null : () => Navigator.pop(context),
+                          onPressed:
+                              _saving ? null : () => Navigator.pop(context),
                           child: const Text('取消'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _saving || _selectedCageId == _rabbit.cageId
-                              ? null
-                              : _save,
+                          onPressed:
+                              _saving || _selectedCageId == _rabbit.cageId
+                                  ? null
+                                  : _save,
                           child: _saving
                               ? const SizedBox.square(
                                   dimension: 20,

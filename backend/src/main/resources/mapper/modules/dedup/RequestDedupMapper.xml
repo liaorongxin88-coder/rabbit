@@ -30,6 +30,11 @@
         values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.status}, #{item.errorMessage})
     </insert>
 
+    <insert id="insertIgnore">
+        insert ignore into request_dedup (house_id, user_id, api, request_id, status, error_message)
+        values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.status}, #{item.errorMessage})
+    </insert>
+
     <update id="updateStatus">
         update request_dedup
         set status = #{status},
@@ -41,4 +46,3 @@
           and request_id = #{requestId}
     </update>
 </mapper>
-

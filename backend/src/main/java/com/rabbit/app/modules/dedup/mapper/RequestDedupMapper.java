@@ -13,6 +13,8 @@ public interface RequestDedupMapper {
 
     int insert(@Param("item") RequestDedup item);
 
+    int insertIgnore(@Param("item") RequestDedup item);
+
     int updateStatus(@Param("houseId") Long houseId,
                      @Param("userId") Long userId,
                      @Param("api") String api,
@@ -20,4 +22,3 @@ public interface RequestDedupMapper {
                      @Param("status") String status,
                      @Param("errorMessage") String errorMessage);
 }
-

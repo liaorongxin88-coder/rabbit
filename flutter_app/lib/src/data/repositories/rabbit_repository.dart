@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
+import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
@@ -32,6 +33,22 @@ final allActiveHouseRabbitsProvider =
     return const <Rabbit>[];
   }
   return ref.watch(rabbitRepositoryProvider).listAllActiveRabbits(houseId);
+});
+
+typedef CageDetailKey = ({int houseId, int cageId});
+
+final cageSummaryProvider =
+    FutureProvider.family<CageSummary, CageDetailKey>((ref, key) {
+  return ref
+      .watch(rabbitRepositoryProvider)
+      .getCageSummary(houseId: key.houseId, cageId: key.cageId);
+});
+
+final cageRabbitsProvider =
+    FutureProvider.family<List<Rabbit>, CageDetailKey>((ref, key) {
+  return ref
+      .watch(rabbitRepositoryProvider)
+      .listRabbitsForCage(houseId: key.houseId, cageId: key.cageId);
 });
 
 class RabbitRepository {
@@ -97,6 +114,47 @@ class RabbitRepository {
             .whereType<Map>()
             .map((item) => Rabbit.fromJson(Map<String, dynamic>.from(item)))
             .toList();
+      },
+    );
+  }
+
+  Future<List<Rabbit>> listRabbitsForCage({
+    required int houseId,
+    required int cageId,
+  }) {
+    return _api.get<List<Rabbit>>(
+      '/api/rabbits',
+      houseId: houseId,
+      query: {
+        'cageId': cageId,
+        'active': true,
+        'page': 1,
+        'pageSize': 200,
+      },
+      decode: (data) {
+        if (data is! List) {
+          throw const ApiException('笼位兔只列表格式不正确');
+        }
+        return data
+            .whereType<Map>()
+            .map((item) => Rabbit.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      },
+    );
+  }
+
+  Future<CageSummary> getCageSummary({
+    required int houseId,
+    required int cageId,
+  }) {
+    return _api.get<CageSummary>(
+      '/api/cages/$cageId/summary',
+      houseId: houseId,
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('笼位摘要格式不正确');
+        }
+        return CageSummary.fromJson(Map<String, dynamic>.from(data));
       },
     );
   }
@@ -236,6 +294,7 @@ class RabbitRepository {
         if (targetCageId != null && targetCageId > 0)
           'targetCageId': targetCageId,
       },
+      decode: (_) {},
     );
   }
 }

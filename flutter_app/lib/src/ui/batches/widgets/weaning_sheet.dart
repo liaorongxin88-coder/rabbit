@@ -286,7 +286,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           ),
                         ),
                         IconButton(
-                          onPressed: _saving ? null : () => Navigator.pop(context),
+                          onPressed:
+                              _saving ? null : () => Navigator.pop(context),
                           icon: const Icon(Icons.close),
                         ),
                       ],
@@ -296,7 +297,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                       children: [
-                        _InfoBox(
+                        const _InfoBox(
                           text: '断奶后将自动生成商品兔仔兔并写入兔笼。'
                               '数量填 0 表示全部损失，不生成仔兔。',
                         ),
@@ -313,7 +314,9 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           controller: _countController,
                           enabled: !_saving,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
                           decoration: const InputDecoration(
                             labelText: '断奶数量',
                             hintText: '本次放入笼位的仔兔数量',
@@ -379,7 +382,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           value: _autoAssignCage,
                           onChanged: _saving
                               ? null
-                              : (value) => setState(() => _autoAssignCage = value),
+                              : (value) =>
+                                  setState(() => _autoAssignCage = value),
                         ),
                         if (!_autoAssignCage) ...[
                           const SizedBox(height: 8),
@@ -391,7 +395,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           else
                             ...commodityCages.map((cage) {
                               final count =
-                                  int.tryParse(_countController.text.trim()) ?? 0;
+                                  int.tryParse(_countController.text.trim()) ??
+                                      0;
                               final enabled = count <= 0 ||
                                   cage.canAcceptCommodityCount(count);
                               return RadioListTile<int>(
@@ -403,9 +408,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                                           () => _selectedCageId = value,
                                         ),
                                 title: Text(_cageLabel(cage)),
-                                subtitle: enabled
-                                    ? null
-                                    : const Text('剩余容量不足'),
+                                subtitle: enabled ? null : const Text('剩余容量不足'),
                               );
                             }),
                         ],
@@ -424,7 +427,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: _saving ? null : () => Navigator.pop(context),
+                              onPressed:
+                                  _saving ? null : () => Navigator.pop(context),
                               child: const Text('取消'),
                             ),
                           ),

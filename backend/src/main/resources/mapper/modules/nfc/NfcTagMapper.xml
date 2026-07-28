@@ -43,6 +43,33 @@
         limit 1
     </select>
 
+    <select id="selectByHouseAndTarget" resultMap="NfcTagMap">
+        select id, house_id, tag_uid, target_type, target_id, rabbit_id, record_id, request_id, remark, create_by, create_time, update_by, update_time
+        from nfc_tags
+        where house_id = #{houseId}
+          and target_type = #{targetType}
+          and target_id = #{targetId}
+        limit 1
+    </select>
+
+    <select id="selectCageQueue" resultType="com.rabbit.app.modules.nfc.dto.NfcCageQueueRow">
+        select c.id as cageId,
+               c.cage_number as cageNumber,
+               n.tag_uid as genericTagUid,
+               ct.tag_uid as cageTagUid
+        from cages c
+                 left join nfc_tags n
+                           on n.house_id = c.house_id
+                               and n.target_type = 'CAGE'
+                               and n.target_id = c.id
+                 left join cage_nfc_tags ct
+                           on ct.house_id = c.house_id
+                               and ct.cage_id = c.id
+        where c.house_id = #{houseId}
+          and c.is_enabled = true
+        order by c.id asc
+    </select>
+
     <resultMap id="NfcTagViewMap" type="com.rabbit.app.modules.nfc.dto.NfcTagView">
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
@@ -95,5 +122,12 @@
         delete from nfc_tags
         where house_id = #{houseId}
           and tag_uid = #{tagUid}
+    </delete>
+
+    <delete id="deleteByHouseAndTarget">
+        delete from nfc_tags
+        where house_id = #{houseId}
+          and target_type = #{targetType}
+          and target_id = #{targetId}
     </delete>
 </mapper>

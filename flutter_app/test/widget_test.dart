@@ -19,6 +19,7 @@ import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
+import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
@@ -33,9 +34,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('智能兔管家'), findsOneWidget);
+    expect(find.byKey(const ValueKey('hongtu-logo')), findsOneWidget);
+    final logo = tester.widget<Image>(
+      find.byKey(const ValueKey('hongtu-logo')),
+    );
+    expect(
+      (logo.image as AssetImage).assetName,
+      'assets/branding/hongtu_logo.png',
+    );
     expect(find.text('手机号一键进入'), findsOneWidget);
     expect(find.text('检测手机号'), findsOneWidget);
     expect(find.text('账号'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('《隐私政策》'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('《隐私政策》'), findsOneWidget);
     expect(find.text('《用户协议》'), findsOneWidget);
     expect(find.textContaining('模拟器默认连接'), findsNothing);
@@ -96,6 +110,48 @@ void main() {
     expect(find.text('密码'), findsOneWidget);
     expect(find.text('创建新账号'), findsNothing);
     expect(find.text('登录'), findsOneWidget);
+  });
+
+  testWidgets('account password can be shown and hidden', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(PageView), const Offset(-420, 0));
+    await tester.pumpAndSettle();
+
+    final passwordField = find.byKey(
+      const ValueKey('account-password-field'),
+    );
+    final visibilityToggle = find.byKey(
+      const ValueKey('password-visibility-toggle'),
+    );
+    final passwordEditor = find.descendant(
+      of: passwordField,
+      matching: find.byType(EditableText),
+    );
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isTrue);
+    expect(find.byTooltip('显示密码'), findsOneWidget);
+
+    await tester.enterText(passwordField, 'secret123');
+    await tester.tap(visibilityToggle);
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isFalse);
+    expect(find.byTooltip('隐藏密码'), findsOneWidget);
+    expect(
+      tester.widget<EditableText>(passwordEditor).controller.text,
+      'secret123',
+    );
+
+    await tester.tap(visibilityToggle);
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isTrue);
+    expect(find.byTooltip('显示密码'), findsOneWidget);
   });
 
   testWidgets('restores session and opens shell without duplicate keys',
@@ -250,6 +306,12 @@ void main() {
             ],
           ),
           homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(
+              perms: 'control',
+              isAdmin: true,
+            ),
+          ),
           houseSettingProvider.overrideWith(
             (_, __) async => HouseSettingState(
               setting: GlobalSetting.defaults(),
@@ -263,6 +325,11 @@ void main() {
 
     await tester.tap(find.text('测试1'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('生产设置'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('生产设置'));
     await tester.pumpAndSettle();
 
@@ -401,7 +468,8 @@ void main() {
     expect(find.text('2'), findsAtLeastNWidgets(1));
   });
 
-  testWidgets('blocks account login when legal consent is unchecked', (tester) async {
+  testWidgets('blocks account login when legal consent is unchecked',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
 

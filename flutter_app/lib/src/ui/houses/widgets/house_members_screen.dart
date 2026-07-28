@@ -20,8 +20,7 @@ class HouseMembersScreen extends ConsumerStatefulWidget {
   final String houseName;
 
   @override
-  ConsumerState<HouseMembersScreen> createState() =>
-      _HouseMembersScreenState();
+  ConsumerState<HouseMembersScreen> createState() => _HouseMembersScreenState();
 }
 
 class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
@@ -41,9 +40,8 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
   Widget build(BuildContext context) {
     final members = ref.watch(houseMembersProvider(widget.houseId));
     final permission = ref.watch(housePermissionProvider(widget.houseId));
-    final title = widget.houseName.isEmpty
-        ? '人员管理'
-        : '${widget.houseName} · 人员管理';
+    final title =
+        widget.houseName.isEmpty ? '人员管理' : '${widget.houseName} · 人员管理';
 
     return AppPage(
       title: title,
@@ -198,10 +196,11 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
       _searchError = null;
     });
     try {
-      final items = await ref.read(houseRepositoryProvider).searchMemberCandidates(
-            houseId: widget.houseId,
-            keyword: keyword,
-          );
+      final items =
+          await ref.read(houseRepositoryProvider).searchMemberCandidates(
+                houseId: widget.houseId,
+                keyword: keyword,
+              );
       if (!mounted) {
         return;
       }
@@ -217,8 +216,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
       }
       setState(() {
         _candidates = const [];
-        _searchError =
-            error is ApiException ? error.message : error.toString();
+        _searchError = error is ApiException ? error.message : error.toString();
       });
     } finally {
       if (mounted) {
@@ -454,7 +452,8 @@ class _CandidateTile extends StatelessWidget {
         children: [
           SizedBox(
             width: 120,
-            child: Text(userName, style: Theme.of(context).textTheme.titleMedium),
+            child:
+                Text(userName, style: Theme.of(context).textTheme.titleMedium),
           ),
           TextButton(
             onPressed: adding ? null : onAddGuest,
@@ -491,7 +490,8 @@ class _MemberTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       leading: CircleAvatar(
-        backgroundColor: member.isAdmin ? palette.primarySoft : palette.surfaceSubtle,
+        backgroundColor:
+            member.isAdmin ? palette.primarySoft : palette.surfaceSubtle,
         child: Icon(
           member.isAdmin ? Icons.shield_outlined : Icons.person_outline,
           color: member.isAdmin ? palette.primary : palette.muted,

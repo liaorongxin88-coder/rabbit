@@ -48,6 +48,10 @@ app:
       enabled: false
   cage:
     commodity-capacity: 10
+  nfc:
+    tag-signing:
+      active-key-id: ${APP_NFC_TAG_ACTIVE_KEY_ID:1}
+      keys: ${APP_NFC_TAG_SIGNING_KEYS:1=cmFiYml0LW5mYy1kZXYtc2lnbmluZy1rZXktY2hhbmdlLW1l}
   mybatis:
     write-guard:
       max-affected-rows: 2000

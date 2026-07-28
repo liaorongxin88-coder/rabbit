@@ -104,7 +104,8 @@ class HouseRepository {
         }
         return data
             .whereType<Map>()
-            .map((item) => HouseMember.fromJson(Map<String, dynamic>.from(item)))
+            .map(
+                (item) => HouseMember.fromJson(Map<String, dynamic>.from(item)))
             .toList();
       },
     );
@@ -124,7 +125,8 @@ class HouseRepository {
         }
         return data
             .whereType<Map>()
-            .map((item) => UserSearchItem.fromJson(Map<String, dynamic>.from(item)))
+            .map((item) =>
+                UserSearchItem.fromJson(Map<String, dynamic>.from(item)))
             .toList();
       },
     );

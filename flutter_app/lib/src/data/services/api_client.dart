@@ -108,7 +108,7 @@ class ApiClient {
 
       final code = _intValue(body['code']);
       if (code != null && code != 0) {
-        throw ApiException(_messageFrom(body));
+        throw ApiException(_messageFrom(body), businessCode: code);
       }
 
       return decode(body['data']);

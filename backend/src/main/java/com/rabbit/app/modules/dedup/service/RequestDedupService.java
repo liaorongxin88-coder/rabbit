@@ -26,6 +26,34 @@ public class RequestDedupService {
         return old != null && STATUS_DONE.equals(old.getStatus());
     }
 
+    public BeginResult begin(Long houseId, Long userId, String api, String requestId) {
+        if (requestId == null || requestId.trim().isEmpty()) {
+            return BeginResult.STARTED;
+        }
+        RequestDedup item = new RequestDedup();
+        item.setHouseId(houseId);
+        item.setUserId(userId);
+        item.setApi(api);
+        item.setRequestId(requestId);
+        item.setStatus(STATUS_PROCESSING);
+        if (requestDedupMapper.insertIgnore(item) > 0) {
+            return BeginResult.STARTED;
+        }
+
+        RequestDedup old = requestDedupMapper.selectByKey(houseId, userId, api, requestId);
+        if (old == null) {
+            throw new BizException(409, "请求幂等状态异常，请稍后重试");
+        }
+        if (STATUS_DONE.equals(old.getStatus())) {
+            return BeginResult.DONE;
+        }
+        if (STATUS_PROCESSING.equals(old.getStatus())) {
+            throw new BizException(429, "请求处理中，请稍后重试");
+        }
+        requestDedupMapper.updateStatus(houseId, userId, api, requestId, STATUS_PROCESSING, null);
+        return BeginResult.STARTED;
+    }
+
     public void markProcessing(Long houseId, Long userId, String api, String requestId) {
         if (requestId == null || requestId.trim().isEmpty()) {
             return;
@@ -70,5 +98,10 @@ public class RequestDedupService {
             return value;
         }
         return value.substring(0, MAX_ERROR_MESSAGE_LEN);
+    }
+
+    public enum BeginResult {
+        STARTED,
+        DONE
     }
 }

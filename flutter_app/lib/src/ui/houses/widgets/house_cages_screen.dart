@@ -103,7 +103,7 @@ class _PageHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '点击具体笼位录入兔子 · ${house.layoutLabel}',
+                  '点击具体笼位进入管理 · ${house.layoutLabel}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
