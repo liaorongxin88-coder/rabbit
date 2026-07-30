@@ -16,6 +16,26 @@ class AppColors {
   static const softRed = Color(0xFFFFEFEF);
 }
 
+class AppSpacing {
+  static const pageHorizontal = 20.0;
+  static const pageTop = 14.0;
+  static const pageBottom = 24.0;
+
+  static const pagePadding = EdgeInsets.fromLTRB(
+    pageHorizontal,
+    pageTop,
+    pageHorizontal,
+    pageBottom,
+  );
+
+  static const loginPagePadding = EdgeInsets.fromLTRB(
+    pageHorizontal,
+    24,
+    pageHorizontal,
+    pageBottom,
+  );
+}
+
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette({

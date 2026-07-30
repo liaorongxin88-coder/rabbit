@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,23 +9,31 @@ import 'package:rabbit_flutter/src/data/services/session_store.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final sessionStore = ref.watch(sessionStoreProvider);
-  return ApiClient(sessionStore);
+  final client = ApiClient(sessionStore);
+  ref.onDispose(client.dispose);
+  return client;
 });
 
 class ApiClient {
-  ApiClient(this._sessionStore)
-      : _dio = Dio(
-          BaseOptions(
-            baseUrl: AppConfig.defaultBaseUrl,
-            connectTimeout: const Duration(seconds: 10),
-            receiveTimeout: const Duration(seconds: 30),
-            sendTimeout: const Duration(seconds: 30),
-            headers: const {'Content-Type': 'application/json'},
-          ),
-        );
+  ApiClient(this._sessionStore, {Dio? dio}) : _dio = dio ?? _buildDio();
 
   final SessionStore _sessionStore;
   final Dio _dio;
+  final _unauthorizedController = StreamController<void>.broadcast(sync: true);
+
+  Stream<void> get unauthorizedEvents => _unauthorizedController.stream;
+
+  static Dio _buildDio() {
+    return Dio(
+      BaseOptions(
+        baseUrl: AppConfig.defaultBaseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
+        headers: const {'Content-Type': 'application/json'},
+      ),
+    );
+  }
 
   Future<T> get<T>(
     String path, {
@@ -108,16 +118,27 @@ class ApiClient {
 
       final code = _intValue(body['code']);
       if (code != null && code != 0) {
+        if (code == 401) {
+          _unauthorizedController.add(null);
+        }
         throw ApiException(_messageFrom(body), businessCode: code);
       }
 
       return decode(body['data']);
     } on DioException catch (error) {
+      if (error.response?.statusCode == 401) {
+        _unauthorizedController.add(null);
+      }
       throw ApiException(
         _dioMessage(error),
         statusCode: error.response?.statusCode,
       );
     }
+  }
+
+  void dispose() {
+    _unauthorizedController.close();
+    _dio.close(force: true);
   }
 
   Future<Options> _options({int? houseId}) async {

@@ -59,7 +59,7 @@ class _HousesContent extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+      padding: AppSpacing.pagePadding,
       children: [
         SectionCard(
           child: Row(

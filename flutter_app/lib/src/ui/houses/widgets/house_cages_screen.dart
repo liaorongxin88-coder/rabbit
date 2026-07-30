@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/cage_management_section.dart';
+import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 
@@ -48,7 +49,7 @@ class HouseCagesScreen extends ConsumerWidget {
             );
           }
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+            padding: AppSpacing.pagePadding,
             children: [
               _PageHeader(house: house),
               const SizedBox(height: 12),

@@ -30,7 +30,7 @@ class HomeScreen extends ConsumerWidget {
           await _refreshHome(ref);
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+          padding: AppSpacing.pagePadding,
           children: [
             events.when(
               data: (items) => _HomeContent(events: items),

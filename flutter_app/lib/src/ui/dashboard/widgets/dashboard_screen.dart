@@ -113,7 +113,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return RefreshIndicator(
             onRefresh: () => _refresh(ref),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+              padding: AppSpacing.pagePadding,
               children: [
                 _DashboardScopeBanner(data: data),
                 const SizedBox(height: 12),

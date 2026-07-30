@@ -95,7 +95,7 @@ class _DetailBody extends ConsumerWidget {
         .firstOrNull;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      padding: AppSpacing.pagePadding,
       children: [
         _CageIdentityBand(summary: summary, houseName: houseName),
         const SizedBox(height: 12),

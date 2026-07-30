@@ -44,7 +44,7 @@ class _AppSettingsContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(localAppSettingsControllerProvider.notifier);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+      padding: AppSpacing.pagePadding,
       children: [
         SectionCard(
           child: Column(

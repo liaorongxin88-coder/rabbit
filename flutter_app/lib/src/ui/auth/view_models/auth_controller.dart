@@ -1,6 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
@@ -8,15 +10,21 @@ import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
 final authControllerProvider =
     StateNotifierProvider<AuthController, AsyncValue<AuthSession?>>((ref) {
   return AuthController(
-      ref.watch(apiClientProvider), ref.watch(sessionStoreProvider));
+    ref.watch(authRepositoryProvider),
+    ref.watch(sessionStoreProvider),
+  );
 });
 
 class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
-  AuthController(this._api, this._sessionStore)
-      : super(const AsyncValue.loading());
+  AuthController(this._repository, this._sessionStore)
+      : super(const AsyncValue.loading()) {
+    _unauthorizedSubscription =
+        _repository.unauthorizedEvents.listen((_) => _invalidateSession());
+  }
 
-  final ApiClient _api;
+  final AuthRepository _repository;
   final SessionStore _sessionStore;
+  late final StreamSubscription<void> _unauthorizedSubscription;
 
   Future<void> restore() async {
     state = const AsyncValue.loading();
@@ -26,25 +34,36 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
         state = const AsyncValue.data(null);
         return;
       }
-      state = AsyncValue.data(
-        AuthSession(
-          token: snapshot.token!,
-          userId: snapshot.userId ?? 0,
-          userName: snapshot.userName ?? '',
-          houseId: snapshot.houseId,
-        ),
+      final localSession = AuthSession(
+        token: snapshot.token!,
+        userId: snapshot.userId ?? 0,
+        userName: snapshot.userName ?? '',
+        houseId: snapshot.houseId,
       );
+      final validatedSession = await _repository.validateSession(localSession);
+      await _sessionStore.saveAuth(
+        token: validatedSession.token,
+        userId: validatedSession.userId,
+        userName: validatedSession.userName,
+      );
+      state = AsyncValue.data(validatedSession);
+    } on ApiException catch (error, stackTrace) {
+      if (error.statusCode == 401 || error.businessCode == 401) {
+        await _invalidateSession();
+        return;
+      }
+      state = AsyncValue.error(error, stackTrace);
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
     }
   }
 
   Future<void> login(String userName, String password) {
-    return _authenticate('/api/auth/login', userName, password);
+    return _authenticate(() => _repository.login(userName, password));
   }
 
   Future<void> register(String userName, String password) {
-    return _authenticate('/api/auth/register', userName, password);
+    return _authenticate(() => _repository.register(userName, password));
   }
 
   Future<void> setHouseId(int houseId) async {
@@ -66,31 +85,15 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
   }
 
   Future<void> logout() async {
-    await _sessionStore.clear();
-    state = const AsyncValue.data(null);
+    await _invalidateSession();
   }
 
   Future<void> _authenticate(
-    String path,
-    String userName,
-    String password,
-  ) async {
+      Future<AuthSession> Function() authenticate) async {
     final previous = state.valueOrNull;
     state = const AsyncValue.loading();
     try {
-      final session = await _api.post<AuthSession>(
-        path,
-        body: {
-          'userName': userName,
-          'password': password,
-        },
-        decode: (data) {
-          if (data is! Map) {
-            throw const ApiException('登录结果格式不正确');
-          }
-          return AuthSession.fromJson(Map<String, dynamic>.from(data));
-        },
-      );
+      final session = await authenticate();
       await _sessionStore.saveAuth(
         token: session.token,
         userId: session.userId,
@@ -104,5 +107,18 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       }
       rethrow;
     }
+  }
+
+  Future<void> _invalidateSession() async {
+    await _sessionStore.clear();
+    if (mounted) {
+      state = const AsyncValue.data(null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _unauthorizedSubscription.cancel();
+    super.dispose();
   }
 }

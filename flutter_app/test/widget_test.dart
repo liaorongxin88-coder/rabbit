@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/app.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
@@ -14,9 +15,11 @@ import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/settings_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
+import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/local_app_settings_store.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
+import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
@@ -53,6 +56,32 @@ void main() {
     expect(find.text('《隐私政策》'), findsOneWidget);
     expect(find.text('《用户协议》'), findsOneWidget);
     expect(find.textContaining('模拟器默认连接'), findsNothing);
+  });
+
+  testWidgets('login controls share the same horizontal alignment',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    final alignedKeys = [
+      'login-mode-selector',
+      'phone-number-input',
+      'phone-login-flow',
+      'phone-login-button',
+      'legal-consent-row',
+    ];
+    final reference = tester.getRect(find.byKey(ValueKey(alignedKeys.first)));
+    for (final key in alignedKeys.skip(1)) {
+      final rect = tester.getRect(find.byKey(ValueKey(key)));
+      expect(rect.left, closeTo(reference.left, 0.1), reason: key);
+      expect(rect.right, closeTo(reference.right, 0.1), reason: key);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('does not load protected home while auth restore is pending',
@@ -154,7 +183,7 @@ void main() {
     expect(find.byTooltip('显示密码'), findsOneWidget);
   });
 
-  testWidgets('restores session and opens shell without duplicate keys',
+  testWidgets('validates restored session and opens the protected shell',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'userId': 3,
@@ -162,8 +191,10 @@ void main() {
     });
     FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
 
+    final authRepository = _FakeAuthRepository();
     await tester.pumpWidget(
       ProviderScopeWrapper(
+        authRepository: authRepository,
         overrides: [
           housesProvider.overrideWith(
             (_) async => const [
@@ -187,6 +218,73 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('今日预警!'), findsOneWidget);
+    expect(authRepository.validationCalls, 1);
+  });
+
+  testWidgets('invalid restored session is cleared and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'expired_user',
+      'houseId.3': 8,
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'expired-token'});
+    final houseRepository = _RecordingHouseRepository();
+    final authRepository = _FakeAuthRepository(
+      validationError: const ApiException('未登录', businessCode: 401),
+    );
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('手机号一键进入'), findsOneWidget);
+    expect(find.text('今日预警!'), findsNothing);
+    expect(houseRepository.calls, 0);
+    expect(authRepository.validationCalls, 1);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
+  });
+
+  testWidgets(
+      'unauthorized event clears an active session and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'active_user',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'active-token'});
+    final authRepository = _FakeAuthRepository();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('今日预警!'), findsOneWidget);
+
+    authRepository.emitUnauthorized();
+    await tester.pumpAndSettle();
+
+    expect(find.text('手机号一键进入'), findsOneWidget);
+    expect(find.text('今日预警!'), findsNothing);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
   });
 
   testWidgets('opens profile with settings entries after session restore',
@@ -507,17 +605,51 @@ void main() {
 }
 
 class ProviderScopeWrapper extends StatelessWidget {
-  const ProviderScopeWrapper({super.key, this.overrides = const []});
+  const ProviderScopeWrapper({
+    super.key,
+    this.overrides = const [],
+    this.authRepository,
+  });
 
   final List<Override> overrides;
+  final AuthRepository? authRepository;
 
   @override
   Widget build(BuildContext context) {
     return ProviderScope(
-      overrides: overrides,
+      overrides: [
+        authRepositoryProvider.overrideWithValue(
+          authRepository ?? _FakeAuthRepository(),
+        ),
+        ...overrides,
+      ],
       child: const RabbitManagerApp(),
     );
   }
+}
+
+class _FakeAuthRepository extends AuthRepository {
+  _FakeAuthRepository({this.validationError})
+      : super(ApiClient(SessionStore()));
+
+  final ApiException? validationError;
+  final _unauthorizedController = StreamController<void>.broadcast(sync: true);
+  int validationCalls = 0;
+
+  @override
+  Stream<void> get unauthorizedEvents => _unauthorizedController.stream;
+
+  @override
+  Future<AuthSession> validateSession(AuthSession localSession) async {
+    validationCalls += 1;
+    final error = validationError;
+    if (error != null) {
+      throw error;
+    }
+    return localSession;
+  }
+
+  void emitUnauthorized() => _unauthorizedController.add(null);
 }
 
 class _PendingSessionStore extends SessionStore {

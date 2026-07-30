@@ -60,63 +60,85 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 34, 24, 24),
-          children: [
-            const _LoginHeader(),
-            const SizedBox(height: 24),
-            SegmentedButton<_LoginMode>(
-              segments: const [
-                ButtonSegment(
-                  value: _LoginMode.phone,
-                  icon: Icon(Icons.phone_android_outlined),
-                  label: Text('手机号'),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final contentWidth =
+                constraints.maxWidth > 520 ? 480.0 : constraints.maxWidth;
+            final modeHeight = _mode == _LoginMode.phone ? 232.0 : 214.0;
+            return Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: contentWidth,
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: AppSpacing.loginPagePadding,
+                  children: [
+                    const _LoginHeader(),
+                    const SizedBox(height: 24),
+                    SegmentedButton<_LoginMode>(
+                      key: const ValueKey('login-mode-selector'),
+                      expandedInsets: EdgeInsets.zero,
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: _LoginMode.phone,
+                          icon: Icon(Icons.phone_android_outlined),
+                          label: Text('手机号'),
+                        ),
+                        ButtonSegment(
+                          value: _LoginMode.account,
+                          icon: Icon(Icons.person_outline),
+                          label: Text('账号'),
+                        ),
+                      ],
+                      selected: {_mode},
+                      onSelectionChanged: _submitting
+                          ? null
+                          : (next) => _selectMode(next.first),
+                    ),
+                    const SizedBox(height: 16),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      height: modeHeight,
+                      child: PageView(
+                        controller: _modePageController,
+                        physics: _submitting
+                            ? const NeverScrollableScrollPhysics()
+                            : const PageScrollPhysics(),
+                        onPageChanged: (index) {
+                          final next = _LoginMode.values[index];
+                          if (_mode != next) {
+                            setState(() => _mode = next);
+                          }
+                        },
+                        children: [
+                          _buildPhoneLogin(context),
+                          _buildAccountLogin(context),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _LegalConsentRow(
+                      agreed: _agreedToTerms,
+                      enabled: !_submitting,
+                      onChanged: (value) =>
+                          setState(() => _agreedToTerms = value),
+                      onOpenPrivacyPolicy: () => _openLegalDocument(
+                        title: LegalDocuments.privacyPolicyTitle,
+                        body: LegalDocuments.privacyPolicy,
+                      ),
+                      onOpenUserAgreement: () => _openLegalDocument(
+                        title: LegalDocuments.userAgreementTitle,
+                        body: LegalDocuments.userAgreement,
+                      ),
+                    ),
+                  ],
                 ),
-                ButtonSegment(
-                  value: _LoginMode.account,
-                  icon: Icon(Icons.person_outline),
-                  label: Text('账号'),
-                ),
-              ],
-              selected: {_mode},
-              onSelectionChanged:
-                  _submitting ? null : (next) => _selectMode(next.first),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 320,
-              child: PageView(
-                controller: _modePageController,
-                physics: _submitting
-                    ? const NeverScrollableScrollPhysics()
-                    : const PageScrollPhysics(),
-                onPageChanged: (index) {
-                  final next = _LoginMode.values[index];
-                  if (_mode != next) {
-                    setState(() => _mode = next);
-                  }
-                },
-                children: [
-                  _buildPhoneLogin(context),
-                  _buildAccountLogin(context),
-                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            _LegalConsentRow(
-              agreed: _agreedToTerms,
-              enabled: !_submitting,
-              onChanged: (value) => setState(() => _agreedToTerms = value),
-              onOpenPrivacyPolicy: () => _openLegalDocument(
-                title: LegalDocuments.privacyPolicyTitle,
-                body: LegalDocuments.privacyPolicy,
-              ),
-              onOpenUserAgreement: () => _openLegalDocument(
-                title: LegalDocuments.userAgreementTitle,
-                body: LegalDocuments.userAgreement,
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -171,6 +193,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const _PhoneLoginFlow(),
         const SizedBox(height: 20),
         SizedBox(
+          key: const ValueKey('phone-login-button'),
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: _submitting ? null : _showPhonePlaceholder,
@@ -376,10 +399,11 @@ class _LegalConsentRow extends StatelessWidget {
     final baseStyle = Theme.of(context).textTheme.bodyMedium;
 
     return Row(
+      key: const ValueKey('legal-consent-row'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Transform.translate(
-          offset: const Offset(0, -2),
+        SizedBox.square(
+          dimension: 40,
           child: Checkbox(
             value: agreed,
             onChanged: enabled ? (value) => onChanged(value ?? false) : null,
@@ -387,10 +411,10 @@ class _LegalConsentRow extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 8),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: 8),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
@@ -450,13 +474,13 @@ class _LoginHeader extends StatelessWidget {
             },
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         Text(
           '智能兔管家',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
           '登录后管理兔舍、预警和生产流程。',
           textAlign: TextAlign.center,
@@ -489,9 +513,10 @@ class _PhoneNumberInput extends StatelessWidget {
     final palette = AppPalette.of(context);
     final borderColor = focused ? palette.primary : palette.line;
     return AnimatedContainer(
+      key: const ValueKey('phone-number-input'),
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOut,
-      height: 64,
+      height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: palette.surface,
@@ -512,7 +537,7 @@ class _PhoneNumberInput extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.phone_android_outlined, color: palette.muted, size: 25),
+          Icon(Icons.phone_android_outlined, color: palette.muted, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: TextField(
@@ -525,7 +550,7 @@ class _PhoneNumberInput extends StatelessWidget {
                 LengthLimitingTextInputFormatter(11),
               ],
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                   ),
               decoration: InputDecoration(
@@ -538,7 +563,7 @@ class _PhoneNumberInput extends StatelessWidget {
                 hintText: '请输入手机号',
                 hintStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: palette.muted,
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
               ),
@@ -569,6 +594,7 @@ class _PhoneLoginFlow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     return Container(
+      key: const ValueKey('phone-login-flow'),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: palette.surface,
@@ -590,8 +616,8 @@ class _PhoneLoginFlow extends StatelessWidget {
           const Expanded(
             child: _PhoneFlowStep(
               icon: Icons.verified_user_outlined,
-              title: '一键进入',
-              subtitle: '请使用账号 Tab 登录',
+              title: '账号登录',
+              subtitle: '切换后继续',
             ),
           ),
         ],
