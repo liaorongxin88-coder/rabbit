@@ -92,7 +92,7 @@ RABBIT_ANDROID_E2E_PROFILE=accessibility-stress \
 ./scripts/android_e2e.sh
 ```
 
-`visual-baseline` 使用 100% 系统字体，作为设计还原和日常回归截图；`accessibility-stress` 使用 200% 系统字体，并验证 App 的人体工学上限为 150%。压力档只验证可达性、换行和溢出边界，不能作为视觉还原基准。
+`visual-baseline` 使用 100% 系统字体，作为设计还原、日常回归和对外交付截图；runner 会拒绝用其他字号伪装成该档位，并在每张截图前断言系统字号与 App 有效字号仍和测试配置一致。`accessibility-stress` 使用 200% 系统字体，并验证 App 的人体工学上限为 150%。压力档只验证可达性、换行和溢出边界，不能作为视觉还原或交付截图基准。
 
 截图、截图清单、fixture 标识、设备物理尺寸、测试档位和数据库断言保存在 `flutter_app/build/android-e2e/<run_id>/`。脚本会验证 7 张业务流程截图完整存在，可修改模拟器字体比例并在结束时恢复；实体机默认不修改系统设置，只有显式设置 `RABBIT_ANDROID_E2E_ALLOW_DEVICE_SETTINGS=1` 才执行字体矩阵。真机 NFC、TalkBack、左右手持机误触和疲劳仍需人工验收。
 

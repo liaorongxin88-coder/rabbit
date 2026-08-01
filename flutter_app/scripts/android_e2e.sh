@@ -38,7 +38,6 @@ fi
 if [[ -z "$EXPECTED_EFFECTIVE_TEXT_SCALE" ]]; then
   EXPECTED_EFFECTIVE_TEXT_SCALE="$(awk -v scale="$TEXT_SCALE" 'BEGIN { print (scale > 1.5 ? 1.5 : scale) }')"
 fi
-
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/android_e2e.sh
@@ -72,6 +71,13 @@ trap cleanup EXIT
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
+fi
+
+if [[ "$TEST_PROFILE" == "visual-baseline" ]] &&
+   ! awk -v system_scale="$TEXT_SCALE" -v effective_scale="$EXPECTED_EFFECTIVE_TEXT_SCALE" \
+     'BEGIN { exit !((system_scale >= 0.99 && system_scale <= 1.01) && (effective_scale >= 0.99 && effective_scale <= 1.01)) }'; then
+  echo "visual-baseline screenshots require system and effective text scale 1.0" >&2
+  exit 64
 fi
 
 for command_name in docker flutter curl awk; do
@@ -195,9 +201,9 @@ printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
 physical_size="$($ADB_BIN -s "$DEVICE_ID" shell wm size | awk -F ': ' '/Physical size/ { print $2; exit }' | tr -d '\r')"
 physical_density="$($ADB_BIN -s "$DEVICE_ID" shell wm density | awk -F ': ' '/Physical density/ { print $2; exit }' | tr -d '\r')"
 diagonal_inches="$(awk -F '[x ]' -v size="$physical_size" -v density="$physical_density" 'BEGIN { split(size, px, "x"); if (density > 0) printf "%.2f", sqrt(px[1]^2 + px[2]^2) / density; else print "unknown" }')"
-printf 'device=%s\navd=%s\nprofile=%s\nsystem_text_scale=%s\neffective_text_scale=%s\nphysical_size=%s\nphysical_density=%s\ndiagonal_inches=%s\nrun_id=%s\nprimary_house_id=%s\n' \
+printf 'device=%s\navd=%s\nprofile=%s\nsystem_text_scale=%s\neffective_text_scale=%s\nscreenshot_text_scale=%s\nphysical_size=%s\nphysical_density=%s\ndiagonal_inches=%s\nrun_id=%s\nprimary_house_id=%s\n' \
   "$DEVICE_ID" "${AVD_NAME:-existing}" "$TEST_PROFILE" "$TEXT_SCALE" "$EXPECTED_EFFECTIVE_TEXT_SCALE" \
-  "$physical_size" "$physical_density" "$diagonal_inches" "$run_id" "$primary_house_id" \
+  "$EXPECTED_EFFECTIVE_TEXT_SCALE" "$physical_size" "$physical_density" "$diagonal_inches" "$run_id" "$primary_house_id" \
   > "$artifact_dir/environment.txt"
 
 export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"

@@ -195,6 +195,7 @@ void main() {
         'expectedSoldRabbitCount': 2,
         'systemTextScale': _systemTextScale(tester),
         'effectiveTextScale': _currentTextScale(tester),
+        'screenshotTextScale': _currentTextScale(tester),
         'logicalSize': _logicalSize(tester).toString(),
       });
     },
@@ -316,6 +317,7 @@ Future<void> _takeScreenshot(
   String name,
 ) async {
   await tester.pumpAndSettle();
+  _expectTextScale(tester);
   await tester.runAsync(
     () => Future<void>.delayed(const Duration(milliseconds: 150)),
   );
