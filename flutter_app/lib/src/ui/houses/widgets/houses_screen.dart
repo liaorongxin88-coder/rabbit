@@ -130,6 +130,7 @@ class _HouseListCard extends StatelessWidget {
         side: BorderSide(color: palette.line),
       ),
       child: InkWell(
+        key: ValueKey('house-card-${house.id}'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(

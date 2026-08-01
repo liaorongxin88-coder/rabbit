@@ -135,6 +135,9 @@ public class HouseService {
                         Cage cage = new Cage();
                         cage.setHouseId(house.getId());
                         cage.setCageNumber(r + "-" + c + "-" + l);
+                        cage.setRowCode("R" + r);
+                        cage.setPositionIndex(c);
+                        cage.setLayerIndex(l);
                         cage.setStatus("0");
                         cage.setRabbitCount(0);
                         cage.setIsFed(Boolean.FALSE);

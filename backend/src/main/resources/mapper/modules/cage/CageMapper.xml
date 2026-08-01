@@ -7,6 +7,9 @@
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
         <result column="cage_number" property="cageNumber"/>
+        <result column="row_code" property="rowCode"/>
+        <result column="layer_index" property="layerIndex"/>
+        <result column="position_index" property="positionIndex"/>
         <result column="status" property="status"/>
         <result column="rabbit_count" property="rabbitCount"/>
         <result column="is_fed" property="isFed"/>
@@ -19,34 +22,70 @@
     </resultMap>
 
     <insert id="insertBatch">
-        insert into cages (house_id, cage_number, status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by)
+        insert into cages (house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by)
         values
         <foreach collection="list" item="item" separator=",">
-            (#{item.houseId}, #{item.cageNumber}, #{item.status}, #{item.rabbitCount}, #{item.isFed}, #{item.isEnabled}, #{item.remark}, #{item.createBy}, #{item.updateBy})
+            (#{item.houseId}, #{item.cageNumber}, #{item.rowCode}, #{item.layerIndex}, #{item.positionIndex}, #{item.status}, #{item.rabbitCount}, #{item.isFed}, #{item.isEnabled}, #{item.remark}, #{item.createBy}, #{item.updateBy})
         </foreach>
     </insert>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into cages (house_id, cage_number, status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by)
-        values (#{houseId}, #{cageNumber}, #{status}, #{rabbitCount}, #{isFed}, #{isEnabled}, #{remark}, #{createBy}, #{updateBy})
+        insert into cages (house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by)
+        values (#{houseId}, #{cageNumber}, #{rowCode}, #{layerIndex}, #{positionIndex}, #{status}, #{rabbitCount}, #{isFed}, #{isEnabled}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByHouseId" resultMap="CageMap">
-        select id, house_id, cage_number, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
         from cages
         where house_id = #{houseId}
         order by id asc
     </select>
 
     <select id="selectById" resultMap="CageMap">
-        select id, house_id, cage_number, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
         from cages
         where house_id = #{houseId} and id = #{id}
+    </select>
+
+    <select id="selectByHouseIdForUpdate" resultMap="CageMap">
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed,
+            is_enabled, remark, create_by, create_time, update_by, update_time
+        from cages
+        where house_id = #{houseId}
+        order by id
+        for update
+    </select>
+
+    <select id="selectByIdsForUpdate" resultMap="CageMap">
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed,
+            is_enabled, remark, create_by, create_time, update_by, update_time
+        from cages
+        where house_id = #{houseId}
+        <if test="ids != null and ids.size() > 0">
+            and id in <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        </if>
+        <if test="ids == null or ids.size() == 0">and 1 = 0</if>
+        order by id
+        for update
+    </select>
+
+    <select id="lockIds" resultType="long">
+        select id from cages
+        where house_id = #{houseId}
+        <if test="ids != null and ids.size() > 0">
+            and id in <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        </if>
+        <if test="ids == null or ids.size() == 0">and 1 = 0</if>
+        order by id
+        for update
     </select>
 
     <update id="updateBasic">
         update cages
         set cage_number = #{cageNumber},
+            row_code = #{rowCode},
+            layer_index = #{layerIndex},
+            position_index = #{positionIndex},
             remark = #{remark},
             is_enabled = #{isEnabled},
             update_by = #{updateBy},
@@ -82,6 +121,17 @@
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="decrementRabbitCount">
+        update cages
+        set status = case when rabbit_count - #{delta} = 0 then '0' else status end,
+            rabbit_count = rabbit_count - #{delta},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+          and #{delta} > 0
+          and rabbit_count >= #{delta}
     </update>
 
     <update id="updateIsFed">

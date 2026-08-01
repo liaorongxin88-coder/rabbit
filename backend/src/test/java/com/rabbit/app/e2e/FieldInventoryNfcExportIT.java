@@ -67,10 +67,21 @@ public class FieldInventoryNfcExportIT extends E2eTestSupport {
         JsonNode abnormal = api.getOk("/api/abnormal?isDeal=false", owner.token, houseId);
         Assertions.assertTrue(abnormal.size() >= 1);
         long abnormalId = abnormal.get(0).get("id").asLong();
+        long versionBeforeResolution = jdbcTemplate.queryForObject(
+                "select state_version from rabbits where id = ?", Long.class, rabbitId);
         api.postOk("/api/abnormal/" + abnormalId + "/deal", owner.token, houseId, obj(
                 "deal", true,
                 "requestId", requestId("abnormal_deal")
         ));
+        long versionAfterResolution = jdbcTemplate.queryForObject(
+                "select state_version from rabbits where id = ?", Long.class, rabbitId);
+        Assertions.assertEquals(versionBeforeResolution + 1, versionAfterResolution);
+        api.postOk("/api/abnormal/" + abnormalId + "/deal", owner.token, houseId, obj(
+                "deal", true,
+                "requestId", requestId("abnormal_deal_again")
+        ));
+        Assertions.assertEquals(versionAfterResolution, jdbcTemplate.queryForObject(
+                "select state_version from rabbits where id = ?", Long.class, rabbitId));
         Assertions.assertTrue(api.getOk("/api/abnormal?isDeal=true", owner.token, houseId).size() >= 1);
 
         JsonNode item = api.postOk("/api/inventory/items", owner.token, houseId, obj(

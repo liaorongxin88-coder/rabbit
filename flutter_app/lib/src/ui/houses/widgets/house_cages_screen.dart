@@ -18,10 +18,21 @@ class HouseCagesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final houses = ref.watch(housesProvider);
+    final canEdit =
+        ref.watch(housePermissionProvider(houseId)).valueOrNull?.canEdit ==
+            true;
 
     return AppPage(
       title: '笼位管理',
       actions: [
+        if (canEdit)
+          IconButton(
+            key: const ValueKey('house-outbound-action'),
+            tooltip: '整舍批量出库',
+            onPressed: () =>
+                context.push('/houses/$houseId/outbound?entryType=HOUSE'),
+            icon: const Icon(Icons.local_shipping_outlined),
+          ),
         IconButton(
           tooltip: '返回兔舍详情',
           onPressed: () => context.go('/houses/$houseId'),
@@ -83,8 +94,10 @@ class _PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
     return SectionCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           IconButton(
             tooltip: '返回',
@@ -98,14 +111,14 @@ class _PageHeader extends StatelessWidget {
               children: [
                 Text(
                   house.name,
-                  maxLines: 1,
+                  maxLines: largeText ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '点击具体笼位进入管理 · ${house.layoutLabel}',
-                  maxLines: 1,
+                  maxLines: largeText ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),

@@ -23,7 +23,6 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _accountFormKey = GlobalKey<FormState>();
-  late final PageController _modePageController;
   final _phoneController = TextEditingController();
   final _userNameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -34,11 +33,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   var _detectingPhone = false;
   var _phoneFocused = false;
   var _agreedToTerms = false;
+  var _horizontalDragDelta = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _modePageController = PageController(initialPage: _mode.index);
     _phoneFocusNode.addListener(() {
       if (mounted) {
         setState(() => _phoneFocused = _phoneFocusNode.hasFocus);
@@ -48,7 +47,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
-    _modePageController.dispose();
     _phoneFocusNode.dispose();
     _phoneController.dispose();
     _userNameController.dispose();
@@ -64,7 +62,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           builder: (context, constraints) {
             final contentWidth =
                 constraints.maxWidth > 520 ? 480.0 : constraints.maxWidth;
-            final modeHeight = _mode == _LoginMode.phone ? 232.0 : 214.0;
             return Align(
               alignment: Alignment.topCenter,
               child: SizedBox(
@@ -98,25 +95,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           : (next) => _selectMode(next.first),
                     ),
                     const SizedBox(height: 16),
-                    AnimatedContainer(
+                    AnimatedSize(
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOutCubic,
-                      height: modeHeight,
-                      child: PageView(
-                        controller: _modePageController,
-                        physics: _submitting
-                            ? const NeverScrollableScrollPhysics()
-                            : const PageScrollPhysics(),
-                        onPageChanged: (index) {
-                          final next = _LoginMode.values[index];
-                          if (_mode != next) {
-                            setState(() => _mode = next);
-                          }
-                        },
-                        children: [
-                          _buildPhoneLogin(context),
-                          _buildAccountLogin(context),
-                        ],
+                      alignment: Alignment.topCenter,
+                      child: GestureDetector(
+                        key: const ValueKey('login-mode-content'),
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragStart: _submitting
+                            ? null
+                            : (_) => _horizontalDragDelta = 0,
+                        onHorizontalDragUpdate: _submitting
+                            ? null
+                            : (details) =>
+                                _horizontalDragDelta += details.delta.dx,
+                        onHorizontalDragEnd: _submitting
+                            ? null
+                            : (_) {
+                                if (_horizontalDragDelta < -40) {
+                                  _selectMode(_LoginMode.account);
+                                } else if (_horizontalDragDelta > 40) {
+                                  _selectMode(_LoginMode.phone);
+                                }
+                                _horizontalDragDelta = 0;
+                              },
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: _mode == _LoginMode.phone
+                              ? _buildPhoneLogin(context)
+                              : _buildAccountLogin(context),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -167,14 +177,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _selectMode(_LoginMode mode) {
-    if (_mode != mode) {
-      setState(() => _mode = mode);
-    }
-    _modePageController.animateToPage(
-      mode.index,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
+    if (_mode == mode) return;
+    setState(() => _mode = mode);
   }
 
   Widget _buildPhoneLogin(BuildContext context) {
@@ -214,6 +218,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Column(
             children: [
               TextFormField(
+                key: const ValueKey('account-username-field'),
                 controller: _userNameController,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
@@ -263,6 +268,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         const SizedBox(height: 22),
         SizedBox(
+          key: const ValueKey('account-login-button'),
           width: double.infinity,
           child: ElevatedButton(
             onPressed: _submitting ? null : _submitAccount,
@@ -394,7 +400,7 @@ class _LegalConsentRow extends StatelessWidget {
     final palette = AppPalette.of(context);
     final linkStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
           color: palette.primary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         );
     final baseStyle = Theme.of(context).textTheme.bodyMedium;
 
@@ -403,12 +409,11 @@ class _LegalConsentRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox.square(
-          dimension: 40,
+          dimension: 48,
           child: Checkbox(
+            key: const ValueKey('legal-consent-checkbox'),
             value: agreed,
             onChanged: enabled ? (value) => onChanged(value ?? false) : null,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
           ),
         ),
         const SizedBox(width: 8),
@@ -512,11 +517,12 @@ class _PhoneNumberInput extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     final borderColor = focused ? palette.primary : palette.line;
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return AnimatedContainer(
       key: const ValueKey('phone-number-input'),
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOut,
-      height: 56,
+      height: largeText ? 72 : 56,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: palette.surface,
@@ -551,7 +557,7 @@ class _PhoneNumberInput extends StatelessWidget {
               ],
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
               decoration: InputDecoration(
                 isCollapsed: true,
@@ -564,7 +570,7 @@ class _PhoneNumberInput extends StatelessWidget {
                 hintStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: palette.muted,
                       fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
               ),
               onSubmitted: (_) => onSubmitted(),
@@ -593,6 +599,17 @@ class _PhoneLoginFlow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    const firstStep = _PhoneFlowStep(
+      icon: Icons.fact_check_outlined,
+      title: '检测手机号',
+      subtitle: '识别已有账号',
+    );
+    const secondStep = _PhoneFlowStep(
+      icon: Icons.verified_user_outlined,
+      title: '账号登录',
+      subtitle: '切换后继续',
+    );
     return Container(
       key: const ValueKey('phone-login-flow'),
       padding: const EdgeInsets.all(14),
@@ -601,27 +618,35 @@ class _PhoneLoginFlow extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: palette.line),
       ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: _PhoneFlowStep(
-              icon: Icons.fact_check_outlined,
-              title: '检测手机号',
-              subtitle: '识别已有账号',
+      child: largeText
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                firstStep,
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Icon(
+                    Icons.arrow_downward,
+                    color: palette.muted,
+                    size: 20,
+                  ),
+                ),
+                secondStep,
+              ],
+            )
+          : Row(
+              children: [
+                const Expanded(child: firstStep),
+                const SizedBox(width: 12),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: palette.muted,
+                  size: 16,
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: secondStep),
+              ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Icon(Icons.arrow_forward_ios, color: palette.muted, size: 16),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: _PhoneFlowStep(
-              icon: Icons.verified_user_outlined,
-              title: '账号登录',
-              subtitle: '切换后继续',
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -640,6 +665,7 @@ class _PhoneFlowStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 150;
@@ -661,15 +687,19 @@ class _PhoneFlowStep extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: largeText ? 2 : 1,
+                    overflow: largeText
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    maxLines: compact ? 2 : 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: largeText || compact ? 2 : 1,
+                    overflow: largeText
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],

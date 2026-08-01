@@ -45,6 +45,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_driver:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -65,6 +69,12 @@ flutter:
     - config/env/dev.env
     - config/env/test.env
     - assets/images/app_logo.jpg
+    - assets/fonts/OFL.txt
+
+  fonts:
+    - family: Noto Sans SC
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Variable.ttf
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

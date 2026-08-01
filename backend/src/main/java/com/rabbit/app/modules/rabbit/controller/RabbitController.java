@@ -80,10 +80,10 @@ public class RabbitController {
     }
 
     @PostMapping("/rabbits/replacement")
-    @HousePerm("edit")
+    @HousePerm("control")
     public ApiResponse<Void> replacement(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody ReplacementRequest req) {
         Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
+        houseService.assertHousePermission(userId, houseId, "control");
         boolean force = req.getForceExitBatch() != null && req.getForceExitBatch();
         rabbitService.convertToReplacement(userId, houseId, req.getRabbitIds(), force, req.getTargetCageId(), req.getRequestId());
         return ApiResponse.ok(null);

@@ -57,9 +57,20 @@
         order by br.id desc
     </select>
 
+    <select id="selectActiveByRabbitForUpdate" resultMap="BatchRabbitMap">
+        select br.*
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        where br.rabbit_id = #{rabbitId} and br.is_active = true
+          and b.house_id = #{houseId}
+        order by br.id
+        for update
+    </select>
+
     <update id="updateStatusAndEvent">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.current_status = #{currentStatus},
             br.last_event_date = #{lastEventDate},
             br.next_event_date = #{nextEventDate},
@@ -68,7 +79,10 @@
             br.event_notify_date = null,
             br.male_rabbit_id = #{maleRabbitId},
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and b.house_id = #{houseId}
     </update>
@@ -76,6 +90,7 @@
     <update id="updateStatusAndEventIfStatus">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.current_status = #{currentStatus},
             br.last_event_date = #{lastEventDate},
             br.next_event_date = #{nextEventDate},
@@ -84,7 +99,10 @@
             br.event_notify_date = null,
             br.male_rabbit_id = #{maleRabbitId},
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and br.is_active = true
           and br.current_status = #{fromStatus}
@@ -94,12 +112,16 @@
     <update id="updateNextEvent">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.next_event_date = #{nextEventDate},
             br.next_event_type = #{nextEventType},
             br.is_event_notified = false,
             br.event_notify_date = null,
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and b.house_id = #{houseId}
     </update>
@@ -107,12 +129,16 @@
     <update id="updateNextEventIfStatus">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.next_event_date = #{nextEventDate},
             br.next_event_type = #{nextEventType},
             br.is_event_notified = false,
             br.event_notify_date = null,
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and br.is_active = true
           and br.current_status = #{fromStatus}
@@ -122,11 +148,15 @@
     <update id="deactivate">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.is_active = false,
             br.exit_date = #{exitDate},
             br.remark = #{remark},
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and b.house_id = #{houseId}
     </update>
@@ -134,11 +164,15 @@
     <update id="deactivateIfActive">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.is_active = false,
             br.exit_date = #{exitDate},
             br.remark = #{remark},
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.id = #{id}
           and br.is_active = true
           and b.house_id = #{houseId}
@@ -147,11 +181,15 @@
     <update id="deactivateByBatch">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
         set br.is_active = false,
             br.exit_date = #{exitDate},
             br.remark = #{remark},
             br.update_by = #{updateBy},
-            br.update_time = now()
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
         where br.batch_id = #{batchId}
           and br.is_active = true
           and b.house_id = #{houseId}

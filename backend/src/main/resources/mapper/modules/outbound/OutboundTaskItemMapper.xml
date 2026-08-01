@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.outbound.mapper.OutboundTaskItemMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.outbound.entity.OutboundTaskItem">
+        <id column="task_id" property="taskId"/>
+        <id column="rabbit_id" property="rabbitId"/>
+        <result column="state_version" property="stateVersion"/>
+        <result column="selection_type" property="selectionType"/>
+        <result column="early_sale_reason" property="earlySaleReason"/>
+        <result column="cage_id_snapshot" property="cageIdSnapshot"/>
+        <result column="cage_number_snapshot" property="cageNumberSnapshot"/>
+        <result column="row_code_snapshot" property="rowCodeSnapshot"/>
+        <result column="layer_index_snapshot" property="layerIndexSnapshot"/>
+        <result column="position_index_snapshot" property="positionIndexSnapshot"/>
+        <result column="stage_snapshot" property="stageSnapshot"/>
+        <result column="batch_id_snapshot" property="batchIdSnapshot"/>
+    </resultMap>
+
+    <delete id="deleteByTask">delete from outbound_task_items where task_id = #{taskId}</delete>
+
+    <insert id="insertBatch">
+        insert into outbound_task_items (task_id, rabbit_id, state_version, selection_type, early_sale_reason,
+            cage_id_snapshot, cage_number_snapshot, row_code_snapshot, layer_index_snapshot,
+            position_index_snapshot, stage_snapshot, batch_id_snapshot)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.taskId}, #{item.rabbitId}, #{item.stateVersion}, #{item.selectionType}, #{item.earlySaleReason},
+             #{item.cageIdSnapshot}, #{item.cageNumberSnapshot}, #{item.rowCodeSnapshot}, #{item.layerIndexSnapshot},
+             #{item.positionIndexSnapshot}, #{item.stageSnapshot}, #{item.batchIdSnapshot})
+        </foreach>
+    </insert>
+
+    <select id="selectByTask" resultMap="Map">
+        select task_id, rabbit_id, state_version, selection_type, early_sale_reason, cage_id_snapshot,
+            cage_number_snapshot, row_code_snapshot, layer_index_snapshot, position_index_snapshot,
+            stage_snapshot, batch_id_snapshot
+        from outbound_task_items where task_id = #{taskId} order by rabbit_id
+    </select>
+</mapper>

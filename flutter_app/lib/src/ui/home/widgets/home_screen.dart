@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
@@ -163,6 +164,11 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       return;
     }
 
+    if (event.eventType.contains('出售') && event.rabbitId != null) {
+      await context.push(
+          '/houses/$houseId/outbound?entryType=RABBIT&rabbitId=${event.rabbitId}');
+      return;
+    }
     await showProductionEventSheet(context: context, event: event);
   }
 }

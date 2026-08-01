@@ -11,6 +11,8 @@ public interface RabbitAbnormalConditionMapper {
 
     List<RabbitAbnormalCondition> selectByHouse(@Param("houseId") Long houseId, @Param("isDeal") Boolean isDeal);
 
+    RabbitAbnormalCondition selectById(@Param("houseId") Long houseId, @Param("id") Long id);
+
     int markDeal(@Param("houseId") Long houseId, @Param("id") Long id, @Param("deal") boolean deal, @Param("updateBy") String updateBy);
 
     int countUndealByCage(@Param("houseId") Long houseId, @Param("cageId") Long cageId);

@@ -165,6 +165,17 @@ class _SystemUiFrame extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseStyle =
         isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark;
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final content = child ?? const SizedBox.shrink();
+    final scaledContent = mediaQuery == null
+        ? content
+        : MediaQuery(
+            data: mediaQuery.copyWith(
+              textScaler:
+                  AppTypography.ergonomicTextScaler(mediaQuery.textScaler),
+            ),
+            child: content,
+          );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: baseStyle.copyWith(
         statusBarColor: palette.background,
@@ -175,7 +186,7 @@ class _SystemUiFrame extends StatelessWidget {
             isDark ? Brightness.light : Brightness.dark,
         systemNavigationBarContrastEnforced: false,
       ),
-      child: child ?? const SizedBox.shrink(),
+      child: scaledContent,
     );
   }
 }

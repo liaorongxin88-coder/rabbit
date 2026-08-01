@@ -84,6 +84,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('login flow remains usable with 200 percent text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    final loginContext = tester.element(
+      find.byKey(const ValueKey('login-mode-selector')),
+    );
+    expect(MediaQuery.textScalerOf(loginContext).scale(10), 15);
+    expect(find.text('检测手机号'), findsOneWidget);
+    expect(find.text('识别已有账号'), findsOneWidget);
+    expect(find.text('账号登录'), findsOneWidget);
+    expect(find.text('切换后继续'), findsOneWidget);
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('phone-login-button')));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('phone-login-button'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('account-username-field')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('account-login-button')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('does not load protected home while auth restore is pending',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -132,7 +175,10 @@ void main() {
     expect(find.text('手机号一键进入'), findsOneWidget);
     expect(find.text('用户名'), findsNothing);
 
-    await tester.drag(find.byType(PageView), const Offset(-420, 0));
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('用户名'), findsOneWidget);
@@ -148,7 +194,10 @@ void main() {
     await tester.pumpWidget(const ProviderScopeWrapper());
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byType(PageView), const Offset(-420, 0));
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
     await tester.pumpAndSettle();
 
     final passwordField = find.byKey(
@@ -574,7 +623,10 @@ void main() {
     await tester.pumpWidget(const ProviderScopeWrapper());
     await tester.pumpAndSettle();
 
-    await tester.drag(find.byType(PageView), const Offset(-420, 0));
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).first, 'demo_user');

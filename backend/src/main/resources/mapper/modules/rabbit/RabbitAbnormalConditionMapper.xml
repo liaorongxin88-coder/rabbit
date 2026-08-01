@@ -18,12 +18,19 @@
         order by warning_time desc, id desc
     </select>
 
+    <select id="selectById" resultType="com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition">
+        select *
+        from rabbit_abnormal_conditions
+        where house_id = #{houseId} and id = #{id}
+    </select>
+
     <update id="markDeal">
         update rabbit_abnormal_conditions
         set is_deal = #{deal},
             update_by = #{updateBy},
             update_time = now()
         where id = #{id} and house_id = #{houseId}
+          and is_deal &lt;&gt; #{deal}
     </update>
 
     <select id="countUndealByCage" resultType="int">

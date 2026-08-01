@@ -33,13 +33,15 @@ public class CageAdminController {
     @PostMapping("/cages")
     public ApiResponse<Cage> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateCageRequest req) {
         Long userId = requireLogin();
-        return ApiResponse.ok(cageAdminService.create(userId, houseId, req.getCageNumber(), req.getRemark(), req.getIsEnabled()));
+        return ApiResponse.ok(cageAdminService.create(userId, houseId, req.getCageNumber(), req.getRowCode(),
+                req.getLayerIndex(), req.getPositionIndex(), req.getRemark(), req.getIsEnabled()));
     }
 
     @PutMapping("/cages/{id}")
     public ApiResponse<Cage> update(@RequestHeader("X-House-Id") Long houseId, @org.springframework.web.bind.annotation.PathVariable("id") Long id, @Valid @RequestBody UpdateCageRequest req) {
         Long userId = requireLogin();
-        return ApiResponse.ok(cageAdminService.update(userId, houseId, id, req.getCageNumber(), req.getRemark(), req.getIsEnabled()));
+        return ApiResponse.ok(cageAdminService.update(userId, houseId, id, req.getCageNumber(), req.getRowCode(),
+                req.getLayerIndex(), req.getPositionIndex(), req.getRemark(), req.getIsEnabled()));
     }
 
     @DeleteMapping("/cages/{id}")

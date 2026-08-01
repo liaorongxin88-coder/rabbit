@@ -22,7 +22,8 @@ final housesProvider = FutureProvider<List<RabbitHouse>>((ref) {
 
 final housePermissionProvider =
     FutureProvider.family<HousePermission, int>((ref, houseId) {
-  if (houseId <= 0) {
+  final session = ref.watch(authControllerProvider).valueOrNull;
+  if (session == null || houseId <= 0) {
     return Future.value(const HousePermission(perms: 'view', isAdmin: false));
   }
   return ref.watch(houseRepositoryProvider).getMyPermission(houseId);

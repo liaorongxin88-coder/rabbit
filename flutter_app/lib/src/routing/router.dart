@@ -17,6 +17,8 @@ import 'package:rabbit_flutter/src/ui/profile/widgets/profile_screen.dart';
 import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_error_screen.dart';
 import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_screen.dart';
 import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_setup_screen.dart';
+import 'package:rabbit_flutter/src/ui/outbound/view_models/outbound_controller.dart';
+import 'package:rabbit_flutter/src/ui/outbound/widgets/outbound_flow_screen.dart';
 import 'package:rabbit_flutter/src/ui/settings/widgets/settings_screen.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/local_app_settings_controller.dart';
 import 'package:rabbit_flutter/src/ui/settings/widgets/account_settings_screen.dart';
@@ -88,6 +90,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final houseId =
               int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
           return NfcWriteScreen(houseId: houseId);
+        },
+      ),
+      GoRoute(
+        path: '/houses/:houseId/outbound',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final houseId =
+              int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+          final userId =
+              ref.read(authControllerProvider).valueOrNull?.userId ?? 0;
+          final query = state.uri.queryParameters;
+          return OutboundFlowScreen(
+            entry: OutboundEntry(
+              userId: userId,
+              houseId: houseId,
+              entryType: (query['entryType'] ?? 'HOUSE').toUpperCase(),
+              rabbitId: int.tryParse(query['rabbitId'] ?? ''),
+              cageId: int.tryParse(query['cageId'] ?? ''),
+              rowCode: query['rowCode'],
+            ),
+          );
         },
       ),
       ShellRoute(

@@ -35,6 +35,13 @@ class CageDetailScreen extends ConsumerWidget {
     return AppPage(
       title: '笼位管理',
       actions: [
+        if (permission.valueOrNull?.canEdit == true)
+          IconButton(
+            tooltip: '该笼批量出库',
+            onPressed: () => context.push(
+                '/houses/$houseId/outbound?entryType=CAGE&cageId=$cageId'),
+            icon: const Icon(Icons.local_shipping_outlined),
+          ),
         IconButton(
           tooltip: '返回笼位列表',
           onPressed: () => context.go('/houses/$houseId/cages'),

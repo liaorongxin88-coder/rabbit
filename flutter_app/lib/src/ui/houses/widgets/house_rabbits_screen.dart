@@ -21,10 +21,20 @@ class HouseRabbitsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final houses = ref.watch(housesProvider);
+    final canEdit =
+        ref.watch(housePermissionProvider(houseId)).valueOrNull?.canEdit ==
+            true;
 
     return AppPage(
       title: '兔只管理',
       actions: [
+        if (canEdit)
+          IconButton(
+            tooltip: '批量出库',
+            onPressed: () =>
+                context.push('/houses/$houseId/outbound?entryType=HOUSE'),
+            icon: const Icon(Icons.local_shipping_outlined),
+          ),
         IconButton(
           tooltip: '返回兔舍详情',
           onPressed: () => context.go('/houses/$houseId'),
@@ -349,6 +359,14 @@ class _RabbitListTile extends StatelessWidget {
             ),
           ),
           if (canEdit) ...[
+            IconButton(
+              tooltip: '单兔出库',
+              onPressed: rabbit.type == '2'
+                  ? () => context.push(
+                      '/houses/$houseId/outbound?entryType=RABBIT&rabbitId=${rabbit.id}')
+                  : null,
+              icon: const Icon(Icons.local_shipping_outlined),
+            ),
             IconButton(
               tooltip: '换笼位',
               onPressed: () => showRabbitMoveCageSheet(

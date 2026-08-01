@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.outbound.mapper.OutboundCandidateMapper">
+    <sql id="CandidateColumns">
+        r.id as rabbit_id, r.house_id, r.cage_id, c.cage_number, c.row_code, c.layer_index, c.position_index,
+        c.is_enabled as cage_enabled, r.type as rabbit_type, r.gender, r.weight, r.is_active as active,
+        r.is_quarantined as quarantined, r.state_version, br.batch_id, br.current_status as stage,
+        br.next_event_date, br.next_event_type,
+        exists(select 1 from treatment_records tr where tr.house_id = r.house_id and tr.rabbit_id = r.id and tr.status = 'OPEN') as open_treatment,
+        exists(select 1 from rabbit_abnormal_conditions ac where ac.house_id = r.house_id and ac.rabbit_id = r.id and ac.is_deal = false) as unresolved_abnormal
+    </sql>
+
+    <sql id="CandidateJoins">
+        from rabbits r
+        left join cages c on c.id = r.cage_id and c.house_id = r.house_id
+        left join batch_rabbits br on br.id = (
+            select br2.id from batch_rabbits br2
+            inner join batches b2 on b2.id = br2.batch_id and b2.house_id = r.house_id
+            where br2.rabbit_id = r.id and br2.is_active = true
+            order by br2.id desc limit 1
+        )
+    </sql>
+
+    <resultMap id="CandidateMap" type="com.rabbit.app.modules.outbound.entity.OutboundCandidateRow">
+        <id column="rabbit_id" property="rabbitId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="cage_id" property="cageId"/>
+        <result column="cage_number" property="cageNumber"/>
+        <result column="row_code" property="rowCode"/>
+        <result column="layer_index" property="layerIndex"/>
+        <result column="position_index" property="positionIndex"/>
+        <result column="cage_enabled" property="cageEnabled"/>
+        <result column="rabbit_type" property="rabbitType"/>
+        <result column="gender" property="gender"/>
+        <result column="weight" property="weight"/>
+        <result column="active" property="active"/>
+        <result column="quarantined" property="quarantined"/>
+        <result column="state_version" property="stateVersion"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="stage" property="stage"/>
+        <result column="next_event_date" property="nextEventDate"/>
+        <result column="next_event_type" property="nextEventType"/>
+        <result column="open_treatment" property="openTreatment"/>
+        <result column="unresolved_abnormal" property="unresolvedAbnormal"/>
+    </resultMap>
+
+    <select id="selectScope" resultMap="CandidateMap">
+        select <include refid="CandidateColumns"/> <include refid="CandidateJoins"/>
+        where r.house_id = #{houseId}
+        <choose>
+            <when test="entryType == 'RABBIT'">and r.id = #{rabbitId}</when>
+            <when test="entryType == 'CAGE'">and r.cage_id = #{cageId} and r.is_active = true</when>
+            <when test="entryType == 'ROW'">and c.row_code = #{rowCode} and r.is_active = true</when>
+            <otherwise>and r.is_active = true</otherwise>
+        </choose>
+        order by c.row_code, c.position_index, c.layer_index, r.id
+    </select>
+
+    <select id="selectByIds" resultMap="CandidateMap">
+        select <include refid="CandidateColumns"/> <include refid="CandidateJoins"/>
+        where r.house_id = #{houseId}
+        <if test="rabbitIds != null and rabbitIds.size() > 0">
+            and r.id in <foreach collection="rabbitIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        </if>
+        <if test="rabbitIds == null or rabbitIds.size() == 0">and 1 = 0</if>
+        order by r.id
+    </select>
+
+    <select id="lockRabbitIds" resultType="long">
+        select id from rabbits where house_id = #{houseId}
+        <if test="rabbitIds != null and rabbitIds.size() > 0">
+            and id in <foreach collection="rabbitIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        </if>
+        <if test="rabbitIds == null or rabbitIds.size() == 0">and 1 = 0</if>
+        order by id for update
+    </select>
+</mapper>

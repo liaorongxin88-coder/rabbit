@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.outbound.mapper.OutboundRequestMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.outbound.entity.OutboundRequest">
+        <id column="request_id" property="requestId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="task_id" property="taskId"/>
+        <result column="payload_hash" property="payloadHash"/>
+        <result column="status" property="status"/>
+        <result column="sale_order_id" property="saleOrderId"/>
+        <result column="error_code" property="errorCode"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="conflicts_json" property="conflictsJson"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insertIgnore">
+        insert ignore into outbound_requests (request_id, house_id, task_id, payload_hash, status)
+        values (#{requestId}, #{houseId}, #{taskId}, #{payloadHash}, #{status})
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select request_id, house_id, task_id, payload_hash, status, sale_order_id, error_code, error_message, conflicts_json,
+            create_time, update_time from outbound_requests
+        where house_id = #{houseId} and request_id = #{requestId}
+    </select>
+
+    <update id="markConflict">
+        update outbound_requests set status = 'CONFLICT', error_code = #{errorCode}, error_message = #{errorMessage},
+            conflicts_json = #{conflictsJson}, update_time = now()
+        where house_id = #{houseId} and request_id = #{requestId} and status = 'PROCESSING'
+    </update>
+
+    <update id="markFailed">
+        update outbound_requests set status = 'FAILED', error_code = #{errorCode}, error_message = #{errorMessage},
+            sale_order_id = null, conflicts_json = null, update_time = now()
+        where house_id = #{houseId} and request_id = #{requestId} and status = 'PROCESSING'
+    </update>
+
+    <update id="markCompleted">
+        update outbound_requests set status = 'COMPLETED', sale_order_id = #{saleOrderId}, error_code = null,
+            error_message = null, conflicts_json = null, update_time = now()
+        where house_id = #{houseId} and request_id = #{requestId} and status = 'PROCESSING'
+    </update>
+</mapper>

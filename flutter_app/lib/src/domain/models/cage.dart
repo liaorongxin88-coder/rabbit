@@ -6,6 +6,9 @@ class Cage {
     required this.id,
     required this.houseId,
     required this.cageNumber,
+    this.rowCode = 'LEGACY',
+    this.layerIndex,
+    this.positionIndex,
     required this.status,
     required this.rabbitCount,
     required this.isEnabled,
@@ -14,6 +17,9 @@ class Cage {
   final int id;
   final int houseId;
   final String cageNumber;
+  final String rowCode;
+  final int? layerIndex;
+  final int? positionIndex;
   final String status;
   final int rabbitCount;
   final bool isEnabled;
@@ -140,6 +146,9 @@ class Cage {
           json['code'] as String? ??
           json['cageNo'] as String? ??
           '',
+      rowCode: json['rowCode'] as String? ?? 'LEGACY',
+      layerIndex: _nullableIntValue(json['layerIndex']),
+      positionIndex: _nullableIntValue(json['positionIndex']),
       status: json['status'] as String? ?? '',
       rabbitCount: _intValue(json['rabbitCount']),
       isEnabled: _boolValue(json['isEnabled'], fallback: true),
@@ -157,6 +166,12 @@ class Cage {
       return int.tryParse(value) ?? 0;
     }
     return 0;
+  }
+
+  static int? _nullableIntValue(Object? value) {
+    if (value == null) return null;
+    final parsed = _intValue(value);
+    return parsed > 0 ? parsed : null;
   }
 
   static bool _boolValue(Object? value, {required bool fallback}) {
