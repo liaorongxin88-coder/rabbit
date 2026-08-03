@@ -2,4 +2,4 @@ target/
 .DS_Store
 .envrc
 .gradle-test
-.pnpm-store
+/.pnpm-store/
