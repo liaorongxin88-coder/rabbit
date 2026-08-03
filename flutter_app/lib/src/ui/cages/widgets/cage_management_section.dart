@@ -183,7 +183,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
         const SizedBox(height: 14),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 640 ? 4 : 3;
+            final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
+            final columns = textScale >= 1.3
+                ? 2
+                : constraints.maxWidth >= 640
+                    ? 4
+                    : 3;
             return GridView.builder(
               itemCount: filtered.length,
               shrinkWrap: true,
@@ -192,7 +197,11 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 crossAxisCount: columns,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: columns >= 4 ? 1.45 : 1.18,
+                childAspectRatio: columns >= 4
+                    ? 1.45
+                    : columns == 2
+                        ? 1.35
+                        : 1.18,
               ),
               itemBuilder: (context, index) {
                 final cage = filtered[index];
@@ -201,6 +210,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                   onTap: () => context.go(
                     '/houses/${widget.house.id}/cages/${cage.id}',
                   ),
+                  onRowOutbound: permission.valueOrNull?.canEdit == true &&
+                          cage.rowCode != 'LEGACY'
+                      ? () => context.push(
+                            '/houses/${widget.house.id}/outbound?entryType=ROW&rowCode=${Uri.encodeQueryComponent(cage.rowCode)}',
+                          )
+                      : null,
                 );
               },
             );
@@ -253,7 +268,7 @@ class _NfcStatusBand extends ConsumerWidget {
                       : 'NFC 已绑定 $bound / ${items.length}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
               IconButton(
@@ -289,7 +304,9 @@ class _CageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    return Row(
+    final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
+    final heading = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: 40,
@@ -309,7 +326,7 @@ class _CageHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 '${house.name} · ${house.layoutLabel}',
-                maxLines: 1,
+                maxLines: largeText ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
@@ -325,6 +342,11 @@ class _CageHeader extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         IconButton(
           tooltip: '刷新笼位',
           onPressed: onRefresh,
@@ -338,6 +360,17 @@ class _CageHeader extends StatelessWidget {
         ),
       ],
     );
+    if (!largeText) {
+      return Row(children: [Expanded(child: heading), actions]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        heading,
+        const SizedBox(height: 8),
+        Align(alignment: Alignment.centerRight, child: actions),
+      ],
+    );
   }
 }
 
@@ -345,10 +378,12 @@ class _CageTile extends StatelessWidget {
   const _CageTile({
     required this.cage,
     required this.onTap,
+    this.onRowOutbound,
   });
 
   final Cage cage;
   final VoidCallback onTap;
+  final VoidCallback? onRowOutbound;
 
   @override
   Widget build(BuildContext context) {
@@ -381,7 +416,7 @@ class _CageTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: titleColor,
                           fontSize: 17,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                   ),
                 ),
@@ -390,15 +425,28 @@ class _CageTile extends StatelessWidget {
             Divider(height: 1, color: palette.line),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-              child: Text(
-                cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: palette.muted,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: palette.muted,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (onRowOutbound != null)
+                    IconButton(
+                      tooltip: '${cage.rowCode} 排批量出库',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onRowOutbound,
+                      icon: const Icon(Icons.local_shipping_outlined),
+                    ),
+                ],
               ),
             ),
           ],
@@ -565,18 +613,26 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
       layers: layers,
       positions: positions,
     );
+    final rowCode = row.toUpperCase().startsWith('R') ? row : 'R$row';
 
     setState(() => _saving = true);
     var created = 0;
     try {
       final repository = ref.read(rabbitRepositoryProvider);
-      for (final label in labels) {
-        await repository.createCage(
-          houseId: widget.houseId,
-          cageNumber: label,
-          remark: '客户端批量新增',
-        );
-        created++;
+      var index = 0;
+      for (var position = 1; position <= positions; position++) {
+        for (var layer = 1; layer <= layers; layer++) {
+          await repository.createCage(
+            houseId: widget.houseId,
+            cageNumber: labels[index],
+            rowCode: rowCode,
+            layerIndex: layer,
+            positionIndex: position,
+            remark: '客户端批量新增',
+          );
+          index++;
+          created++;
+        }
       }
       ref.invalidate(houseCagesProvider(widget.houseId));
       ref.invalidate(houseRabbitsProvider(widget.houseId));

@@ -80,7 +80,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
         ref.read(authControllerProvider).valueOrNull?.userId ?? 0;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      padding: AppSpacing.pagePadding,
       children: [
         SectionCard(
           child: Column(

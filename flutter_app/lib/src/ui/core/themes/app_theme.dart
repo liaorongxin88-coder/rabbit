@@ -16,6 +16,35 @@ class AppColors {
   static const softRed = Color(0xFFFFEFEF);
 }
 
+class AppTypography {
+  static const fontFamily = 'Noto Sans SC';
+  static const maxTextScaleFactor = 1.5;
+
+  static TextScaler ergonomicTextScaler(TextScaler systemTextScaler) {
+    return systemTextScaler.clamp(maxScaleFactor: maxTextScaleFactor);
+  }
+}
+
+class AppSpacing {
+  static const pageHorizontal = 20.0;
+  static const pageTop = 14.0;
+  static const pageBottom = 24.0;
+
+  static const pagePadding = EdgeInsets.fromLTRB(
+    pageHorizontal,
+    pageTop,
+    pageHorizontal,
+    pageBottom,
+  );
+
+  static const loginPagePadding = EdgeInsets.fromLTRB(
+    pageHorizontal,
+    24,
+    pageHorizontal,
+    pageBottom,
+  );
+}
+
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette({
@@ -174,30 +203,30 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: palette.background,
-    fontFamily: 'Roboto',
+    fontFamily: AppTypography.fontFamily,
     extensions: [palette],
     textTheme: TextTheme(
       headlineLarge: TextStyle(
         color: palette.text,
         fontSize: 34,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
         height: 1.12,
       ),
       headlineMedium: TextStyle(
         color: palette.text,
         fontSize: 26,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
         height: 1.18,
       ),
       titleLarge: TextStyle(
         color: palette.text,
         fontSize: 20,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
       titleMedium: TextStyle(
         color: palette.text,
         fontSize: 16,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
       ),
       bodyLarge: TextStyle(
         color: palette.text,
@@ -212,7 +241,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       labelLarge: TextStyle(
         color: palette.text,
         fontSize: 14,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -223,7 +252,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       titleTextStyle: TextStyle(
         color: palette.text,
         fontSize: 18,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
       iconTheme: IconThemeData(color: palette.text),
       actionsIconTheme: IconThemeData(color: palette.text),
@@ -273,7 +302,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         elevation: 0,
         minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -282,7 +311,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         minimumSize: const Size.fromHeight(48),
         side: BorderSide(color: palette.line),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -295,7 +324,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       titleTextStyle: TextStyle(
         color: palette.text,
         fontSize: 16,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
       ),
       subtitleTextStyle: TextStyle(
         color: palette.muted,
@@ -310,7 +339,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           color: states.contains(WidgetState.selected)
               ? palette.primary
               : palette.muted,

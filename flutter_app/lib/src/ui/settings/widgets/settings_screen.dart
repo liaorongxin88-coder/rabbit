@@ -16,7 +16,7 @@ class SettingsScreen extends StatelessWidget {
     return AppPage(
       title: '设置',
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+        padding: AppSpacing.pagePadding,
         children: [
           SectionCard(
             child: Column(

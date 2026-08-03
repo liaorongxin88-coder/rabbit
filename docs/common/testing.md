@@ -65,6 +65,37 @@ flutter build apk --debug
 
 如果 Flutter SDK cache 权限导致命令失败，先修复本机 Flutter SDK/cache 权限，再判断项目代码是否有问题。
 
+## Flutter Android 设备 E2E
+
+批量出库 Android 测试使用真实 Flutter Dev APK、Android 模拟器、`rabbit_app` 后端和每轮隔离 fixture。runner 会在没有设备时启动第一个可用 AVD，注入测试数据，执行只读权限、人体工学、提前出售、并发冲突恢复和成功提交，并对销售单、兔只状态和请求状态做数据库断言：
+
+前置条件是 `http://127.0.0.1:8080` 后端和 `rabbit-mysql-1` 已运行且指向本地开发库 `rabbit_app`。预检不通过时 runner 会在注入 fixture 和启动模拟器之前退出。
+
+```bash
+cd flutter_app
+./scripts/android_e2e.sh
+```
+
+runner 固定要求 JDK 21。macOS/Homebrew 默认使用 `/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`；其他环境通过 `RABBIT_ANDROID_E2E_JAVA_HOME` 指定，避免 Android Studio JBR 升级后破坏 Gradle 8.4 构建。
+
+常用矩阵参数：
+
+```bash
+RABBIT_ANDROID_E2E_AVD=Medium_Phone \
+RABBIT_ANDROID_E2E_TEXT_SCALE=1.0 \
+RABBIT_ANDROID_E2E_PROFILE=visual-baseline \
+./scripts/android_e2e.sh
+
+RABBIT_ANDROID_E2E_AVD=Medium_Phone \
+RABBIT_ANDROID_E2E_TEXT_SCALE=2.0 \
+RABBIT_ANDROID_E2E_PROFILE=accessibility-stress \
+./scripts/android_e2e.sh
+```
+
+`visual-baseline` 使用 100% 系统字体，作为设计还原、日常回归和对外交付截图；runner 会拒绝用其他字号伪装成该档位，并在每张截图前断言系统字号与 App 有效字号仍和测试配置一致。`accessibility-stress` 使用 200% 系统字体，并验证 App 的人体工学上限为 150%。压力档只验证可达性、换行和溢出边界，不能作为视觉还原或交付截图基准。
+
+截图、截图清单、fixture 标识、设备物理尺寸、测试档位和数据库断言保存在 `flutter_app/build/android-e2e/<run_id>/`。脚本会验证 7 张业务流程截图完整存在，可修改模拟器字体比例并在结束时恢复；实体机默认不修改系统设置，只有显式设置 `RABBIT_ANDROID_E2E_ALLOW_DEVICE_SETTINGS=1` 才执行字体矩阵。真机 NFC、TalkBack、左右手持机误触和疲劳仍需人工验收。
+
 ## Admin 验证
 
 ```bash

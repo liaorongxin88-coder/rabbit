@@ -15,7 +15,16 @@ public interface CageMapper {
 
     List<Cage> selectByHouseId(@Param("houseId") Long houseId);
 
-    int updateBasic(@Param("houseId") Long houseId, @Param("id") Long id, @Param("cageNumber") String cageNumber, @Param("remark") String remark, @Param("isEnabled") boolean isEnabled, @Param("updateBy") String updateBy);
+    List<Cage> selectByHouseIdForUpdate(@Param("houseId") Long houseId);
+
+    List<Cage> selectByIdsForUpdate(@Param("houseId") Long houseId, @Param("ids") List<Long> ids);
+
+    List<Long> lockIds(@Param("houseId") Long houseId, @Param("ids") List<Long> ids);
+
+    int updateBasic(@Param("houseId") Long houseId, @Param("id") Long id, @Param("cageNumber") String cageNumber,
+                    @Param("rowCode") String rowCode, @Param("layerIndex") Integer layerIndex,
+                    @Param("positionIndex") Integer positionIndex, @Param("remark") String remark,
+                    @Param("isEnabled") boolean isEnabled, @Param("updateBy") String updateBy);
 
     int deleteById(@Param("houseId") Long houseId, @Param("id") Long id);
 
@@ -24,6 +33,9 @@ public interface CageMapper {
     int updateRabbitCountAndStatus(@Param("houseId") Long houseId, @Param("id") Long id, @Param("rabbitCount") int rabbitCount, @Param("status") String status, @Param("updateBy") String updateBy);
 
     int incRabbitCount(@Param("houseId") Long houseId, @Param("id") Long id, @Param("delta") int delta, @Param("updateBy") String updateBy);
+
+    int decrementRabbitCount(@Param("houseId") Long houseId, @Param("id") Long id,
+                             @Param("delta") int delta, @Param("updateBy") String updateBy);
 
     int updateIsFed(@Param("houseId") Long houseId, @Param("id") Long id, @Param("isFed") boolean isFed, @Param("updateBy") String updateBy);
 

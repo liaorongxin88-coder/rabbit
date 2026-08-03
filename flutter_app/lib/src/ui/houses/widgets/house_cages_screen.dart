@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/cage_management_section.dart';
+import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 
@@ -17,10 +18,21 @@ class HouseCagesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final houses = ref.watch(housesProvider);
+    final canEdit =
+        ref.watch(housePermissionProvider(houseId)).valueOrNull?.canEdit ==
+            true;
 
     return AppPage(
       title: '笼位管理',
       actions: [
+        if (canEdit)
+          IconButton(
+            key: const ValueKey('house-outbound-action'),
+            tooltip: '整舍批量出库',
+            onPressed: () =>
+                context.push('/houses/$houseId/outbound?entryType=HOUSE'),
+            icon: const Icon(Icons.local_shipping_outlined),
+          ),
         IconButton(
           tooltip: '返回兔舍详情',
           onPressed: () => context.go('/houses/$houseId'),
@@ -48,7 +60,7 @@ class HouseCagesScreen extends ConsumerWidget {
             );
           }
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+            padding: AppSpacing.pagePadding,
             children: [
               _PageHeader(house: house),
               const SizedBox(height: 12),
@@ -82,8 +94,10 @@ class _PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
     return SectionCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           IconButton(
             tooltip: '返回',
@@ -97,14 +111,14 @@ class _PageHeader extends StatelessWidget {
               children: [
                 Text(
                   house.name,
-                  maxLines: 1,
+                  maxLines: largeText ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '点击具体笼位进入管理 · ${house.layoutLabel}',
-                  maxLines: 1,
+                  maxLines: largeText ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),

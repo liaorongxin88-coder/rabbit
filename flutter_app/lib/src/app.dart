@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
 import 'package:rabbit_flutter/src/data/services/nfc_intent_service.dart';
@@ -133,6 +134,7 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
         title: '智能兔管家',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
+        builder: (context, child) => _SystemUiFrame(child: child),
         home: const Scaffold(
           body: Center(child: CircularProgressIndicator()),
         ),
@@ -146,7 +148,45 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: settings?.themeMode ?? ThemeMode.system,
+      builder: (context, child) => _SystemUiFrame(child: child),
       routerConfig: router,
+    );
+  }
+}
+
+class _SystemUiFrame extends StatelessWidget {
+  const _SystemUiFrame({required this.child});
+
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseStyle =
+        isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark;
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final content = child ?? const SizedBox.shrink();
+    final scaledContent = mediaQuery == null
+        ? content
+        : MediaQuery(
+            data: mediaQuery.copyWith(
+              textScaler:
+                  AppTypography.ergonomicTextScaler(mediaQuery.textScaler),
+            ),
+            child: content,
+          );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: baseStyle.copyWith(
+        statusBarColor: palette.background,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarColor: palette.background,
+        systemNavigationBarDividerColor: palette.line,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: scaledContent,
     );
   }
 }

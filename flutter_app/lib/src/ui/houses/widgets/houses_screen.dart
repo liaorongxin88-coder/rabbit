@@ -59,7 +59,7 @@ class _HousesContent extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+      padding: AppSpacing.pagePadding,
       children: [
         SectionCard(
           child: Row(
@@ -130,6 +130,7 @@ class _HouseListCard extends StatelessWidget {
         side: BorderSide(color: palette.line),
       ),
       child: InkWell(
+        key: ValueKey('house-card-${house.id}'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(

@@ -15,6 +15,8 @@ public interface BatchRabbitMapper {
 
     List<BatchRabbit> selectActiveByRabbit(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId);
 
+    List<BatchRabbit> selectActiveByRabbitForUpdate(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId);
+
     int updateStatusAndEvent(@Param("houseId") Long houseId,
                              @Param("id") Long id,
                              @Param("currentStatus") String currentStatus,

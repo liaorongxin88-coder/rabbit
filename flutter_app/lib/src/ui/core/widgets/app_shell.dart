@@ -29,6 +29,7 @@ class AppShell extends StatelessWidget {
               label: '首页',
             ),
             NavigationDestination(
+              key: ValueKey('nav-houses'),
               icon: Icon(Icons.storefront_outlined),
               selectedIcon: Icon(Icons.storefront),
               label: '兔舍',
@@ -39,6 +40,7 @@ class AppShell extends StatelessWidget {
               label: '数据面板',
             ),
             NavigationDestination(
+              key: ValueKey('nav-profile'),
               icon: Icon(Icons.person_outline),
               selectedIcon: Icon(Icons.person),
               label: '我的',

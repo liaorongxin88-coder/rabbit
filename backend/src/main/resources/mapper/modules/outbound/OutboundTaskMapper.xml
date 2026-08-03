@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.outbound.mapper.OutboundTaskMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.outbound.entity.OutboundTask">
+        <id column="task_id" property="taskId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="entry_type" property="entryType"/>
+        <result column="source_rabbit_id" property="sourceRabbitId"/>
+        <result column="source_cage_id" property="sourceCageId"/>
+        <result column="source_row_code" property="sourceRowCode"/>
+        <result column="status" property="status"/>
+        <result column="revision" property="revision"/>
+        <result column="sale_time" property="saleTime"/>
+        <result column="total_weight" property="totalWeight"/>
+        <result column="unit_price" property="unitPrice"/>
+        <result column="customer" property="customer"/>
+        <result column="remark" property="remark"/>
+        <result column="request_id" property="requestId"/>
+        <result column="sale_order_id" property="saleOrderId"/>
+        <result column="snapshot_time" property="snapshotTime"/>
+        <result column="completed_time" property="completedTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Columns">task_id, house_id, operator_id, entry_type, source_rabbit_id, source_cage_id,
+        source_row_code, status, revision, sale_time, total_weight, unit_price, customer, remark,
+        request_id, sale_order_id, snapshot_time, completed_time, create_time, update_time</sql>
+
+    <insert id="insert">
+        insert into outbound_tasks (task_id, house_id, operator_id, entry_type, source_rabbit_id, source_cage_id,
+            source_row_code, status, revision)
+        values (#{taskId}, #{houseId}, #{operatorId}, #{entryType}, #{sourceRabbitId}, #{sourceCageId},
+            #{sourceRowCode}, #{status}, #{revision})
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select <include refid="Columns"/> from outbound_tasks
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="Map">
+        select <include refid="Columns"/> from outbound_tasks
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+        for update
+    </select>
+
+    <select id="selectLatestEditable" resultMap="Map">
+        select <include refid="Columns"/> from outbound_tasks
+        where house_id = #{houseId} and operator_id = #{operatorId}
+          and status in ('SELECTING', 'WAITING_CONFIRMATION')
+          and update_time &gt;= date_sub(now(), interval 7 day)
+        order by update_time desc limit 1
+    </select>
+
+    <update id="updateDraft">
+        update outbound_tasks
+        set status = #{status}, revision = revision + 1, sale_time = #{saleTime}, total_weight = #{totalWeight},
+            unit_price = #{unitPrice}, customer = #{customer}, remark = #{remark},
+            snapshot_time = case when #{status} = 'WAITING_CONFIRMATION' then now() else snapshot_time end,
+            update_time = now()
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+          and revision = #{revision} and status in ('SELECTING', 'WAITING_CONFIRMATION')
+    </update>
+
+    <update id="markCancelled">
+        update outbound_tasks set status = 'CANCELLED', revision = revision + 1, update_time = now()
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+          and status in ('SELECTING', 'WAITING_CONFIRMATION')
+    </update>
+
+    <update id="markSubmitting">
+        update outbound_tasks set status = 'SUBMITTING', request_id = #{requestId}, update_time = now()
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+          and status = 'WAITING_CONFIRMATION'
+    </update>
+
+    <update id="restoreWaiting">
+        update outbound_tasks set status = 'WAITING_CONFIRMATION', update_time = now()
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+          and request_id = #{requestId} and status = 'SUBMITTING'
+    </update>
+
+    <update id="markCompleted">
+        update outbound_tasks set status = 'COMPLETED', request_id = #{requestId}, sale_order_id = #{saleOrderId},
+            completed_time = #{completedTime}, update_time = now()
+        where house_id = #{houseId} and operator_id = #{operatorId} and task_id = #{taskId}
+          and request_id = #{requestId} and status = 'SUBMITTING'
+    </update>
+</mapper>

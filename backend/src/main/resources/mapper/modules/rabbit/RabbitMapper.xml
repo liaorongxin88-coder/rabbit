@@ -14,6 +14,7 @@
         <result column="arrival_method" property="arrivalMethod"/>
         <result column="arrival_date" property="arrivalDate"/>
         <result column="weight" property="weight"/>
+        <result column="state_version" property="stateVersion"/>
         <result column="is_active" property="isActive"/>
         <result column="is_quarantined" property="isQuarantined"/>
         <result column="quarantine_time" property="quarantineTime"/>
@@ -28,12 +29,12 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbits (house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
-        values (#{houseId}, #{cageId}, #{motherId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
+        insert into rabbits (house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
+        values (#{houseId}, #{cageId}, #{motherId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, coalesce(#{stateVersion}, 0), #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectById" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, state_version, is_active,
                is_quarantined, quarantine_time, quarantine_reason,
                request_id,
                departure_date, departure_reason, create_by, create_time, update_by, update_time
@@ -41,8 +42,22 @@
         where house_id = #{houseId} and id = #{id}
     </select>
 
+    <select id="selectByIdsForUpdate" resultMap="RabbitMap">
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight,
+               state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id,
+               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        from rabbits
+        where house_id = #{houseId}
+        <if test="ids != null and ids.size() > 0">
+            and id in <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+        </if>
+        <if test="ids == null or ids.size() == 0">and 1 = 0</if>
+        order by id
+        for update
+    </select>
+
     <select id="selectByHouse" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, state_version, is_active,
                is_quarantined, quarantine_time, quarantine_reason,
                request_id,
                departure_date, departure_reason, create_by, create_time, update_by, update_time
@@ -61,7 +76,7 @@
     </select>
 
     <select id="selectPageByHouse" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, state_version, is_active,
                is_quarantined, quarantine_time, quarantine_reason,
                request_id,
                departure_date, departure_reason, create_by, create_time, update_by, update_time
@@ -81,7 +96,7 @@
     </select>
 
     <select id="selectByHouseAndRequestId" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active,
+        select id, house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, state_version, is_active,
                is_quarantined, quarantine_time, quarantine_reason,
                request_id,
                departure_date, departure_reason, create_by, create_time, update_by, update_time
@@ -94,6 +109,7 @@
         update rabbits
         set type = #{type},
             cage_id = #{cageId},
+            state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
@@ -104,9 +120,37 @@
         set is_active = false,
             departure_date = #{departureDate},
             departure_reason = #{departureReason},
+            state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateDepartureIfVersion">
+        update rabbits
+        set is_active = false,
+            departure_date = #{departureDate},
+            departure_reason = #{departureReason},
+            state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id} and is_active = true and state_version = #{stateVersion}
+    </update>
+
+    <update id="bumpStateVersion">
+        update rabbits
+        set state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="bumpStateVersionIfActive">
+        update rabbits
+        set state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id} and is_active = true
     </update>
 
     <update id="updateQuarantine">
@@ -114,6 +158,7 @@
         set is_quarantined = #{isQuarantined},
             quarantine_time = #{quarantineTime},
             quarantine_reason = #{quarantineReason},
+            state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
@@ -122,6 +167,7 @@
     <update id="updateWeight">
         update rabbits
         set weight = #{weight},
+            state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
@@ -135,6 +181,7 @@
             arrival_method = #{arrivalMethod},
             arrival_date = #{arrivalDate},
             weight = #{weight},
+            state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}

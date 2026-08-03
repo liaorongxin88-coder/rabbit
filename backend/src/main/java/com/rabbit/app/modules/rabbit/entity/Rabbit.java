@@ -13,6 +13,7 @@ public class Rabbit {
     private String arrivalMethod;
     private Date arrivalDate;
     private Double weight;
+    private Long stateVersion;
     private Boolean isActive;
     private Boolean isQuarantined;
     private Date quarantineTime;
@@ -103,6 +104,14 @@ public class Rabbit {
 
     public void setWeight(Double weight) {
         this.weight = weight;
+    }
+
+    public Long getStateVersion() {
+        return stateVersion;
+    }
+
+    public void setStateVersion(Long stateVersion) {
+        this.stateVersion = stateVersion;
     }
 
     public Boolean getIsActive() {

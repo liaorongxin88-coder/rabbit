@@ -85,6 +85,9 @@ CREATE TABLE IF NOT EXISTS cages (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT NOT NULL,
   cage_number VARCHAR(50) NOT NULL,
+  row_code VARCHAR(40),
+  layer_index INT,
+  position_index INT,
   status VARCHAR(1) NOT NULL DEFAULT '0',
   rabbit_count INT NOT NULL DEFAULT 0,
   is_fed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -96,6 +99,7 @@ CREATE TABLE IF NOT EXISTS cages (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_house_cage_number (house_id, cage_number),
   KEY idx_house_id (house_id),
+  KEY idx_cages_house_row_position (house_id, row_code, position_index, layer_index),
   CONSTRAINT fk_cages_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -172,6 +176,7 @@ CREATE TABLE IF NOT EXISTS rabbits (
   arrival_method VARCHAR(1),
   arrival_date DATETIME,
   weight DOUBLE,
+  state_version BIGINT NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   is_quarantined BOOLEAN NOT NULL DEFAULT FALSE,
   quarantine_time DATETIME,
@@ -542,6 +547,18 @@ CREATE TABLE IF NOT EXISTS sale_order_items (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   sale_order_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
+  cage_id_snapshot BIGINT,
+  cage_number_snapshot VARCHAR(50),
+  row_code_snapshot VARCHAR(40),
+  layer_index_snapshot INT,
+  position_index_snapshot INT,
+  rabbit_type_snapshot VARCHAR(1),
+  stage_snapshot VARCHAR(30),
+  parallel_status_snapshot VARCHAR(120),
+  state_version_snapshot BIGINT,
+  early_sale BOOLEAN NOT NULL DEFAULT FALSE,
+  early_sale_reason VARCHAR(300),
+  batch_id_snapshot BIGINT,
   weight DOUBLE,
   price DECIMAL(10,2),
   create_by VARCHAR(64),
@@ -550,8 +567,77 @@ CREATE TABLE IF NOT EXISTS sale_order_items (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_soi_order (sale_order_id),
   KEY idx_soi_rabbit (rabbit_id),
+  UNIQUE KEY uk_sale_order_rabbit (sale_order_id, rabbit_id),
   CONSTRAINT fk_soi_order FOREIGN KEY (sale_order_id) REFERENCES sale_orders (id),
   CONSTRAINT fk_soi_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS outbound_tasks (
+  task_id VARCHAR(36) PRIMARY KEY,
+  house_id BIGINT NOT NULL,
+  operator_id BIGINT NOT NULL,
+  entry_type VARCHAR(16) NOT NULL,
+  source_rabbit_id BIGINT,
+  source_cage_id BIGINT,
+  source_row_code VARCHAR(40),
+  status VARCHAR(24) NOT NULL,
+  revision BIGINT NOT NULL DEFAULT 0,
+  sale_time DATETIME,
+  total_weight DOUBLE,
+  unit_price DECIMAL(10,2),
+  customer VARCHAR(100),
+  remark TEXT,
+  request_id VARCHAR(64),
+  sale_order_id BIGINT,
+  snapshot_time DATETIME,
+  completed_time DATETIME,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_outbound_task_house_operator (house_id, operator_id, status, update_time),
+  KEY idx_outbound_task_sale_order (sale_order_id),
+  CONSTRAINT fk_outbound_task_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_outbound_task_operator FOREIGN KEY (operator_id) REFERENCES sys_user (user_id),
+  CONSTRAINT fk_outbound_task_sale_order FOREIGN KEY (sale_order_id) REFERENCES sale_orders (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS outbound_task_items (
+  task_id VARCHAR(36) NOT NULL,
+  rabbit_id BIGINT NOT NULL,
+  state_version BIGINT NOT NULL,
+  selection_type VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
+  early_sale_reason VARCHAR(300),
+  cage_id_snapshot BIGINT NOT NULL,
+  cage_number_snapshot VARCHAR(50) NOT NULL,
+  row_code_snapshot VARCHAR(40) NOT NULL,
+  layer_index_snapshot INT,
+  position_index_snapshot INT,
+  stage_snapshot VARCHAR(30),
+  batch_id_snapshot BIGINT,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (task_id, rabbit_id),
+  KEY idx_outbound_item_rabbit (rabbit_id),
+  CONSTRAINT fk_outbound_item_task FOREIGN KEY (task_id) REFERENCES outbound_tasks (task_id),
+  CONSTRAINT fk_outbound_item_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS outbound_requests (
+  request_id VARCHAR(64) PRIMARY KEY,
+  house_id BIGINT NOT NULL,
+  task_id VARCHAR(36) NOT NULL,
+  payload_hash CHAR(64) NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  sale_order_id BIGINT,
+  error_code VARCHAR(64),
+  error_message VARCHAR(500),
+  conflicts_json TEXT,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_outbound_request_task (task_id, update_time),
+  KEY idx_outbound_request_sale_order (sale_order_id),
+  CONSTRAINT fk_outbound_request_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_outbound_request_task FOREIGN KEY (task_id) REFERENCES outbound_tasks (task_id),
+  CONSTRAINT fk_outbound_request_sale_order FOREIGN KEY (sale_order_id) REFERENCES sale_orders (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS breeding_performance (

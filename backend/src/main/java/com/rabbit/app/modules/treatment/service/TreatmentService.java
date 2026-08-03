@@ -58,14 +58,18 @@ public class TreatmentService {
             }
 
             Date now = DateUtil.now();
+            String operator = String.valueOf(userId);
+            if (rabbitMapper.bumpStateVersionIfActive(houseId, r.getRabbitId(), operator) == 0) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
             if (r.getStartDate() == null) {
                 r.setStartDate(now);
             }
             r.setHouseId(houseId);
             r.setStatus(STATUS_OPEN);
             r.setRequestId(requestId);
-            r.setCreateBy(String.valueOf(userId));
-            r.setUpdateBy(String.valueOf(userId));
+            r.setCreateBy(operator);
+            r.setUpdateBy(operator);
             treatmentRecordMapper.insert(r);
 
             RabbitStatusHistory h = new RabbitStatusHistory();
@@ -77,8 +81,8 @@ public class TreatmentService {
             h.setReason("治疗：" + safe(r.getDrug()));
             h.setRelatedRecordId(r.getId());
             h.setRelatedRecordTable("treatment_records");
-            h.setCreateBy(String.valueOf(userId));
-            h.setUpdateBy(String.valueOf(userId));
+            h.setCreateBy(operator);
+            h.setUpdateBy(operator);
             rabbitStatusHistoryMapper.insert(h);
 
             requestDedupService.markDone(houseId, userId, api, requestId);
@@ -104,7 +108,11 @@ public class TreatmentService {
             if (!STATUS_OPEN.equals(tr.getStatus())) {
                 throw new BizException(409, "记录已完成");
             }
-            treatmentRecordMapper.updateStatus(houseId, id, STATUS_DONE, String.valueOf(userId));
+            String operator = String.valueOf(userId);
+            if (rabbitMapper.bumpStateVersion(houseId, tr.getRabbitId(), operator) == 0) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            treatmentRecordMapper.updateStatus(houseId, id, STATUS_DONE, operator);
 
             Date t = completeTime == null ? DateUtil.now() : completeTime;
             RabbitStatusHistory h = new RabbitStatusHistory();
@@ -116,8 +124,8 @@ public class TreatmentService {
             h.setReason("治疗复查完成");
             h.setRelatedRecordId(tr.getId());
             h.setRelatedRecordTable("treatment_records");
-            h.setCreateBy(String.valueOf(userId));
-            h.setUpdateBy(String.valueOf(userId));
+            h.setCreateBy(operator);
+            h.setUpdateBy(operator);
             rabbitStatusHistoryMapper.insert(h);
 
             requestDedupService.markDone(houseId, userId, api, requestId);

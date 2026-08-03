@@ -13,6 +13,8 @@ public interface RabbitMapper {
 
     Rabbit selectById(@Param("houseId") Long houseId, @Param("id") Long id);
 
+    List<Rabbit> selectByIdsForUpdate(@Param("houseId") Long houseId, @Param("ids") List<Long> ids);
+
     Rabbit selectByHouseAndRequestId(@Param("houseId") Long houseId, @Param("requestId") String requestId);
 
     List<Rabbit> selectByHouse(@Param("houseId") Long houseId,
@@ -30,6 +32,18 @@ public interface RabbitMapper {
     int updateTypeAndCage(@Param("houseId") Long houseId, @Param("id") Long id, @Param("type") String type, @Param("cageId") Long cageId, @Param("updateBy") String updateBy);
 
     int updateDeparture(@Param("houseId") Long houseId, @Param("id") Long id, @Param("departureDate") java.util.Date departureDate, @Param("departureReason") String departureReason, @Param("updateBy") String updateBy);
+
+    int updateDepartureIfVersion(@Param("houseId") Long houseId, @Param("id") Long id,
+                                 @Param("stateVersion") Long stateVersion,
+                                 @Param("departureDate") java.util.Date departureDate,
+                                 @Param("departureReason") String departureReason,
+                                 @Param("updateBy") String updateBy);
+
+    int bumpStateVersion(@Param("houseId") Long houseId, @Param("id") Long id,
+                         @Param("updateBy") String updateBy);
+
+    int bumpStateVersionIfActive(@Param("houseId") Long houseId, @Param("id") Long id,
+                                 @Param("updateBy") String updateBy);
 
     int updateQuarantine(@Param("houseId") Long houseId,
                          @Param("id") Long id,

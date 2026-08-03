@@ -11,7 +11,7 @@
 | 后端 API、权限、数据库或迁移 | [backend/README.md](backend/README.md) | [backend/modules/api-and-permissions.md](backend/modules/api-and-permissions.md)、[backend/modules/data-and-migrations.md](backend/modules/data-and-migrations.md) |
 | Flutter Android 客户端 | [flutter_app/README.md](flutter_app/README.md) | [flutter_app/modules/rabbit-management-flow.md](flutter_app/modules/rabbit-management-flow.md)、`../flutter_app/.rule` |
 | SaaS 平台管理后台 | [admin/README.md](admin/README.md) | [admin/modules/platform-admin.md](admin/modules/platform-admin.md)、`../admin/.rules`、`../admin/DESIGN.md` |
-| 测试、E2E 或验收 | [common/testing.md](common/testing.md) | 对应子项目 README |
+| 测试、E2E 或验收 | [common/testing.md](common/testing.md) | [批量出库完整业务场景测试方案](batch-outbound-test-plan.md)、对应子项目 README |
 | Docker 部署或运维 | [common/operations.md](common/operations.md) | [backend/README.md](backend/README.md) |
 | 对照原始业务设计 | [common/business-baseline.md](common/business-baseline.md) | [archive/legacy/README.md](archive/legacy/README.md) |
 

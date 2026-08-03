@@ -162,6 +162,9 @@ class RabbitRepository {
   Future<Cage> createCage({
     required int houseId,
     required String cageNumber,
+    String? rowCode,
+    int? layerIndex,
+    int? positionIndex,
     String? remark,
   }) {
     return _api.post<Cage>(
@@ -169,6 +172,10 @@ class RabbitRepository {
       houseId: houseId,
       body: {
         'cageNumber': cageNumber,
+        if (rowCode != null && rowCode.trim().isNotEmpty)
+          'rowCode': rowCode.trim(),
+        if (layerIndex != null) 'layerIndex': layerIndex,
+        if (positionIndex != null) 'positionIndex': positionIndex,
         'isEnabled': true,
         'remark': remark ?? '',
       },

@@ -26,11 +26,15 @@ public class CageAdminService {
     }
 
     @Transactional
-    public Cage create(Long userId, Long houseId, String cageNumber, String remark, Boolean isEnabled) {
+    public Cage create(Long userId, Long houseId, String cageNumber, String rowCode, Integer layerIndex,
+                       Integer positionIndex, String remark, Boolean isEnabled) {
         houseService.assertHousePermission(userId, houseId, "control");
         Cage c = new Cage();
         c.setHouseId(houseId);
         c.setCageNumber(cageNumber);
+        c.setRowCode(normalizeRowCode(rowCode));
+        c.setLayerIndex(positiveOrNull(layerIndex));
+        c.setPositionIndex(positiveOrNull(positionIndex));
         c.setStatus("0");
         c.setRabbitCount(0);
         c.setIsFed(Boolean.FALSE);
@@ -46,7 +50,8 @@ public class CageAdminService {
         return c;
     }
 
-    public Cage update(Long userId, Long houseId, Long id, String cageNumber, String remark, Boolean isEnabled) {
+    public Cage update(Long userId, Long houseId, Long id, String cageNumber, String rowCode, Integer layerIndex,
+                       Integer positionIndex, String remark, Boolean isEnabled) {
         houseService.assertHousePermission(userId, houseId, "control");
         Cage existing = cageMapper.selectById(houseId, id);
         if (existing == null) {
@@ -60,11 +65,24 @@ public class CageAdminService {
             }
         }
         try {
-            cageMapper.updateBasic(houseId, id, cageNumber, remark, enabled, String.valueOf(userId));
+            String nextRowCode = rowCode == null || rowCode.trim().isEmpty()
+                    ? existing.getRowCode() : normalizeRowCode(rowCode);
+            Integer nextLayerIndex = layerIndex == null ? existing.getLayerIndex() : positiveOrNull(layerIndex);
+            Integer nextPositionIndex = positionIndex == null ? existing.getPositionIndex() : positiveOrNull(positionIndex);
+            cageMapper.updateBasic(houseId, id, cageNumber, nextRowCode, nextLayerIndex,
+                    nextPositionIndex, remark, enabled, String.valueOf(userId));
         } catch (DuplicateKeyException e) {
             throw new BizException(400, "笼位编号已存在");
         }
         return cageMapper.selectById(houseId, id);
+    }
+
+    private String normalizeRowCode(String rowCode) {
+        return rowCode == null || rowCode.trim().isEmpty() ? "LEGACY" : rowCode.trim();
+    }
+
+    private Integer positiveOrNull(Integer value) {
+        return value != null && value > 0 ? value : null;
     }
 
     public void delete(Long userId, Long houseId, Long id) {

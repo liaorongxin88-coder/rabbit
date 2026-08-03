@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 
 class LegalDocumentScreen extends StatelessWidget {
@@ -17,7 +18,7 @@ class LegalDocumentScreen extends StatelessWidget {
     return AppPage(
       title: title,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: AppSpacing.pagePadding,
         children: [
           Text(
             body.trim(),
