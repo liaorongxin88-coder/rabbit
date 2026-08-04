@@ -26,7 +26,7 @@ final nfcWriteControllerProvider = StateNotifierProvider.autoDispose
 class NfcWriteController extends StateNotifier<NfcWriteState> {
   NfcWriteController({
     required this.houseId,
-    required NfcRepository repository,
+    required NfcBindingGateway repository,
     required NfcHardwareService hardware,
     required NfcLocalStore store,
     required NfcPendingSyncController pendingSync,
@@ -41,7 +41,7 @@ class NfcWriteController extends StateNotifier<NfcWriteState> {
   }
 
   final int houseId;
-  final NfcRepository _repository;
+  final NfcBindingGateway _repository;
   final NfcHardwareService _hardware;
   final NfcLocalStore _store;
   final NfcPendingSyncController _pendingSync;
@@ -114,6 +114,16 @@ class NfcWriteController extends StateNotifier<NfcWriteState> {
     } on NfcWriteException catch (error) {
       if (_disposed) return;
       if (error.kind == NfcWriteError.cancelled) return;
+      try {
+        await _updateCurrent(
+          NfcWriteItemStatus.ready,
+          null,
+          error.diagnosticMessage,
+        );
+      } catch (_) {
+        // A storage failure must not hide the NFC error from the operator.
+      }
+      if (_disposed) return;
       HapticFeedback.heavyImpact();
       SystemSound.play(SystemSoundType.alert);
       state = state.copyWith(
