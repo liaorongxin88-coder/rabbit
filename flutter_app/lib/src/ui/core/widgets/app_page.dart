@@ -5,17 +5,20 @@ class AppPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.child,
+    this.leading,
     this.actions,
   });
 
   final String title;
   final Widget child;
+  final Widget? leading;
   final List<Widget>? actions;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: leading,
         title: Text(title),
         actions: actions,
       ),

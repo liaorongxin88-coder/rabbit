@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 REPO_DIR="$(cd "$PROJECT_DIR/.." && pwd -P)"
+source "$SCRIPT_DIR/java_env.sh"
 
 DB_CONTAINER="${RABBIT_ANDROID_E2E_DB_CONTAINER:-rabbit-mysql-1}"
 DB_NAME="${RABBIT_ANDROID_E2E_DB_NAME:-rabbit_app}"
@@ -14,8 +15,6 @@ DEVICE_API_URL="${RABBIT_ANDROID_E2E_DEVICE_API_URL:-http://10.0.2.2:8080}"
 TEXT_SCALE="${RABBIT_ANDROID_E2E_TEXT_SCALE:-1.0}"
 TEST_PROFILE="${RABBIT_ANDROID_E2E_PROFILE:-}"
 EXPECTED_EFFECTIVE_TEXT_SCALE="${RABBIT_ANDROID_E2E_EXPECTED_EFFECTIVE_TEXT_SCALE:-}"
-DEFAULT_JDK_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
-JDK_HOME="${RABBIT_ANDROID_E2E_JAVA_HOME:-}"
 ANDROID_SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-${HOME}/Library/Android/sdk}}"
 ADB_BIN="${RABBIT_ANDROID_E2E_ADB:-$ANDROID_SDK_DIR/platform-tools/adb}"
 EMULATOR_BIN="${RABBIT_ANDROID_E2E_EMULATOR:-$ANDROID_SDK_DIR/emulator/emulator}"
@@ -87,24 +86,10 @@ for command_name in docker flutter curl awk; do
   fi
 done
 
-if [[ -z "$JDK_HOME" && -x "$DEFAULT_JDK_HOME/bin/java" ]]; then
-  JDK_HOME="$DEFAULT_JDK_HOME"
+if [[ -n "${RABBIT_ANDROID_E2E_JAVA_HOME:-}" ]]; then
+  RABBIT_JAVA_HOME="$RABBIT_ANDROID_E2E_JAVA_HOME"
 fi
-if [[ -z "$JDK_HOME" ]]; then
-  JDK_HOME="${JAVA_HOME:-}"
-fi
-if [[ -z "$JDK_HOME" || ! -x "$JDK_HOME/bin/java" ]]; then
-  echo "JDK 21 not found; set RABBIT_ANDROID_E2E_JAVA_HOME" >&2
-  exit 69
-fi
-java_major="$($JDK_HOME/bin/java -version 2>&1 | awk -F '[\".]' '/version/ { print $2; exit }')"
-if [[ "$java_major" != "21" ]]; then
-  echo "Android E2E requires JDK 21, found JDK ${java_major:-unknown} at $JDK_HOME" >&2
-  exit 69
-fi
-export JAVA_HOME="$JDK_HOME"
-export PATH="$JAVA_HOME/bin:$PATH"
-export GRADLE_OPTS="-Dorg.gradle.java.home=$JAVA_HOME ${GRADLE_OPTS:-}"
+rabbit_configure_java
 
 if [[ ! -x "$ADB_BIN" ]]; then
   echo "Android adb not found: $ADB_BIN" >&2

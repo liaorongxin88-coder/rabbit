@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/platform_tags.dart';
 
@@ -202,7 +203,23 @@ abstract interface class Ntag21xIo {
   Future<void> writePage(int pageOffset, Uint8List data);
 }
 
-class Ntag21xSnapshot {
+abstract interface class Type2TagSnapshot {
+  Ntag21xIo get io;
+
+  Uint8List get userMemory;
+
+  Ntag21xType2Data get type2Data;
+
+  Ntag21xWriteBlocker? get writeBlocker;
+
+  int get ndefMemoryBytes;
+
+  String get modelName;
+
+  int requiredBytesForMessage(Uint8List message);
+}
+
+class Ntag21xSnapshot implements Type2TagSnapshot {
   const Ntag21xSnapshot({
     required this.model,
     required this.io,
@@ -212,39 +229,241 @@ class Ntag21xSnapshot {
   });
 
   final Ntag21xModel model;
+  @override
   final Ntag21xIo io;
+  @override
   final Uint8List userMemory;
+  @override
   final Ntag21xType2Data type2Data;
+  @override
   final Ntag21xWriteBlocker? writeBlocker;
 
+  @override
+  int get ndefMemoryBytes => model.ndefMemoryBytes;
+
+  @override
+  String get modelName => model.name;
+
+  @override
   int requiredBytesForMessage(Uint8List message) {
     return type2Data.controlPrefix.length + 2 + message.length + 1;
+  }
+}
+
+class CompatibleType2Snapshot implements Type2TagSnapshot {
+  const CompatibleType2Snapshot({
+    required this.io,
+    required this.userMemory,
+    required this.type2Data,
+    required this.writeBlocker,
+    required this.ndefMemoryBytes,
+  });
+
+  @override
+  final Ntag21xIo io;
+  @override
+  final Uint8List userMemory;
+  @override
+  final Ntag21xType2Data type2Data;
+  @override
+  final Ntag21xWriteBlocker? writeBlocker;
+  @override
+  final int ndefMemoryBytes;
+
+  @override
+  String get modelName => 'type2-compatible';
+
+  @override
+  int requiredBytesForMessage(Uint8List message) {
+    return type2Data.controlPrefix.length + 2 + message.length + 1;
+  }
+}
+
+class Type2TagInspection {
+  const Type2TagInspection({
+    required this.snapshot,
+    required this.transport,
+    this.atqa,
+    this.sak,
+    this.version,
+    this.capabilityContainer,
+    this.probeError,
+  });
+
+  final Type2TagSnapshot? snapshot;
+  final String transport;
+  final Uint8List? atqa;
+  final int? sak;
+  final Uint8List? version;
+  final Uint8List? capabilityContainer;
+  final String? probeError;
+
+  String get diagnostic {
+    final values = <String>[
+      'transport=$transport',
+      if (atqa != null) 'atqa=${_hex(atqa!)}',
+      if (sak != null) 'sak=0x${sak!.toRadixString(16).padLeft(2, '0')}',
+      'version=${version == null ? 'unavailable' : _hex(version!)}',
+      if (capabilityContainer != null) 'cc=${_hex(capabilityContainer!)}',
+      if (probeError != null && probeError!.isNotEmpty)
+        'probeError=$probeError',
+    ];
+    return values.join(', ');
   }
 }
 
 class Ntag21xNdefWriter {
   const Ntag21xNdefWriter();
 
-  Future<Ntag21xSnapshot?> inspect(NfcTag tag) {
+  Future<Type2TagInspection> inspectDetailed(NfcTag tag) {
+    final nfcA = NfcA.from(tag);
     final ultralight = MifareUltralight.from(tag);
     if (ultralight != null) {
-      return inspectIo(_MifareUltralightIo(ultralight));
+      return inspectIoDetailed(
+        _MifareUltralightIo(ultralight),
+        transport: 'mifareultralight',
+        atqa: nfcA?.atqa,
+        sak: nfcA?.sak,
+      );
     }
-    final nfcA = NfcA.from(tag);
-    if (nfcA != null) return inspectIo(_NfcAIo(nfcA));
-    return Future<Ntag21xSnapshot?>.value();
+    if (nfcA != null) {
+      return inspectIoDetailed(
+        _NfcAIo(nfcA),
+        transport: 'nfca',
+        atqa: nfcA.atqa,
+        sak: nfcA.sak,
+      );
+    }
+    return Future<Type2TagInspection>.value(const Type2TagInspection(
+      snapshot: null,
+      transport: 'unavailable',
+      probeError: 'no Type 2 compatible transport',
+    ));
+  }
+
+  Future<Ntag21xSnapshot?> inspect(NfcTag tag) async {
+    final inspection = await inspectDetailed(tag);
+    final snapshot = inspection.snapshot;
+    return snapshot is Ntag21xSnapshot ? snapshot : null;
   }
 
   Future<Ntag21xSnapshot?> inspectIo(Ntag21xIo io) async {
-    Uint8List version;
+    final inspection = await inspectIoDetailed(io);
+    final snapshot = inspection.snapshot;
+    return snapshot is Ntag21xSnapshot ? snapshot : null;
+  }
+
+  Future<Type2TagInspection> inspectIoDetailed(
+    Ntag21xIo io, {
+    String transport = 'test',
+    Uint8List? atqa,
+    int? sak,
+  }) async {
+    Uint8List? version;
+    String? versionError;
     try {
       version = await io.getVersion();
-    } catch (_) {
-      return null;
+    } catch (error) {
+      versionError = _errorSummary(error);
     }
-    final model = identifyNtag21x(version);
-    if (model == null) return null;
+    final model = version == null ? null : identifyNtag21x(version);
+    if (model != null) {
+      return Type2TagInspection(
+        snapshot: await _inspectNtag21x(io, model),
+        transport: transport,
+        atqa: atqa,
+        sak: sak,
+        version: version,
+      );
+    }
 
+    Uint8List? header;
+    String? readError;
+    try {
+      header = await _readFourPages(io, 2);
+    } catch (error) {
+      readError = _errorSummary(error);
+    }
+    final capability =
+        header == null ? null : Uint8List.fromList(header.sublist(4, 8));
+    final baseInspection = Type2TagInspection(
+      snapshot: null,
+      transport: transport,
+      atqa: atqa,
+      sak: sak,
+      version: version,
+      capabilityContainer: capability,
+      probeError: [
+        if (versionError != null) 'getVersion:$versionError',
+        if (readError != null) 'readPages:$readError',
+      ].join('; '),
+    );
+    if (header == null || !_isSupportedType2Capability(capability!)) {
+      return baseInspection;
+    }
+
+    final readAccess = capability[3] >> 4;
+    if (readAccess != 0) {
+      return Type2TagInspection(
+        snapshot: null,
+        transport: transport,
+        atqa: atqa,
+        sak: sak,
+        version: version,
+        capabilityContainer: capability,
+        probeError: '${baseInspection.probeError}; ccReadAccess=$readAccess',
+      );
+    }
+
+    final memoryBytes = capability[2] * 8;
+    Uint8List userMemory;
+    try {
+      userMemory = await _readBytes(
+        io,
+        startPage: 4,
+        byteLength: memoryBytes,
+      );
+    } catch (error) {
+      return Type2TagInspection(
+        snapshot: null,
+        transport: transport,
+        atqa: atqa,
+        sak: sak,
+        version: version,
+        capabilityContainer: capability,
+        probeError:
+            '${baseInspection.probeError}; readUserMemory:${_errorSummary(error)}',
+      );
+    }
+    final writeAccess = capability[3] & 0x0F;
+    final blocker = header[2] != 0 || header[3] != 0
+        ? Ntag21xWriteBlocker.staticLocked
+        : writeAccess == 0x0F
+            ? Ntag21xWriteBlocker.readOnly
+            : writeAccess != 0
+                ? Ntag21xWriteBlocker.passwordProtected
+                : null;
+    return Type2TagInspection(
+      snapshot: CompatibleType2Snapshot(
+        io: io,
+        userMemory: userMemory,
+        type2Data: inspectType2Data(userMemory),
+        writeBlocker: blocker,
+        ndefMemoryBytes: memoryBytes,
+      ),
+      transport: transport,
+      atqa: atqa,
+      sak: sak,
+      version: version,
+      capabilityContainer: capability,
+      probeError: baseInspection.probeError,
+    );
+  }
+
+  Future<Ntag21xSnapshot> _inspectNtag21x(
+    Ntag21xIo io,
+    Ntag21xModel model,
+  ) async {
     final header = await _readFourPages(io, 2);
     final access = await _readFourPages(io, model.dynamicLockPage);
     final userMemory = await _readBytes(
@@ -280,13 +499,13 @@ class Ntag21xNdefWriter {
   }
 
   Future<void> writeExternal({
-    required Ntag21xSnapshot snapshot,
+    required Type2TagSnapshot snapshot,
     required String domain,
     required String type,
     required String payload,
   }) async {
     if (snapshot.writeBlocker != null) {
-      throw StateError('NTAG21x write is blocked: ${snapshot.writeBlocker}');
+      throw StateError('Type 2 write is blocked: ${snapshot.writeBlocker}');
     }
     final message = encodeExternalTypeNdef(
       domain: domain,
@@ -295,7 +514,7 @@ class Ntag21xNdefWriter {
     );
     if (message.length > 0xFE) {
       throw const FormatException(
-        'NTAG21x writer supports short NDEF TLV messages only',
+        'Type 2 writer supports short NDEF TLV messages only',
       );
     }
     final prefix = snapshot.type2Data.controlPrefix;
@@ -306,10 +525,10 @@ class Ntag21xNdefWriter {
       ...message,
       0xFE,
     ]);
-    if (finalData.length > snapshot.model.ndefMemoryBytes) {
+    if (finalData.length > snapshot.ndefMemoryBytes) {
       throw Ntag21xCapacityException(
         requiredBytes: finalData.length,
-        availableBytes: snapshot.model.ndefMemoryBytes,
+        availableBytes: snapshot.ndefMemoryBytes,
       );
     }
 
@@ -354,7 +573,7 @@ class Ntag21xNdefWriter {
     );
     final verifiedData = inspectType2Data(verified);
     if (verifiedData.managedPayload('$domain:$type') != payload) {
-      throw const FormatException('NTAG21x raw NDEF verification failed');
+      throw const FormatException('Type 2 raw NDEF verification failed');
     }
   }
 }
@@ -451,4 +670,31 @@ bool _listEquals(List<int> left, List<int> right) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+bool _isSupportedType2Capability(Uint8List capability) {
+  if (capability.length != 4) return false;
+  final mappingMajorVersion = capability[1] >> 4;
+  final memoryBytes = capability[2] * 8;
+  return capability[0] == 0xE1 &&
+      mappingMajorVersion == 1 &&
+      memoryBytes > 0 &&
+      memoryBytes <= 0xFF * 8;
+}
+
+String _errorSummary(Object error) {
+  if (error is PlatformException) {
+    final message = error.message;
+    return message == null || message.isEmpty
+        ? error.code
+        : '${error.code}:$message';
+  }
+  return error.runtimeType.toString();
+}
+
+String _hex(Iterable<int> values) {
+  return values
+      .map((value) => value.toRadixString(16).padLeft(2, '0'))
+      .join()
+      .toUpperCase();
 }

@@ -123,11 +123,9 @@
 - `prod` flavor 的 `usesCleartextTraffic` 必须保持关闭；本地 `dev` / `staging` 可以开启以支持 `10.0.2.2` 或局域网 HTTP 调试。
 - 共享 Android Studio Run/Debug Configurations 只提交 `.run/*.run.xml`，不要提交 `.idea/workspace.xml`、设备缓存或个人 IDE 状态。
 - 共享配置名称保持为 `Rabbit Dev` / `Rabbit Test` / `Rabbit Prod` / `Rabbit Tests`。
-- `android/gradle.properties` 使用 Android Studio JBR：
-
-```properties
-org.gradle.java.home=/Applications/Android Studio.app/Contents/jbr/Contents/Home
-```
+- Android 构建统一使用 JDK 21；不要在 tracked `android/gradle.properties` 中写死某台机器的 `org.gradle.java.home`。
+- 首次配置运行 `./scripts/setup_android_env.sh`。脚本按 `RABBIT_JAVA_HOME`、本地 `config/env/toolchain.local.env`、`JAVA_HOME` 和常见安装位置动态解析 JDK 21，并同步 Flutter `jdk-dir` 与 Android Studio 的 `GRADLE_LOCAL_JAVA_HOME`。
+- Android Studio 的 Gradle JDK 选择 `GRADLE_LOCAL_JAVA_HOME`；IDE 本身仍可使用随 Android Studio 安装的 JBR。
 
 - Gradle wrapper 使用 `8.4`。
 - Android Gradle Plugin 使用 `8.2.2`。

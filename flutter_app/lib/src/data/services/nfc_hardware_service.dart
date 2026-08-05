@@ -259,9 +259,9 @@ class NfcHardwareService {
     required String tagUid,
     required bool allowOverwrite,
   }) async {
-    Ntag21xSnapshot? snapshot;
+    Type2TagInspection inspection;
     try {
-      snapshot = await _ntag21xWriter.inspect(tag);
+      inspection = await _ntag21xWriter.inspectDetailed(tag);
     } catch (error, stackTrace) {
       throw _operationFailure(
         operation: NfcWriteOperation.format,
@@ -270,18 +270,23 @@ class NfcHardwareService {
         tagUid: tagUid,
       );
     }
+    final snapshot = inspection.snapshot;
     if (snapshot == null) {
       final technologies = tag.data.keys.toList()..sort();
+      final details = [
+        'technologies=${technologies.join(',')}',
+        inspection.diagnostic,
+      ].join(', ');
       developer.log(
-        'Unsupported NFC tag technologies=${technologies.join(',')}',
+        'Unsupported NFC tag $details',
         name: 'rabbit.nfc',
       );
       throw NfcWriteException(
         NfcWriteError.notNdef,
-        '标签不是受支持的NDEF或NTAG21x标签',
+        '标签未提供可安全写入的NDEF Type 2存储区',
         tagUid: tagUid,
         operation: NfcWriteOperation.format,
-        platformDetails: 'technologies=${technologies.join(',')}',
+        platformDetails: details,
       );
     }
 
@@ -312,11 +317,13 @@ class NfcHardwareService {
           blocker != Ntag21xWriteBlocker.invalidCapabilityContainer;
       throw NfcWriteException(
         isLocked ? NfcWriteError.readOnly : NfcWriteError.notNdef,
-        isLocked ? 'NTAG21x标签已锁定或受密码保护，无法写入' : 'NTAG21x标签的NDEF容量信息异常，无法安全写入',
+        isLocked
+            ? 'NDEF Type 2标签已锁定或受密码保护，无法写入'
+            : 'NDEF Type 2标签的容量信息异常，无法安全写入',
         tagUid: tagUid,
         operation: NfcWriteOperation.format,
         platformDetails:
-            'model=${snapshot.model.name}, blocker=${blocker.name}',
+            'model=${snapshot.modelName}, blocker=${blocker.name}, ${inspection.diagnostic}',
       );
     }
 
@@ -326,7 +333,7 @@ class NfcHardwareService {
       payload: payload,
     );
     final requiredBytes = snapshot.requiredBytesForMessage(rawMessage);
-    if (requiredBytes > snapshot.model.ndefMemoryBytes) {
+    if (requiredBytes > snapshot.ndefMemoryBytes) {
       throw NfcWriteException(
         NfcWriteError.tooSmall,
         '标签容量不足，需要至少 $requiredBytes 字节',
@@ -347,6 +354,7 @@ class NfcHardwareService {
         stackTrace: stackTrace,
         tagUid: tagUid,
         mayHaveWritten: true,
+        contextDetails: inspection.diagnostic,
       );
     }
   }
@@ -357,14 +365,19 @@ class NfcHardwareService {
     required StackTrace stackTrace,
     String? tagUid,
     bool mayHaveWritten = false,
+    String? contextDetails,
   }) {
     final platformError = error is PlatformException ? error : null;
+    final recordedDetails = [
+      if (platformError?.details != null) platformError!.details.toString(),
+      if (contextDetails != null && contextDetails.isNotEmpty) contextDetails,
+    ].join(', ');
     developer.log(
       'NFC ${operation.name} failed'
       ' tagUid=${tagUid ?? '-'}'
       ' code=${platformError?.code ?? '-'}'
       ' message=${platformError?.message ?? '-'}'
-      ' details=${platformError?.details ?? '-'}',
+      ' details=${recordedDetails.isEmpty ? '-' : recordedDetails}',
       name: 'rabbit.nfc',
       error: error,
       stackTrace: stackTrace,
@@ -387,7 +400,7 @@ class NfcHardwareService {
       operation: operation,
       platformCode: code,
       platformMessage: platformError?.message,
-      platformDetails: platformError?.details?.toString(),
+      platformDetails: recordedDetails.isEmpty ? null : recordedDetails,
       mayHaveWritten: mayHaveWritten,
     );
   }

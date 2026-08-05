@@ -10,13 +10,27 @@ import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 
-class HouseCagesScreen extends ConsumerWidget {
+class HouseCagesScreen extends ConsumerStatefulWidget {
   const HouseCagesScreen({super.key, required this.houseId});
 
   final int houseId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HouseCagesScreen> createState() => _HouseCagesScreenState();
+}
+
+class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final houseId = widget.houseId;
     final houses = ref.watch(housesProvider);
     final canEdit =
         ref.watch(housePermissionProvider(houseId)).valueOrNull?.canEdit ==
@@ -60,11 +74,16 @@ class HouseCagesScreen extends ConsumerWidget {
             );
           }
           return ListView(
+            key: const ValueKey('house-cage-list-scroll'),
+            controller: _scrollController,
             padding: AppSpacing.pagePadding,
             children: [
               _PageHeader(house: house),
               const SizedBox(height: 12),
-              CageManagementSection(house: house),
+              CageManagementSection(
+                house: house,
+                scrollController: _scrollController,
+              ),
             ],
           );
         },
@@ -79,7 +98,7 @@ class HouseCagesScreen extends ConsumerWidget {
 
   RabbitHouse? _findHouse(List<RabbitHouse> houses) {
     for (final house in houses) {
-      if (house.id == houseId) {
+      if (house.id == widget.houseId) {
         return house;
       }
     }

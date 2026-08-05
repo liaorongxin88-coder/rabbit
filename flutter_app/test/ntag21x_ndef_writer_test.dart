@@ -112,6 +112,52 @@ void main() {
     expect(io.writtenPages.last, 5);
   });
 
+  test('uses a valid Type 2 capability container when GET_VERSION fails',
+      () async {
+    final io = _FakeNtag21xIo.type2Compatible();
+    const writer = Ntag21xNdefWriter();
+
+    final inspection = await writer.inspectIoDetailed(
+      io,
+      transport: 'nfca',
+      atqa: Uint8List.fromList([0x44, 0x00]),
+      sak: 0,
+    );
+
+    expect(inspection.snapshot, isA<CompatibleType2Snapshot>());
+    expect(inspection.diagnostic, contains('transport=nfca'));
+    expect(inspection.diagnostic, contains('atqa=4400'));
+    expect(inspection.diagnostic, contains('sak=0x00'));
+    expect(inspection.diagnostic, contains('version=unavailable'));
+    expect(inspection.diagnostic, contains('cc=E1101200'));
+    expect(inspection.diagnostic, contains('getVersion:StateError'));
+
+    await writer.writeExternal(
+      snapshot: inspection.snapshot!,
+      domain: NfcHardwareService.externalDomain,
+      type: NfcHardwareService.externalType,
+      payload: 'r1.2.u1.1.DrCBtJgInkFtKMEF',
+    );
+
+    final updated = await writer.inspectIoDetailed(io);
+    expect(
+      updated.snapshot!.type2Data.managedPayload(
+        NfcHardwareService.fullExternalType,
+      ),
+      'r1.2.u1.1.DrCBtJgInkFtKMEF',
+    );
+  });
+
+  test('does not treat an arbitrary NfcA memory layout as Type 2', () async {
+    final io = _FakeNtag21xIo.type2Compatible()
+      ..memory.setRange(12, 16, [0x00, 0x00, 0x00, 0x00]);
+
+    final inspection = await const Ntag21xNdefWriter().inspectIoDetailed(io);
+
+    expect(inspection.snapshot, isNull);
+    expect(inspection.diagnostic, contains('cc=00000000'));
+  });
+
   test('detects static locks before raw page writes', () async {
     final io = _FakeNtag21xIo.ntag213()..memory[10] = 0x01;
 
@@ -145,7 +191,19 @@ void main() {
 class _FakeNtag21xIo implements Ntag21xIo {
   _FakeNtag21xIo.ntag213()
       : version = Uint8List.fromList([0, 4, 4, 2, 1, 0, 0x0F, 3]),
+        versionError = null,
         memory = Uint8List(45 * 4) {
+    _initializeMemory();
+  }
+
+  _FakeNtag21xIo.type2Compatible()
+      : version = Uint8List(0),
+        versionError = StateError('GET_VERSION is not supported'),
+        memory = Uint8List(45 * 4) {
+    _initializeMemory();
+  }
+
+  void _initializeMemory() {
     memory.setRange(12, 16, [0xE1, 0x10, 0x12, 0x00]);
     memory.setRange(
       16,
@@ -157,13 +215,18 @@ class _FakeNtag21xIo implements Ntag21xIo {
   }
 
   final Uint8List version;
+  final Object? versionError;
   final Uint8List memory;
   final List<int> writtenPages = [];
   int? failOnWrite;
   var _writeCount = 0;
 
   @override
-  Future<Uint8List> getVersion() async => Uint8List.fromList(version);
+  Future<Uint8List> getVersion() async {
+    final error = versionError;
+    if (error != null) throw error;
+    return Uint8List.fromList(version);
+  }
 
   @override
   Future<Uint8List> readPages(int pageOffset) async {

@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/flutter_env.sh"
+source "$SCRIPT_DIR/java_env.sh"
 
 usage() {
   cat <<'USAGE'
@@ -31,6 +32,7 @@ if [[ "$env_name" == "-h" || "$env_name" == "--help" ]]; then
 fi
 
 rabbit_resolve_env "$env_name"
+rabbit_configure_java
 
 run_mode="--debug"
 extra_args=()

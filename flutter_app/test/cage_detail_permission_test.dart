@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
@@ -42,6 +43,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.leading, isNotNull);
+    expect(
+      find.byKey(const ValueKey('cage-detail-back-button')),
+      findsOneWidget,
+    );
     expect(find.text('当前权限不可管理标签'), findsOneWidget);
     expect(nfcQueueRequested, isFalse);
     await tester.scrollUntilVisible(
@@ -101,6 +108,51 @@ void main() {
       find.byKey(const ValueKey('cage-rabbit-entry')),
     );
     expect(entryButton.onPressed, isNotNull);
+  });
+
+  testWidgets('cage detail back button returns to the cage list',
+      (tester) async {
+    const key = (houseId: 8, cageId: 10);
+    final router = GoRouter(
+      initialLocation: '/houses/8/cages/10',
+      routes: [
+        GoRoute(
+          path: '/houses/:houseId/cages',
+          builder: (_, __) => const Scaffold(body: Text('笼位列表页')),
+        ),
+        GoRoute(
+          path: '/houses/:houseId/cages/:cageId',
+          builder: (_, __) => const CageDetailScreen(houseId: 8, cageId: 10),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          cageSummaryProvider(key).overrideWith((_) async => _summary),
+          cageRabbitsProvider(key).overrideWith((_) async => const <Rabbit>[]),
+          houseCagesProvider(8).overrideWith((_) async => const [_cage]),
+          housesProvider.overrideWith((_) async => const [_house]),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'view', isAdmin: false),
+          ),
+        ],
+        child: MaterialApp.router(
+          theme: buildAppTheme(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('cage-detail-back-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('笼位列表页'), findsOneWidget);
   });
 }
 

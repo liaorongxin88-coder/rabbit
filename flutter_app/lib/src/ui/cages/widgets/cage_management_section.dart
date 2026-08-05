@@ -18,9 +18,11 @@ class CageManagementSection extends ConsumerStatefulWidget {
   const CageManagementSection({
     super.key,
     required this.house,
+    required this.scrollController,
   });
 
   final RabbitHouse house;
+  final ScrollController scrollController;
 
   @override
   ConsumerState<CageManagementSection> createState() =>
@@ -28,13 +30,35 @@ class CageManagementSection extends ConsumerStatefulWidget {
 }
 
 class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
+  static const _infiniteScrollThreshold = 30;
+  static const _batchSize = 20;
+
   final _searchController = TextEditingController();
   var _keyword = '';
+  var _visibleCageCount = _batchSize;
+  var _availableCageCount = 0;
+  var _loadingMore = false;
+  var _paginationGeneration = 0;
+  int? _lastSourceCageCount;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_handleSearchChanged);
+    widget.scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant CageManagementSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController.removeListener(_handleScroll);
+      widget.scrollController.addListener(_handleScroll);
+    }
+    if (oldWidget.house.id != widget.house.id) {
+      _lastSourceCageCount = null;
+      _resetPagination();
+    }
   }
 
   @override
@@ -42,6 +66,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     _searchController
       ..removeListener(_handleSearchChanged)
       ..dispose();
+    widget.scrollController.removeListener(_handleScroll);
     super.dispose();
   }
 
@@ -50,7 +75,42 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     if (next == _keyword) {
       return;
     }
-    setState(() => _keyword = next);
+    setState(() {
+      _keyword = next;
+      _resetPagination();
+    });
+  }
+
+  void _resetPagination() {
+    _visibleCageCount = _batchSize;
+    _availableCageCount = 0;
+    _loadingMore = false;
+    _paginationGeneration += 1;
+  }
+
+  void _handleScroll() {
+    final controller = widget.scrollController;
+    if (!controller.hasClients ||
+        controller.position.extentAfter > 240 ||
+        _loadingMore ||
+        _visibleCageCount >= _availableCageCount) {
+      return;
+    }
+
+    final generation = _paginationGeneration;
+    setState(() => _loadingMore = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _paginationGeneration) {
+        return;
+      }
+      setState(() {
+        _visibleCageCount = (_visibleCageCount + _batchSize).clamp(
+          0,
+          _availableCageCount,
+        );
+        _loadingMore = false;
+      });
+    });
   }
 
   @override
@@ -141,6 +201,11 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     List<Cage> cages,
     AsyncValue<HousePermission> permission,
   ) {
+    if (_lastSourceCageCount != cages.length) {
+      _lastSourceCageCount = cages.length;
+      _resetPagination();
+    }
+
     final keyword = _keyword.toLowerCase();
     final filtered = keyword.isEmpty
         ? cages
@@ -149,6 +214,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             .toList();
 
     if (cages.isEmpty) {
+      _availableCageCount = 0;
       final canControl = permission.valueOrNull?.canControl == true;
       return _CageEmptyState(
         title: '暂无笼位',
@@ -160,6 +226,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     }
 
     if (filtered.isEmpty) {
+      _availableCageCount = 0;
       return const _CageEmptyState(
         title: '没有匹配笼位',
         message: '换一个位置编号试试，或清空搜索查看全部笼位。',
@@ -167,6 +234,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     }
 
     final occupied = cages.where((cage) => cage.rabbitCount > 0).length;
+    final usesInfiniteScroll = filtered.length > _infiniteScrollThreshold;
+    final visibleCageCount = usesInfiniteScroll
+        ? _visibleCageCount.clamp(0, filtered.length)
+        : filtered.length;
+    final hasMore = visibleCageCount < filtered.length;
+    _availableCageCount = hasMore ? filtered.length : 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,7 +263,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                     ? 4
                     : 3;
             return GridView.builder(
-              itemCount: filtered.length,
+              key: const ValueKey('house-cage-grid'),
+              itemCount: visibleCageCount,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -198,10 +272,10 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
                 childAspectRatio: columns >= 4
-                    ? 1.45
+                    ? 1.3
                     : columns == 2
-                        ? 1.35
-                        : 1.18,
+                        ? 1.15
+                        : 0.9,
               ),
               itemBuilder: (context, index) {
                 final cage = filtered[index];
@@ -221,6 +295,18 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             );
           },
         ),
+        if (hasMore)
+          SizedBox(
+            height: 42,
+            child: Center(
+              child: _loadingMore
+                  ? const SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+          ),
       ],
     );
   }
