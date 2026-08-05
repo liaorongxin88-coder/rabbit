@@ -79,6 +79,48 @@ void main() {
     expect(message.byteLength, lessThanOrEqualTo(144));
   });
 
+  test('recognizes only an exact Rabbit payload for write recovery', () {
+    const payload = 'r1.2.u1.1.DrCBtJgInkFtKMEF';
+    final managedRecord = NdefRecord.createExternal(
+      NfcHardwareService.externalDomain,
+      NfcHardwareService.externalType,
+      Uint8List.fromList(ascii.encode(payload)),
+    );
+
+    expect(
+      hasExactManagedNfcPayload(NdefMessage([managedRecord]), payload),
+      isTrue,
+    );
+    expect(
+      hasExactManagedNfcPayload(
+        NdefMessage([
+          managedRecord,
+          NdefRecord.createText('extra'),
+        ]),
+        payload,
+      ),
+      isFalse,
+    );
+    expect(
+      hasExactManagedNfcPayload(NdefMessage([managedRecord]), 'other'),
+      isFalse,
+    );
+  });
+
+  test('NFC write diagnostics retain the failed stage and platform code', () {
+    const error = NfcWriteException(
+      NfcWriteError.writeFailed,
+      '标签可能已写入，但回读校验失败',
+      operation: NfcWriteOperation.verify,
+      platformCode: 'io_exception',
+      mayHaveWritten: true,
+    );
+
+    expect(error.diagnosticMessage, contains('stage=verify'));
+    expect(error.diagnosticMessage, contains('code=io_exception'));
+    expect(error.diagnosticMessage, contains('writeOutcome=ambiguous'));
+  });
+
   test('same physical tag cannot advance to the next cage', () {
     expect(isRepeatedNfcTag('04AABBCC', '04aabbcc'), isTrue);
     expect(isRepeatedNfcTag('04AABBCC', '04DDEEFF'), isFalse);

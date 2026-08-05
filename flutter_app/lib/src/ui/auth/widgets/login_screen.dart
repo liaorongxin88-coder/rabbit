@@ -406,7 +406,7 @@ class _LegalConsentRow extends StatelessWidget {
 
     return Row(
       key: const ValueKey('legal-consent-row'),
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox.square(
           dimension: 48,
@@ -418,10 +418,11 @@ class _LegalConsentRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
+          child: FittedBox(
+            alignment: Alignment.centerLeft,
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text('请阅读并同意', style: baseStyle),
                 GestureDetector(

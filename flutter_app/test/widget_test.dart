@@ -84,6 +84,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('legal consent icon and text stay on one line', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('legal-consent-row')),
+    );
+
+    final consentRect = tester.getRect(
+      find.byKey(const ValueKey('legal-consent-row')),
+    );
+    final checkboxRect = tester.getRect(
+      find.byKey(const ValueKey('legal-consent-checkbox')),
+    );
+    final textFinders = [
+      find.text('请阅读并同意'),
+      find.text('《隐私政策》'),
+      find.text('与'),
+      find.text('《用户协议》'),
+    ];
+    for (final finder in textFinders) {
+      final textRect = tester.getRect(finder);
+      expect(
+        textRect.center.dy,
+        closeTo(checkboxRect.center.dy, 0.1),
+        reason: tester.widget<Text>(finder).data,
+      );
+      expect(textRect.right, lessThanOrEqualTo(consentRect.right));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('login flow remains usable with 200 percent text',
       (tester) async {
     SharedPreferences.setMockInitialValues({});

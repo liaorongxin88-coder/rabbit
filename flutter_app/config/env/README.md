@@ -1,5 +1,12 @@
 # 环境配置
 
+此目录包含两类配置：
+
+- `dev.env`、`test.env`、`release.env`：注入 APK 的 App 编译期配置。
+- `toolchain.local.env`：可选的本机构建工具链覆盖，不注入 APK且不提交。
+
+本地 JDK 通常可自动发现。只有自动发现失败时，才从 `toolchain.local.env.example` 复制并填写 JDK 21 路径，然后运行 `./scripts/setup_android_env.sh`。环境变量 `RABBIT_JAVA_HOME` 的优先级高于本地文件。
+
 Flutter 客户端通过编译期变量读取后端地址：
 
 ```dart

@@ -41,13 +41,61 @@ class HousesScreen extends ConsumerWidget {
   }
 }
 
-class _HousesContent extends ConsumerWidget {
+class _HousesContent extends ConsumerStatefulWidget {
   const _HousesContent({required this.houses});
 
   final List<RabbitHouse> houses;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HousesContent> createState() => _HousesContentState();
+}
+
+class _HousesContentState extends ConsumerState<_HousesContent> {
+  static const _infiniteScrollThreshold = 30;
+  static const _batchSize = 20;
+
+  late int _visibleHouseCount = _initialVisibleCount(widget.houses.length);
+  var _loadingMore = false;
+
+  @override
+  void didUpdateWidget(covariant _HousesContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.houses.length != widget.houses.length) {
+      _visibleHouseCount = _initialVisibleCount(widget.houses.length);
+      _loadingMore = false;
+    }
+  }
+
+  int _initialVisibleCount(int total) {
+    return total > _infiniteScrollThreshold ? _batchSize : total;
+  }
+
+  bool _handleScroll(ScrollNotification notification) {
+    if (notification.metrics.extentAfter > 240 ||
+        _loadingMore ||
+        _visibleHouseCount >= widget.houses.length) {
+      return false;
+    }
+
+    setState(() => _loadingMore = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visibleHouseCount = (_visibleHouseCount + _batchSize).clamp(
+          0,
+          widget.houses.length,
+        );
+        _loadingMore = false;
+      });
+    });
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final houses = widget.houses;
     if (houses.isEmpty) {
       return EmptyState(
         icon: Icons.storefront_outlined,
@@ -58,45 +106,70 @@ class _HousesContent extends ConsumerWidget {
       );
     }
 
-    return ListView(
-      padding: AppSpacing.pagePadding,
-      children: [
-        SectionCard(
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('兔舍列表', style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      '共 ${houses.length} 个兔舍，点击兔舍进入管理。',
-                      style: Theme.of(context).textTheme.bodyMedium,
+    final hasMore = _visibleHouseCount < houses.length;
+    return NotificationListener<ScrollNotification>(
+      onNotification: _handleScroll,
+      child: ListView.builder(
+        key: const ValueKey('house-list'),
+        padding: AppSpacing.pagePadding,
+        itemCount: 1 + _visibleHouseCount + (hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return SectionCard(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '兔舍列表',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '共 ${houses.length} 个兔舍，点击兔舍进入管理。',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _showCreateHouseSheet(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('创建'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          if (index > _visibleHouseCount) {
+            return const Padding(
+              key: ValueKey('house-list-loading-more'),
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _showCreateHouseSheet(context),
-                icon: const Icon(Icons.add),
-                label: const Text('创建'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final house in houses) ...[
-          _HouseListCard(
-            house: house,
-            onTap: () {
-              ref.read(authControllerProvider.notifier).setHouseId(house.id);
-              context.go('/houses/${house.id}');
-            },
-          ),
-          const SizedBox(height: 10),
-        ],
-      ],
+            );
+          }
+
+          final house = houses[index - 1];
+          return Padding(
+            padding: EdgeInsets.only(top: index == 1 ? 12 : 10),
+            child: _HouseListCard(
+              house: house,
+              onTap: () {
+                ref.read(authControllerProvider.notifier).setHouseId(house.id);
+                context.go('/houses/${house.id}');
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 

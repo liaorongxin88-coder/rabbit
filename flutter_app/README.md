@@ -31,9 +31,22 @@ NFC、后台通知、离线待提交和全量批次操作页尚未迁移，除�
 
 ```bash
 cd flutter_app
+./scripts/setup_android_env.sh
 flutter pub get
 ./scripts/run_flutter.sh dev
 ```
+
+首次运行或升级 Android Studio/JDK 后执行 `setup_android_env.sh`。它会动态查找 JDK 21，配置 Flutter，并生成只在本机生效的 Android Studio `GRADLE_LOCAL_JAVA_HOME` 配置。然后在 Android Studio 的 `Settings > Build, Execution, Deployment > Build Tools > Gradle` 中将 Gradle JDK 选为 `GRADLE_LOCAL_JAVA_HOME`。
+
+解析顺序为 `RABBIT_JAVA_HOME`、`config/env/toolchain.local.env`、兼容的 `JAVA_HOME`、常见 JDK 21 安装位置。自动发现失败时：
+
+```bash
+cp config/env/toolchain.local.env.example config/env/toolchain.local.env
+# 编辑 RABBIT_JAVA_HOME 后重新运行
+./scripts/setup_android_env.sh
+```
+
+`toolchain.local.env` 只配置本地构建工具链且不会提交；App 后端地址仍由下面的 `dev/test/release` 编译期配置管理。
 
 Android Studio 打开 `flutter_app/` 后，Run/Debug Configurations 里使用：
 
