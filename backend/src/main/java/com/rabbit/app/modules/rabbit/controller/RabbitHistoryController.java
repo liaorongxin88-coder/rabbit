@@ -1,5 +1,7 @@
 package com.rabbit.app.modules.rabbit.controller;
 
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.house.service.HouseService;
@@ -27,6 +29,7 @@ public class RabbitHistoryController {
     }
 
     @GetMapping("/rabbit-status-history")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<RabbitStatusHistory>> list(@RequestHeader("X-House-Id") Long houseId, @RequestParam("rabbitId") Long rabbitId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -41,4 +44,3 @@ public class RabbitHistoryController {
         return userId;
     }
 }
-

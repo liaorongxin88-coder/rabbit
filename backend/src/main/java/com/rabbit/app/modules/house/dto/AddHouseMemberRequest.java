@@ -6,6 +6,8 @@ public class AddHouseMemberRequest {
     @NotBlank(message = "userName不能为空")
     private String userName;
 
+    private String role;
+
     private String perms;
 
     private Boolean isAdmin;
@@ -19,6 +21,14 @@ public class AddHouseMemberRequest {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public String getPerms() {

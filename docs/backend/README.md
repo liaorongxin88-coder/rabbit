@@ -14,8 +14,11 @@
 
 - [modules/domain-modules.md](modules/domain-modules.md)：业务模块职责和源码落点。
 - [modules/api-and-permissions.md](modules/api-and-permissions.md)：普通业务 API、平台 API、鉴权和兔舍权限。
+- [modules/merchant-house-access.md](modules/merchant-house-access.md)：全局账号、商户成员、兔场角色和平台策略。
+- [modules/farming-workspaces.md](modules/farming-workspaces.md)：多养殖业务工作空间、复用边界和模块化演进路线。
 - [modules/data-and-migrations.md](modules/data-and-migrations.md)：数据库迁移、schema 参考、种子数据和数据隔离。
 - [modules/auth-phone-wechat.md](modules/auth-phone-wechat.md)：手机号一键登录、微信快捷登录和强制手机号绑定设计。
+- [sms-auth.md](sms-auth.md)：当前阿里云短信验证码登录实现、部署配置和接口契约。
 
 ## 常用命令
 

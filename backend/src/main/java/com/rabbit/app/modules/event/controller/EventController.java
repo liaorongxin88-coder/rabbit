@@ -6,7 +6,8 @@ import com.rabbit.app.modules.event.dto.AckEventRequest;
 import com.rabbit.app.modules.event.service.EventService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,7 +29,7 @@ public class EventController {
     }
 
     @PostMapping("/events/ack")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_EVENTS_ACK)
     public ApiResponse<Void> ack(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody AckEventRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");

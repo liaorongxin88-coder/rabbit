@@ -1,0 +1,170 @@
+# flutter_app/.rule
+
+> Canonical rule file for `flutter_app/`. `AGENTS.md` and `CLAUDE.md` are compatibility symlinks; edit this file instead.
+
+## 当前定位
+
+`flutter_app` 是 Rabbit 管理系统的并行 Flutter Android 客户端。它用于承接首版 Flutter 重构，不替换也不删除现有 `../android` 原生 Java App，直到用户明确要求切换。
+
+首版范围保持聚焦：
+
+- 登录 / 注册
+- 会话恢复
+- 兔舍列表、创建和选择
+- 首页四栏导航
+- 今日预警
+- 生产流程 Tab
+- 空态、加载态、错误态
+- 未迁移模块的清晰占位入口
+
+除非任务明确要求，不迁移 NFC、后台通知、离线待提交、全量批次操作页，也不修改后端 schema。
+
+## 工程边界
+
+- 不要为了 Flutter UI 工作修改 `../android`，除非任务明确要求原生 Android 联动。
+- 不要为了 Flutter UI 工作修改 `../backend` 的 API 契约，除非任务明确要求后端支持。
+- 新增 Flutter 功能时优先沿用本目录已有分层和命名，不引入另一套架构。
+- 保持 Android-only 首版，不新增 iOS/Web/macOS/Linux/Windows 平台文件，除非用户明确要求。
+
+## 技术栈与目录职责
+
+- 路由使用 `MaterialApp.router` + `go_router`，路由定义集中在 `lib/src/routing/router.dart`。
+- 状态管理使用 `flutter_riverpod`。异步状态放在 provider/controller/view model，不放在深层 widget 的临时状态里。
+- API 访问统一通过 `lib/src/data/services/api_client.dart` 的 `dio` 封装，不在页面局部创建新的 `Dio`。
+- 会话持久化逻辑放在 `lib/src/data/services/session_store.dart`。
+- token 使用 `flutter_secure_storage` 保存。
+- `userName`、`userId`、`currentHouseId`、`baseUrl` 等非敏感信息使用 `shared_preferences`。
+- 视觉 token 和主题集中在 `lib/src/ui/core/themes/app_theme.dart`，不要在业务 widget 里散落一次性 hex color。
+
+## Flutter 官方架构组织方式
+
+`flutter_app` 按 Flutter 官方 App Architecture 推荐的轻量分层组织：`UI layer`、`Data layer`、共享 `domain models`、路由和配置分离。新增代码必须沿用这套结构，不再新增旧式 `features/`、`models/`、`core/`、`shared/`、`theme/` 顶层目录。
+
+目录职责：
+
+- `lib/src/config/`：应用级配置和运行时常量。
+- `lib/src/data/repositories/`：面向功能的 Repository，负责组织后端数据、请求参数和 DTO 转换。
+- `lib/src/data/services/`：底层服务，例如 HTTP client、本地会话、设备能力封装；页面不得直接绕过 repository 调用 service。
+- `lib/src/domain/models/`：跨 UI 和 Data 层复用的数据模型。保持纯数据和轻量解析逻辑，不放 UI 或网络请求。
+- `lib/src/routing/`：路由表、导航守卫、ShellRoute 等导航结构。
+- `lib/src/ui/<feature>/widgets/`：某个业务功能的页面和组件，例如 `ui/houses/widgets/houses_screen.dart`。
+- `lib/src/ui/<feature>/view_models/`：该功能需要显式 UI 状态协调时放 ViewModel / Controller，例如 `ui/auth/view_models/auth_controller.dart`。
+- `lib/src/ui/core/widgets/`：跨功能复用的页面壳、空态、错误态、加载态等 UI 组件。
+- `lib/src/ui/core/themes/`：主题、颜色和视觉 token。
+
+新增功能时的默认落点：
+
+- 后端接口封装放到 `data/repositories/<feature>_repository.dart`。
+- 后端返回结构或请求展示所需模型放到 `domain/models/`。
+- 页面放到 `ui/<feature>/widgets/`。
+- 复杂 UI 状态放到 `ui/<feature>/view_models/`；简单页面可以只用 provider 和局部表单状态。
+- 路由只在 `routing/router.dart` 增加。
+- 只有当业务规则明显复杂到 repository/view model 难以承载时，才引入额外 domain service/use case；不要提前空转抽象。
+
+## API 规则
+
+- Android 模拟器默认后端地址为 `http://10.0.2.2:8080`。
+- 后端地址通过 Flutter 编译期变量 `RABBIT_API_BASE_URL` 注入，配置文件放在 `config/env/`。
+- AppConfig 读取优先级为 `--dart-define` / `--dart-define-from-file`、已打包的 `config/env/dev.env` 或 `config/env/test.env` asset、最后才是代码兜底默认值。
+- 不要使用 Android Studio Run Configuration 的 `Environment variables` 配置 `RABBIT_API_BASE_URL`；Flutter Android 运行时不会把它当成 `String.fromEnvironment`。
+- 脚本层环境固定为 `dev` / `test` / `prod`；Android flavor 固定为 `dev` / `staging` / `prod`，其中 `test` 环境映射到 `staging` flavor，正式 `prod` flavor 的包名保持 `com.rabbit.app.flutter`。
+- `dev` 使用 `config/env/dev.env`；`test` 使用 `config/env/test.env`；`prod` 使用本地创建的 `config/env/prod.env`，不要提交真实正式环境配置。
+- 旧的 `release` 环境名仅作为脚本兼容别名，映射到 `prod` flavor 和本地 `config/env/release.env`。
+- 打包时优先使用 `./rabbit apk <dev|test|prod> --release`，或直接传 `--flavor dev|staging|prod --dart-define-from-file=config/env/<env>.env`。
+- `dev` / `test` / `prod` 表示脚本层后端环境，`dev` / `staging` / `prod` 表示 Android flavor，`--debug` / `--profile` / `--release` 表示 Flutter 构建模式，三者不要混用。
+- 登录后请求统一带 `Authorization: Bearer <token>`。
+- 兔舍域请求统一带 `X-House-Id: <houseId>`。
+- 后端包装响应中 `ApiResponse.code != 0` 必须视为业务失败，并显示明确错误文案。
+- 超时、断网、401、无兔舍、无预警、API code 非 0 都要有明确 UI 状态。
+
+首版已接入或计划接入的接口：
+
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `GET /api/houses`
+- `POST /api/houses`
+- `GET /api/events?onlyUnnotified=true`
+
+需要幂等的写请求使用 `uuid` 生成 `requestId`。生产 UI 不写死 mock 响应；无数据时使用空态或错误态。
+
+## UI 规则
+
+- 首页信息结构对齐截图：居中标题、兔舍上下文、`今日预警!`、生产流程 Tab、系统使用步骤空态、四栏底部导航。
+- 视觉方向是专业养殖管理工具，不做营销页、落地页或装饰型 hero。
+- 顶部保留居中标题；右侧操作区使用 Flutter 原生操作，包括兔舍切换、刷新、设置等。
+- 今日预警区域展示主标题、预警数量、逾期 / 到期 / 未到期状态 chips。
+- 底部导航固定四栏：`首页`、`兔舍`、`数据面板`、`我的`。
+- 未完成页面使用可点击占位页，说明模块状态并保留后续入口，避免用户以为功能消失。
+
+视觉 token：
+
+- 背景：`#F7F8FA`
+- 主蓝：`#1577D2`
+- 预警红：`#EF4444`
+- 田野绿：`#2F8F6B`
+- 墨色：`#17202A`
+- 边线：`#E5E8EC`
+
+交互和布局约束：
+
+- 主要圆角使用 8px，除非已有组件需要其它半径。
+- 控件图标优先使用 Material icons。
+- 不添加装饰渐变、过大的 hero section、纯装饰插画或模板化背景。
+- 长兔舍名、用户名、事件名称必须设置 `maxLines` 和 `TextOverflow.ellipsis`。
+- 文案不能在 360x800 和 412x915 常见 Android 尺寸下重叠或撑破容器。
+- 固定格式控件，如 Tab、底部导航、统计 chips、工具按钮，需要稳定尺寸，避免加载或 hover/focus 状态导致布局跳动。
+
+## Android 构建规则
+
+- 正式 `prod` flavor 的 Android package id 保持为 `com.rabbit.app.flutter`，避免覆盖现有原生 App。
+- `dev` / `staging` flavor 分别使用 `com.rabbit.app.flutter.dev` / `com.rabbit.app.flutter.test`，方便和正式包在同一设备并存。
+- 正式 Android app label 保持为 `智能兔管家`；`dev` / `staging` label 使用 `智能兔管家 Dev` / `智能兔管家 Test`。
+- `pubspec.yaml` 的 `flutter.default-flavor` 保持为 `dev`，方便 Android Studio 和 Flutter 工具默认进入本地开发 flavor。
+- `prod` flavor 的 `usesCleartextTraffic` 必须保持关闭；本地 `dev` / `staging` 可以开启以支持 `10.0.2.2` 或局域网 HTTP 调试。
+- 共享 Android Studio Run/Debug Configurations 只提交 `.run/*.run.xml`，不要提交 `.idea/workspace.xml`、设备缓存或个人 IDE 状态。
+- 共享配置名称保持为 `Rabbit Dev` / `Rabbit Test` / `Rabbit Release` / `Rabbit Tests`。
+- Android 构建统一使用 JDK 21；不要在 tracked `android/gradle.properties` 中写死某台机器的 `org.gradle.java.home`。
+- 首次配置运行 `./rabbit bootstrap`。工具链脚本按当前环境变量、本地 `config/env/toolchain.local.env`、项目配置、`PATH` 和常见安装位置动态解析 Flutter、JDK 21、Android SDK，并同步 Flutter `jdk-dir` 与 Android Studio 的 `GRADLE_LOCAL_JAVA_HOME`。
+- 日常开发、检查、测试、构建和发布优先通过 `./rabbit`；Android 相关命令必须经工具链脚本动态注入 Java 和 SDK，不提交机器绝对路径。
+- Android Studio 的 Gradle JDK 选择 `GRADLE_LOCAL_JAVA_HOME`；IDE 本身仍可使用随 Android Studio 安装的 JBR。
+
+- Gradle wrapper 使用 `8.4`。
+- Android Gradle Plugin 使用 `8.2.2`。
+- Kotlin Android plugin 使用 `1.9.22`。
+- NDK 使用 `25.1.8937393`。
+- 不切换到 Gradle 9.x，除非构建失败证明必须升级并同步处理 AGP 兼容。
+- 如果 Android Studio 与终端 Gradle 表现不同，优先单独排查 IDE JDK / Gradle 配置，不要盲目改项目版本。
+
+## 常用命令
+
+在 `flutter_app/` 下：
+
+```bash
+./rabbit bootstrap
+./rabbit analyze
+./rabbit test
+./rabbit apk dev --debug
+./rabbit apk test --release
+```
+
+模拟器调试：
+
+```bash
+./rabbit devices
+./rabbit run dev -d Pixel_8_Pro_API_34
+```
+
+如果有多个设备，先用 `flutter devices` 确认 device id。
+
+## 验收规则
+
+- Flutter 代码改动默认至少运行 `./rabbit analyze`。
+- 业务逻辑、provider、model、API wrapper 改动应运行 `./rabbit test`。
+- Android 构建配置或依赖改动应运行 `./rabbit apk dev --debug`。
+- 纯规则或文档改动不要求运行 Flutter 构建，但要检查 `.rule`、`AGENTS.md`、`CLAUDE.md` 指向关系。
+
+## 迁移策略
+
+- Flutter 首版是并行客户端，不删除原生 Android 页面。
+- 对未迁移功能保留清晰入口占位，不隐藏用户预期中的主流程。
+- 迁移稳定后，替换包名、迁移 NFC / 通知 / 离线缓存、下线原生 App 需要单独计划。

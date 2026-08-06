@@ -1,17 +1,34 @@
 package com.rabbit.app.modules.auth.dto;
 
+import java.util.List;
+
 public class AuthTokenResponse {
     private String token;
     private Long userId;
     private String userName;
+    private Boolean phoneBound;
+    private String maskedPhone;
+    private List<String> permissions = List.of();
 
     public AuthTokenResponse() {
     }
 
     public AuthTokenResponse(String token, Long userId, String userName) {
+        this(token, userId, userName, false, null);
+    }
+
+    public AuthTokenResponse(
+            String token,
+            Long userId,
+            String userName,
+            Boolean phoneBound,
+            String maskedPhone
+    ) {
         this.token = token;
         this.userId = userId;
         this.userName = userName;
+        this.phoneBound = phoneBound;
+        this.maskedPhone = maskedPhone;
     }
 
     public String getToken() {
@@ -36,5 +53,29 @@ public class AuthTokenResponse {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public Boolean getPhoneBound() {
+        return phoneBound;
+    }
+
+    public void setPhoneBound(Boolean phoneBound) {
+        this.phoneBound = phoneBound;
+    }
+
+    public String getMaskedPhone() {
+        return maskedPhone;
+    }
+
+    public void setMaskedPhone(String maskedPhone) {
+        this.maskedPhone = maskedPhone;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(List<String> permissions) {
+        this.permissions = permissions == null ? List.of() : List.copyOf(permissions);
     }
 }

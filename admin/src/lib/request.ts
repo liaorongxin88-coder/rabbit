@@ -1,7 +1,12 @@
 import { createAlova } from 'alova'
 import adapterFetch from 'alova/fetch'
 import { toast } from 'sonner'
-import { clearSession, getToken } from '@/lib/auth'
+import {
+  clearMerchantSession,
+  clearSession,
+  getMerchantToken,
+  getToken,
+} from '@/lib/auth'
 import type { ApiResponse } from '@/types/api'
 
 type JsonBody = object | string
@@ -33,43 +38,56 @@ async function parseApiResponse(response: Response) {
   }
 }
 
-const alova = createAlova({
-  baseURL: API_BASE_URL,
-  requestAdapter: adapterFetch(),
-  beforeRequest(method) {
-    const token = getToken()
-    if (token) {
-      method.config.headers = {
-        ...method.config.headers,
-        Authorization: `Bearer ${token}`,
-      }
-    }
-  },
-  responded: {
-    async onSuccess(response) {
-      const payload = await parseApiResponse(response)
-      if (!payload || typeof payload.code !== 'number') {
-        throw new Error('响应格式不合法')
-      }
-      if (payload.code !== 0) {
-        if (payload.code === 401) {
-          clearSession()
+function createRequestClient(token: () => string, clearAuth: () => void) {
+  return createAlova({
+    baseURL: API_BASE_URL,
+    requestAdapter: adapterFetch(),
+    beforeRequest(method) {
+      const accessToken = token()
+      if (accessToken) {
+        method.config.headers = {
+          ...method.config.headers,
+          Authorization: `Bearer ${accessToken}`,
         }
-        throw new Error(payload.message || '请求失败')
       }
-      return payload.data
     },
-    onError(error) {
-      const message = getRequestErrorMessage(error)
-      toast.error(message)
-      throw new Error(message)
+    responded: {
+      async onSuccess(response) {
+        const payload = await parseApiResponse(response)
+        if (!payload || typeof payload.code !== 'number') {
+          throw new Error('响应格式不合法')
+        }
+        if (payload.code !== 0) {
+          const message = payload.message || '请求失败'
+          if (payload.code === 401) {
+            const hadSession = Boolean(token())
+            clearAuth()
+            if (hadSession) {
+              toast.error(message)
+            }
+            throw new Error(message)
+          }
+          toast.error(message)
+          throw new Error(message)
+        }
+        return payload.data
+      },
+      onError(error) {
+        const message = getRequestErrorMessage(error)
+        toast.error(message)
+        throw new Error(message)
+      },
     },
-  },
-})
+  })
+}
+
+const alova = createRequestClient(getToken, clearSession)
+const merchantAlova = createRequestClient(getMerchantToken, clearMerchantSession)
 
 export function getJson<T>(url: string, params?: Record<string, unknown>) {
   return alova.Get<T>(url, {
     params,
+    cacheFor: 0,
   })
 }
 
@@ -83,4 +101,45 @@ export function putJson<T>(url: string, data?: JsonBody) {
 
 export function deleteJson<T>(url: string) {
   return alova.Delete<T>(url)
+}
+
+interface MerchantRequestOptions {
+  houseId?: number | null
+  params?: Record<string, unknown>
+}
+
+function merchantConfig(options?: MerchantRequestOptions) {
+  return {
+    params: options?.params,
+    headers: options?.houseId
+      ? { 'X-House-Id': String(options.houseId) }
+      : undefined,
+  }
+}
+
+export function merchantGetJson<T>(url: string, options?: MerchantRequestOptions) {
+  return merchantAlova.Get<T>(url, {
+    ...merchantConfig(options),
+    cacheFor: 0,
+  })
+}
+
+export function merchantPostJson<T>(
+  url: string,
+  data?: JsonBody,
+  options?: MerchantRequestOptions,
+) {
+  return merchantAlova.Post<T>(url, data, merchantConfig(options))
+}
+
+export function merchantPutJson<T>(
+  url: string,
+  data?: JsonBody,
+  options?: MerchantRequestOptions,
+) {
+  return merchantAlova.Put<T>(url, data, merchantConfig(options))
+}
+
+export function merchantDeleteJson<T>(url: string, options?: MerchantRequestOptions) {
+  return merchantAlova.Delete<T>(url, undefined, merchantConfig(options))
 }

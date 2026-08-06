@@ -59,10 +59,9 @@ docker compose up -d --build
 
 ```bash
 cd flutter_app
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit bootstrap
+./rabbit check
+./rabbit apk dev --debug
 ```
 
 Android 模拟器默认后端地址为 `http://10.0.2.2:8080`。
@@ -89,9 +88,8 @@ mvn --file backend/pom.xml -Pe2e verify
 
 # Flutter
 cd flutter_app
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit check
+./rabbit apk dev --debug
 
 # Admin
 pnpm --dir admin lint

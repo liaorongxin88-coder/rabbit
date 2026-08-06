@@ -1,8 +1,6 @@
 package com.rabbit.app.modules.house.service;
 
 import com.rabbit.app.common.BizException;
-import com.rabbit.app.modules.auth.entity.SysUser;
-import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
@@ -11,7 +9,12 @@ import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
-import com.rabbit.app.security.HouseContext;
+import com.rabbit.app.modules.merchant.entity.MerchantHousePolicy;
+import com.rabbit.app.modules.merchant.mapper.MerchantHousePolicyMapper;
+import com.rabbit.app.modules.merchant.service.MerchantMembershipService;
+import com.rabbit.app.security.AccessControlService;
+import com.rabbit.app.security.permission.HouseRole;
+import com.rabbit.app.security.permission.PermissionCode;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -23,21 +26,27 @@ public class HouseService {
     private final RabbitHouseMapper rabbitHouseMapper;
     private final HouseUserMapper houseUserMapper;
     private final CageMapper cageMapper;
-    private final SysUserMapper sysUserMapper;
     private final RequestDedupService requestDedupService;
+    private final MerchantMembershipService membershipService;
+    private final MerchantHousePolicyMapper policyMapper;
+    private final AccessControlService accessControlService;
 
     public HouseService(
             RabbitHouseMapper rabbitHouseMapper,
             HouseUserMapper houseUserMapper,
             CageMapper cageMapper,
-            SysUserMapper sysUserMapper,
-            RequestDedupService requestDedupService
+            RequestDedupService requestDedupService,
+            MerchantMembershipService membershipService,
+            MerchantHousePolicyMapper policyMapper,
+            AccessControlService accessControlService
     ) {
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.houseUserMapper = houseUserMapper;
         this.cageMapper = cageMapper;
-        this.sysUserMapper = sysUserMapper;
         this.requestDedupService = requestDedupService;
+        this.membershipService = membershipService;
+        this.policyMapper = policyMapper;
+        this.accessControlService = accessControlService;
     }
 
     public List<RabbitHouse> listMyHouses(Long userId) {
@@ -48,7 +57,7 @@ public class HouseService {
         if (houseId == null || houseId <= 0) {
             throw new BizException(400, "houseId不能为空");
         }
-        assertHousePermission(userId, houseId, "control");
+        accessControlService.requireHousePermission(userId, houseId, PermissionCode.RABBIT_HOUSES_EDIT);
         int n = rabbitHouseMapper.updateBasic(houseId, name, remark, String.valueOf(userId));
         if (n <= 0) {
             throw new BizException(404, "兔舍不存在或已删除");
@@ -60,11 +69,7 @@ public class HouseService {
         if (houseId == null || houseId <= 0) {
             throw new BizException(400, "houseId不能为空");
         }
-        assertHousePermission(userId, houseId, "control");
-        HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-        if (hu == null || hu.getIsAdmin() == null || !hu.getIsAdmin()) {
-            throw new BizException(403, "仅管理员可删除兔舍");
-        }
+        accessControlService.requireHousePermission(userId, houseId, PermissionCode.RABBIT_HOUSES_REMOVE);
         int n = rabbitHouseMapper.markDeleted(houseId, String.valueOf(userId));
         if (n <= 0) {
             throw new BizException(404, "兔舍不存在或已删除");
@@ -73,6 +78,20 @@ public class HouseService {
 
     @Transactional
     public RabbitHouse createHouse(Long userId, String name, int rows, int cols, int layers, String remark, String requestId) {
+        return createHouse(userId, null, name, rows, cols, layers, remark, requestId);
+    }
+
+    @Transactional
+    public RabbitHouse createHouse(
+            Long userId,
+            Long requestedMerchantId,
+            String name,
+            int rows,
+            int cols,
+            int layers,
+            String remark,
+            String requestId
+    ) {
         String api = "house.create";
         String createBy = String.valueOf(userId);
         RabbitHouse existing = rabbitHouseMapper.selectByCreatorAndRequestId(createBy, requestId);
@@ -97,7 +116,8 @@ public class HouseService {
                 throw new BizException(400, "排数/列数/层数必须大于0");
             }
 
-            Long merchantId = resolveMerchantIdForNewHouse(userId);
+            Long merchantId = membershipService.resolveMerchantId(userId, requestedMerchantId);
+            assertCanCreateHouse(userId, merchantId);
             RabbitHouse house = new RabbitHouse();
             house.setName(name);
             house.setLayoutRows(rows);
@@ -106,6 +126,7 @@ public class HouseService {
             house.setRemark(remark);
             house.setRequestId(requestId);
             house.setMerchantId(merchantId);
+            house.setOwnerUserId(userId);
             house.setCreateBy(createBy);
             house.setUpdateBy(createBy);
             try {
@@ -122,8 +143,9 @@ public class HouseService {
             HouseUser hu = new HouseUser();
             hu.setHouseId(house.getId());
             hu.setUserId(userId);
-            hu.setPerms("control");
-            hu.setIsAdmin(Boolean.TRUE);
+            hu.setRole(HouseRole.OWNER.code());
+            hu.setPerms(HouseRole.OWNER.legacyPermission());
+            hu.setIsAdmin(HouseRole.OWNER.administrator());
             hu.setCreateBy(createBy);
             hu.setUpdateBy(createBy);
             houseUserMapper.insert(hu);
@@ -158,73 +180,37 @@ public class HouseService {
         }
     }
 
-    private Long resolveMerchantIdForNewHouse(Long userId) {
-        SysUser user = sysUserMapper.selectById(userId);
-        if (user == null) {
-            throw new BizException(404, "用户不存在");
+    private void assertCanCreateHouse(Long userId, Long merchantId) {
+        accessControlService.requireMerchantPermission(userId, merchantId, PermissionCode.MERCHANT_HOUSES_ADD);
+        MerchantHousePolicy policy = policyMapper.selectByMerchantId(merchantId);
+        if (policy == null || !Boolean.TRUE.equals(policy.getHouseCreationEnabled())) {
+            throw new BizException(403, "商户未开通兔场创建权限");
         }
-        if (user.getMerchantId() == null) {
-            throw new BizException(500, "用户未归属商户");
+        if (rabbitHouseMapper.countByMerchantId(merchantId) >= policy.getMaxHouseCount()) {
+            throw new BizException(409, "已达到商户兔场数量上限");
         }
-        return user.getMerchantId();
     }
 
     public void assertHousePermission(Long userId, Long houseId, String requiredPerm) {
-        HouseContext ctx = HouseContext.get();
-        boolean admin = false;
-        String p = null;
-        if (ctx != null && userId != null && houseId != null && userId.equals(ctx.getUserId()) && houseId.equals(ctx.getHouseId())) {
-            admin = ctx.isAdmin();
-            p = ctx.getPerms();
-        } else {
-            HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-            if (hu == null) {
-                throw new BizException(403, "无兔舍权限");
-            }
-            admin = hu.getIsAdmin() != null && hu.getIsAdmin();
-            p = hu.getPerms();
-        }
-        if (admin) {
-            return;
-        }
-        if ("view".equals(requiredPerm)) {
-            return;
-        }
-        if ("edit".equals(requiredPerm)) {
-            if ("edit".equals(p) || "control".equals(p)) {
-                return;
-            }
-        }
-        if ("control".equals(requiredPerm)) {
-            if ("control".equals(p)) {
-                return;
-            }
-        }
-        throw new BizException(403, "权限不足");
+        accessControlService.requireHouseLevel(userId, houseId, requiredPerm);
     }
 
     public void assertHouseAdmin(Long userId, Long houseId) {
-        HousePermissionInfo info = getMyHousePermission(userId, houseId);
-        if (info.getIsAdmin() == null || !info.getIsAdmin()) {
-            throw new BizException(403, "仅管理员可操作");
-        }
+        accessControlService.requireHouseOwner(userId, houseId);
     }
 
     public HousePermissionInfo getMyHousePermission(Long userId, Long houseId) {
-        HouseContext ctx = HouseContext.get();
-        if (ctx != null && userId != null && houseId != null && userId.equals(ctx.getUserId()) && houseId.equals(ctx.getHouseId())) {
-            HousePermissionInfo info = new HousePermissionInfo();
-            info.setPerms(ctx.getPerms());
-            info.setIsAdmin(ctx.isAdmin());
-            return info;
-        }
-        HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-        if (hu == null) {
-            throw new BizException(403, "无兔舍权限");
-        }
+        AccessControlService.HouseAccess access = accessControlService.requireHousePermission(
+                userId,
+                houseId,
+                PermissionCode.RABBIT_HOUSES_QUERY
+        );
+        HouseRole role = access.role();
         HousePermissionInfo info = new HousePermissionInfo();
-        info.setPerms(hu.getPerms());
-        info.setIsAdmin(hu.getIsAdmin() != null && hu.getIsAdmin());
+        info.setPerms(role.legacyPermission());
+        info.setRole(role.code());
+        info.setIsAdmin(role.administrator());
+        info.setPermissions(access.permissions());
         return info;
     }
 }

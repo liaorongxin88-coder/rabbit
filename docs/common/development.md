@@ -60,17 +60,18 @@ java -jar target/rabbit-backend-0.0.1-SNAPSHOT.jar
 
 ```bash
 cd flutter_app
-flutter pub get
-flutter run
+./rabbit bootstrap
+./rabbit run dev
 ```
+
+`./rabbit` 会按当前环境、本机忽略配置、项目配置和常见安装位置动态解析 Flutter、JDK 21 与 Android SDK，不需要在仓库中写死机器路径。运行 `./rabbit doctor` 可查看实际使用的工具链。
 
 常用检查：
 
 ```bash
 cd flutter_app
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit check
+./rabbit apk dev --debug
 ```
 
 默认 Android 模拟器访问本机后端地址为 `http://10.0.2.2:8080`。真机调试时改为电脑局域网 IP，并保证手机和电脑在同一网络。

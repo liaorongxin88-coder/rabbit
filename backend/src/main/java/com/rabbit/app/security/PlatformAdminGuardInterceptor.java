@@ -6,6 +6,7 @@ import com.rabbit.app.modules.admin.mapper.PlatformAdminMapper;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 public class PlatformAdminGuardInterceptor implements HandlerInterceptor {
@@ -18,6 +19,9 @@ public class PlatformAdminGuardInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         if (DispatcherType.ASYNC.equals(request.getDispatcherType())) {
+            return true;
+        }
+        if (HttpMethod.OPTIONS.matches(request.getMethod())) {
             return true;
         }
         String uri = request.getRequestURI();

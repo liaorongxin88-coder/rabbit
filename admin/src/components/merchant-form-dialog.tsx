@@ -200,7 +200,7 @@ export function MerchantFormDialog({
                 <div className="border-t pt-5">
                   <p className="text-sm font-medium">登录账号</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    账号创建后将直接归属当前商户。
+                    账号创建后将成为当前商户的所有者。
                   </p>
                 </div>
                 <Field data-invalid={userNameError ? true : undefined}>

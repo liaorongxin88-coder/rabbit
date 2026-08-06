@@ -137,6 +137,38 @@ public class AdminSaasIT extends E2eTestSupport {
         Assertions.assertTrue(page.has("items"));
     }
 
+    @Test
+    void platformAdminRoleUsesDeclaredPermissionCodes() {
+        String superToken = loginAdmin();
+        String userName = "limited_admin_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        String password = "admin123456";
+        api.postOk("/api/admin/accounts", superToken, null, obj(
+                "userName", userName,
+                "password", password,
+                "role", "ADMIN",
+                "enabled", true
+        ));
+
+        JsonNode login = api.postOk("/api/admin/auth/login", null, null, obj(
+                "userName", userName,
+                "password", password
+        ));
+        String adminToken = login.get("token").asText();
+        Assertions.assertTrue(containsPermission(login, "platform:merchants:list"));
+        Assertions.assertFalse(containsPermission(login, "platform:accounts:list"));
+        api.getOk("/api/admin/merchants", adminToken, null);
+        api.expectError("/api/admin/accounts", HttpMethod.GET, adminToken, null, null, 403, "权限不足");
+    }
+
+    private boolean containsPermission(JsonNode grant, String permission) {
+        for (JsonNode item : grant.path("permissions")) {
+            if (permission.equals(item.asText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String loginAdmin() {
         JsonNode auth = api.postOk("/api/admin/auth/login", null, null, obj(
                 "userName", "admin",

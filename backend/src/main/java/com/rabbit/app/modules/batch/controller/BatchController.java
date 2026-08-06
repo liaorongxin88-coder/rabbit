@@ -24,7 +24,8 @@ import com.rabbit.app.modules.sale.dto.SaleRequest;
 import com.rabbit.app.modules.treatment.entity.TreatmentRecord;
 import com.rabbit.app.modules.treatment.service.TreatmentService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_BATCHES_LIST)
 public class BatchController {
     private final HouseService houseService;
     private final BatchService batchService;
@@ -73,7 +74,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_ADD)
     public ApiResponse<Batch> createBatch(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateBatchRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -81,6 +82,7 @@ public class BatchController {
     }
 
     @GetMapping("/batches/{batchId}")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
     public ApiResponse<Batch> getBatch(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -92,6 +94,7 @@ public class BatchController {
     }
 
     @GetMapping("/batches/{batchId}/batch-rabbits")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
     public ApiResponse<List<BatchRabbitItem>> listBatchRabbits(
             @RequestHeader("X-House-Id") Long houseId,
             @PathVariable("batchId") Long batchId,
@@ -108,7 +111,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/mating")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> mating(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody MatingRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -117,7 +120,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/aphrodisiac/start")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> aphrodisiacStart(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody AphrodisiacRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -130,7 +133,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/aphrodisiac/finish")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> aphrodisiacFinish(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody AphrodisiacRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -143,7 +146,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/pregnancy-check")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> pregnancyCheck(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PregnancyCheckRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -152,7 +155,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/prepartum/finish")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> prepartumFinish(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PrepartumRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -161,7 +164,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/parturition")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> parturition(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody ParturitionRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -171,7 +174,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/weaning")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> weaning(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody WeaningRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -180,7 +183,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/sale")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> sale(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody SaleRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -189,7 +192,7 @@ public class BatchController {
     }
 
     @PostMapping("/batches/{batchId}/complete")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> complete(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody CompleteBatchRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -199,6 +202,7 @@ public class BatchController {
     }
 
     @GetMapping("/events")
+    @RequiresPermission(PermissionCode.RABBIT_EVENTS_LIST)
     public ApiResponse<List<EventItem>> listEvents(@RequestHeader("X-House-Id") Long houseId, @RequestParam(value = "onlyUnnotified", required = false) Boolean onlyUnnotified) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");

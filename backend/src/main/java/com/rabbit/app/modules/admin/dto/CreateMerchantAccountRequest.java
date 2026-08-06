@@ -16,6 +16,8 @@ public class CreateMerchantAccountRequest {
     @Size(min = 6, max = 64, message = "确认密码长度需为6-64个字符")
     private String confirmPassword;
 
+    private String role;
+
     public String getUserName() {
         return userName;
     }
@@ -38,5 +40,13 @@ public class CreateMerchantAccountRequest {
 
     public void setConfirmPassword(String confirmPassword) {
         this.confirmPassword = confirmPassword;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 }

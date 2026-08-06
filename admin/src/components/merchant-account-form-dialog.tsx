@@ -123,7 +123,7 @@ export function MerchantAccountFormDialog({
                 <FieldLabel>所属商户</FieldLabel>
                 <Input value={account.merchantName || '-'} disabled />
                 <FieldDescription>
-                  商户 ID {account.merchantId}，账号归属不可跨商户变更。
+                  商户 ID {account.merchantId}，这里展示账号的默认商户。
                 </FieldDescription>
               </Field>
               <Field>

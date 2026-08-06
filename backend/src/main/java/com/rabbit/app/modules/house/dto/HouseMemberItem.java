@@ -5,6 +5,7 @@ import java.util.Date;
 public class HouseMemberItem {
     private Long userId;
     private String userName;
+    private String role;
     private String perms;
     private Boolean isAdmin;
     private Date joinTime;
@@ -23,6 +24,14 @@ public class HouseMemberItem {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public String getPerms() {

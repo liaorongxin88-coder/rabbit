@@ -10,6 +10,11 @@ import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
+import com.rabbit.app.modules.merchant.entity.MerchantHousePolicy;
+import com.rabbit.app.modules.merchant.entity.MerchantMembership;
+import com.rabbit.app.modules.merchant.mapper.MerchantHousePolicyMapper;
+import com.rabbit.app.modules.merchant.service.MerchantMembershipService;
+import com.rabbit.app.security.permission.HouseRole;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -22,17 +27,23 @@ public class HouseMemberService {
     private final SysUserMapper sysUserMapper;
     private final RabbitHouseMapper rabbitHouseMapper;
     private final RequestDedupService requestDedupService;
+    private final MerchantMembershipService membershipService;
+    private final MerchantHousePolicyMapper policyMapper;
 
     public HouseMemberService(
             HouseUserMapper houseUserMapper,
             SysUserMapper sysUserMapper,
             RabbitHouseMapper rabbitHouseMapper,
-            RequestDedupService requestDedupService
+            RequestDedupService requestDedupService,
+            MerchantMembershipService membershipService,
+            MerchantHousePolicyMapper policyMapper
     ) {
         this.houseUserMapper = houseUserMapper;
         this.sysUserMapper = sysUserMapper;
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.requestDedupService = requestDedupService;
+        this.membershipService = membershipService;
+        this.policyMapper = policyMapper;
     }
 
     public List<HouseMemberItem> listMembers(Long houseId) {
@@ -70,16 +81,13 @@ public class HouseMemberService {
     }
 
     @Transactional
-    public void addMember(Long houseId, Long operatorUserId, String operator, String userName, String perms, Boolean isAdmin, String requestId) {
+    public void addMember(Long houseId, Long operatorUserId, String operator, String userName, String role, String perms, Boolean isAdmin, String requestId) {
         String api = "houseMember.add";
         if (requestDedupService.shouldSkipAsDone(houseId, operatorUserId, api, requestId)) {
             return;
         }
         requestDedupService.markProcessing(houseId, operatorUserId, api, requestId);
         try {
-            if (Boolean.TRUE.equals(isAdmin)) {
-                throw new BizException(400, "新增成员不能设为管理员，请使用转让管理员");
-            }
             SysUser user = sysUserMapper.selectByUserName(userName);
             if (user == null) {
                 throw new BizException(404, "用户不存在");
@@ -88,12 +96,14 @@ public class HouseMemberService {
             if (houseUserMapper.selectByUserAndHouse(user.getUserId(), houseId) != null) {
                 throw new BizException(409, "用户已是兔舍成员");
             }
-            perms = normalizeMemberPerms(perms, false);
+            assertMemberLimit(houseId);
+            HouseRole normalizedRole = normalizeRole(role, perms, isAdmin, false);
             HouseUser hu = new HouseUser();
             hu.setHouseId(houseId);
             hu.setUserId(user.getUserId());
-            hu.setPerms(perms);
-            hu.setIsAdmin(Boolean.FALSE);
+            hu.setRole(normalizedRole.code());
+            hu.setPerms(normalizedRole.legacyPermission());
+            hu.setIsAdmin(normalizedRole.administrator());
             hu.setCreateBy(operator);
             hu.setUpdateBy(operator);
             try {
@@ -109,7 +119,7 @@ public class HouseMemberService {
     }
 
     @Transactional
-    public void updateMember(Long houseId, Long targetUserId, Long operatorUserId, String operator, String perms, Boolean isAdmin, String requestId) {
+    public void updateMember(Long houseId, Long targetUserId, Long operatorUserId, String operator, String role, String perms, Boolean isAdmin, String requestId) {
         String api = "houseMember.update";
         if (requestDedupService.shouldSkipAsDone(houseId, operatorUserId, api, requestId)) {
             return;
@@ -120,21 +130,27 @@ public class HouseMemberService {
             if (current == null) {
                 throw new BizException(404, "成员不存在");
             }
-            String newPerms = perms != null ? perms : current.getPerms();
-            Boolean newAdmin = isAdmin != null ? isAdmin : current.getIsAdmin();
-            if (Boolean.TRUE.equals(newAdmin)) {
-                newPerms = "control";
-                houseUserMapper.clearOtherAdmins(houseId, targetUserId, operator);
-                newAdmin = Boolean.TRUE;
-            } else {
-                newPerms = normalizeMemberPerms(newPerms, false);
-                newAdmin = Boolean.FALSE;
-                int countAdmins = houseUserMapper.countAdmins(houseId);
-                if (Boolean.TRUE.equals(current.getIsAdmin()) && countAdmins <= 1) {
-                    throw new BizException(400, "请先转让管理员后再调整该成员权限");
-                }
+            assertMemberManagementEnabled(houseId);
+            HouseRole currentRole = roleOf(current);
+            HouseRole newRole = normalizeRole(role, perms, isAdmin, true);
+            if (role == null && perms == null && isAdmin == null) {
+                newRole = currentRole;
             }
-            int n = houseUserMapper.updateMember(houseId, targetUserId, newPerms, newAdmin, operator);
+            if (currentRole == HouseRole.OWNER && newRole != HouseRole.OWNER) {
+                throw new BizException(400, "请先将其他成员设为所有者完成转让");
+            }
+            if (newRole == HouseRole.OWNER) {
+                houseUserMapper.demoteOtherOwners(houseId, targetUserId, operator);
+                rabbitHouseMapper.updateOwner(houseId, targetUserId, operator);
+            }
+            int n = houseUserMapper.updateMember(
+                    houseId,
+                    targetUserId,
+                    newRole.code(),
+                    newRole.legacyPermission(),
+                    newRole.administrator(),
+                    operator
+            );
             if (n <= 0) {
                 throw new BizException(400, "更新失败");
             }
@@ -157,8 +173,9 @@ public class HouseMemberService {
             if (current == null) {
                 throw new BizException(404, "成员不存在");
             }
-            if (Boolean.TRUE.equals(current.getIsAdmin()) && houseUserMapper.countAdmins(houseId) <= 1) {
-                throw new BizException(400, "请先转让管理员后再移除");
+            assertMemberManagementEnabled(houseId);
+            if (roleOf(current) == HouseRole.OWNER) {
+                throw new BizException(400, "兔场所有者不能移除，请先转让所有权");
             }
             int n = houseUserMapper.deleteMember(houseId, targetUserId);
             if (n <= 0) {
@@ -183,8 +200,8 @@ public class HouseMemberService {
             if (current == null) {
                 throw new BizException(404, "您不是该兔舍成员");
             }
-            if (Boolean.TRUE.equals(current.getIsAdmin()) && houseUserMapper.countAdmins(houseId) <= 1) {
-                throw new BizException(400, "唯一管理员不能直接退出，请先转让管理员");
+            if (roleOf(current) == HouseRole.OWNER) {
+                throw new BizException(400, "兔场所有者不能直接退出，请先转让所有权");
             }
             int n = houseUserMapper.deleteMember(houseId, userId);
             if (n <= 0) {
@@ -205,22 +222,48 @@ public class HouseMemberService {
         if (house.getMerchantId() == null) {
             throw new BizException(500, "兔舍未归属商户");
         }
-        if (user.getMerchantId() == null || !house.getMerchantId().equals(user.getMerchantId())) {
+        MerchantMembership membership = membershipService.requireActiveMembership(user.getUserId(), house.getMerchantId());
+        if (membership == null) {
             throw new BizException(400, "只能添加同商户下的账号");
         }
     }
 
-    private String normalizeMemberPerms(String perms, boolean admin) {
-        if (admin) {
-            return "control";
+    private void assertMemberLimit(Long houseId) {
+        MerchantHousePolicy policy = assertMemberManagementEnabled(houseId);
+        if (houseUserMapper.countMembers(houseId) >= policy.getMaxMembersPerHouse()) {
+            throw new BizException(409, "已达到单兔场成员数量上限");
         }
-        if (perms == null || perms.trim().isEmpty()) {
-            return "edit";
+    }
+
+    private MerchantHousePolicy assertMemberManagementEnabled(Long houseId) {
+        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
+        if (house == null || house.getMerchantId() == null) {
+            throw new BizException(404, "兔场不存在");
         }
-        String p = perms.trim();
-        if ("view".equals(p) || "edit".equals(p) || "control".equals(p)) {
-            return p;
+        MerchantHousePolicy policy = policyMapper.selectByMerchantId(house.getMerchantId());
+        if (policy == null || !Boolean.TRUE.equals(policy.getHouseMemberManagementEnabled())) {
+            throw new BizException(403, "商户未开通兔场成员管理权限");
         }
-        throw new BizException(400, "成员权限不合法");
+        return policy;
+    }
+
+    private HouseRole normalizeRole(String role, String perms, Boolean isAdmin, boolean allowOwner) {
+        HouseRole normalized;
+        if (role != null && !role.trim().isEmpty()) {
+            normalized = HouseRole.parseAssignable(role, allowOwner);
+        } else if (Boolean.TRUE.equals(isAdmin)) {
+            normalized = allowOwner ? HouseRole.OWNER : HouseRole.MANAGER;
+        } else if ("control".equals(perms)) {
+            normalized = HouseRole.MANAGER;
+        } else if ("view".equals(perms)) {
+            normalized = HouseRole.VIEWER;
+        } else {
+            normalized = HouseRole.STAFF;
+        }
+        return normalized;
+    }
+
+    private HouseRole roleOf(HouseUser member) {
+        return HouseRole.fromStored(member.getRole(), member.getPerms(), member.getIsAdmin());
     }
 }

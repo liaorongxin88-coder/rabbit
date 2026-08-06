@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.report.mapper.DashboardReportMapper">
+    <sql id="houseIds">
+        <foreach collection="houseIds" item="houseId" open="(" separator="," close=")">
+            #{houseId}
+        </foreach>
+    </sql>
+
+    <select id="selectRabbitStats" resultType="com.rabbit.app.modules.report.dto.RabbitDashboardStats">
+        select count(1) as totalRabbits,
+               coalesce(sum(case when type = '0' then 1 else 0 end), 0) as seedRabbits,
+               coalesce(sum(case when gender = '1' then 1 else 0 end), 0) as maleRabbits,
+               coalesce(sum(case when gender = '0' then 1 else 0 end), 0) as femaleRabbits,
+               coalesce(sum(case when type = '0' and gender = '0' then 1 else 0 end), 0) as femaleSeedRabbits,
+               coalesce(sum(case when type = '2' then 1 else 0 end), 0) as commodityRabbits,
+               coalesce(sum(case when type = '1' then 1 else 0 end), 0) as replacementRabbits
+        from rabbits
+        where house_id in <include refid="houseIds"/>
+          and is_active = true
+    </select>
+
+    <select id="countBatches" resultType="int">
+        select count(1)
+        from batches
+        where house_id in <include refid="houseIds"/>
+    </select>
+
+    <select id="selectBreedingSummary" resultType="com.rabbit.app.modules.batch.dto.BreedingSummary">
+        select coalesce(sum(total_litters), 0) as totalLitters,
+               coalesce(sum(total_kits), 0) as totalKits,
+               coalesce(sum(total_live_kits), 0) as totalLiveKits,
+               coalesce(sum(total_weaned), 0) as totalWeaned,
+               coalesce(sum(success_breeding_count), 0) as successBreedingCount,
+               coalesce(sum(failed_breeding_count), 0) as failedBreedingCount
+        from breeding_performance
+        where house_id in <include refid="houseIds"/>
+    </select>
+
+    <select id="selectMonthlyBirths" resultType="com.rabbit.app.modules.report.dto.MonthlyCount">
+        select month(birth_date) as month, coalesce(sum(live_kits), 0) as count
+        from parturition_records
+        where house_id in <include refid="houseIds"/>
+          and birth_date &gt;= #{from}
+          and birth_date &lt; #{to}
+        group by month(birth_date)
+        order by month(birth_date)
+    </select>
+
+    <select id="selectMonthlyWeaned" resultType="com.rabbit.app.modules.report.dto.MonthlyCount">
+        select month(weaning_date) as month, coalesce(sum(weaning_count), 0) as count
+        from weaning_records
+        where house_id in <include refid="houseIds"/>
+          and weaning_date &gt;= #{from}
+          and weaning_date &lt; #{to}
+        group by month(weaning_date)
+        order by month(weaning_date)
+    </select>
+</mapper>

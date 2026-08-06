@@ -3,3 +3,5 @@ target/
 .envrc
 .gradle-test
 /.pnpm-store/
+rabbit-master/
+**/.idea/workspace.xml

@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MerchantAccountMigrationIT {
     private static final String URL = env(
-            "E2E_DATASOURCE_URL",
-            "jdbc:mysql://localhost:3306/rabbit_app_e2e?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+            "E2E_MIGRATION_DATASOURCE_URL",
+            "jdbc:mysql://localhost:3306/rabbit_app_e2e_migration?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
     );
     private static final String USERNAME = env("E2E_DATASOURCE_USERNAME", "root");
     private static final String PASSWORD = env("E2E_DATASOURCE_PASSWORD", "rabbit_root");
@@ -56,7 +56,7 @@ class MerchantAccountMigrationIT {
 
         flyway(null).migrate();
 
-        assertEquals(0, queryLong("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'merchant_users'"));
+        assertEquals(1, queryLong("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'merchant_users'"));
         assertEquals(0, queryLong("SELECT COUNT(*) FROM sys_user WHERE merchant_id IS NULL"));
         assertEquals(defaultMerchantId, queryLong("SELECT merchant_id FROM sys_user WHERE user_id = ?", boundUserId));
 
@@ -77,6 +77,9 @@ class MerchantAccountMigrationIT {
                 1,
                 queryLong("SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'sys_user' AND constraint_name = 'fk_sys_user_merchant'")
         );
+        assertEquals(1, queryLong("SELECT COUNT(*) FROM merchant_users WHERE merchant_id = ? AND user_id = ?", defaultMerchantId, boundUserId));
+        assertEquals("OWNER", queryString("SELECT role FROM merchant_users WHERE merchant_id = ? ORDER BY user_id LIMIT 1", orphanMerchantId));
+        assertEquals(1, queryLong("SELECT COUNT(*) FROM merchant_house_policies WHERE merchant_id = ?", orphanMerchantId));
     }
 
     @Test

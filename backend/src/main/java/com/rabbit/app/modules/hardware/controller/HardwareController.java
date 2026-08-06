@@ -7,7 +7,8 @@ import com.rabbit.app.modules.hardware.dto.HardwareStatus;
 import com.rabbit.app.modules.hardware.service.HardwareLinkService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/hardware")
-@HousePerm("control")
+@RequiresPermission(PermissionCode.RABBIT_HARDWARE_CONTROL)
 public class HardwareController {
     private final HouseService houseService;
     private final HardwareLinkService hardwareLinkService;

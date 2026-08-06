@@ -15,9 +15,15 @@ public interface RabbitHouseMapper {
 
     List<RabbitHouse> selectAllActive();
 
+    long countByMerchantId(@Param("merchantId") Long merchantId);
+
     RabbitHouse selectByCreatorAndRequestId(@Param("createBy") String createBy, @Param("requestId") String requestId);
 
     int updateBasic(@Param("houseId") Long houseId, @Param("name") String name, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
     int markDeleted(@Param("houseId") Long houseId, @Param("updateBy") String updateBy);
+
+    int updateOwner(@Param("houseId") Long houseId,
+                    @Param("ownerUserId") Long ownerUserId,
+                    @Param("updateBy") String updateBy);
 }

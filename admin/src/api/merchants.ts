@@ -4,6 +4,9 @@ import type {
   MerchantOverview,
   MerchantStatus,
   MerchantAccountSummary,
+  MerchantHousePolicy,
+  MerchantRole,
+  MembershipStatus,
   PageResult,
 } from '@/types/api'
 
@@ -31,6 +34,14 @@ export interface CreateMerchantAccountPayload {
   userName: string
   password: string
   confirmPassword: string
+  role: Exclude<MerchantRole, 'OWNER'>
+}
+
+export interface MerchantHousePolicyPayload {
+  houseCreationEnabled: boolean
+  houseMemberManagementEnabled: boolean
+  maxHouseCount: number
+  maxMembersPerHouse: number
 }
 
 export function listMerchants(params: MerchantListParams) {
@@ -82,5 +93,32 @@ export function createMerchantAccount(
 export function getMerchantOverview(merchantId: number) {
   return getJson<MerchantOverview>(
     `/api/admin/merchants/${merchantId}/overview`,
+  ).send()
+}
+
+export function getMerchantHousePolicy(merchantId: number) {
+  return getJson<MerchantHousePolicy>(
+    `/api/admin/merchants/${merchantId}/house-policy`,
+  ).send()
+}
+
+export function updateMerchantHousePolicy(
+  merchantId: number,
+  payload: MerchantHousePolicyPayload,
+) {
+  return putJson<MerchantHousePolicy>(
+    `/api/admin/merchants/${merchantId}/house-policy`,
+    payload,
+  ).send()
+}
+
+export function updateMerchantMembership(
+  merchantId: number,
+  userId: number,
+  payload: { role: MerchantRole; status: MembershipStatus },
+) {
+  return putJson<void>(
+    `/api/admin/merchants/${merchantId}/accounts/${userId}/membership`,
+    payload,
   ).send()
 }

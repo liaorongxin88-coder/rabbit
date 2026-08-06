@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Rabbit Release" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <option name="buildFlavor" value="prod" />
+    <option name="additionalArgs" value="--dart-define-from-file=config/env/prod.env --dart-define=RABBIT_BUILD_ENV=prod" />
+    <method v="2" />
+  </configuration>
+</component>

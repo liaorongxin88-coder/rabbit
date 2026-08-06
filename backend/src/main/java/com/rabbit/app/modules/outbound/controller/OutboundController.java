@@ -7,7 +7,8 @@ import com.rabbit.app.modules.outbound.dto.OutboundDtos;
 import com.rabbit.app.modules.outbound.service.OutboundSubmitCoordinator;
 import com.rabbit.app.modules.outbound.service.OutboundTaskService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/outbound")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_OUTBOUND_LIST)
 public class OutboundController {
     private final HouseService houseService;
     private final OutboundTaskService taskService;
@@ -36,7 +37,7 @@ public class OutboundController {
     }
 
     @PostMapping("/tasks")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_EDIT)
     public ApiResponse<OutboundDtos.TaskView> create(@RequestHeader("X-House-Id") Long houseId,
                                                       @Valid @RequestBody OutboundDtos.CreateTaskRequest request) {
         Long userId = requireEdit(houseId);
@@ -44,6 +45,7 @@ public class OutboundController {
     }
 
     @GetMapping("/tasks/{taskId}")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_QUERY)
     public ApiResponse<OutboundDtos.TaskView> get(@RequestHeader("X-House-Id") Long houseId,
                                                   @PathVariable String taskId) {
         Long userId = requireLogin();
@@ -52,7 +54,7 @@ public class OutboundController {
     }
 
     @PostMapping("/tasks/{taskId}/precheck")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_EDIT)
     public ApiResponse<OutboundDtos.TaskView> precheck(@RequestHeader("X-House-Id") Long houseId,
                                                        @PathVariable String taskId) {
         Long userId = requireEdit(houseId);
@@ -60,7 +62,7 @@ public class OutboundController {
     }
 
     @PutMapping("/tasks/{taskId}")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_EDIT)
     public ApiResponse<OutboundDtos.TaskView> save(@RequestHeader("X-House-Id") Long houseId,
                                                    @PathVariable String taskId,
                                                    @Valid @RequestBody OutboundDtos.SaveDraftRequest request) {
@@ -69,7 +71,7 @@ public class OutboundController {
     }
 
     @PostMapping("/tasks/{taskId}/cancel")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_EDIT)
     public ApiResponse<Void> cancel(@RequestHeader("X-House-Id") Long houseId, @PathVariable String taskId) {
         Long userId = requireEdit(houseId);
         taskService.cancel(userId, houseId, taskId);
@@ -77,7 +79,7 @@ public class OutboundController {
     }
 
     @PostMapping("/tasks/{taskId}/submit")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_EDIT)
     public ApiResponse<OutboundDtos.SubmitResult> submit(@RequestHeader("X-House-Id") Long houseId,
                                                          @PathVariable String taskId,
                                                          @Valid @RequestBody OutboundDtos.SubmitRequest request) {
@@ -86,6 +88,7 @@ public class OutboundController {
     }
 
     @GetMapping("/requests/{requestId}")
+    @RequiresPermission(PermissionCode.RABBIT_OUTBOUND_QUERY)
     public ApiResponse<OutboundDtos.SubmitResult> status(@RequestHeader("X-House-Id") Long houseId,
                                                          @PathVariable String requestId) {
         Long userId = requireLogin();

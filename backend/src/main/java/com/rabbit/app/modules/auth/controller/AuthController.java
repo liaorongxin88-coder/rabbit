@@ -4,14 +4,22 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
 import com.rabbit.app.modules.auth.dto.LoginRequest;
+import com.rabbit.app.modules.auth.dto.PhoneLoginRequest;
 import com.rabbit.app.modules.auth.dto.RegisterRequest;
+import com.rabbit.app.modules.auth.dto.SendSmsCodeRequest;
+import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
 import com.rabbit.app.modules.auth.dto.UpdatePasswordRequest;
 import com.rabbit.app.modules.auth.dto.UpdateUserProfileRequest;
 import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.dto.WechatLoginRequest;
 import com.rabbit.app.modules.auth.service.AuthService;
+import com.rabbit.app.modules.auth.service.PhoneAuthService;
+import com.rabbit.app.modules.auth.service.SmsVerificationService;
 import com.rabbit.app.modules.auth.service.WechatService;
 import com.rabbit.app.security.AuthContext;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.validation.annotation.Validated;
@@ -26,11 +34,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
-    private final com.rabbit.app.modules.auth.service.WechatService wechatService;
+    private final WechatService wechatService;
+    private final SmsVerificationService smsVerificationService;
+    private final PhoneAuthService phoneAuthService;
 
-    public AuthController(AuthService authService, com.rabbit.app.modules.auth.service.WechatService wechatService) {
+    public AuthController(
+            AuthService authService,
+            WechatService wechatService,
+            SmsVerificationService smsVerificationService,
+            PhoneAuthService phoneAuthService
+    ) {
         this.authService = authService;
         this.wechatService = wechatService;
+        this.smsVerificationService = smsVerificationService;
+        this.phoneAuthService = phoneAuthService;
     }
 
     @PostMapping("/register")
@@ -41,6 +58,19 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest req) {
         return ApiResponse.ok(authService.login(req.getUserName(), req.getPassword()));
+    }
+
+    @PostMapping("/sms/code")
+    public ApiResponse<SmsCodeSendResponse> sendSmsCode(
+            @Valid @RequestBody SendSmsCodeRequest req,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(smsVerificationService.sendCode(req.getPhone(), request.getRemoteAddr()));
+    }
+
+    @PostMapping("/sms/login")
+    public ApiResponse<AuthTokenResponse> phoneLogin(@Valid @RequestBody PhoneLoginRequest req) {
+        return ApiResponse.ok(phoneAuthService.loginOrRegister(req.getPhone(), req.getCode()));
     }
 
     @PostMapping("/wechat-login")
@@ -57,16 +87,19 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @RequiresPermission(PermissionCode.ACCOUNT_PROFILE_QUERY)
     public ApiResponse<UserProfileResponse> me() {
         return ApiResponse.ok(authService.getProfile(requireLogin()));
     }
 
     @PutMapping("/me")
+    @RequiresPermission(PermissionCode.ACCOUNT_PROFILE_EDIT)
     public ApiResponse<UserProfileResponse> updateMe(@Valid @RequestBody UpdateUserProfileRequest req) {
         return ApiResponse.ok(authService.updateUserName(requireLogin(), req.getUserName()));
     }
 
     @PutMapping("/password")
+    @RequiresPermission(PermissionCode.ACCOUNT_PASSWORD_EDIT)
     public ApiResponse<Void> updatePassword(@Valid @RequestBody UpdatePasswordRequest req) {
         authService.updatePassword(requireLogin(), req.getOldPassword(), req.getNewPassword());
         return ApiResponse.ok(null);

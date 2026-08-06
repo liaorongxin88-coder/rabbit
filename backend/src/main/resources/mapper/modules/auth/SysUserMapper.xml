@@ -9,31 +9,50 @@
         <result column="user_name" property="userName"/>
         <result column="password" property="password"/>
         <result column="openid" property="openid"/>
+        <result column="phone_country_code" property="phoneCountryCode"/>
+        <result column="phone_hash" property="phoneHash"/>
+        <result column="phone_masked" property="phoneMasked"/>
+        <result column="phone_bound_time" property="phoneBoundTime"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
     <select id="selectByUserName" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where user_name = #{userName}
     </select>
 
     <select id="selectByOpenid" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where openid = #{openid}
     </select>
 
+    <select id="selectByPhoneHash" resultMap="SysUserMap">
+        select user_id, merchant_id, user_name, password, openid,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
+        from sys_user
+        where phone_hash = #{phoneHash}
+    </select>
+
     <select id="selectById" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid, create_time, update_time
+        select user_id, merchant_id, user_name, password, openid,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where user_id = #{userId}
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="userId">
-        insert into sys_user (merchant_id, user_name, password, openid)
-        values (#{merchantId}, #{userName}, #{password}, #{openid})
+        insert into sys_user (
+            merchant_id, user_name, password, openid,
+            phone_country_code, phone_hash, phone_masked, phone_bound_time
+        ) values (
+            #{merchantId}, #{userName}, #{password}, #{openid},
+            #{phoneCountryCode}, #{phoneHash}, #{phoneMasked}, #{phoneBoundTime}
+        )
     </insert>
 
     <update id="updateOpenid">
@@ -59,17 +78,21 @@
     </update>
 
     <select id="searchByMerchant" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid, create_time, update_time
-        from sys_user
-        where merchant_id = #{merchantId}
-          and user_name like concat('%', #{keyword}, '%')
+        select u.user_id, u.merchant_id, u.user_name, u.password, u.openid,
+               u.phone_country_code, u.phone_hash, u.phone_masked, u.phone_bound_time,
+               u.create_time, u.update_time
+        from sys_user u
+        join merchant_users mu on mu.user_id = u.user_id
+                              and mu.merchant_id = #{merchantId}
+                              and mu.status = 'ENABLED'
+        where u.user_name like concat('%', #{keyword}, '%')
         <if test="excludeUserIds != null and excludeUserIds.size() > 0">
-            and user_id not in
+            and u.user_id not in
             <foreach collection="excludeUserIds" item="id" open="(" separator="," close=")">
                 #{id}
             </foreach>
         </if>
-        order by user_name asc
+        order by u.user_name asc
         limit #{limit}
     </select>
 </mapper>

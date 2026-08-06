@@ -14,24 +14,38 @@ If a requested UI change conflicts with `DESIGN.md`, either preserve the design 
 
 ## Product Scope
 
-`admin/` is the Rabbit SaaS platform management console. It serves platform staff, not merchant business users.
+`admin/` contains two deliberately isolated operational surfaces:
+
+- The Rabbit SaaS platform console under `/login` and the existing platform routes. It serves platform staff.
+- The Rabbit Farm merchant workspace under `/merchant/**`. It serves merchant business accounts and uses the same business identity as the Flutter client.
 
 First-version scope stays narrow:
 
 - Platform admin login and logout.
 - Merchant list, create, edit, and enable / disable; creating a merchant also provisions its required initial business login account.
-- Merchant account creation inside a merchant; each business account belongs to exactly one merchant and every merchant retains at least one account.
+- Merchant account creation and merchant membership roles; a global business account may join multiple merchants and every merchant retains one owner.
+- Merchant rabbit-house governance policy, including creation/member-management switches and capacity limits.
 - Read-only merchant overview for rabbit houses, cages, rabbits, and recent audit records.
 
-Do not add billing, package plans, merchant self-registration, customer support impersonation, cross-merchant business data editing, or platform operation modules unless the task explicitly requests them.
+Merchant-workspace scope includes:
+
+- Business-account login and logout.
+- Merchant and rabbit-house selection with persisted per-user context.
+- Rabbit-house dashboard summaries.
+- Rabbit-house, cage, rabbit, production-batch, merchant-member, and house-member workflows allowed by the current merchant role and house permission.
+- Web-safe production actions that do not depend on mobile peripherals.
+
+Do not add billing, package plans, merchant self-registration, customer support impersonation, cross-merchant business data editing, or unrelated platform operation modules unless the task explicitly requests them. MQTT, NFC tag writing/resolution, Bluetooth, cameras, and hardware-triggered production controls remain pending outside the merchant web workspace. Keep non-hardware business state changes such as aphrodisiac start/finish available with hardware triggering disabled.
 
 ## Engineering Boundaries
 
 - Do not modify backend API contracts from admin UI work unless the user explicitly asks for backend support.
 - Do not modify Flutter or Android clients for admin UI tasks.
 - Do not bypass the backend SaaS boundaries: platform admin APIs use `/api/admin/**`; merchant business APIs remain under existing `/api/**` flows.
-- Preserve read-only boundaries for business production data. Admin may inspect summaries and previews, but must not edit rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
-- Merchant enable / disable is the only high-risk write operation in the first version.
+- Preserve read-only boundaries for business production data in platform routes. Platform admins may inspect summaries and previews, but must not edit rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
+- Merchant workspace routes may write business production data only through existing `/api/**` merchant flows and must send the selected `X-House-Id` for house-scoped operations.
+- Platform and merchant sessions, tokens, route guards, and logout flows must remain separate.
+- Merchant enable / disable and ownership transfer are high-risk write operations.
 
 ## Tech Stack
 
@@ -53,8 +67,9 @@ Keep Vite on the current newer main major already configured in `package.json`; 
 - `src/components/`: domain and layout components shared by admin pages.
 - `src/components/ui/`: shadcn-style primitive components. Keep them generic and prop-driven.
 - `src/api/`: business API methods. Components must import request functions from here instead of calling raw HTTP clients.
-- `src/lib/request.ts`: single alova instance, base URL, token injection, `ApiResponse<T>` unwrapping, and common error handling.
-- `src/lib/auth.ts`: platform admin session storage and token access.
+- `src/lib/request.ts`: isolated platform and merchant alova clients, base URL, token injection, `X-House-Id` injection, `ApiResponse<T>` unwrapping, and common error handling.
+- `src/lib/auth.ts`: separate platform-admin and merchant-business session storage plus per-user merchant/house selection.
+- `src/lib/merchant-workspace.ts`: merchant workspace context contract and hook.
 - `src/types/`: API and domain TypeScript types.
 - `src/index.css`: Tailwind import, semantic color tokens, motion tokens, and global reusable animation classes.
 - `scripts/deploy.sh`: one-command static asset build and rsync deployment for `admin/dist/`.
@@ -65,6 +80,9 @@ Keep Vite on the current newer main major already configured in `package.json`; 
 - Admin login uses `POST /api/admin/auth/login`; do not reuse merchant business login.
 - Admin requests must send `Authorization: Bearer <token>` through the alova wrapper.
 - Admin requests must not send or require `X-House-Id`.
+- Merchant login uses `POST /api/auth/login` and merchant requests use a separate token store.
+- House-scoped merchant requests must send the selected `X-House-Id`; cross-house aggregate requests must use an explicit backend contract rather than omitting scope accidentally.
+- Merchant selectors must filter houses by the selected merchant before rendering or persisting the active house.
 - API response wrappers with `code !== 0` are business failures and must surface a clear toast or page state.
 - `401` clears the admin session and should lead the user back to login through existing route guards.
 - Components must not use bare `fetch`, ad hoc `axios`, or inline base URLs.

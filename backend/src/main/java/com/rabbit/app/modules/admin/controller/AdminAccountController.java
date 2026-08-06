@@ -9,6 +9,8 @@ import com.rabbit.app.modules.admin.dto.UpdateAdminAccountRequest;
 import com.rabbit.app.modules.admin.dto.UpdateMerchantAccountRequest;
 import com.rabbit.app.modules.admin.service.MerchantAccountAdminService;
 import com.rabbit.app.modules.admin.service.PlatformAdminAccountService;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,6 +39,7 @@ public class AdminAccountController {
     }
 
     @GetMapping
+    @RequiresPermission(PermissionCode.PLATFORM_ACCOUNTS_LIST)
     public ApiResponse<PageResult<AdminAccountItem>> list(@RequestParam(value = "page", required = false) Integer page,
                                                           @RequestParam(value = "pageSize", required = false) Integer pageSize,
                                                           @RequestParam(value = "keyword", required = false) String keyword) {
@@ -44,6 +47,7 @@ public class AdminAccountController {
     }
 
     @GetMapping("/merchant-accounts")
+    @RequiresPermission(PermissionCode.PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_LIST)
     public ApiResponse<PageResult<MerchantAccountItem>> listMerchantAccounts(@RequestParam(value = "page", required = false) Integer page,
                                                                              @RequestParam(value = "pageSize", required = false) Integer pageSize,
                                                                              @RequestParam(value = "keyword", required = false) String keyword) {
@@ -51,27 +55,32 @@ public class AdminAccountController {
     }
 
     @PutMapping("/merchant-accounts/{userId}")
+    @RequiresPermission(PermissionCode.PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_EDIT)
     public ApiResponse<MerchantAccountItem> updateMerchantAccount(@PathVariable("userId") Long userId,
                                                                   @Valid @RequestBody UpdateMerchantAccountRequest req) {
         return ApiResponse.ok(merchantAccountAdminService.update(userId, req.getUserName(), req.getPassword(), req.getConfirmPassword()));
     }
 
     @GetMapping("/{accountId}")
+    @RequiresPermission(PermissionCode.PLATFORM_ACCOUNTS_QUERY)
     public ApiResponse<AdminAccountItem> get(@PathVariable("accountId") Long accountId) {
         return ApiResponse.ok(platformAdminAccountService.get(accountId));
     }
 
     @PostMapping
+    @RequiresPermission(PermissionCode.PLATFORM_ACCOUNTS_ADD)
     public ApiResponse<AdminAccountItem> create(@Valid @RequestBody CreateAdminAccountRequest req) {
         return ApiResponse.ok(platformAdminAccountService.create(req.getUserName(), req.getPassword(), req.getRole(), req.getEnabled()));
     }
 
     @PutMapping("/{accountId}")
+    @RequiresPermission(PermissionCode.PLATFORM_ACCOUNTS_EDIT)
     public ApiResponse<AdminAccountItem> update(@PathVariable("accountId") Long accountId, @Valid @RequestBody UpdateAdminAccountRequest req) {
         return ApiResponse.ok(platformAdminAccountService.update(accountId, req.getUserName(), req.getPassword(), req.getRole(), req.getEnabled()));
     }
 
     @DeleteMapping("/{accountId}")
+    @RequiresPermission(PermissionCode.PLATFORM_ACCOUNTS_REMOVE)
     public ApiResponse<Void> delete(@PathVariable("accountId") Long accountId) {
         platformAdminAccountService.delete(accountId);
         return ApiResponse.ok(null);

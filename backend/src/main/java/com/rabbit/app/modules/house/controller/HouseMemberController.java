@@ -9,7 +9,8 @@ import com.rabbit.app.modules.house.dto.UserSearchItem;
 import com.rabbit.app.modules.house.service.HouseMemberService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -38,7 +39,7 @@ public class HouseMemberController {
     }
 
     @GetMapping("/house-members")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_LIST)
     public ApiResponse<List<HouseMemberItem>> list(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -47,7 +48,7 @@ public class HouseMemberController {
     }
 
     @GetMapping("/house-members/search-users")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_QUERY)
     public ApiResponse<List<UserSearchItem>> searchUsers(@RequestHeader("X-House-Id") Long houseId,
                                                          @RequestParam("q") String q) {
         Long userId = requireLogin();
@@ -57,18 +58,18 @@ public class HouseMemberController {
     }
 
     @PostMapping("/house-members")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_ADD)
     public ApiResponse<Void> add(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody AddHouseMemberRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
         houseService.assertHouseAdmin(userId, houseId);
         String operator = String.valueOf(userId);
-        houseMemberService.addMember(houseId, userId, operator, req.getUserName(), req.getPerms(), req.getIsAdmin(), req.getRequestId());
+        houseMemberService.addMember(houseId, userId, operator, req.getUserName(), req.getRole(), req.getPerms(), req.getIsAdmin(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
     @PutMapping("/house-members/{memberUserId}")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_EDIT)
     public ApiResponse<Void> update(@RequestHeader("X-House-Id") Long houseId,
                                     @PathVariable("memberUserId") Long memberUserId,
                                     @Valid @RequestBody UpdateHouseMemberRequest req) {
@@ -76,12 +77,12 @@ public class HouseMemberController {
         houseService.assertHousePermission(userId, houseId, "view");
         houseService.assertHouseAdmin(userId, houseId);
         String operator = String.valueOf(userId);
-        houseMemberService.updateMember(houseId, memberUserId, userId, operator, req.getPerms(), req.getIsAdmin(), req.getRequestId());
+        houseMemberService.updateMember(houseId, memberUserId, userId, operator, req.getRole(), req.getPerms(), req.getIsAdmin(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
     @DeleteMapping("/house-members/{memberUserId}")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_REMOVE)
     public ApiResponse<Void> remove(@RequestHeader("X-House-Id") Long houseId,
                                     @PathVariable("memberUserId") Long memberUserId,
                                     @RequestParam("requestId") @NotBlank(message = "requestId不能为空") String requestId) {
@@ -96,7 +97,7 @@ public class HouseMemberController {
     }
 
     @PostMapping("/house-members/leave")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_LEAVE)
     public ApiResponse<Void> leave(@RequestHeader("X-House-Id") Long houseId,
                                    @RequestParam("requestId") @NotBlank(message = "requestId不能为空") String requestId) {
         Long userId = requireLogin();

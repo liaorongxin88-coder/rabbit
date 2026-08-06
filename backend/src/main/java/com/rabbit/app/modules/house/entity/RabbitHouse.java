@@ -5,6 +5,7 @@ import java.util.Date;
 public class RabbitHouse {
     private Long id;
     private Long merchantId;
+    private Long ownerUserId;
     private String name;
     private Integer layoutRows;
     private Integer layoutCols;
@@ -31,6 +32,14 @@ public class RabbitHouse {
 
     public void setMerchantId(Long merchantId) {
         this.merchantId = merchantId;
+    }
+
+    public Long getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(Long ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 
     public String getName() {

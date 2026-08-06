@@ -10,7 +10,12 @@ import com.rabbit.app.modules.admin.mapper.MerchantMapper;
 import com.rabbit.app.modules.admin.mapper.MerchantOverviewMapper;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
+import com.rabbit.app.modules.merchant.entity.MerchantHousePolicy;
+import com.rabbit.app.modules.merchant.mapper.MerchantHousePolicyMapper;
+import com.rabbit.app.modules.merchant.service.MerchantMembershipService;
 import com.rabbit.app.security.PlatformAdminContext;
+import com.rabbit.app.security.AccessControlService;
+import com.rabbit.app.security.permission.PermissionCode;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,22 +29,32 @@ public class MerchantAdminService {
     private final MerchantOverviewMapper merchantOverviewMapper;
     private final SysUserMapper sysUserMapper;
     private final PasswordEncoder passwordEncoder;
+    private final MerchantMembershipService membershipService;
+    private final MerchantHousePolicyMapper policyMapper;
+    private final AccessControlService accessControlService;
 
     public MerchantAdminService(
             MerchantMapper merchantMapper,
             MerchantAccountMapper merchantAccountMapper,
             MerchantOverviewMapper merchantOverviewMapper,
             SysUserMapper sysUserMapper,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            MerchantMembershipService membershipService,
+            MerchantHousePolicyMapper policyMapper,
+            AccessControlService accessControlService
     ) {
         this.merchantMapper = merchantMapper;
         this.merchantAccountMapper = merchantAccountMapper;
         this.merchantOverviewMapper = merchantOverviewMapper;
         this.sysUserMapper = sysUserMapper;
         this.passwordEncoder = passwordEncoder;
+        this.membershipService = membershipService;
+        this.policyMapper = policyMapper;
+        this.accessControlService = accessControlService;
     }
 
     public PageResult<Merchant> list(String keyword, String status, Integer page, Integer pageSize) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANTS_LIST);
         int p = page == null || page.intValue() <= 0 ? 1 : page.intValue();
         int ps = pageSize == null || pageSize.intValue() <= 0 ? 20 : pageSize.intValue();
         if (ps > 100) {
@@ -54,6 +69,7 @@ public class MerchantAdminService {
     }
 
     public Merchant get(Long merchantId) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANTS_QUERY);
         Merchant merchant = merchantMapper.selectById(merchantId);
         if (merchant == null) {
             throw new BizException(404, "商户不存在");
@@ -71,6 +87,7 @@ public class MerchantAdminService {
             String password,
             String confirmPassword
     ) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANTS_ADD);
         Merchant merchant = new Merchant();
         merchant.setName(trim(name));
         merchant.setContactName(trim(contactName));
@@ -81,11 +98,14 @@ public class MerchantAdminService {
         merchant.setUpdateBy(operator());
         merchantMapper.insert(merchant);
 
-        createBusinessUser(merchant.getId(), userName, password, confirmPassword);
+        SysUser owner = createBusinessUser(merchant.getId(), userName, password, confirmPassword);
+        membershipService.createInitialOwner(merchant.getId(), owner.getUserId(), operator());
+        policyMapper.insertDefault(merchant.getId(), operator());
         return merchantMapper.selectById(merchant.getId());
     }
 
     public Merchant update(Long merchantId, String name, String contactName, String contactPhone, String remark) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANTS_EDIT);
         ensureExists(merchantId);
         int n = merchantMapper.updateBasic(merchantId, trim(name), trim(contactName), trim(contactPhone), trim(remark), operator());
         if (n <= 0) {
@@ -95,6 +115,7 @@ public class MerchantAdminService {
     }
 
     public Merchant updateStatus(Long merchantId, String status) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANTS_EDIT);
         ensureExists(merchantId);
         String s = normalizeRequiredStatus(status);
         int n = merchantMapper.updateStatus(merchantId, s, operator());
@@ -105,17 +126,59 @@ public class MerchantAdminService {
     }
 
     public List<MerchantAccountSummary> listAccounts(Long merchantId) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_ACCOUNTS_LIST);
         ensureExists(merchantId);
         return merchantAccountMapper.selectByMerchantId(merchantId);
     }
 
     @Transactional
-    public void createAccount(Long merchantId, String userName, String password, String confirmPassword) {
+    public void createAccount(Long merchantId, String userName, String password, String confirmPassword, String role) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_ACCOUNTS_ADD);
         ensureExists(merchantId);
-        createBusinessUser(merchantId, userName, password, confirmPassword);
+        SysUser user = createBusinessUser(merchantId, userName, password, confirmPassword);
+        membershipService.createMember(merchantId, user.getUserId(), role, operator());
+    }
+
+    public MerchantHousePolicy getHousePolicy(Long merchantId) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_POLICY_QUERY);
+        ensureExists(merchantId);
+        MerchantHousePolicy policy = policyMapper.selectByMerchantId(merchantId);
+        if (policy == null) {
+            policyMapper.insertDefault(merchantId, operator());
+            policy = policyMapper.selectByMerchantId(merchantId);
+        }
+        return policy;
+    }
+
+    @Transactional
+    public MerchantHousePolicy updateHousePolicy(
+            Long merchantId,
+            Boolean houseCreationEnabled,
+            Boolean houseMemberManagementEnabled,
+            Integer maxHouseCount,
+            Integer maxMembersPerHouse
+    ) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_POLICY_EDIT);
+        ensureExists(merchantId);
+        MerchantHousePolicy policy = getHousePolicy(merchantId);
+        policy.setHouseCreationEnabled(houseCreationEnabled);
+        policy.setHouseMemberManagementEnabled(houseMemberManagementEnabled);
+        policy.setMaxHouseCount(maxHouseCount);
+        policy.setMaxMembersPerHouse(maxMembersPerHouse);
+        policy.setUpdateBy(operator());
+        policyMapper.update(policy);
+        return policyMapper.selectByMerchantId(merchantId);
+    }
+
+    @Transactional
+    public void updateMembership(Long merchantId, Long userId, String role, String status) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_MEMBERSHIP_EDIT);
+        ensureExists(merchantId);
+        membershipService.updateMembership(merchantId, userId, role, status, operator());
     }
 
     public MerchantOverview overview(Long merchantId) {
+        accessControlService.requirePlatformPermission(PermissionCode.PLATFORM_MERCHANT_OVERVIEW_QUERY);
         ensureExists(merchantId);
         MerchantOverview overview = new MerchantOverview();
         overview.setHouseCount(merchantOverviewMapper.countHouses(merchantId));

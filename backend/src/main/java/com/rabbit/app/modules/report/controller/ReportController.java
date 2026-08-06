@@ -5,11 +5,15 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BreedingSummary;
 import com.rabbit.app.modules.event.dto.EventAckSummary;
 import com.rabbit.app.modules.feed.dto.FeedSummary;
+import com.rabbit.app.modules.report.dto.DashboardSummary;
+import com.rabbit.app.modules.report.service.DashboardReportService;
 import com.rabbit.app.modules.batch.mapper.BreedingPerformanceMapper;
 import com.rabbit.app.modules.event.mapper.EventAckMapper;
 import com.rabbit.app.modules.feed.mapper.FeedLogMapper;
 import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.security.AuthContext;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.modules.feed.service.FeedService;
 import com.rabbit.app.modules.house.service.HouseService;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -37,20 +41,32 @@ public class ReportController {
     private final BreedingPerformanceMapper breedingPerformanceMapper;
     private final EventAckMapper eventAckMapper;
     private final FeedService feedService;
+    private final DashboardReportService dashboardReportService;
 
     public ReportController(HouseService houseService,
                             FeedLogMapper feedLogMapper,
                             BreedingPerformanceMapper breedingPerformanceMapper,
                             EventAckMapper eventAckMapper,
-                            FeedService feedService) {
+                            FeedService feedService,
+                            DashboardReportService dashboardReportService) {
         this.houseService = houseService;
         this.feedLogMapper = feedLogMapper;
         this.breedingPerformanceMapper = breedingPerformanceMapper;
         this.eventAckMapper = eventAckMapper;
         this.feedService = feedService;
+        this.dashboardReportService = dashboardReportService;
+    }
+
+    @GetMapping("/dashboard")
+    @RequiresPermission(PermissionCode.DASHBOARD_QUERY)
+    public ApiResponse<DashboardSummary> dashboard(
+            @RequestParam(value = "houseId", required = false) Long houseId,
+            @RequestParam(value = "year", required = false) Integer year) {
+        return ApiResponse.ok(dashboardReportService.load(requireLogin(), houseId, year));
     }
 
     @GetMapping("/feed-summary")
+    @RequiresPermission(PermissionCode.RABBIT_REPORTS_QUERY)
     public ApiResponse<FeedSummary> feedSummary(@RequestHeader("X-House-Id") Long houseId,
                                                 @RequestParam(value = "from", required = false) Long from,
                                                 @RequestParam(value = "to", required = false) Long to) {
@@ -62,6 +78,7 @@ public class ReportController {
     }
 
     @GetMapping(value = "/feed-logs.csv")
+    @RequiresPermission(PermissionCode.RABBIT_REPORTS_EXPORT)
     public ResponseEntity<StreamingResponseBody> feedLogsCsv(@RequestHeader("X-House-Id") Long houseId,
                                                             @RequestParam(value = "from", required = false) Long from,
                                                             @RequestParam(value = "to", required = false) Long to,
@@ -129,6 +146,7 @@ public class ReportController {
     }
 
     @GetMapping("/breeding-summary")
+    @RequiresPermission(PermissionCode.RABBIT_REPORTS_QUERY)
     public ApiResponse<BreedingSummary> breedingSummary(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -136,6 +154,7 @@ public class ReportController {
     }
 
     @GetMapping("/event-ack-summary")
+    @RequiresPermission(PermissionCode.RABBIT_REPORTS_QUERY)
     public ApiResponse<EventAckSummary> eventAckSummary(@RequestHeader("X-House-Id") Long houseId,
                                                         @RequestParam("category") String category,
                                                         @RequestParam(value = "from", required = false) Long from,
@@ -154,6 +173,7 @@ public class ReportController {
     }
 
     @GetMapping(value = "/event-ack-summary.csv")
+    @RequiresPermission(PermissionCode.RABBIT_REPORTS_EXPORT)
     public ResponseEntity<StreamingResponseBody> eventAckSummaryCsv(@RequestHeader("X-House-Id") Long houseId,
                                                                    @RequestParam("category") String category,
                                                                    @RequestParam(value = "from", required = false) Long from,

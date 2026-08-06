@@ -25,10 +25,21 @@ Rabbit 当前由三块主要应用组成：
 - `audit`：接口审计。
 - `dedup`：写请求幂等去重。
 - `hardware`：硬件联动网关，默认 noop。
-- `admin`：平台管理员、商户和平台侧概览。
+- `merchant`：全局账号与商户的成员关系、商户角色和兔场策略。
+- `workspace`：多养殖业务工作空间契约和模块注册；当前由兔场模块提供 `RABBIT` 适配。
+- `admin`：平台管理员、商户、商户成员权限和平台侧概览。
 - `report`、`setting`：报表和全局设置。
 
 数据库结构由 Flyway 管理，迁移目录为 `backend/src/main/resources/db/migration/`。`db/schema.sql` 只作为当前结构参考，不作为常规初始化入口。
+
+当前保持单个 Spring Boot 模块化单体。业务层级是“全局账号 -> 商户租户 -> 养殖工作空间 ->
+具体养殖模块”。现有兔场通过 `RABBIT:<houseId>` 暴露为工作空间，但仍使用原表和
+`X-House-Id`，不进行破坏性迁移。第二种养殖业务应注册独立 workspace provider，并保留
+自己的场地拓扑和生命周期状态机。详细决策见
+[多养殖业务工作空间](../backend/modules/farming-workspaces.md)。
+
+跨模块依赖使用 workspace 的 `model` 和 `spi` 契约。兔养殖适配器属于 `house.workspace`，
+通用 workspace 核心不依赖任何具体养殖模块；该方向由后端架构测试强制执行。
 
 ## 权限与数据隔离
 
@@ -36,7 +47,10 @@ Rabbit 当前由三块主要应用组成：
 
 - 登录后使用 `Authorization: Bearer <token>`。
 - 兔舍域请求必须带 `X-House-Id: <houseId>`。
+- `GET /api/workspaces` 提供当前账号可见的养殖业务模块和空间，现有兔场键为 `RABBIT:<houseId>`。
 - 权限分为 `view`、`edit`、`control`。
+- 账号是全局身份，通过 `merchant_users` 加入一个或多个商户；`sys_user.merchant_id` 仅作为旧客户端的默认商户兼容字段。
+- 兔场角色分为 `OWNER`、`MANAGER`、`STAFF`、`VIEWER`，并向旧客户端映射为原有权限字段。
 - 查询和写入必须按兔舍隔离；没有直接 `house_id` 的从表需要通过父表关联过滤。
 
 平台管理 API：
@@ -44,7 +58,7 @@ Rabbit 当前由三块主要应用组成：
 - 使用 `/api/admin/**`。
 - 使用平台管理员 JWT。
 - 不发送 `X-House-Id`。
-- 第一版只能管理商户及其业务账号并查看概览，不直接编辑商户生产数据。
+- 可管理商户成员角色和兔场治理策略，不直接编辑商户生产数据。
 
 ## Flutter 客户端
 
@@ -76,7 +90,7 @@ Admin 位于 `admin/`，是 React + TypeScript + Vite 应用。它只服务平�
 - 请求统一走 `src/lib/request.ts` 和 `src/api/`。
 - 平台登录使用 `POST /api/admin/auth/login`。
 - 商户业务数据以只读概览为主。
-- 可写操作集中在商户创建、编辑、启停，以及在商户下新增业务账号。
+- 可写操作集中在商户创建、编辑、启停、成员角色，以及兔场治理策略。
 
 UI 和工程规则分别见 `admin/DESIGN.md` 与 `admin/.rules`。
 

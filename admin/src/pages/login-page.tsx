@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Building2Icon, ShieldCheckIcon, UserCogIcon, UsersIcon, type LucideIcon } from 'lucide-react'
+import { Building2Icon, RabbitIcon, ShieldCheckIcon, UserCogIcon, UsersIcon, type LucideIcon } from 'lucide-react'
 import { loginAdmin } from '@/api/admin'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -102,6 +102,12 @@ export function LoginPage() {
               <Button type="submit" disabled={submitting}>
                 {submitting ? <Spinner /> : null}
                 登录
+              </Button>
+              <Button type="button" variant="ghost" asChild>
+                <Link to="/merchant/login">
+                  <RabbitIcon data-icon="inline-start" />
+                  商户工作台登录
+                </Link>
               </Button>
             </form>
           </CardContent>

@@ -9,7 +9,8 @@ import com.rabbit.app.modules.rabbit.dto.UpdateRabbitRequest;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.service.RabbitService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_RABBITS_LIST)
 public class RabbitController {
     private final HouseService houseService;
     private final RabbitService rabbitService;
@@ -37,7 +38,7 @@ public class RabbitController {
     }
 
     @PostMapping("/rabbits")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_ADD)
     public ApiResponse<Rabbit> createRabbit(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateRabbitRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -72,6 +73,7 @@ public class RabbitController {
     }
 
     @GetMapping("/rabbits/{id}")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_QUERY)
     public ApiResponse<Rabbit> getRabbit(@RequestHeader("X-House-Id") Long houseId, @PathVariable("id") Long id) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -80,7 +82,7 @@ public class RabbitController {
     }
 
     @PostMapping("/rabbits/replacement")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_CONTROL)
     public ApiResponse<Void> replacement(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody ReplacementRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "control");
@@ -90,7 +92,7 @@ public class RabbitController {
     }
 
     @PutMapping("/rabbits/{id}")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_EDIT)
     public ApiResponse<Rabbit> updateRabbit(@RequestHeader("X-House-Id") Long houseId, @PathVariable("id") Long id, @Valid @RequestBody UpdateRabbitRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");

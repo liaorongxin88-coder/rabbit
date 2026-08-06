@@ -19,6 +19,8 @@
         <java.version>21</java.version>
         <jjwt.version>0.11.5</jjwt.version>
         <mybatis-spring-boot.version>3.0.5</mybatis-spring-boot.version>
+        <aliyun-dysmsapi.version>4.1.1</aliyun-dysmsapi.version>
+        <archunit.version>1.4.2</archunit.version>
     </properties>
 
     <dependencies>
@@ -75,8 +77,20 @@
         </dependency>
 
         <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>dysmsapi20170525</artifactId>
+            <version>${aliyun-dysmsapi.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

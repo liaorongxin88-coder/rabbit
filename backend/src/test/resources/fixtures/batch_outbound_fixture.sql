@@ -32,12 +32,31 @@ SET @user_edit = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outboun
 SET @user_view = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outbound_fixture_', @run_id, '_view'));
 SET @user_concurrent = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outbound_fixture_', @run_id, '_concurrent'));
 
+INSERT INTO merchant_users (merchant_id, user_id, role, status, create_by, update_by)
+VALUES
+    (@merchant_id, @user_control, 'OWNER', 'ENABLED', @actor, @actor),
+    (@merchant_id, @user_edit, 'MEMBER', 'ENABLED', @actor, @actor),
+    (@merchant_id, @user_view, 'MEMBER', 'ENABLED', @actor, @actor),
+    (@merchant_id, @user_concurrent, 'MEMBER', 'ENABLED', @actor, @actor);
+
+UPDATE merchants
+SET owner_user_id = @user_control,
+    update_by = @actor
+WHERE id = @merchant_id;
+
+INSERT INTO merchant_house_policies (
+    merchant_id, house_creation_enabled, house_member_management_enabled,
+    max_house_count, max_members_per_house, create_by, update_by
+)
+VALUES (@merchant_id, TRUE, TRUE, 20, 50, @actor, @actor);
+
 INSERT INTO rabbit_houses (
-    merchant_id, name, layout_rows, layout_cols, layout_layers,
+    merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers,
     request_id, remark, create_by, update_by
 )
 VALUES (
     @merchant_id,
+    @user_control,
     CONCAT('H-GOLDEN-', @run_id),
     2,
     6,
@@ -50,11 +69,12 @@ VALUES (
 SET @primary_house_id = LAST_INSERT_ID();
 
 INSERT INTO rabbit_houses (
-    merchant_id, name, layout_rows, layout_cols, layout_layers,
+    merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers,
     request_id, remark, create_by, update_by
 )
 VALUES (
     @merchant_id,
+    @user_control,
     CONCAT('H-GOLDEN-BRANCH-', @run_id),
     1,
     2,
@@ -66,16 +86,16 @@ VALUES (
 );
 SET @branch_house_id = LAST_INSERT_ID();
 
-INSERT INTO house_users (house_id, user_id, perms, is_admin, create_by, update_by)
+INSERT INTO house_users (house_id, user_id, role, perms, is_admin, create_by, update_by)
 VALUES
-    (@primary_house_id, @user_control, 'control', TRUE, @actor, @actor),
-    (@primary_house_id, @user_edit, 'edit', FALSE, @actor, @actor),
-    (@primary_house_id, @user_view, 'view', FALSE, @actor, @actor),
-    (@primary_house_id, @user_concurrent, 'control', FALSE, @actor, @actor),
-    (@branch_house_id, @user_control, 'control', TRUE, @actor, @actor),
-    (@branch_house_id, @user_edit, 'edit', FALSE, @actor, @actor),
-    (@branch_house_id, @user_view, 'view', FALSE, @actor, @actor),
-    (@branch_house_id, @user_concurrent, 'control', FALSE, @actor, @actor);
+    (@primary_house_id, @user_control, 'OWNER', 'control', TRUE, @actor, @actor),
+    (@primary_house_id, @user_edit, 'STAFF', 'edit', FALSE, @actor, @actor),
+    (@primary_house_id, @user_view, 'VIEWER', 'view', FALSE, @actor, @actor),
+    (@primary_house_id, @user_concurrent, 'MANAGER', 'control', FALSE, @actor, @actor),
+    (@branch_house_id, @user_control, 'OWNER', 'control', TRUE, @actor, @actor),
+    (@branch_house_id, @user_edit, 'STAFF', 'edit', FALSE, @actor, @actor),
+    (@branch_house_id, @user_view, 'VIEWER', 'view', FALSE, @actor, @actor),
+    (@branch_house_id, @user_concurrent, 'MANAGER', 'control', FALSE, @actor, @actor);
 
 INSERT INTO cages (
     house_id, cage_number, row_code, layer_index, position_index,
@@ -187,7 +207,7 @@ SELECT
     b.id,
     r.id,
     '断奶',
-    '商品兔',
+    'fattening',
     '成长期',
     NOW() - INTERVAL 7 DAY,
     CASE

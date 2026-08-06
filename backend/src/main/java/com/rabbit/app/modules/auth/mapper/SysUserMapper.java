@@ -12,6 +12,8 @@ public interface SysUserMapper {
 
     SysUser selectByOpenid(@Param("openid") String openid);
 
+    SysUser selectByPhoneHash(@Param("phoneHash") String phoneHash);
+
     SysUser selectById(@Param("userId") Long userId);
 
     List<SysUser> searchByMerchant(@Param("merchantId") Long merchantId,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -8,12 +8,22 @@ import {
   KeyRoundIcon,
   PencilIcon,
   RabbitIcon,
+  Settings2Icon,
   ShieldAlertIcon,
+  ShieldCheckIcon,
   UsersIcon,
 } from 'lucide-react'
-import { getMerchant, getMerchantOverview, listMerchantAccounts, updateMerchantStatus } from '@/api/merchants'
+import {
+  getMerchant,
+  getMerchantHousePolicy,
+  getMerchantOverview,
+  listMerchantAccounts,
+  updateMerchantStatus,
+} from '@/api/merchants'
 import { MerchantFormDialog } from '@/components/merchant-form-dialog'
 import { MerchantAccountCreateDialog } from '@/components/merchant-account-create-dialog'
+import { MerchantHousePolicyDialog } from '@/components/merchant-house-policy-dialog'
+import { MerchantMembershipDialog } from '@/components/merchant-membership-dialog'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
@@ -26,7 +36,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { Merchant, MerchantAccountSummary, MerchantOverview } from '@/types/api'
+import type {
+  Merchant,
+  MerchantAccountSummary,
+  MerchantHousePolicy,
+  MerchantOverview,
+  MerchantRole,
+} from '@/types/api'
 
 export function MerchantDetailPage() {
   const params = useParams()
@@ -35,10 +51,14 @@ export function MerchantDetailPage() {
   const [merchant, setMerchant] = useState<Merchant | null>(null)
   const [users, setUsers] = useState<MerchantAccountSummary[]>([])
   const [overview, setOverview] = useState<MerchantOverview | null>(null)
+  const [policy, setPolicy] = useState<MerchantHousePolicy | null>(null)
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
   const [createAccountOpen, setCreateAccountOpen] = useState(false)
   const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [policyDialogOpen, setPolicyDialogOpen] = useState(false)
+  const [membershipDialogOpen, setMembershipDialogOpen] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<MerchantAccountSummary | null>(null)
   const [saving, setSaving] = useState(false)
 
   const loadDetail = useCallback(async () => {
@@ -48,14 +68,16 @@ export function MerchantDetailPage() {
     }
     setLoading(true)
     try {
-      const [merchantResult, usersResult, overviewResult] = await Promise.all([
+      const [merchantResult, usersResult, overviewResult, policyResult] = await Promise.all([
         getMerchant(merchantId),
         listMerchantAccounts(merchantId),
         getMerchantOverview(merchantId),
+        getMerchantHousePolicy(merchantId),
       ])
       setMerchant(merchantResult)
       setUsers(usersResult)
       setOverview(overviewResult)
+      setPolicy(policyResult)
     } finally {
       setLoading(false)
     }
@@ -79,6 +101,11 @@ export function MerchantDetailPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  function openMembershipDialog(account: MerchantAccountSummary) {
+    setSelectedAccount(account)
+    setMembershipDialogOpen(true)
   }
 
   if (loading) {
@@ -150,6 +177,7 @@ export function MerchantDetailPage() {
         <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="overview">数据概览</TabsTrigger>
           <TabsTrigger value="users">商户账号</TabsTrigger>
+          <TabsTrigger value="permissions">兔场权限</TabsTrigger>
           <TabsTrigger value="audit">最近审计</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
@@ -209,7 +237,7 @@ export function MerchantDetailPage() {
               <div>
                 <CardTitle>商户账号</CardTitle>
                 <CardDescription>
-                  每个账号只属于当前商户，新增账号后可直接登录业务端。
+                  管理账号在当前商户内的角色和状态；同一账号可加入多个商户。
                 </CardDescription>
               </div>
               <Button onClick={() => setCreateAccountOpen(true)}>
@@ -223,8 +251,11 @@ export function MerchantDetailPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>用户</TableHead>
-                      <TableHead>OpenID</TableHead>
+                      <TableHead>角色</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>账号标识</TableHead>
                       <TableHead>创建时间</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -238,11 +269,29 @@ export function MerchantDetailPage() {
                             </p>
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <Badge variant={user.role === 'OWNER' ? 'default' : 'secondary'}>
+                            {merchantRoleLabel(user.role)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.membershipStatus === 'ENABLED' ? 'secondary' : 'outline'}>
+                            {user.membershipStatus === 'ENABLED' ? '启用' : '停用'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
-                          <span className="block max-w-72 truncate">{user.openid || '-'}</span>
+                          <span className="block max-w-72 truncate">
+                            {user.phoneMasked || user.openid || '-'}
+                          </span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {formatTime(user.createTime)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => openMembershipDialog(user)}>
+                            <ShieldCheckIcon data-icon="inline-start" />
+                            配置权限
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -252,8 +301,74 @@ export function MerchantDetailPage() {
                 <Empty>
                   <EmptyTitle>暂无商户账号</EmptyTitle>
                   <EmptyDescription>
-                    新增账号后，该账号会直接归属当前商户。
+                    新增账号后，会为该账号创建当前商户的成员关系。
                   </EmptyDescription>
+                </Empty>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="permissions">
+          <Card>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>兔场管理权限</CardTitle>
+                <CardDescription>平台为当前商户配置建场、成员维护和容量边界。</CardDescription>
+              </div>
+              <Button variant="outline" disabled={!policy} onClick={() => setPolicyDialogOpen(true)}>
+                <Settings2Icon data-icon="inline-start" />
+                配置权限
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {policy ? (
+                <>
+                  <dl className="grid grid-cols-2 gap-x-5 gap-y-5 sm:hidden">
+                    <PolicySummary label="创建兔场">
+                      {permissionBadge(policy.houseCreationEnabled)}
+                    </PolicySummary>
+                    <PolicySummary label="管理兔场成员">
+                      {permissionBadge(policy.houseMemberManagementEnabled)}
+                    </PolicySummary>
+                    <PolicySummary label="兔场上限">
+                      {policy.maxHouseCount}
+                    </PolicySummary>
+                    <PolicySummary label="单兔场成员上限">
+                      {policy.maxMembersPerHouse}
+                    </PolicySummary>
+                    <PolicySummary label="更新时间" className="col-span-2">
+                      {formatTime(policy.updateTime)}
+                    </PolicySummary>
+                  </dl>
+                  <div className="hidden sm:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>创建兔场</TableHead>
+                          <TableHead>管理兔场成员</TableHead>
+                          <TableHead>兔场上限</TableHead>
+                          <TableHead>单兔场成员上限</TableHead>
+                          <TableHead>更新时间</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>{permissionBadge(policy.houseCreationEnabled)}</TableCell>
+                          <TableCell>{permissionBadge(policy.houseMemberManagementEnabled)}</TableCell>
+                          <TableCell>{policy.maxHouseCount}</TableCell>
+                          <TableCell>{policy.maxMembersPerHouse}</TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {formatTime(policy.updateTime)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              ) : (
+                <Empty>
+                  <EmptyTitle>权限配置不可用</EmptyTitle>
+                  <EmptyDescription>刷新商户详情后重试。</EmptyDescription>
                 </Empty>
               )}
             </CardContent>
@@ -328,6 +443,23 @@ export function MerchantDetailPage() {
         onSaved={() => void loadDetail()}
       />
 
+      {policy ? (
+        <MerchantHousePolicyDialog
+          open={policyDialogOpen}
+          policy={policy}
+          onOpenChange={setPolicyDialogOpen}
+          onSaved={setPolicy}
+        />
+      ) : null}
+
+      <MerchantMembershipDialog
+        open={membershipDialogOpen}
+        merchantId={merchantId}
+        account={selectedAccount}
+        onOpenChange={setMembershipDialogOpen}
+        onSaved={() => void loadDetail()}
+      />
+
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -376,6 +508,37 @@ function formatCost(value?: number | null) {
     return '-'
   }
   return `${value} ms`
+}
+
+function merchantRoleLabel(role: MerchantRole) {
+  if (role === 'OWNER') {
+    return '所有者'
+  }
+  if (role === 'ADMIN') {
+    return '管理员'
+  }
+  return '成员'
+}
+
+function permissionBadge(enabled: boolean) {
+  return enabled ? <Badge>允许</Badge> : <Badge variant="secondary">禁止</Badge>
+}
+
+function PolicySummary({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={className}>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-2 text-sm font-medium">{children}</dd>
+    </div>
+  )
 }
 
 function renderAuditStatus(log: { apiCode?: number | null; status?: number | null }) {

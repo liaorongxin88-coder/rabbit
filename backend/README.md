@@ -63,6 +63,14 @@ docker compose up -d --build --no-deps backend
 - `APP_ADMIN_BOOTSTRAP_ENABLED`
 - `APP_ADMIN_BOOTSTRAP_USERNAME`
 - `APP_ADMIN_BOOTSTRAP_PASSWORD`
+- `APP_PHONE_HASH_SECRET`，手机号唯一摘要的 pepper，生产环境必须使用独立随机值
+- `APP_SMS_ENABLED`，短信登录开关，默认 `false`
+- `APP_SMS_CODE_SECRET`，验证码 HMAC 密钥，生产环境必须使用独立随机值
+- `ALIBABA_CLOUD_ACCESS_KEY_ID`
+- `ALIBABA_CLOUD_ACCESS_KEY_SECRET`
+- `APP_SMS_SIGN_NAME`
+- `APP_SMS_TEMPLATE_CODE`
+- `APP_SMS_TEMPLATE_PARAM_NAME`，默认 `code`
 - `APP_NFC_TAG_ACTIVE_KEY_ID`
 - `APP_NFC_TAG_SIGNING_KEYS`，必填，格式为 `1=<base64url-key>,2=<base64url-key>`
 
@@ -72,7 +80,7 @@ docker compose up -d --build --no-deps backend
 
 业务模块位于 `src/main/java/com/rabbit/app/modules/`：
 
-- `auth`、`house`、`cage`、`rabbit`、`batch`
+- `auth`、`workspace`、`house`、`cage`、`rabbit`、`batch`
 - `event`、`feed`、`treatment`、`weight`
 - `inventory`、`sale`、`nfc`
 - `audit`、`dedup`、`hardware`
@@ -102,8 +110,11 @@ docker compose up -d --build --no-deps backend
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/sms/code`
+- `POST /api/auth/sms/login`
 - `POST /api/auth/wechat-login`
 - `GET /api/houses`
+- `GET /api/workspaces`
 - `POST /api/houses`
 - `GET /api/house-members`
 
@@ -137,7 +148,10 @@ mvn -DskipTests package
 mvn -Pe2e verify
 ```
 
-E2E 说明见 [../docs/common/testing.md](../docs/common/testing.md)。
+E2E 说明见 [../docs/common/testing.md](../docs/common/testing.md)。手机号登录的阿里云短信配置、
+接口契约和限流规则见 [../docs/backend/sms-auth.md](../docs/backend/sms-auth.md)。
+多养殖业务的工作空间兼容层和后续模块化路线见
+[../docs/backend/modules/farming-workspaces.md](../docs/backend/modules/farming-workspaces.md)。
 
 ## 更多文档
 

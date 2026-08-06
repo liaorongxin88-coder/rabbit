@@ -7,7 +7,8 @@ import com.rabbit.app.modules.weight.dto.CreateWeightLogRequest;
 import com.rabbit.app.modules.weight.entity.WeightLog;
 import com.rabbit.app.modules.weight.service.WeightService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_WEIGHTS_LIST)
 public class WeightController {
     private final HouseService houseService;
     private final WeightService weightService;
@@ -33,7 +34,7 @@ public class WeightController {
     }
 
     @PostMapping("/weight-logs")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_WEIGHTS_ADD)
     public ApiResponse<WeightLog> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateWeightLogRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");

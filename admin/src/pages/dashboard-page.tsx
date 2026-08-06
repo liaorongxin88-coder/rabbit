@@ -20,6 +20,7 @@ import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { AdminSession, Merchant, PageResult } from '@/types/api'
+import { hasPermission } from '@/lib/permissions'
 
 const DASHBOARD_PAGE_SIZE = 8
 
@@ -53,6 +54,10 @@ export function DashboardPage({ session }: { session: AdminSession }) {
       setData(result)
       setEnabledTotal(enabled.total)
       setDisabledTotal(disabled.total)
+    } catch {
+      setData(null)
+      setEnabledTotal(0)
+      setDisabledTotal(0)
     } finally {
       setLoading(false)
     }
@@ -97,8 +102,8 @@ export function DashboardPage({ session }: { session: AdminSession }) {
         <SummaryCard title="最近记录" value={stats.recent} icon={Clock3Icon} />
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card>
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card className="min-w-0">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>商户快照</CardTitle>
@@ -167,7 +172,7 @@ export function DashboardPage({ session }: { session: AdminSession }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>常用操作</CardTitle>
             <CardDescription>进入商户和账号管理。</CardDescription>
@@ -180,7 +185,7 @@ export function DashboardPage({ session }: { session: AdminSession }) {
                   商户管理
                 </Link>
               </Button>
-              {session.role === 'SUPER_ADMIN' ? (
+              {hasPermission(session, 'platform:accounts:list') ? (
                 <Button className="justify-start" variant="outline" asChild>
                   <Link to="/accounts">
                     <UserCogIcon data-icon="inline-start" />

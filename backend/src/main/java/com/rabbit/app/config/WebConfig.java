@@ -1,42 +1,30 @@
 package com.rabbit.app.config;
 
 import com.rabbit.app.modules.audit.support.AuditLogInterceptor;
-import com.rabbit.app.modules.admin.mapper.MerchantMapper;
 import com.rabbit.app.modules.admin.mapper.PlatformAdminMapper;
-import com.rabbit.app.modules.house.mapper.HouseUserMapper;
-import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
-import com.rabbit.app.security.HouseGuardInterceptor;
-import com.rabbit.app.security.PermissionInterceptor;
+import com.rabbit.app.security.AccessControlService;
+import com.rabbit.app.security.AuthorizationInterceptor;
+import com.rabbit.app.security.BusinessAuthenticationInterceptor;
 import com.rabbit.app.security.PlatformAdminGuardInterceptor;
 import com.rabbit.app.modules.audit.service.AuditLogService;
-import com.rabbit.app.modules.house.service.HouseService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-    private final HouseUserMapper houseUserMapper;
-    private final RabbitHouseMapper rabbitHouseMapper;
-    private final MerchantMapper merchantMapper;
     private final PlatformAdminMapper platformAdminMapper;
     private final AuditLogService auditLogService;
-    private final HouseService houseService;
+    private final AccessControlService accessControlService;
 
     public WebConfig(
-            HouseUserMapper houseUserMapper,
-            RabbitHouseMapper rabbitHouseMapper,
-            MerchantMapper merchantMapper,
             PlatformAdminMapper platformAdminMapper,
             AuditLogService auditLogService,
-            HouseService houseService
+            AccessControlService accessControlService
     ) {
-        this.houseUserMapper = houseUserMapper;
-        this.rabbitHouseMapper = rabbitHouseMapper;
-        this.merchantMapper = merchantMapper;
         this.platformAdminMapper = platformAdminMapper;
         this.auditLogService = auditLogService;
-        this.houseService = houseService;
+        this.accessControlService = accessControlService;
     }
 
     @Override
@@ -45,11 +33,25 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**");
         registry.addInterceptor(new PlatformAdminGuardInterceptor(platformAdminMapper))
                 .addPathPatterns("/api/admin/**");
-        registry.addInterceptor(new HouseGuardInterceptor(houseUserMapper, rabbitHouseMapper, merchantMapper))
+        registry.addInterceptor(new BusinessAuthenticationInterceptor())
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/admin/**");
-        registry.addInterceptor(new PermissionInterceptor(houseService))
+                .excludePathPatterns(
+                        "/api/admin/**",
+                        "/api/auth/register",
+                        "/api/auth/login",
+                        "/api/auth/sms/code",
+                        "/api/auth/sms/login",
+                        "/api/auth/wechat-login"
+                );
+        registry.addInterceptor(new AuthorizationInterceptor(accessControlService))
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/admin/**");
+                .excludePathPatterns(
+                        "/api/admin/auth/login",
+                        "/api/auth/register",
+                        "/api/auth/login",
+                        "/api/auth/sms/code",
+                        "/api/auth/sms/login",
+                        "/api/auth/wechat-login"
+                );
     }
 }

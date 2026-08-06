@@ -1,0 +1,60 @@
+package com.rabbit.app.modules.merchant.dto;
+
+import java.util.Date;
+
+public class MerchantMemberItem {
+    private Long userId;
+    private String userName;
+    private String phoneMasked;
+    private String role;
+    private String status;
+    private Date joinTime;
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
+    }
+
+    public String getPhoneMasked() {
+        return phoneMasked;
+    }
+
+    public void setPhoneMasked(String phoneMasked) {
+        this.phoneMasked = phoneMasked;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Date getJoinTime() {
+        return joinTime;
+    }
+
+    public void setJoinTime(Date joinTime) {
+        this.joinTime = joinTime;
+    }
+}

@@ -2,13 +2,17 @@ package com.rabbit.app.modules.auth.dto;
 
 import com.rabbit.app.modules.auth.entity.SysUser;
 import java.util.Date;
+import java.util.List;
 
 public class UserProfileResponse {
     private Long userId;
     private String userName;
     private Boolean openidBound;
+    private Boolean phoneBound;
+    private String maskedPhone;
     private Date createTime;
     private Date updateTime;
+    private List<String> permissions = List.of();
 
     public UserProfileResponse() {
     }
@@ -17,6 +21,8 @@ public class UserProfileResponse {
         this.userId = user.getUserId();
         this.userName = user.getUserName();
         this.openidBound = user.getOpenid() != null && !user.getOpenid().trim().isEmpty();
+        this.phoneBound = user.getPhoneBoundTime() != null;
+        this.maskedPhone = user.getPhoneMasked();
         this.createTime = user.getCreateTime();
         this.updateTime = user.getUpdateTime();
     }
@@ -45,6 +51,22 @@ public class UserProfileResponse {
         this.openidBound = openidBound;
     }
 
+    public Boolean getPhoneBound() {
+        return phoneBound;
+    }
+
+    public void setPhoneBound(Boolean phoneBound) {
+        this.phoneBound = phoneBound;
+    }
+
+    public String getMaskedPhone() {
+        return maskedPhone;
+    }
+
+    public void setMaskedPhone(String maskedPhone) {
+        this.maskedPhone = maskedPhone;
+    }
+
     public Date getCreateTime() {
         return createTime;
     }
@@ -59,5 +81,13 @@ public class UserProfileResponse {
 
     public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(List<String> permissions) {
+        this.permissions = permissions == null ? List.of() : List.copyOf(permissions);
     }
 }

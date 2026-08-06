@@ -5,6 +5,9 @@ import com.rabbit.app.modules.admin.dto.AdminLoginResponse;
 import com.rabbit.app.modules.admin.entity.PlatformAdmin;
 import com.rabbit.app.modules.admin.mapper.PlatformAdminMapper;
 import com.rabbit.app.security.PlatformAdminJwtUtil;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.PermissionScope;
+import com.rabbit.app.security.permission.PlatformRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +30,13 @@ public class PlatformAdminAuthService {
         }
         platformAdminMapper.updateLastLoginTime(admin.getId());
         String token = platformAdminJwtUtil.generateToken(admin.getId(), admin.getRole());
-        return new AdminLoginResponse(token, admin.getId(), admin.getUserName(), admin.getRole());
+        PlatformRole role = PlatformRole.fromStored(admin.getRole());
+        return new AdminLoginResponse(
+                token,
+                admin.getId(),
+                admin.getUserName(),
+                role.code(),
+                PermissionCode.granted(PermissionScope.PLATFORM, role)
+        );
     }
 }

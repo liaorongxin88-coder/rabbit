@@ -4,6 +4,7 @@ import java.util.Date;
 
 public class Merchant {
     private Long id;
+    private Long ownerUserId;
     private String name;
     private String contactName;
     private String contactPhone;
@@ -20,6 +21,14 @@ public class Merchant {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(Long ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 
     public String getName() {

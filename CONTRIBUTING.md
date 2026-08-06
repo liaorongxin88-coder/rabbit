@@ -80,12 +80,11 @@ mvn -DskipTests package
 
 ```bash
 cd flutter_app
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit check
+./rabbit apk dev --debug
 ```
 
-若只改 UI，可至少运行 `flutter analyze`；若改 model、repository、provider 或业务逻辑，应运行 `flutter test`。
+若只改 UI，可至少运行 `./rabbit analyze`；若改 model、repository、provider 或业务逻辑，应运行 `./rabbit test`。
 
 ### 平台管理后台
 

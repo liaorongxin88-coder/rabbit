@@ -18,4 +18,8 @@ public interface MerchantMapper {
     int updateBasic(@Param("id") Long id, @Param("name") String name, @Param("contactName") String contactName, @Param("contactPhone") String contactPhone, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
     int updateStatus(@Param("id") Long id, @Param("status") String status, @Param("updateBy") String updateBy);
+
+    int updateOwner(@Param("id") Long id,
+                    @Param("ownerUserId") Long ownerUserId,
+                    @Param("updateBy") String updateBy);
 }

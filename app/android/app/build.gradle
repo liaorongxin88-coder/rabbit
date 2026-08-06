@@ -1,0 +1,102 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def releaseKeystorePath = System.getenv("RABBIT_ANDROID_KEYSTORE_PATH")
+def releaseKeystorePassword = System.getenv("RABBIT_ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("RABBIT_ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("RABBIT_ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = [
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every { value -> value != null && !value.trim().isEmpty() }
+
+android {
+    namespace = "com.rabbit.app.flutter"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = "25.1.8937393"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId = "com.rabbit.app.flutter"
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        manifestPlaceholders += [
+            appLabel: "智能兔管家",
+            usesCleartextTraffic: "true"
+        ]
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        dev {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家 Dev",
+                usesCleartextTraffic: "true"
+            ]
+        }
+        staging {
+            dimension = "environment"
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家 Test",
+                usesCleartextTraffic: "true"
+            ]
+        }
+        prod {
+            dimension = "environment"
+            manifestPlaceholders += [
+                appLabel: "智能兔管家",
+                usesCleartextTraffic: "false"
+            ]
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = hasReleaseSigning
+                ? signingConfigs.release
+                : signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

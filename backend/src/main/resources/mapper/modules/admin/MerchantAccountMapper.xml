@@ -7,6 +7,9 @@
         <id column="user_id" property="userId"/>
         <result column="user_name" property="userName"/>
         <result column="openid" property="openid"/>
+        <result column="phone_masked" property="phoneMasked"/>
+        <result column="role" property="role"/>
+        <result column="membership_status" property="membershipStatus"/>
         <result column="create_time" property="createTime"/>
     </resultMap>
 
@@ -16,6 +19,8 @@
         <result column="merchant_name" property="merchantName"/>
         <result column="user_name" property="userName"/>
         <result column="openid" property="openid"/>
+        <result column="role" property="role"/>
+        <result column="membership_status" property="membershipStatus"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
@@ -34,15 +39,18 @@
     </sql>
 
     <select id="selectByMerchantId" resultMap="MerchantAccountSummaryMap">
-        select u.user_id, u.user_name, u.openid, u.create_time
-        from sys_user u
-        where u.merchant_id = #{merchantId}
-        order by u.create_time desc, u.user_id desc
+        select u.user_id, u.user_name, u.openid, u.phone_masked,
+               mu.role, mu.status as membership_status, mu.create_time
+        from merchant_users mu
+        join sys_user u on u.user_id = mu.user_id
+        where mu.merchant_id = #{merchantId}
+        order by case mu.role when 'OWNER' then 0 when 'ADMIN' then 1 else 2 end,
+                 mu.create_time asc, u.user_id asc
     </select>
 
     <select id="countByMerchantId" resultType="long">
         select count(1)
-        from sys_user
+        from merchant_users
         where merchant_id = #{merchantId}
     </select>
 
@@ -50,6 +58,7 @@
         select count(1)
         from sys_user u
         join merchants m on m.id = u.merchant_id
+        left join merchant_users mu on mu.merchant_id = u.merchant_id and mu.user_id = u.user_id
         <include refid="AccountFilter"/>
     </select>
 
@@ -60,10 +69,13 @@
             m.name as merchant_name,
             u.user_name,
             u.openid,
+            mu.role,
+            mu.status as membership_status,
             u.create_time,
             u.update_time
         from sys_user u
         join merchants m on m.id = u.merchant_id
+        left join merchant_users mu on mu.merchant_id = u.merchant_id and mu.user_id = u.user_id
         <include refid="AccountFilter"/>
         order by u.create_time desc, u.user_id desc
         limit #{limit} offset #{offset}
@@ -76,10 +88,13 @@
             m.name as merchant_name,
             u.user_name,
             u.openid,
+            mu.role,
+            mu.status as membership_status,
             u.create_time,
             u.update_time
         from sys_user u
         join merchants m on m.id = u.merchant_id
+        left join merchant_users mu on mu.merchant_id = u.merchant_id and mu.user_id = u.user_id
         where u.user_id = #{userId}
     </select>
 </mapper>

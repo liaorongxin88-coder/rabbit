@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public class CreateHouseRequest {
+    private Long merchantId;
+
     @NotBlank(message = "兔舍名称不能为空")
     @Size(max = 100, message = "兔舍名称过长")
     private String name;
@@ -26,6 +28,14 @@ public class CreateHouseRequest {
 
     @NotBlank(message = "requestId不能为空")
     private String requestId;
+
+    public Long getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(Long merchantId) {
+        this.merchantId = merchantId;
+    }
 
     public String getName() {
         return name;

@@ -6,6 +6,7 @@
     <resultMap id="RabbitHouseMap" type="com.rabbit.app.modules.house.entity.RabbitHouse">
         <id column="id" property="id"/>
         <result column="merchant_id" property="merchantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
         <result column="name" property="name"/>
         <result column="layout_rows" property="layoutRows"/>
         <result column="layout_cols" property="layoutCols"/>
@@ -20,34 +21,44 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbit_houses (merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, create_by, update_by)
-        values (#{merchantId}, #{name}, #{layoutRows}, #{layoutCols}, #{layoutLayers}, #{requestId}, #{remark}, #{createBy}, #{updateBy})
+        insert into rabbit_houses (merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, create_by, update_by)
+        values (#{merchantId}, #{ownerUserId}, #{name}, #{layoutRows}, #{layoutCols}, #{layoutLayers}, #{requestId}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectById" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
         where id = #{houseId}
     </select>
 
     <select id="selectByUserId" resultMap="RabbitHouseMap">
-        select h.id, h.merchant_id, h.name, h.layout_rows, h.layout_cols, h.layout_layers, h.remark,
+        select distinct h.id, h.merchant_id, h.owner_user_id, h.name, h.layout_rows, h.layout_cols, h.layout_layers, h.remark,
                h.request_id, h.is_deleted, h.create_by, h.create_time, h.update_by, h.update_time
         from rabbit_houses h
-        inner join house_users hu on hu.house_id = h.id
-        where hu.user_id = #{userId} and h.is_deleted = false
+        join merchants m on m.id = h.merchant_id and m.status = 'ENABLED'
+        join merchant_users active_mu on active_mu.merchant_id = h.merchant_id
+                                     and active_mu.user_id = #{userId}
+                                     and active_mu.status = 'ENABLED'
+        left join house_users hu on hu.house_id = h.id and hu.user_id = #{userId}
+        where (hu.user_id is not null or active_mu.role = 'OWNER') and h.is_deleted = false
         order by h.id desc
     </select>
 
     <select id="selectAllActive" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
         where is_deleted = false
         order by id asc
     </select>
 
+    <select id="countByMerchantId" resultType="long">
+        select count(1)
+        from rabbit_houses
+        where merchant_id = #{merchantId} and is_deleted = false
+    </select>
+
     <select id="selectByCreatorAndRequestId" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
         where create_by = #{createBy} and request_id = #{requestId}
         limit 1
@@ -65,6 +76,14 @@
     <update id="markDeleted">
         update rabbit_houses
         set is_deleted = true,
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{houseId} and is_deleted = false
+    </update>
+
+    <update id="updateOwner">
+        update rabbit_houses
+        set owner_user_id = #{ownerUserId},
             update_by = #{updateBy},
             update_time = now()
         where id = #{houseId} and is_deleted = false

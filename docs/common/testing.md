@@ -17,6 +17,7 @@ mvn -DskipTests package
 
 ```bash
 mysql -uroot -e "create database if not exists rabbit_app_e2e default character set utf8mb4 collate utf8mb4_general_ci;"
+mysql -uroot -e "create database if not exists rabbit_app_e2e_migration default character set utf8mb4 collate utf8mb4_general_ci;"
 ```
 
 运行：
@@ -35,6 +36,9 @@ E2E_DATASOURCE_PASSWORD=rabbit_root \
 mvn -Pe2e verify
 ```
 
+迁移兼容测试默认使用独立的 `rabbit_app_e2e_migration`，可通过
+`E2E_MIGRATION_DATASOURCE_URL` 覆盖。两个测试库都只允许用于本地或 CI 测试。
+
 注意：E2E 会清空 `rabbit_app_e2e`，不要指向开发库或生产库。
 
 ## 接口演示回归
@@ -52,16 +56,15 @@ mvn -Pe2e verify
 
 ```bash
 cd flutter_app
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit check
+./rabbit apk dev --debug
 ```
 
 默认规则：
 
-- Flutter UI 或状态改动至少跑 `flutter analyze`。
-- model、repository、provider 或业务逻辑改动跑 `flutter test`。
-- Android 构建配置、依赖或 manifest 改动跑 `flutter build apk --debug`。
+- Flutter UI 或状态改动至少跑 `./rabbit analyze`。
+- model、repository、provider 或业务逻辑改动跑 `./rabbit test`。
+- Android 构建配置、依赖或 manifest 改动跑 `./rabbit apk dev --debug`。
 
 如果 Flutter SDK cache 权限导致命令失败，先修复本机 Flutter SDK/cache 权限，再判断项目代码是否有问题。
 

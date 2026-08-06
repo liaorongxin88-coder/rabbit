@@ -1,6 +1,6 @@
 ---
 name: Rabbit SaaS Admin
-description: Operational console for platform staff managing SaaS merchants, merchant accounts, and read-only business summaries.
+description: Operational platform console and merchant rabbit-farm workspace with isolated identities, permissions, and business scope.
 status: canonical
 owners: admin frontend
 framework: React + TypeScript + Vite
@@ -40,37 +40,42 @@ This document is the source of truth for the `admin/` frontend visual and intera
 
 ## Overview
 
-Rabbit SaaS Admin is an operational console for platform staff. The first version focuses on managing merchants, merchant accounts, merchant enablement state, and read-only business data summaries.
+Rabbit SaaS Admin contains two operational surfaces that share one restrained design system but not one identity or permission model. The platform console manages merchants, account memberships, merchant enablement state, rabbit-house governance policies, and read-only business summaries. The merchant workspace manages the selected merchant and rabbit house through existing business APIs.
 
-The interface should feel like a quiet control room for a production SaaS platform: clear hierarchy, low visual noise, stable controls, and enough density for repeated daily work. It is not a marketing site, a merchant self-service portal, or a business data editor.
+The interface should feel like a quiet control room: clear hierarchy, low visual noise, stable controls, and enough density for repeated daily work. It is not a marketing site. Platform routes are not business data editors; merchant routes are production tools constrained by merchant and rabbit-house permissions.
 
 ## Design Principles
 
 - **Operational clarity first.** Every surface should help an operator answer one of three questions: which merchant is this, what state is it in, and what action is safe here?
 - **Hierarchy through structure.** Use layout, spacing, table grouping, and muted metadata instead of decorative panels or bright color blocks.
 - **One memorable accent.** The teal primary color is the product signature. Keep everything around it neutral and disciplined.
-- **Read-only means read-only.** Rabbit houses, cages, rabbits, and audit previews are inspection surfaces in this admin UI. Do not add editing affordances for business production data.
+- **Read-only means read-only in platform scope.** Rabbit houses, cages, rabbits, and audit previews remain inspection surfaces in platform routes.
+- **Business actions follow selected scope.** Merchant pages must make the active merchant, active rabbit house, and effective role visible before write actions.
 - **Motion confirms state.** Animation should help the eye follow navigation, table updates, dialogs, and button presses; it must not compete with data readability.
 
 ## Audience And Jobs
 
-Primary users are internal platform operators. They work across merchants and need quick scanning, low ambiguity, and clear boundaries between platform actions and merchant business actions.
+Primary users are internal platform operators and merchant business users. Platform operators work across merchants. Merchant users work inside one selected merchant and rabbit house at a time. Both need quick scanning, low ambiguity, and visible permission boundaries.
 
 Core jobs:
 
 - Find a merchant by name, contact, phone, status, or ID.
 - Create a merchant together with its initial login account, or update merchant profile information.
-- Add merchant login accounts and keep at least one account bound to every merchant.
+- Add merchant login accounts, configure membership roles, and keep one owner for every merchant.
+- Configure whether a merchant can create rabbit houses or manage house members, plus capacity limits.
 - Enable or disable a merchant with clear risk signaling.
-- Inspect and edit accounts that belong directly to a single merchant.
+- Inspect global accounts and edit their membership inside a merchant.
 - Inspect merchant scale through counts, rabbit house previews, user lists, and audit previews.
+- Switch among merchants and rabbit houses available to the signed-in business account.
+- Manage houses, cages, rabbits, production batches, and member roles when the effective permission allows it.
 
 Non-goals:
 
 - Package, billing, invoice, or plan management.
 - Merchant self-registration.
 - Customer support impersonation.
-- Editing rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
+- Exposing platform-wide business editing.
+- NFC tag writing/resolution, Bluetooth, camera, MQTT, or hardware-triggered controls in the PC workspace.
 - Landing pages, dashboards built for storytelling, or decorative hero layouts.
 
 ## Color System
@@ -202,14 +207,14 @@ Rules:
 
 ## Navigation
 
-Desktop navigation is a fixed left sidebar with product identity, primary admin sections, and the current admin session at the bottom.
+Desktop navigation is a fixed left sidebar with product identity, primary sections, and the current session at the bottom. Merchant routes place compact merchant and rabbit-house selectors above their business navigation.
 
-Mobile navigation uses a compact sticky top header. Do not introduce a heavy mobile drawer until there are enough real sections to justify it.
+Mobile navigation uses a compact sticky top header. Merchant routes use a horizontally scrollable business-navigation row and an unframed selector block below it so every route and tenant control remains reachable without a drawer.
 
 Rules:
 
 - Active navigation should use quiet secondary fill and stronger foreground text.
-- Product identity should stay compact: `Rabbit SaaS` and `平台管理端`.
+- Product identity should stay compact: `Rabbit SaaS / 平台管理端` for platform routes and `Rabbit Farm / 商户工作台` for merchant routes.
 - Do not add duplicate routes that point to the same page unless the label exposes a real distinct workflow.
 
 ## Components
@@ -270,7 +275,8 @@ Rules:
 - `DISABLED` should read as restricted/high attention, but red should be reserved for the destructive action itself or error state.
 - `停用商户` uses destructive styling.
 - `启用商户` uses primary/default styling.
-- Merchant account creation must happen in merchant context; do not expose cross-merchant binding controls.
+- Merchant account creation and role changes happen in merchant context; a global account may have memberships in multiple merchants.
+- Ownership transfer must remain explicit and must never leave a merchant without an enabled owner.
 - Platform admin screens must not imply merchant-level permission controls unless the backend supports them.
 
 ## Copy
@@ -312,7 +318,8 @@ Rules:
 
 - Do not create a landing page or hero-first admin home.
 - Do not add decorative gradients, blobs, bokeh, or illustration backgrounds.
-- Do not add business data edit controls to read-only overview sections.
+- Do not add business data edit controls to platform read-only overview sections.
+- Do not show NFC, Bluetooth, MQTT, camera, or hardware-trigger controls in merchant web navigation while those capabilities are pending. Business-only production transitions remain available and must submit with hardware triggering disabled.
 - Do not place cards inside cards.
 - Do not scatter raw Tailwind colors through page code.
 - Do not call `fetch` directly from components.

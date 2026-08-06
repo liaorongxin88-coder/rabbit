@@ -12,18 +12,28 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 
 interface FormState {
   userName: string
   password: string
   confirmPassword: string
+  role: 'ADMIN' | 'MEMBER'
 }
 
 const emptyForm: FormState = {
   userName: '',
   password: '',
   confirmPassword: '',
+  role: 'MEMBER',
 }
 
 export function MerchantAccountCreateDialog({
@@ -90,7 +100,7 @@ export function MerchantAccountCreateDialog({
         <DialogHeader>
           <DialogTitle>新增商户账号</DialogTitle>
           <DialogDescription>
-            创建业务端登录账号，账号将直接归属当前商户。
+            创建业务端登录账号，并加入当前商户。
           </DialogDescription>
         </DialogHeader>
         <form className="flex min-h-0 flex-1 flex-col gap-5" onSubmit={handleSubmit}>
@@ -159,6 +169,26 @@ export function MerchantAccountCreateDialog({
                   两次输入的密码不一致。
                 </FieldDescription>
               ) : null}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-merchant-role">商户角色</FieldLabel>
+              <Select
+                value={form.role}
+                onValueChange={(value: 'ADMIN' | 'MEMBER') =>
+                  setForm((current) => ({ ...current, role: value }))
+                }
+              >
+                <SelectTrigger id="new-merchant-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="MEMBER">成员</SelectItem>
+                    <SelectItem value="ADMIN">管理员</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>管理员可以创建兔场；成员只能进入已分配的兔场。</FieldDescription>
             </Field>
           </FieldGroup>
           <DialogFooter>

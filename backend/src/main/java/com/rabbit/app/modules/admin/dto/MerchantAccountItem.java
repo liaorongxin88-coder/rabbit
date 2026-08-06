@@ -8,6 +8,8 @@ public class MerchantAccountItem {
     private String merchantName;
     private String userName;
     private String openid;
+    private String role;
+    private String membershipStatus;
     private Date createTime;
     private Date updateTime;
 
@@ -49,6 +51,22 @@ public class MerchantAccountItem {
 
     public void setOpenid(String openid) {
         this.openid = openid;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public String getMembershipStatus() {
+        return membershipStatus;
+    }
+
+    public void setMembershipStatus(String membershipStatus) {
+        this.membershipStatus = membershipStatus;
     }
 
     public Date getCreateTime() {

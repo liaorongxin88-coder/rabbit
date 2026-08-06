@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class RabbitServiceTest {
     @Test
     void convertToReplacementRequiresControlAtServiceBoundary() {
-        HouseService houseService = new HouseService(null, null, null, null, null) {
+        HouseService houseService = new HouseService(null, null, null, null, null, null, null) {
             @Override
             public void assertHousePermission(Long userId, Long houseId, String requiredPerm) {
                 throw new BizException(403, "权限不足");

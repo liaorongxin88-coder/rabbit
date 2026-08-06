@@ -33,9 +33,19 @@ docker compose up -d --build --no-deps backend
 - `APP_ADMIN_BOOTSTRAP_ENABLED`
 - `APP_ADMIN_BOOTSTRAP_USERNAME`
 - `APP_ADMIN_BOOTSTRAP_PASSWORD`
+- `APP_PHONE_HASH_SECRET`
+- `APP_SMS_ENABLED`
+- `APP_SMS_CODE_SECRET`
+- `ALIBABA_CLOUD_ACCESS_KEY_ID`
+- `ALIBABA_CLOUD_ACCESS_KEY_SECRET`
+- `APP_SMS_SIGN_NAME`
+- `APP_SMS_TEMPLATE_CODE`
+- `APP_SMS_TEMPLATE_PARAM_NAME`
 - `JAVA_OPTS`
 
-生产必须替换所有默认 secret 和默认管理员密码。
+生产必须替换所有默认 secret 和默认管理员密码。开启短信登录前还必须配置独立
+RAM AccessKey、审核通过的短信签名和验证码模板，具体见
+[../backend/sms-auth.md](../backend/sms-auth.md)。
 
 ## 数据库迁移
 

@@ -7,8 +7,13 @@ import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
 import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
+import com.rabbit.app.modules.merchant.mapper.MerchantHousePolicyMapper;
+import com.rabbit.app.modules.merchant.service.MerchantMembershipService;
 import com.rabbit.app.security.JwtUtil;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.PermissionScope;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,17 +25,26 @@ public class AuthService {
     private final MerchantMapper merchantMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final PhoneIdentityService phoneIdentityService;
+    private final MerchantMembershipService membershipService;
+    private final MerchantHousePolicyMapper policyMapper;
 
     public AuthService(
             SysUserMapper sysUserMapper,
             MerchantMapper merchantMapper,
             PasswordEncoder passwordEncoder,
-            JwtUtil jwtUtil
+            JwtUtil jwtUtil,
+            PhoneIdentityService phoneIdentityService,
+            MerchantMembershipService membershipService,
+            MerchantHousePolicyMapper policyMapper
     ) {
         this.sysUserMapper = sysUserMapper;
         this.merchantMapper = merchantMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.phoneIdentityService = phoneIdentityService;
+        this.membershipService = membershipService;
+        this.policyMapper = policyMapper;
     }
 
     @Transactional
@@ -50,8 +64,8 @@ public class AuthService {
         u.setUserName(normalizedUserName);
         u.setPassword(passwordEncoder.encode(password));
         sysUserMapper.insert(u);
-        String token = jwtUtil.generateToken(u.getUserId());
-        return new AuthTokenResponse(token, u.getUserId(), u.getUserName());
+        initializeMerchantOwner(merchant.getId(), u.getUserId(), "self-register");
+        return tokenResponse(u);
     }
 
     public AuthTokenResponse login(String userName, String password) {
@@ -59,8 +73,34 @@ public class AuthService {
         if (u == null || !passwordEncoder.matches(password, u.getPassword())) {
             throw new BizException(401, "用户名或密码错误");
         }
-        String token = jwtUtil.generateToken(u.getUserId());
-        return new AuthTokenResponse(token, u.getUserId(), u.getUserName());
+        return tokenResponse(u);
+    }
+
+    @Transactional
+    public AuthTokenResponse loginOrRegisterPhone(String phone) {
+        String phoneHash = phoneIdentityService.hash(phone);
+        String maskedPhone = phoneIdentityService.mask(phone);
+        SysUser user = sysUserMapper.selectByPhoneHash(phoneHash);
+        if (user == null) {
+            SysUser created = new SysUser();
+            String userName = buildPhoneUserName();
+            Merchant merchant = createMerchantForAccount(
+                    "手机号用户 " + maskedPhone,
+                    "phone-login",
+                    "手机号首次验证时自动创建"
+            );
+            created.setMerchantId(merchant.getId());
+            created.setUserName(userName);
+            created.setPhoneCountryCode("+86");
+            created.setPhoneHash(phoneHash);
+            created.setPhoneMasked(maskedPhone);
+            created.setPhoneBoundTime(new Date());
+            created.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+            sysUserMapper.insert(created);
+            initializeMerchantOwner(merchant.getId(), created.getUserId(), "phone-login");
+            user = created;
+        }
+        return tokenResponse(user);
     }
 
     @Transactional
@@ -94,15 +134,17 @@ public class AuthService {
             x.setOpenid(t);
             x.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
             sysUserMapper.insert(x);
+            initializeMerchantOwner(merchant.getId(), x.getUserId(), "wechat-login");
             u = x;
         }
-        String token = jwtUtil.generateToken(u.getUserId());
-        return new AuthTokenResponse(token, u.getUserId(), u.getUserName());
+        return tokenResponse(u);
     }
 
     public UserProfileResponse getProfile(Long userId) {
         SysUser user = requireUser(userId);
-        return new UserProfileResponse(user);
+        UserProfileResponse response = new UserProfileResponse(user);
+        response.setPermissions(PermissionCode.all(PermissionScope.BUSINESS));
+        return response;
     }
 
     public UserProfileResponse updateUserName(Long userId, String userName) {
@@ -137,6 +179,10 @@ public class AuthService {
         return "wx_" + suffix;
     }
 
+    private String buildPhoneUserName() {
+        return "mobile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+    }
+
     private Merchant createMerchantForAccount(String name, String operator, String remark) {
         Merchant merchant = new Merchant();
         merchant.setName(name);
@@ -146,6 +192,23 @@ public class AuthService {
         merchant.setUpdateBy(operator);
         merchantMapper.insert(merchant);
         return merchant;
+    }
+
+    private void initializeMerchantOwner(Long merchantId, Long userId, String operator) {
+        membershipService.createInitialOwner(merchantId, userId, operator);
+        policyMapper.insertDefault(merchantId, operator);
+    }
+
+    private AuthTokenResponse tokenResponse(SysUser user) {
+        AuthTokenResponse response = new AuthTokenResponse(
+                jwtUtil.generateToken(user.getUserId()),
+                user.getUserId(),
+                user.getUserName(),
+                user.getPhoneBoundTime() != null,
+                user.getPhoneMasked()
+        );
+        response.setPermissions(PermissionCode.all(PermissionScope.BUSINESS));
+        return response;
     }
 
     private SysUser requireUser(Long userId) {

@@ -18,9 +18,8 @@ Flutter Android 客户端是当前移动端重构方向，源码位于 `flutter_
 
 ```bash
 cd flutter_app
-flutter analyze
-./scripts/test_flutter.sh
-./scripts/build_apk.sh dev --debug
+./rabbit check
+./rabbit apk dev --debug
 ```
 
 默认 Android 模拟器后端地址为 `http://10.0.2.2:8080`。Android Studio 可直接使用 `Rabbit Dev` / `Rabbit Test` / `Rabbit Release` / `Rabbit Tests` 共享配置。

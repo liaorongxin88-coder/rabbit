@@ -1,6 +1,7 @@
 USE rabbit_app;
 
-SET @demo_user_id = IFNULL((SELECT id FROM sys_user WHERE user_name = 'demo' ORDER BY id DESC LIMIT 1), 1);
+SET @demo_user_id = IFNULL((SELECT user_id FROM sys_user WHERE user_name = 'demo' ORDER BY user_id DESC LIMIT 1), 1);
+SET @demo_merchant_id = (SELECT merchant_id FROM sys_user WHERE user_id = @demo_user_id);
 
 SET @old_house_id = (SELECT id FROM rabbit_houses WHERE name = '演示兔场A' ORDER BY id DESC LIMIT 1);
 
@@ -20,13 +21,13 @@ DELETE FROM global_setting WHERE house_id = @old_house_id OR user_id = @demo_use
 DELETE FROM house_users WHERE house_id = @old_house_id;
 DELETE FROM rabbit_houses WHERE id = @old_house_id;
 
-INSERT INTO rabbit_houses(name, layout_rows, layout_cols, layout_layers, remark, create_by, update_by)
-VALUES ('演示兔场A', 4, 5, 1, 'demo 数据', 'system', 'system');
+INSERT INTO rabbit_houses(merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, remark, create_by, update_by)
+VALUES (@demo_merchant_id, @demo_user_id, '演示兔场A', 4, 5, 1, 'demo 数据', 'system', 'system');
 
 SET @house_id = LAST_INSERT_ID();
 
-INSERT INTO house_users(house_id, user_id, perms, is_admin)
-VALUES (@house_id, @demo_user_id, 'control', TRUE);
+INSERT INTO house_users(house_id, user_id, role, perms, is_admin)
+VALUES (@house_id, @demo_user_id, 'OWNER', 'control', TRUE);
 
 INSERT INTO global_setting(house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days, remark, create_by, update_by)
 VALUES (NULL, @demo_user_id, 7, 10, 3, 25, 10, 90, 120, 'demo 设置', 'system', 'system');
