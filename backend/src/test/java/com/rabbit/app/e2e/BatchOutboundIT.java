@@ -315,7 +315,7 @@ public class BatchOutboundIT extends E2eTestSupport {
     @Test
     void earlySaleAndReplacementRequireControlAndSubmitRechecksFrozenItems() {
         UserSession owner = register("outbound_auth_owner");
-        UserSession member = createMerchantAccount(owner, "outbound_auth_member");
+        UserSession member = register("outbound_auth_member");
         long houseId = createHouse(owner, "outbound_auth_house", 1, 4, 1);
         List<Long> cages = cageIds(owner, houseId);
         long normalRabbit = createRabbit(owner, houseId, cages.get(0), "2", "0", "normal_auth");

@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private var channel: MethodChannel? = null
+    private var carrierAuthChannel: CarrierAuthChannel? = null
     private var pendingEvent: Map<String, Any>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,12 +37,22 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        carrierAuthChannel = CarrierAuthChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            UnavailableCarrierAuthAdapter(),
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         captureNfcIntent(intent)
+    }
+
+    override fun onDestroy() {
+        carrierAuthChannel?.dispose()
+        carrierAuthChannel = null
+        super.onDestroy()
     }
 
     @Suppress("DEPRECATION")

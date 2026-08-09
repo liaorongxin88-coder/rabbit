@@ -1,5 +1,5 @@
-export type MerchantStatus = 'ENABLED' | 'DISABLED'
-export type MerchantRole = 'OWNER' | 'ADMIN' | 'MEMBER'
+export type FarmStatus = 'ENABLED' | 'SUSPENDED' | 'ORPHANED'
+export type UserStatus = 'ENABLED' | 'DISABLED'
 export type MembershipStatus = 'ENABLED' | 'DISABLED'
 
 export type AdminRole = 'SUPER_ADMIN' | 'ADMIN'
@@ -25,34 +25,24 @@ export interface AdminSession {
   permissions?: string[]
 }
 
-export interface MerchantSession {
+export interface WorkspaceSession {
   token: string
   userId: number
   userName: string
-  phoneBound?: boolean
-  maskedPhone?: string | null
+  phoneBound: boolean
+  maskedPhone: string | null
+  hasPassword: boolean
+  canCreateHouse?: boolean
   permissions?: string[]
 }
 
-export interface MerchantMembership {
-  merchantId: number
-  merchantName: string
-  merchantStatus: MerchantStatus
-  role: MerchantRole
-  membershipStatus: MembershipStatus
-  permissions?: string[]
-}
+export type HouseRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER'
 
-export interface MerchantMember {
-  userId: number
-  userName: string
-  phoneMasked?: string | null
-  role: MerchantRole
-  status: MembershipStatus
-  joinTime?: string | null
+export interface HouseInvitationRequest {
+  phone: string
+  role: HouseRole
+  requestId: string
 }
-
-export type HouseRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER' | 'MERCHANT_OWNER'
 
 export interface HousePermission {
   perms: 'view' | 'edit' | 'control'
@@ -64,9 +54,11 @@ export interface HousePermission {
 export interface HouseMember {
   userId: number
   userName: string
+  phoneMasked?: string | null
   role: HouseRole
   perms: 'view' | 'edit' | 'control'
   isAdmin: boolean
+  status?: MembershipStatus
   joinTime?: string | null
 }
 
@@ -80,54 +72,63 @@ export interface AdminAccount {
   updateTime?: string | null
 }
 
-export interface MerchantAccount {
-  userId: number
-  merchantId: number
-  merchantName: string
-  userName: string
-  openid?: string | null
-  role?: MerchantRole | null
-  membershipStatus?: MembershipStatus | null
-  createTime?: string | null
-  updateTime?: string | null
-}
-
-export interface Merchant {
-  id: number
-  ownerUserId?: number | null
-  name: string
-  contactName?: string | null
-  contactPhone?: string | null
-  status: MerchantStatus
-  remark?: string | null
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
-
-export interface MerchantAccountSummary {
+export interface BusinessUser {
   userId: number
   userName: string
-  openid?: string | null
+  phoneBound: boolean
   phoneMasked?: string | null
-  role: MerchantRole
-  membershipStatus: MembershipStatus
+  enabled: boolean
+  status?: UserStatus
+  houseCount: number
+  lastLoginTime?: string | null
   createTime?: string | null
+  updateTime?: string | null
 }
 
-export interface MerchantHousePolicy {
-  merchantId: number
-  houseCreationEnabled: boolean
-  houseMemberManagementEnabled: boolean
-  maxHouseCount: number
-  maxMembersPerHouse: number
+export interface AdminFarm {
+  id: number
+  name: string
+  status: FarmStatus
+  ownerNames?: string[]
+  ownerCount?: number
+  memberCount?: number
+  cageCount?: number
+  rabbitCount?: number
+  layoutRows?: number
+  layoutCols?: number
+  layoutLayers?: number
+  remark?: string | null
+  createTime?: string | null
   updateTime?: string | null
+}
+
+export interface CreateAdminFarmRequest {
+  name: string
+  layoutRows: number
+  layoutCols: number
+  layoutLayers: number
+  remark?: string
+  ownerUserId?: number
+  ownerPhone?: string
+  requestId: string
+}
+
+export interface UpdateAdminFarmRequest {
+  name: string
+  remark?: string
+}
+
+export interface AdminFarmMember {
+  userId: number
+  userName: string
+  phoneMasked?: string | null
+  role: HouseRole
+  status?: MembershipStatus
+  joinTime?: string | null
 }
 
 export interface RabbitHouse {
   id: number
-  merchantId?: number | null
   name: string
   layoutRows: number
   layoutCols: number
@@ -309,11 +310,12 @@ export interface AuditLog {
   createTime?: string | null
 }
 
-export interface MerchantOverview {
-  houseCount: number
-  userCount: number
+export interface FarmOverview {
+  farm: AdminFarm
+  memberCount: number
   cageCount: number
   rabbitCount: number
-  houses: RabbitHouse[]
+  batchCount: number
+  members: AdminFarmMember[]
   recentAuditLogs: AuditLog[]
 }

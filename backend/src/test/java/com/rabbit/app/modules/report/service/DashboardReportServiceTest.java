@@ -54,7 +54,7 @@ class DashboardReportServiceTest {
         private Long assertedHouseId;
 
         FakeHouseService(Long... houseIds) {
-            super(null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null);
             this.houses = Arrays.stream(houseIds).map(FakeHouseService::house).toList();
         }
 

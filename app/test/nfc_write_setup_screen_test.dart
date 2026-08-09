@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
 import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_setup_screen.dart';
 
 void main() {

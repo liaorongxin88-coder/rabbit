@@ -1,78 +1,70 @@
 import {
-  merchantDeleteJson,
-  merchantGetJson,
-  merchantPostJson,
-  merchantPutJson,
+  workspaceDeleteJson,
+  workspaceGetJson,
+  workspacePostJson,
+  workspacePutJson,
 } from '@/lib/request'
 import type {
   BatchRabbit,
   Cage,
   DashboardSummary,
+  HouseInvitationRequest,
   HouseMember,
   HousePermission,
-  MerchantMember,
-  MerchantMembership,
-  MerchantRole,
-  MerchantSession,
-  MembershipStatus,
   OutboundSelectedItem,
   OutboundSubmitResult,
   OutboundTask,
   ProductionBatch,
   Rabbit,
   RabbitHouse,
+  WorkspaceSession,
 } from '@/types/api'
 
 export function requestId() {
   return crypto.randomUUID()
 }
 
-export function loginMerchant(data: { userName: string; password: string }) {
-  return merchantPostJson<MerchantSession>('/api/auth/login', data)
-}
-
-export function listMerchantMemberships() {
-  return merchantGetJson<MerchantMembership[]>('/api/merchant-memberships')
+export function loginWorkspace(data: { userName: string; password: string }) {
+  return workspacePostJson<WorkspaceSession>('/api/auth/login', data)
 }
 
 export function listWorkspaceHouses() {
-  return merchantGetJson<RabbitHouse[]>('/api/houses')
+  return workspaceGetJson<RabbitHouse[]>('/api/houses')
 }
 
 export function getHousePermission(houseId: number) {
-  return merchantGetJson<HousePermission>('/api/houses/permission', { houseId })
+  return workspaceGetJson<HousePermission>('/api/houses/permission', { houseId })
 }
 
 export function createWorkspaceHouse(data: {
-  merchantId: number
   name: string
   layoutRows: number
   layoutCols: number
   layoutLayers: number
   remark?: string
 }) {
-  return merchantPostJson<RabbitHouse>('/api/houses', { ...data, requestId: requestId() })
+  return workspacePostJson<RabbitHouse>('/api/houses', { ...data, requestId: requestId() })
 }
 
 export function updateWorkspaceHouse(
   houseId: number,
   data: { name: string; remark?: string },
 ) {
-  return merchantPutJson<RabbitHouse>(`/api/houses/${houseId}`, data, { houseId })
+  return workspacePutJson<RabbitHouse>(`/api/houses/${houseId}`, data, { houseId })
 }
 
 export function deleteWorkspaceHouse(houseId: number) {
-  return merchantDeleteJson<void>(`/api/houses/${houseId}`, { houseId })
+  return workspaceDeleteJson<void>(`/api/houses/${houseId}`, { houseId })
 }
 
 export function getDashboard(houseId?: number | null, year = new Date().getFullYear()) {
-  return merchantGetJson<DashboardSummary>('/api/reports/dashboard', {
+  return workspaceGetJson<DashboardSummary>('/api/reports/dashboard', {
     params: { houseId: houseId ?? undefined, year },
   })
 }
 
 export function listCages(houseId: number) {
-  return merchantGetJson<Cage[]>('/api/cages', { houseId })
+  return workspaceGetJson<Cage[]>('/api/cages', { houseId })
 }
 
 export function createCage(
@@ -86,7 +78,7 @@ export function createCage(
     isEnabled: boolean
   },
 ) {
-  return merchantPostJson<Cage>('/api/cages', data, { houseId })
+  return workspacePostJson<Cage>('/api/cages', data, { houseId })
 }
 
 export function updateCage(
@@ -101,15 +93,15 @@ export function updateCage(
     isEnabled: boolean
   },
 ) {
-  return merchantPutJson<Cage>(`/api/cages/${cageId}`, data, { houseId })
+  return workspacePutJson<Cage>(`/api/cages/${cageId}`, data, { houseId })
 }
 
 export function deleteCage(houseId: number, cageId: number) {
-  return merchantDeleteJson<void>(`/api/cages/${cageId}`, { houseId })
+  return workspaceDeleteJson<void>(`/api/cages/${cageId}`, { houseId })
 }
 
 export function listRabbits(houseId: number) {
-  return merchantGetJson<Rabbit[]>('/api/rabbits', { houseId })
+  return workspaceGetJson<Rabbit[]>('/api/rabbits', { houseId })
 }
 
 export interface RabbitWriteInput {
@@ -124,7 +116,7 @@ export interface RabbitWriteInput {
 }
 
 export function createRabbit(houseId: number, data: RabbitWriteInput) {
-  return merchantPostJson<Rabbit>(
+  return workspacePostJson<Rabbit>(
     '/api/rabbits',
     { ...data, requestId: requestId() },
     { houseId },
@@ -133,7 +125,7 @@ export function createRabbit(houseId: number, data: RabbitWriteInput) {
 
 export function updateRabbit(houseId: number, rabbitId: number, data: RabbitWriteInput) {
   const { type: _type, gender: _gender, ...update } = data
-  return merchantPutJson<Rabbit>(
+  return workspacePutJson<Rabbit>(
     `/api/rabbits/${rabbitId}`,
     { ...update, requestId: requestId() },
     { houseId },
@@ -141,14 +133,14 @@ export function updateRabbit(houseId: number, rabbitId: number, data: RabbitWrit
 }
 
 export function listBatches(houseId: number) {
-  return merchantGetJson<ProductionBatch[]>('/api/batches', { houseId })
+  return workspaceGetJson<ProductionBatch[]>('/api/batches', { houseId })
 }
 
 export function createBatch(
   houseId: number,
   data: { batchCode: string; femaleRabbitIds: number[]; remark?: string },
 ) {
-  return merchantPostJson<ProductionBatch>(
+  return workspacePostJson<ProductionBatch>(
     '/api/batches',
     { ...data, requestId: requestId() },
     { houseId },
@@ -156,7 +148,7 @@ export function createBatch(
 }
 
 export function listBatchRabbits(houseId: number, batchId: number) {
-  return merchantGetJson<BatchRabbit[]>(`/api/batches/${batchId}/batch-rabbits`, {
+  return workspaceGetJson<BatchRabbit[]>(`/api/batches/${batchId}/batch-rabbits`, {
     houseId,
   })
 }
@@ -178,7 +170,7 @@ export function submitBatchAction(
   action: BatchAction,
   data: Record<string, unknown>,
 ) {
-  return merchantPostJson<void>(
+  return workspacePostJson<void>(
     `/api/batches/${batchId}/${action}`,
     { ...data, requestId: requestId() },
     { houseId },
@@ -186,7 +178,7 @@ export function submitBatchAction(
 }
 
 export function createOutboundTask(houseId: number) {
-  return merchantPostJson<OutboundTask>(
+  return workspacePostJson<OutboundTask>(
     '/api/outbound/tasks',
     { entryType: 'HOUSE', resumeExisting: false },
     { houseId },
@@ -194,7 +186,7 @@ export function createOutboundTask(houseId: number) {
 }
 
 export function precheckOutboundTask(houseId: number, taskId: string) {
-  return merchantPostJson<OutboundTask>(
+  return workspacePostJson<OutboundTask>(
     `/api/outbound/tasks/${taskId}/precheck`,
     {},
     { houseId },
@@ -215,7 +207,7 @@ export function saveOutboundTask(
     remark?: string
   },
 ) {
-  return merchantPutJson<OutboundTask>(`/api/outbound/tasks/${taskId}`, data, { houseId })
+  return workspacePutJson<OutboundTask>(`/api/outbound/tasks/${taskId}`, data, { houseId })
 }
 
 export function submitOutboundTask(
@@ -233,7 +225,7 @@ export function submitOutboundTask(
     requestId: string
   },
 ) {
-  return merchantPostJson<OutboundSubmitResult>(
+  return workspacePostJson<OutboundSubmitResult>(
     `/api/outbound/tasks/${taskId}/submit`,
     data,
     { houseId },
@@ -241,58 +233,26 @@ export function submitOutboundTask(
 }
 
 export function cancelOutboundTask(houseId: number, taskId: string) {
-  return merchantPostJson<void>(`/api/outbound/tasks/${taskId}/cancel`, {}, { houseId })
-}
-
-export function listMerchantMembers(merchantId: number) {
-  return merchantGetJson<MerchantMember[]>(`/api/merchant-memberships/${merchantId}/members`)
-}
-
-export function addMerchantMember(
-  merchantId: number,
-  data: { userName: string; role: Exclude<MerchantRole, 'OWNER'> },
-) {
-  return merchantPostJson<void>(`/api/merchant-memberships/${merchantId}/members`, data)
-}
-
-export function updateMerchantMember(
-  merchantId: number,
-  userId: number,
-  data: { role?: MerchantRole; status?: MembershipStatus },
-) {
-  return merchantPutJson<void>(
-    `/api/merchant-memberships/${merchantId}/members/${userId}`,
-    data,
-  )
-}
-
-export function removeMerchantMember(merchantId: number, userId: number) {
-  return merchantDeleteJson<void>(
-    `/api/merchant-memberships/${merchantId}/members/${userId}`,
-  )
+  return workspacePostJson<void>(`/api/outbound/tasks/${taskId}/cancel`, {}, { houseId })
 }
 
 export function listHouseMembers(houseId: number) {
-  return merchantGetJson<HouseMember[]>('/api/house-members', { houseId })
+  return workspaceGetJson<HouseMember[]>('/api/house-members', { houseId })
 }
 
-export function addHouseMember(
+export function createHouseInvitation(
   houseId: number,
-  data: { userName: string; role: Exclude<HouseMember['role'], 'OWNER' | 'MERCHANT_OWNER'> },
+  data: HouseInvitationRequest,
 ) {
-  return merchantPostJson<void>(
-    '/api/house-members',
-    { ...data, requestId: requestId() },
-    { houseId },
-  )
+  return workspacePostJson<void>('/api/house-invitations', data, { houseId })
 }
 
 export function updateHouseMember(
   houseId: number,
   userId: number,
-  role: Exclude<HouseMember['role'], 'MERCHANT_OWNER'>,
+  role: HouseMember['role'],
 ) {
-  return merchantPutJson<void>(
+  return workspacePutJson<void>(
     `/api/house-members/${userId}`,
     { role, requestId: requestId() },
     { houseId },
@@ -300,7 +260,7 @@ export function updateHouseMember(
 }
 
 export function removeHouseMember(houseId: number, userId: number) {
-  return merchantDeleteJson<void>(`/api/house-members/${userId}`, {
+  return workspaceDeleteJson<void>(`/api/house-members/${userId}`, {
     houseId,
     params: { requestId: requestId() },
   })

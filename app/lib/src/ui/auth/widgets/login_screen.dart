@@ -7,8 +7,10 @@ import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/phone_number_detector.dart';
-import 'package:rabbit_flutter/src/domain/legal_documents.dart';
+import 'package:rabbit_flutter/src/config/legal_documents.dart';
+import 'package:rabbit_flutter/src/data/services/device/carrier_auth_service.dart';
+import 'package:rabbit_flutter/src/data/services/device/phone_number_detector.dart';
+import 'package:rabbit_flutter/src/domain/models/carrier_auth.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/auth/widgets/legal_document_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
@@ -39,6 +41,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   var _detectingPhone = false;
   var _phoneFocused = false;
   var _agreedToTerms = false;
+  var _carrierAuthorizing = false;
+  CarrierAuthService? _activeCarrierAuthService;
   var _horizontalDragDelta = 0.0;
   Timer? _resendTimer;
 
@@ -54,6 +58,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    if (_carrierAuthorizing) {
+      unawaited(_activeCarrierAuthService?.cancelAuthorization());
+    }
     _resendTimer?.cancel();
     _phoneFocusNode.dispose();
     _phoneController.dispose();
@@ -137,8 +144,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _LegalConsentRow(
                       agreed: _agreedToTerms,
                       enabled: !_submitting && !_sendingCode,
-                      onChanged: (value) =>
-                          setState(() => _agreedToTerms = value),
+                      onChanged: (value) {
+                        setState(() => _agreedToTerms = value);
+                      },
                       onOpenPrivacyPolicy: () => _openLegalDocument(
                         title: LegalDocuments.privacyPolicyTitle,
                         body: LegalDocuments.privacyPolicy,
@@ -199,9 +207,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildPhoneLogin(BuildContext context) {
+    final carrierCapability = _agreedToTerms
+        ? ref.watch(carrierAuthCapabilityProvider).valueOrNull
+        : null;
     return Column(
       key: const ValueKey('phone-login'),
       children: [
+        if (carrierCapability?.isAvailable == true) ...[
+          SizedBox(
+            key: const ValueKey('carrier-login-button'),
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _submitting || _sendingCode ? null : _submitCarrier,
+              icon: _submitting
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.flash_on_outlined),
+              label: const Text('本机号码一键登录'),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const _SmsLoginDivider(),
+          const SizedBox(height: 14),
+        ],
         _PhoneNumberInput(
           controller: _phoneController,
           focusNode: _phoneFocusNode,
@@ -391,6 +421,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await _runAuth(() => controller.loginWithPhone(phone, code));
   }
 
+  Future<void> _submitCarrier() async {
+    if (_submitting || _sendingCode || !_ensureLegalConsent()) {
+      return;
+    }
+    final controller = ref.read(authControllerProvider.notifier);
+    final carrierService = ref.read(carrierAuthServiceProvider);
+    _activeCarrierAuthService = carrierService;
+    _carrierAuthorizing = true;
+    try {
+      await _runAuth(() async {
+        final credential = await carrierService.authorize();
+        await controller.loginWithCarrier(credential);
+      });
+    } finally {
+      _carrierAuthorizing = false;
+      if (identical(_activeCarrierAuthService, carrierService)) {
+        _activeCarrierAuthService = null;
+      }
+    }
+  }
+
   Future<void> _detectPhoneNumber() async {
     if (_detectingPhone) {
       return;
@@ -456,7 +507,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) {
         return;
       }
-      final message = error is ApiException ? error.message : error.toString();
+      final message = switch (error) {
+        ApiException apiError => apiError.message,
+        CarrierAuthException carrierError => carrierError.message,
+        _ => error.toString(),
+      };
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -465,6 +520,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() => _submitting = false);
       }
     }
+  }
+}
+
+class _SmsLoginDivider extends StatelessWidget {
+  const _SmsLoginDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Row(
+      key: const ValueKey('sms-login-divider'),
+      children: [
+        Expanded(child: Divider(color: palette.line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            '或使用短信验证码',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Expanded(child: Divider(color: palette.line)),
+      ],
+    );
   }
 }
 

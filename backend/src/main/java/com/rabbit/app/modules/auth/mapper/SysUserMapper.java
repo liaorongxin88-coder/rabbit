@@ -4,8 +4,6 @@ import com.rabbit.app.modules.auth.entity.SysUser;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.util.List;
-
 @Mapper
 public interface SysUserMapper {
     SysUser selectByUserName(@Param("userName") String userName);
@@ -14,12 +12,11 @@ public interface SysUserMapper {
 
     SysUser selectByPhoneHash(@Param("phoneHash") String phoneHash);
 
+    SysUser selectByPhoneHashForUpdate(@Param("phoneHash") String phoneHash);
+
     SysUser selectById(@Param("userId") Long userId);
 
-    List<SysUser> searchByMerchant(@Param("merchantId") Long merchantId,
-                                   @Param("keyword") String keyword,
-                                   @Param("excludeUserIds") List<Long> excludeUserIds,
-                                   @Param("limit") int limit);
+    SysUser selectByIdForUpdate(@Param("userId") Long userId);
 
     int insert(SysUser user);
 
@@ -28,4 +25,10 @@ public interface SysUserMapper {
     int updateUserName(@Param("userId") Long userId, @Param("userName") String userName);
 
     int updatePassword(@Param("userId") Long userId, @Param("password") String password);
+
+    int updatePasswordAndInitialize(@Param("userId") Long userId,
+                                    @Param("password") String password);
+
+    int updateStatus(@Param("userId") Long userId,
+                     @Param("status") String status);
 }

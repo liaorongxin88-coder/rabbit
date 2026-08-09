@@ -44,8 +44,6 @@ public class RabbitHouseWorkspaceProvider implements FarmingWorkspaceProvider {
         return new FarmingWorkspaceView(
                 FarmingWorkspaceView.key(BUSINESS_TYPE, house.getId()),
                 house.getId(),
-                house.getMerchantId(),
-                house.getOwnerUserId(),
                 house.getName(),
                 BUSINESS_TYPE,
                 MODULE.displayName(),

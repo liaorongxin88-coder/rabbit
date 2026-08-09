@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
 
 class ProductionSettingsScreen extends ConsumerWidget {
   const ProductionSettingsScreen({

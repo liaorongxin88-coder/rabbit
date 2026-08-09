@@ -72,7 +72,7 @@ public class HouseSelectGuardInterceptor implements Interceptor {
             return invocation.proceed();
         }
         String s = normalizeSql(sql);
-        if (!s.contains("house_id")) {
+        if (!s.contains("house_id") && !isRabbitHousePrimaryKeyScoped(s)) {
             throw new BizException(500, "SQL缺少house_id过滤: " + ms.getId());
         }
         return invocation.proceed();
@@ -90,6 +90,11 @@ public class HouseSelectGuardInterceptor implements Interceptor {
 
     private String normalizeSql(String sql) {
         return sql.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private boolean isRabbitHousePrimaryKeyScoped(String sql) {
+        return sql.contains(" from rabbit_houses ")
+                && sql.matches(".*\\bwhere\\s+id\\s*=.*");
     }
 
     private boolean shouldIgnore(String msId, String config) {
@@ -129,4 +134,3 @@ public class HouseSelectGuardInterceptor implements Interceptor {
     public void setProperties(Properties properties) {
     }
 }
-

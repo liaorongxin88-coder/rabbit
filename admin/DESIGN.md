@@ -1,6 +1,6 @@
 ---
 name: Rabbit SaaS Admin
-description: Operational platform console and merchant rabbit-farm workspace with isolated identities, permissions, and business scope.
+description: Operational platform console and rabbit-farm workspace with isolated identities, permissions, and farm-scoped business access.
 status: canonical
 owners: admin frontend
 framework: React + TypeScript + Vite
@@ -40,39 +40,38 @@ This document is the source of truth for the `admin/` frontend visual and intera
 
 ## Overview
 
-Rabbit SaaS Admin contains two operational surfaces that share one restrained design system but not one identity or permission model. The platform console manages merchants, account memberships, merchant enablement state, rabbit-house governance policies, and read-only business summaries. The merchant workspace manages the selected merchant and rabbit house through existing business APIs.
+Rabbit SaaS Admin contains two operational surfaces that share one restrained design system but not one identity or permission model. The platform console manages rabbit farms, business users, rabbit-farm memberships, farm state, and read-only business summaries. The business workspace manages the selected rabbit farm through existing business APIs.
 
-The interface should feel like a quiet control room: clear hierarchy, low visual noise, stable controls, and enough density for repeated daily work. It is not a marketing site. Platform routes are not business data editors; merchant routes are production tools constrained by merchant and rabbit-house permissions.
+The interface should feel like a quiet control room: clear hierarchy, low visual noise, stable controls, and enough density for repeated daily work. It is not a marketing site. Platform routes are not business data editors; workspace routes are production tools constrained by rabbit-farm membership and permissions.
 
 ## Design Principles
 
-- **Operational clarity first.** Every surface should help an operator answer one of three questions: which merchant is this, what state is it in, and what action is safe here?
+- **Operational clarity first.** Every surface should help an operator answer one of three questions: which rabbit farm is this, who can access it, and what action is safe here?
 - **Hierarchy through structure.** Use layout, spacing, table grouping, and muted metadata instead of decorative panels or bright color blocks.
 - **One memorable accent.** The teal primary color is the product signature. Keep everything around it neutral and disciplined.
 - **Read-only means read-only in platform scope.** Rabbit houses, cages, rabbits, and audit previews remain inspection surfaces in platform routes.
-- **Business actions follow selected scope.** Merchant pages must make the active merchant, active rabbit house, and effective role visible before write actions.
+- **Business actions follow selected scope.** Workspace pages must make the active rabbit farm and effective role visible before write actions.
 - **Motion confirms state.** Animation should help the eye follow navigation, table updates, dialogs, and button presses; it must not compete with data readability.
 
 ## Audience And Jobs
 
-Primary users are internal platform operators and merchant business users. Platform operators work across merchants. Merchant users work inside one selected merchant and rabbit house at a time. Both need quick scanning, low ambiguity, and visible permission boundaries.
+Primary users are internal platform operators and rabbit-farm business users. Platform operators work across rabbit farms and users. Business users work inside one selected rabbit farm at a time. Both need quick scanning, low ambiguity, and visible permission boundaries.
 
 Core jobs:
 
-- Find a merchant by name, contact, phone, status, or ID.
-- Create a merchant together with its initial login account, or update merchant profile information.
-- Add merchant login accounts, configure membership roles, and keep one owner for every merchant.
-- Configure whether a merchant can create rabbit houses or manage house members, plus capacity limits.
-- Enable or disable a merchant with clear risk signaling.
-- Inspect global accounts and edit their membership inside a merchant.
-- Inspect merchant scale through counts, rabbit house previews, user lists, and audit previews.
-- Switch among merchants and rabbit houses available to the signed-in business account.
-- Manage houses, cages, rabbits, production batches, and member roles when the effective permission allows it.
+- Find a rabbit farm by name, owner, status, or ID.
+- Create or update a rabbit farm and assign an existing user, or an invited phone identity, as its initial owner.
+- Find business users by permitted identifiers and inspect masked phone identity, account state, and accessible rabbit-farm count.
+- Add or remove rabbit-farm members, configure farm roles, and keep at least one enabled OWNER for every rabbit farm; multiple co-owners are allowed.
+- Enable or disable a rabbit farm with clear risk signaling without implicitly disabling its users.
+- Inspect rabbit-farm scale through cage, rabbit, production, member, and audit previews.
+- Switch among rabbit farms available to the signed-in business user.
+- Manage rabbit farms, cages, rabbits, production batches, and member roles when the effective permission allows it.
 
 Non-goals:
 
 - Package, billing, invoice, or plan management.
-- Merchant self-registration.
+- Public self-registration outside the approved phone and account flows.
 - Customer support impersonation.
 - Exposing platform-wide business editing.
 - NFC tag writing/resolution, Bluetooth, camera, MQTT, or hardware-triggered controls in the PC workspace.
@@ -117,7 +116,7 @@ Rules:
 - Letter spacing stays `0` or `tracking-normal`.
 - Do not scale font size with viewport width.
 - Keep headings short and literal. Avoid clever slogans.
-- Long values such as merchant names, OpenID, phone, and IDs must truncate or wrap without overlapping actions.
+- Long values such as rabbit-farm names, user names, masked phone numbers, OpenID, and IDs must truncate or wrap without overlapping actions.
 
 ## Layout
 
@@ -207,14 +206,14 @@ Rules:
 
 ## Navigation
 
-Desktop navigation is a fixed left sidebar with product identity, primary sections, and the current session at the bottom. Merchant routes place compact merchant and rabbit-house selectors above their business navigation.
+Desktop navigation is a fixed left sidebar with product identity, primary sections, and the current session at the bottom. Business workspace routes place one compact rabbit-farm selector above their business navigation.
 
-Mobile navigation uses a compact sticky top header. Merchant routes use a horizontally scrollable business-navigation row and an unframed selector block below it so every route and tenant control remains reachable without a drawer.
+Mobile navigation uses a compact sticky top header. Workspace routes use a horizontally scrollable business-navigation row and an unframed rabbit-farm selector below it so every route and scope control remains reachable without a drawer.
 
 Rules:
 
 - Active navigation should use quiet secondary fill and stronger foreground text.
-- Product identity should stay compact: `Rabbit SaaS / 平台管理端` for platform routes and `Rabbit Farm / 商户工作台` for merchant routes.
+- Product identity should stay compact: `Rabbit SaaS / 平台管理端` for platform routes and `Rabbit Farm / 兔场工作台` for `/workspace/**` routes.
 - Do not add duplicate routes that point to the same page unless the label exposes a real distinct workflow.
 
 ## Components
@@ -235,7 +234,7 @@ Rules:
 - Icons inside buttons use `data-icon`; do not manually size them in page code.
 - Dialogs must include a useful description, especially for create, edit, bind, and destructive flows.
 - Forms should group labels, inputs, validation hints, and descriptions consistently.
-- Toasts should name the completed action, such as `商户已启用` or `账号已创建`.
+- Toasts should name the completed action, such as `兔场已启用` or `成员已添加`.
 
 ## Tables And Data Display
 
@@ -255,7 +254,7 @@ Rules:
 
 Rules:
 
-- Create and edit forms open in dialogs for first-version merchant management.
+- Rabbit-farm and business-user create or edit forms open in dialogs when the workflow is short and self-contained.
 - In the fixed-sidebar shell, desktop dialogs are centered inside the main content pane, not the full viewport. The dialog layout viewport uses `left: var(--admin-sidebar-width)` and `right: 0`; do not combine `left/top` centering with `translate(-50%, -50%)` motion transforms.
 - Dialog forms should reset state when opened for a new target.
 - Long dialog forms keep the header and footer fixed inside the card; only the form body scrolls.
@@ -263,21 +262,22 @@ Rules:
 - Filter forms with inline actions must align action buttons to the input/select control row, not to helper text. Put helper text in a separate row below the controls when it would change grid row height.
 - Search and filter action buttons should use the same visual height as adjacent inputs and selects.
 - Async submit buttons must disable during saving and show loading feedback when available.
-- Keep destructive operations explicit. Do not hide merchant disable behind a generic edit form.
+- Keep destructive operations explicit. Do not hide rabbit-farm disable, owner membership changes, or member removal behind a generic edit form.
 
 ## Status, Risk, And Permissions
 
-Merchant status is the most important platform state in the first version.
+Rabbit-farm state, business-user state, and rabbit-farm membership state are independent. The interface must not imply that changing one silently changes another.
 
 Rules:
 
 - `ENABLED` should read as normal/healthy and may use the accent green.
 - `DISABLED` should read as restricted/high attention, but red should be reserved for the destructive action itself or error state.
-- `停用商户` uses destructive styling.
-- `启用商户` uses primary/default styling.
-- Merchant account creation and role changes happen in merchant context; a global account may have memberships in multiple merchants.
-- Ownership transfer must remain explicit and must never leave a merchant without an enabled owner.
-- Platform admin screens must not imply merchant-level permission controls unless the backend supports them.
+- `停用兔场` and `移除成员` use destructive styling.
+- `启用兔场` uses primary/default styling.
+- A business user may have memberships in multiple rabbit farms. Role changes happen in the selected rabbit-farm context.
+- Owner membership changes must remain explicit and must never leave a rabbit farm without at least one enabled OWNER; multiple co-owners are valid.
+- A phone number is shown only as a masked user identity. It must not appear as a rabbit-farm contact field or imply farm access by itself.
+- Platform screens must not imply rabbit-farm permission controls unless the backend supports them.
 
 ## Copy
 
@@ -287,7 +287,7 @@ Rules:
 
 - Prefer precise verbs over promotional copy.
 - Labels name the object being edited, not the backend concept.
-- A control should say exactly what happens: `新增商户`, `新增账号`, `查询`, `编辑`, `停用商户`, `启用商户`.
+- A control should say exactly what happens: `新增兔场`, `添加成员`, `查询`, `编辑`, `停用兔场`, `启用兔场`.
 - Toast vocabulary should match the action vocabulary.
 - Empty copy should explain what makes data appear and provide an action only when the operator can perform it here.
 - Error copy should direct the operator to the next practical step.
@@ -308,7 +308,7 @@ Rules:
 ## Do
 
 - Build dense but calm operational workflows.
-- Keep admin APIs and merchant APIs visually and technically separate.
+- Keep platform-admin APIs and business-workspace APIs visually and technically separate.
 - Use the existing request layer and semantic UI primitives.
 - Add new design tokens only when a repeated need appears.
 - Verify desktop and narrow mobile layouts for text overlap and action reachability.
@@ -319,7 +319,7 @@ Rules:
 - Do not create a landing page or hero-first admin home.
 - Do not add decorative gradients, blobs, bokeh, or illustration backgrounds.
 - Do not add business data edit controls to platform read-only overview sections.
-- Do not show NFC, Bluetooth, MQTT, camera, or hardware-trigger controls in merchant web navigation while those capabilities are pending. Business-only production transitions remain available and must submit with hardware triggering disabled.
+- Do not show NFC, Bluetooth, MQTT, camera, or hardware-trigger controls in business web navigation while those capabilities are pending. Business-only production transitions remain available and must submit with hardware triggering disabled.
 - Do not place cards inside cards.
 - Do not scatter raw Tailwind colors through page code.
 - Do not call `fetch` directly from components.

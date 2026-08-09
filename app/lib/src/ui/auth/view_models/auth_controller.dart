@@ -6,12 +6,19 @@ import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
+import 'package:rabbit_flutter/src/domain/models/carrier_auth.dart';
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AsyncValue<AuthSession?>>((ref) {
   return AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(sessionStoreProvider),
+  );
+});
+
+final authenticatedUserIdProvider = Provider<int>((ref) {
+  return ref.watch(
+    authControllerProvider.select((state) => state.valueOrNull?.userId ?? 0),
   );
 });
 
@@ -52,7 +59,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       }
       state = AsyncValue.data(validatedSession);
     } on ApiException catch (error, stackTrace) {
-      if (error.statusCode == 401 || error.businessCode == 401) {
+      if (error.invalidatesSession) {
         await _invalidateSession();
         return;
       }
@@ -74,6 +81,10 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     return _authenticate(() => _repository.loginWithPhone(phone, code));
   }
 
+  Future<void> loginWithCarrier(CarrierAuthCredential credential) {
+    return _authenticate(() => _repository.loginWithCarrier(credential));
+  }
+
   Future<void> setHouseId(int houseId) async {
     final current = state.valueOrNull;
     if (current == null) {
@@ -81,6 +92,43 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     }
     await _sessionStore.saveHouseId(current.userId, houseId);
     state = AsyncValue.data(current.copyWith(houseId: houseId));
+  }
+
+  Future<void> reconcileHouseIds(Iterable<int> availableHouseIds) async {
+    final current = state.valueOrNull;
+    if (current == null) {
+      return;
+    }
+
+    final ids = availableHouseIds.where((id) => id > 0).toSet();
+    final snapshot = await _sessionStore.readSession();
+    if (state.valueOrNull?.userId != current.userId) {
+      return;
+    }
+
+    final cachedHouseId =
+        snapshot.userId == current.userId ? snapshot.houseId : current.houseId;
+    final candidateHouseId =
+        current.houseId > 0 ? current.houseId : cachedHouseId;
+    final int nextHouseId;
+    if (ids.isEmpty) {
+      nextHouseId = 0;
+    } else if (ids.length == 1) {
+      nextHouseId = ids.first;
+    } else if (ids.contains(candidateHouseId)) {
+      nextHouseId = candidateHouseId;
+    } else {
+      nextHouseId = 0;
+    }
+
+    if (current.houseId == nextHouseId && cachedHouseId == nextHouseId) {
+      return;
+    }
+    await _sessionStore.saveHouseId(current.userId, nextHouseId);
+    final latest = state.valueOrNull;
+    if (mounted && latest?.userId == current.userId) {
+      state = AsyncValue.data(latest!.copyWith(houseId: nextHouseId));
+    }
   }
 
   Future<void> setUserName(String userName) async {

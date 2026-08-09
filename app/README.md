@@ -87,6 +87,13 @@ Android Studio 打开 `flutter_app/` 后，Run/Debug Configurations 里使用：
 2. APK asset 中的 `config/env/dev.env` 或 `config/env/test.env`。
 3. 代码兜底默认值。
 
+`RABBIT_CARRIER_AUTH_ENABLED` 控制一键登录入口，所有已提交环境默认 `false`。只有当前 flavor
+已经在阿里云登记包名和签名、官方 Android AAR 已接入且后端号码认证也已启用时才设为
+`true`。一键登录只允许连接 HTTPS 后端；使用 HTTP 的本地 `dev` / `test` 环境即使误开开关
+也不会查询运营商能力、显示入口或发送认证凭证。交互授权的超时由未来接入的原生 SDK
+adapter 在用户操作或网络认证阶段报告，Flutter 不对整个授权页面设置固定墙钟超时。
+SDK 不可用、用户取消或授权失败时继续使用短信验证码登录。
+
 不要在 Android Studio Run Configuration 的 `Environment variables` 里设置 `RABBIT_API_BASE_URL`，Flutter Android App 运行时不会按这种方式读取它。修改 `config/env/*.env` 后需要 Stop 当前 App 并重新 Run，不能只 hot reload。
 
 推荐用统一入口打包：
@@ -144,12 +151,12 @@ cd flutter_app
 
 ## 目录
 
-- `lib/src/config/`：应用配置。
-- `lib/src/data/services/`：HTTP、会话存储等底层服务。
+- `lib/src/config/`：应用配置和静态应用文案。
+- `lib/src/data/services/`：HTTP、会话、设备能力和本地存储等底层服务。
 - `lib/src/data/repositories/`：面向功能的后端数据访问。
 - `lib/src/domain/models/`：纯数据模型。
 - `lib/src/routing/`：go_router 路由和守卫。
-- `lib/src/ui/`：页面、组件、主题和 view model。
+- `lib/src/ui/`：按功能归档的页面、组件、主题、Provider 和 view model。
 
 更详细的架构说明见 `lib/src/README.md`。
 

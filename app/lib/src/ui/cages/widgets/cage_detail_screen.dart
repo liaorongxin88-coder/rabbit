@@ -3,18 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/cage_providers.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
 
 class CageDetailScreen extends ConsumerWidget {

@@ -12,58 +12,6 @@ final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
   return RabbitRepository(ref.watch(apiClientProvider));
 });
 
-final houseCagesProvider =
-    FutureProvider.autoDispose.family<List<Cage>, int>((ref, houseId) async {
-  if (houseId <= 0) {
-    return const <Cage>[];
-  }
-  final cancelToken = CancelToken();
-  ref.onDispose(cancelToken.cancel);
-  return ref
-      .watch(rabbitRepositoryProvider)
-      .listCages(houseId, cancelToken: cancelToken);
-});
-
-final houseRabbitsProvider =
-    FutureProvider.autoDispose.family<List<Rabbit>, int>((ref, houseId) async {
-  if (houseId <= 0) {
-    return const <Rabbit>[];
-  }
-  final cancelToken = CancelToken();
-  ref.onDispose(cancelToken.cancel);
-  return ref
-      .watch(rabbitRepositoryProvider)
-      .listRabbits(houseId, cancelToken: cancelToken);
-});
-
-final allActiveHouseRabbitsProvider =
-    FutureProvider.autoDispose.family<List<Rabbit>, int>((ref, houseId) async {
-  if (houseId <= 0) {
-    return const <Rabbit>[];
-  }
-  final cancelToken = CancelToken();
-  ref.onDispose(cancelToken.cancel);
-  return ref
-      .watch(rabbitRepositoryProvider)
-      .listAllActiveRabbits(houseId, cancelToken: cancelToken);
-});
-
-typedef CageDetailKey = ({int houseId, int cageId});
-
-final cageSummaryProvider =
-    FutureProvider.autoDispose.family<CageSummary, CageDetailKey>((ref, key) {
-  return ref
-      .watch(rabbitRepositoryProvider)
-      .getCageSummary(houseId: key.houseId, cageId: key.cageId);
-});
-
-final cageRabbitsProvider =
-    FutureProvider.autoDispose.family<List<Rabbit>, CageDetailKey>((ref, key) {
-  return ref
-      .watch(rabbitRepositoryProvider)
-      .listRabbitsForCage(houseId: key.houseId, cageId: key.cageId);
-});
-
 class RabbitRepository {
   RabbitRepository(this._api);
 

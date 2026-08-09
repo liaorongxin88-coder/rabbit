@@ -8,6 +8,7 @@
         <result column="house_id" property="houseId"/>
         <result column="user_id" property="userId"/>
         <result column="role" property="role"/>
+        <result column="status" property="status"/>
         <result column="perms" property="perms"/>
         <result column="is_admin" property="isAdmin"/>
         <result column="join_time" property="joinTime"/>
@@ -20,25 +21,30 @@
     <resultMap id="HouseMemberItemMap" type="com.rabbit.app.modules.house.dto.HouseMemberItem">
         <result column="user_id" property="userId"/>
         <result column="user_name" property="userName"/>
+        <result column="phone_masked" property="phoneMasked"/>
         <result column="role" property="role"/>
+        <result column="status" property="status"/>
         <result column="perms" property="perms"/>
         <result column="is_admin" property="isAdmin"/>
         <result column="join_time" property="joinTime"/>
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into house_users (house_id, user_id, role, perms, is_admin, create_by, update_by)
-        values (#{houseId}, #{userId}, #{role}, #{perms}, #{isAdmin}, #{createBy}, #{updateBy})
+        insert into house_users (house_id, user_id, role, status, perms, is_admin, create_by, update_by)
+        values (#{houseId}, #{userId}, #{role}, #{status}, #{perms}, #{isAdmin}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByUserAndHouse" resultMap="HouseUserMap">
-        select id, house_id, user_id, role, perms, is_admin, join_time, create_by, create_time, update_by, update_time
+        select id, house_id, user_id, role, status, perms, is_admin, join_time, create_by, create_time, update_by, update_time
         from house_users
         where user_id = #{userId} and house_id = #{houseId}
     </select>
 
     <select id="selectMembersByHouse" resultMap="HouseMemberItemMap">
-        select hu.user_id, su.user_name, hu.role, hu.perms, hu.is_admin, hu.join_time
+        select hu.user_id, su.user_name, su.phone_masked, hu.role,
+               case when hu.status = 'ENABLED' and su.status = 'ENABLED'
+                    then 'ENABLED' else 'DISABLED' end as status,
+               hu.perms, hu.is_admin, hu.join_time
         from house_users hu
         join sys_user su on su.user_id = hu.user_id
         where hu.house_id = #{houseId}
@@ -49,6 +55,7 @@
     <update id="updateMember">
         update house_users
         set role = #{role},
+            status = #{status},
             perms = #{perms},
             is_admin = #{isAdmin},
             update_by = #{updateBy},
@@ -73,27 +80,14 @@
         where house_id = #{houseId}
     </select>
 
-    <update id="clearOtherAdmins">
-        update house_users
-        set is_admin = 0,
-            update_by = #{updateBy},
-            update_time = now()
-        where house_id = #{houseId}
-          and user_id != #{exceptUserId}
-          and is_admin = 1
-    </update>
-
-    <update id="demoteOtherOwners">
-        update house_users
-        set role = 'MANAGER',
-            perms = 'control',
-            is_admin = 0,
-            update_by = #{updateBy},
-            update_time = now()
-        where house_id = #{houseId}
-          and user_id != #{exceptUserId}
-          and role = 'OWNER'
-    </update>
+    <select id="countEnabledOwners" resultType="int">
+        select count(1)
+        from house_users hu
+        join sys_user u on u.user_id = hu.user_id and u.status = 'ENABLED'
+        where hu.house_id = #{houseId}
+          and hu.role = 'OWNER'
+          and hu.status = 'ENABLED'
+    </select>
 
     <select id="selectMemberUserIds" resultType="long">
         select user_id

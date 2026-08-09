@@ -5,7 +5,6 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.house.dto.AddHouseMemberRequest;
 import com.rabbit.app.modules.house.dto.HouseMemberItem;
 import com.rabbit.app.modules.house.dto.UpdateHouseMemberRequest;
-import com.rabbit.app.modules.house.dto.UserSearchItem;
 import com.rabbit.app.modules.house.service.HouseMemberService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
@@ -47,24 +46,23 @@ public class HouseMemberController {
         return ApiResponse.ok(houseMemberService.listMembers(houseId));
     }
 
-    @GetMapping("/house-members/search-users")
-    @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_QUERY)
-    public ApiResponse<List<UserSearchItem>> searchUsers(@RequestHeader("X-House-Id") Long houseId,
-                                                         @RequestParam("q") String q) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "view");
-        houseService.assertHouseAdmin(userId, houseId);
-        return ApiResponse.ok(houseMemberService.searchCandidates(houseId, q, 10));
-    }
-
     @PostMapping("/house-members")
     @RequiresPermission(PermissionCode.RABBIT_HOUSE_MEMBERS_ADD)
-    public ApiResponse<Void> add(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody AddHouseMemberRequest req) {
+    public ApiResponse<Void> add(
+            @RequestHeader("X-House-Id") Long houseId,
+            @Valid @RequestBody AddHouseMemberRequest request
+    ) {
         Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "view");
-        houseService.assertHouseAdmin(userId, houseId);
-        String operator = String.valueOf(userId);
-        houseMemberService.addMember(houseId, userId, operator, req.getUserName(), req.getRole(), req.getPerms(), req.getIsAdmin(), req.getRequestId());
+        houseMemberService.addMember(
+                houseId,
+                userId,
+                String.valueOf(userId),
+                request.getUserName(),
+                request.getRole(),
+                request.getPerms(),
+                request.getIsAdmin(),
+                request.getRequestId()
+        );
         return ApiResponse.ok(null);
     }
 

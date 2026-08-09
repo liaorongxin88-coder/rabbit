@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final houses = ref.watch(housesProvider);
     final events = ref.watch(homeEventsProvider);
 
     return AppPage(
@@ -26,28 +27,44 @@ class HomeScreen extends ConsumerWidget {
           icon: const Icon(Icons.refresh),
         ),
       ],
-      child: RefreshIndicator(
-        onRefresh: () async {
-          await _refreshHome(ref);
-        },
-        child: ListView(
-          padding: AppSpacing.pagePadding,
-          children: [
-            events.when(
-              data: (items) => _HomeContent(events: items),
-              loading: () => const Padding(
-                padding: EdgeInsets.only(top: 120),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => SizedBox(
-                height: 480,
-                child: ErrorState(
-                  message: error.toString(),
-                  onRetry: () => ref.invalidate(homeEventsProvider),
+      child: houses.when(
+        data: (items) {
+          if (items.isEmpty) {
+            return EmptyState(
+              icon: Icons.storefront_outlined,
+              title: '尚未加入兔舍',
+              message: '可以创建兔舍，或等待管理员通过手机号邀请后刷新。',
+              actionLabel: '管理兔舍',
+              onAction: () => context.go('/houses'),
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () => _refreshHome(ref),
+            child: ListView(
+              padding: AppSpacing.pagePadding,
+              children: [
+                events.when(
+                  data: (items) => _HomeContent(events: items),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.only(top: 120),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (error, _) => SizedBox(
+                    height: 480,
+                    child: ErrorState(
+                      message: error.toString(),
+                      onRetry: () => ref.invalidate(homeEventsProvider),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => ErrorState(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(housesProvider),
         ),
       ),
     );

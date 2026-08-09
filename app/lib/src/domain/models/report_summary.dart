@@ -51,6 +51,67 @@ class BreedingSummary {
   }
 }
 
+class DashboardReport {
+  const DashboardReport({
+    required this.feed,
+    required this.breeding,
+  });
+
+  final FeedSummary feed;
+  final BreedingSummary breeding;
+
+  factory DashboardReport.empty() {
+    return const DashboardReport(
+      feed: FeedSummary(recordCount: 0, totalAmount: 0),
+      breeding: BreedingSummary(
+        totalLitters: 0,
+        totalKits: 0,
+        totalLiveKits: 0,
+        totalWeaned: 0,
+        successBreedingCount: 0,
+        failedBreedingCount: 0,
+      ),
+    );
+  }
+
+  factory DashboardReport.sum(Iterable<DashboardReport> reports) {
+    var feedRecordCount = 0;
+    var feedTotalAmount = 0.0;
+    var totalLitters = 0;
+    var totalKits = 0;
+    var totalLiveKits = 0;
+    var totalWeaned = 0;
+    var successBreedingCount = 0;
+    var failedBreedingCount = 0;
+
+    for (final report in reports) {
+      feedRecordCount += report.feed.recordCount;
+      feedTotalAmount += report.feed.totalAmount;
+      totalLitters += report.breeding.totalLitters;
+      totalKits += report.breeding.totalKits;
+      totalLiveKits += report.breeding.totalLiveKits;
+      totalWeaned += report.breeding.totalWeaned;
+      successBreedingCount += report.breeding.successBreedingCount;
+      failedBreedingCount += report.breeding.failedBreedingCount;
+    }
+
+    return DashboardReport(
+      feed: FeedSummary(
+        recordCount: feedRecordCount,
+        totalAmount: feedTotalAmount,
+      ),
+      breeding: BreedingSummary(
+        totalLitters: totalLitters,
+        totalKits: totalKits,
+        totalLiveKits: totalLiveKits,
+        totalWeaned: totalWeaned,
+        successBreedingCount: successBreedingCount,
+        failedBreedingCount: failedBreedingCount,
+      ),
+    );
+  }
+}
+
 class DashboardSummary {
   const DashboardSummary({
     required this.selectedHouseId,

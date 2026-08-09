@@ -104,13 +104,6 @@ public class AuditLogInterceptor implements HandlerInterceptor {
     }
 
     private static String getClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.trim().isEmpty()) {
-            String v = xff.split(",")[0];
-            if (v != null) {
-                return v.trim();
-            }
-        }
         return request.getRemoteAddr();
     }
 

@@ -7,18 +7,12 @@ public enum PermissionCode {
     ACCOUNT_PROFILE_QUERY("account:profile:query", PermissionScope.BUSINESS, 1),
     ACCOUNT_PROFILE_EDIT("account:profile:edit", PermissionScope.BUSINESS, 1),
     ACCOUNT_PASSWORD_EDIT("account:password:edit", PermissionScope.BUSINESS, 1),
-    MERCHANT_MEMBERSHIPS_LIST("merchant:memberships:list", PermissionScope.BUSINESS, 1),
+    WORKSPACES_LIST("workspaces:list", PermissionScope.BUSINESS, 1),
     RABBIT_HOUSES_LIST("rabbit:houses:list", PermissionScope.BUSINESS, 1),
     RABBIT_HOUSES_ADD("rabbit:houses:add", PermissionScope.BUSINESS, 1),
     USER_SETTINGS_QUERY("account:settings:query", PermissionScope.BUSINESS, 1),
     USER_SETTINGS_EDIT("account:settings:edit", PermissionScope.BUSINESS, 1),
     DASHBOARD_QUERY("rabbit:dashboard:query", PermissionScope.BUSINESS, 1),
-
-    MERCHANT_MEMBERS_LIST("merchant:members:list", PermissionScope.MERCHANT, MerchantRole.OWNER.rank()),
-    MERCHANT_MEMBERS_ADD("merchant:members:add", PermissionScope.MERCHANT, MerchantRole.OWNER.rank()),
-    MERCHANT_MEMBERS_EDIT("merchant:members:edit", PermissionScope.MERCHANT, MerchantRole.OWNER.rank()),
-    MERCHANT_MEMBERS_REMOVE("merchant:members:remove", PermissionScope.MERCHANT, MerchantRole.OWNER.rank()),
-    MERCHANT_HOUSES_ADD("merchant:houses:add", PermissionScope.MERCHANT, MerchantRole.ADMIN.rank()),
 
     RABBIT_HOUSES_QUERY("rabbit:houses:query", PermissionScope.HOUSE, HouseRole.VIEWER.rank()),
     RABBIT_HOUSES_EDIT("rabbit:houses:edit", PermissionScope.HOUSE, HouseRole.MANAGER.rank()),
@@ -75,23 +69,18 @@ public enum PermissionCode {
     RABBIT_NFC_CONTROL("rabbit:nfc:control", PermissionScope.HOUSE, HouseRole.MANAGER.rank()),
     RABBIT_HARDWARE_CONTROL("rabbit:hardware:control", PermissionScope.HOUSE, HouseRole.MANAGER.rank()),
 
-    PLATFORM_MERCHANTS_LIST("platform:merchants:list", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANTS_QUERY("platform:merchants:query", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANTS_ADD("platform:merchants:add", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANTS_EDIT("platform:merchants:edit", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_ACCOUNTS_LIST("platform:merchant-accounts:list", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_ACCOUNTS_ADD("platform:merchant-accounts:add", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_MEMBERSHIP_EDIT("platform:merchant-membership:edit", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_POLICY_QUERY("platform:merchant-policy:query", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_POLICY_EDIT("platform:merchant-policy:edit", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
-    PLATFORM_MERCHANT_OVERVIEW_QUERY("platform:merchant-overview:query", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_FARMS_LIST("platform:farms:list", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_FARMS_QUERY("platform:farms:query", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_FARMS_ADD("platform:farms:add", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_FARMS_EDIT("platform:farms:edit", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_USERS_LIST("platform:users:list", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_USERS_QUERY("platform:users:query", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
+    PLATFORM_USERS_EDIT("platform:users:edit", PermissionScope.PLATFORM, PlatformRole.ADMIN.rank()),
     PLATFORM_ACCOUNTS_LIST("platform:accounts:list", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
     PLATFORM_ACCOUNTS_QUERY("platform:accounts:query", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
     PLATFORM_ACCOUNTS_ADD("platform:accounts:add", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
     PLATFORM_ACCOUNTS_EDIT("platform:accounts:edit", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
-    PLATFORM_ACCOUNTS_REMOVE("platform:accounts:remove", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
-    PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_LIST("platform:global-merchant-accounts:list", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank()),
-    PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_EDIT("platform:global-merchant-accounts:edit", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank());
+    PLATFORM_ACCOUNTS_REMOVE("platform:accounts:remove", PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN.rank());
 
     private final String code;
     private final PermissionScope scope;

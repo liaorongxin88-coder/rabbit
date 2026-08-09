@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
+import 'package:rabbit_flutter/src/domain/models/carrier_auth.dart';
 import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
 import 'package:rabbit_flutter/src/domain/models/user_profile.dart';
 
@@ -55,6 +57,29 @@ class AuthRepository {
     );
   }
 
+  Future<AuthSession> loginWithCarrier(
+    CarrierAuthCredential credential, {
+    String? requestId,
+  }) {
+    if (!_api.usesSecureTransport) {
+      throw const ApiException('一键登录仅支持安全的 HTTPS 服务地址');
+    }
+    final provider = credential.provider.trim();
+    final accessToken = credential.accessToken.trim();
+    if (provider.isEmpty || accessToken.isEmpty) {
+      throw const ApiException('运营商认证凭证无效');
+    }
+    return _api.post<AuthSession>(
+      '/api/auth/phone-one-tap-login',
+      body: {
+        'provider': provider,
+        'accessToken': accessToken,
+        'requestId': requestId ?? const Uuid().v4(),
+      },
+      decode: _decodeSession,
+    );
+  }
+
   Future<AuthSession> validateSession(AuthSession localSession) async {
     final profile = await _api.get<UserProfile>(
       '/api/auth/me',
@@ -64,6 +89,9 @@ class AuthRepository {
       userId: profile.userId,
       userName: profile.userName,
       houseId: profile.userId == localSession.userId ? localSession.houseId : 0,
+      phoneBound: profile.phoneBound,
+      maskedPhone: profile.maskedPhone,
+      hasPassword: profile.hasPassword,
       permissions: profile.permissions,
     );
   }

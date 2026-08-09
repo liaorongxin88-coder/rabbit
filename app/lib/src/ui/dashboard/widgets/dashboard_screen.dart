@@ -3,13 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 
 final _selectedDashboardHouseProvider = StateProvider<int?>((ref) => null);
 final _selectedDashboardYearProvider = StateProvider<int>(
@@ -94,8 +94,8 @@ class DashboardScreen extends ConsumerWidget {
           if (data.houses.isEmpty) {
             return const EmptyState(
               icon: Icons.storefront_outlined,
-              title: '暂无兔舍',
-              message: '创建兔舍后，这里会默认汇总所有兔舍的兔群统计和繁殖数据。',
+              title: '尚未加入兔舍',
+              message: '创建兔舍或接受手机号邀请后，这里会汇总可访问兔舍的生产数据。',
             );
           }
           return RefreshIndicator(

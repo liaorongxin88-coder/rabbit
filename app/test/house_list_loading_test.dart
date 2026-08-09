@@ -2,12 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
 
 void main() {
+  testWidgets('empty house list explains creation and phone invitation',
+      (tester) async {
+    await tester.pumpWidget(_testApp(const []));
+    await tester.pumpAndSettle();
+
+    expect(find.text('尚未加入兔舍'), findsOneWidget);
+    expect(find.textContaining('通过手机号邀请'), findsOneWidget);
+    expect(find.text('创建兔舍'), findsOneWidget);
+  });
+
   testWidgets('small house list is available in a single batch',
       (tester) async {
     final houses = _houses(12);

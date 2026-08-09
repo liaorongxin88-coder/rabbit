@@ -1,10 +1,12 @@
-import type { AdminSession, MerchantSession } from '@/types/api'
+import type { AdminSession, WorkspaceSession } from '@/types/api'
 
 const STORAGE_KEY = 'rabbit_admin_session_v1'
-const MERCHANT_STORAGE_KEY = 'rabbit_merchant_session_v1'
-const MERCHANT_SELECTION_KEY = 'rabbit_merchant_selection_v1'
+const WORKSPACE_STORAGE_KEY = 'rabbit_workspace_session_v2'
+const WORKSPACE_SELECTION_KEY = 'rabbit_workspace_selection_v2'
+const LEGACY_WORKSPACE_STORAGE_KEY = 'rabbit_merchant_session_v1'
+const LEGACY_WORKSPACE_SELECTION_KEY = 'rabbit_merchant_selection_v1'
 const ADMIN_SESSION_CHANGE_EVENT = 'rabbit-admin-session-change'
-const MERCHANT_SESSION_CHANGE_EVENT = 'rabbit-merchant-session-change'
+const WORKSPACE_SESSION_CHANGE_EVENT = 'rabbit-workspace-session-change'
 
 function emitSessionChange(eventName: string) {
   window.dispatchEvent(new Event(eventName))
@@ -64,65 +66,68 @@ export function subscribeAdminSession(listener: () => void) {
   return subscribeSessionChange(STORAGE_KEY, ADMIN_SESSION_CHANGE_EVENT, listener)
 }
 
-export function getMerchantSession(): MerchantSession | null {
-  const raw = window.localStorage.getItem(MERCHANT_STORAGE_KEY)
+export function getWorkspaceSession(): WorkspaceSession | null {
+  window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_WORKSPACE_SELECTION_KEY)
+  const raw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
   if (!raw) {
     return null
   }
   try {
-    return JSON.parse(raw) as MerchantSession
+    return JSON.parse(raw) as WorkspaceSession
   } catch {
-    window.localStorage.removeItem(MERCHANT_STORAGE_KEY)
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY)
     return null
   }
 }
 
-export function setMerchantSession(session: MerchantSession) {
-  window.localStorage.setItem(MERCHANT_STORAGE_KEY, JSON.stringify(session))
-  emitSessionChange(MERCHANT_SESSION_CHANGE_EVENT)
+export function setWorkspaceSession(session: WorkspaceSession) {
+  window.localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(session))
+  emitSessionChange(WORKSPACE_SESSION_CHANGE_EVENT)
 }
 
-export function clearMerchantSession() {
-  const hadSession = window.localStorage.getItem(MERCHANT_STORAGE_KEY) !== null
-  window.localStorage.removeItem(MERCHANT_STORAGE_KEY)
-  window.localStorage.removeItem(MERCHANT_SELECTION_KEY)
+export function clearWorkspaceSession() {
+  const hadSession = window.localStorage.getItem(WORKSPACE_STORAGE_KEY) !== null
+  window.localStorage.removeItem(WORKSPACE_STORAGE_KEY)
+  window.localStorage.removeItem(WORKSPACE_SELECTION_KEY)
+  window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY)
+  window.localStorage.removeItem(LEGACY_WORKSPACE_SELECTION_KEY)
   if (hadSession) {
-    emitSessionChange(MERCHANT_SESSION_CHANGE_EVENT)
+    emitSessionChange(WORKSPACE_SESSION_CHANGE_EVENT)
   }
 }
 
-export function getMerchantToken() {
-  return getMerchantSession()?.token ?? ''
+export function getWorkspaceToken() {
+  return getWorkspaceSession()?.token ?? ''
 }
 
-export function subscribeMerchantSession(listener: () => void) {
+export function subscribeWorkspaceSession(listener: () => void) {
   return subscribeSessionChange(
-    MERCHANT_STORAGE_KEY,
-    MERCHANT_SESSION_CHANGE_EVENT,
+    WORKSPACE_STORAGE_KEY,
+    WORKSPACE_SESSION_CHANGE_EVENT,
     listener,
   )
 }
 
-export interface MerchantSelection {
+export interface WorkspaceSelection {
   userId: number
-  merchantId: number | null
   houseId: number | null
 }
 
-export function getMerchantSelection(userId: number): MerchantSelection | null {
-  const raw = window.localStorage.getItem(MERCHANT_SELECTION_KEY)
+export function getWorkspaceSelection(userId: number): WorkspaceSelection | null {
+  const raw = window.localStorage.getItem(WORKSPACE_SELECTION_KEY)
   if (!raw) {
     return null
   }
   try {
-    const selection = JSON.parse(raw) as MerchantSelection
+    const selection = JSON.parse(raw) as WorkspaceSelection
     return selection.userId === userId ? selection : null
   } catch {
-    window.localStorage.removeItem(MERCHANT_SELECTION_KEY)
+    window.localStorage.removeItem(WORKSPACE_SELECTION_KEY)
     return null
   }
 }
 
-export function setMerchantSelection(selection: MerchantSelection) {
-  window.localStorage.setItem(MERCHANT_SELECTION_KEY, JSON.stringify(selection))
+export function setWorkspaceSelection(selection: WorkspaceSelection) {
+  window.localStorage.setItem(WORKSPACE_SELECTION_KEY, JSON.stringify(selection))
 }

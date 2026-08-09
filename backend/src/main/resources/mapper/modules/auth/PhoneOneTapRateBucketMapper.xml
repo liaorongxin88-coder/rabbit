@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.auth.mapper.PhoneOneTapRateBucketMapper">
+    <insert id="lockOrCreate">
+        insert into phone_one_tap_rate_buckets (
+            request_ip, bucket_type, bucket_start, request_count
+        ) values (
+            #{requestIp}, #{bucketType}, #{bucketStart}, 0
+        )
+        on duplicate key update request_count = request_count
+    </insert>
+
+    <select id="selectCountForUpdate" resultType="int">
+        select request_count
+        from phone_one_tap_rate_buckets
+        where request_ip = #{requestIp}
+          and bucket_type = #{bucketType}
+          and bucket_start = #{bucketStart}
+        for update
+    </select>
+
+    <update id="increment">
+        update phone_one_tap_rate_buckets
+        set request_count = request_count + 1, update_time = now()
+        where request_ip = #{requestIp}
+          and bucket_type = #{bucketType}
+          and bucket_start = #{bucketStart}
+    </update>
+
+    <delete id="deleteBefore">
+        delete from phone_one_tap_rate_buckets
+        where bucket_start &lt; #{cutoff}
+        order by bucket_start
+        limit #{limit}
+    </delete>
+</mapper>

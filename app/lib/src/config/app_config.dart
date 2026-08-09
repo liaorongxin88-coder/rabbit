@@ -12,7 +12,13 @@ class AppConfig {
     defaultValue: '',
   );
 
+  static const _definedCarrierAuthEnabled = String.fromEnvironment(
+    'RABBIT_CARRIER_AUTH_ENABLED',
+    defaultValue: '',
+  );
+
   static String? _envFileBaseUrl;
+  static bool? _envFileCarrierAuthEnabled;
 
   static String get defaultBaseUrl {
     final definedBaseUrl = _definedBaseUrl.trim();
@@ -31,11 +37,15 @@ class AppConfig {
     };
   }
 
-  static Future<void> load() async {
-    if (_definedBaseUrl.trim().isNotEmpty) {
-      return;
+  static bool get carrierAuthEnabled {
+    final defined = _boolValue(_definedCarrierAuthEnabled);
+    if (defined != null) {
+      return defined;
     }
+    return _envFileCarrierAuthEnabled ?? false;
+  }
 
+  static Future<void> load() async {
     final envAssetPath = _envAssetPath;
     if (envAssetPath == null) {
       return;
@@ -45,7 +55,14 @@ class AppConfig {
       return;
     }
 
-    _envFileBaseUrl = _readEnvValue(content, 'RABBIT_API_BASE_URL');
+    if (_definedBaseUrl.trim().isEmpty) {
+      _envFileBaseUrl = _readEnvValue(content, 'RABBIT_API_BASE_URL');
+    }
+    if (_definedCarrierAuthEnabled.trim().isEmpty) {
+      _envFileCarrierAuthEnabled = _boolValue(
+        _readEnvValue(content, 'RABBIT_CARRIER_AUTH_ENABLED'),
+      );
+    }
   }
 
   static String? get _envAssetPath {
@@ -84,5 +101,13 @@ class AppConfig {
       return line.substring(separatorIndex + 1).trim();
     }
     return null;
+  }
+
+  static bool? _boolValue(String? value) {
+    return switch (value?.trim().toLowerCase()) {
+      'true' || '1' || 'yes' || 'on' => true,
+      'false' || '0' || 'no' || 'off' => false,
+      _ => null,
+    };
   }
 }

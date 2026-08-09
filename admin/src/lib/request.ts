@@ -2,11 +2,15 @@ import { createAlova } from 'alova'
 import adapterFetch from 'alova/fetch'
 import { toast } from 'sonner'
 import {
-  clearMerchantSession,
   clearSession,
-  getMerchantToken,
   getToken,
+  clearWorkspaceSession,
+  getWorkspaceToken,
 } from '@/lib/auth'
+import {
+  shouldClearRequestSession,
+  type RequestSessionScope,
+} from '@/lib/request-auth'
 import type { ApiResponse } from '@/types/api'
 
 type JsonBody = object | string
@@ -38,7 +42,11 @@ async function parseApiResponse(response: Response) {
   }
 }
 
-function createRequestClient(token: () => string, clearAuth: () => void) {
+function createRequestClient(
+  token: () => string,
+  clearAuth: () => void,
+  scope: RequestSessionScope,
+) {
   return createAlova({
     baseURL: API_BASE_URL,
     requestAdapter: adapterFetch(),
@@ -59,7 +67,7 @@ function createRequestClient(token: () => string, clearAuth: () => void) {
         }
         if (payload.code !== 0) {
           const message = payload.message || '请求失败'
-          if (payload.code === 401) {
+          if (shouldClearRequestSession(scope, payload.code, message)) {
             const hadSession = Boolean(token())
             clearAuth()
             if (hadSession) {
@@ -81,8 +89,12 @@ function createRequestClient(token: () => string, clearAuth: () => void) {
   })
 }
 
-const alova = createRequestClient(getToken, clearSession)
-const merchantAlova = createRequestClient(getMerchantToken, clearMerchantSession)
+const alova = createRequestClient(getToken, clearSession, 'admin')
+const workspaceAlova = createRequestClient(
+  getWorkspaceToken,
+  clearWorkspaceSession,
+  'workspace',
+)
 
 export function getJson<T>(url: string, params?: Record<string, unknown>) {
   return alova.Get<T>(url, {
@@ -103,12 +115,12 @@ export function deleteJson<T>(url: string) {
   return alova.Delete<T>(url)
 }
 
-interface MerchantRequestOptions {
+interface WorkspaceRequestOptions {
   houseId?: number | null
   params?: Record<string, unknown>
 }
 
-function merchantConfig(options?: MerchantRequestOptions) {
+function workspaceConfig(options?: WorkspaceRequestOptions) {
   return {
     params: options?.params,
     headers: options?.houseId
@@ -117,29 +129,29 @@ function merchantConfig(options?: MerchantRequestOptions) {
   }
 }
 
-export function merchantGetJson<T>(url: string, options?: MerchantRequestOptions) {
-  return merchantAlova.Get<T>(url, {
-    ...merchantConfig(options),
+export function workspaceGetJson<T>(url: string, options?: WorkspaceRequestOptions) {
+  return workspaceAlova.Get<T>(url, {
+    ...workspaceConfig(options),
     cacheFor: 0,
   })
 }
 
-export function merchantPostJson<T>(
+export function workspacePostJson<T>(
   url: string,
   data?: JsonBody,
-  options?: MerchantRequestOptions,
+  options?: WorkspaceRequestOptions,
 ) {
-  return merchantAlova.Post<T>(url, data, merchantConfig(options))
+  return workspaceAlova.Post<T>(url, data, workspaceConfig(options))
 }
 
-export function merchantPutJson<T>(
+export function workspacePutJson<T>(
   url: string,
   data?: JsonBody,
-  options?: MerchantRequestOptions,
+  options?: WorkspaceRequestOptions,
 ) {
-  return merchantAlova.Put<T>(url, data, merchantConfig(options))
+  return workspaceAlova.Put<T>(url, data, workspaceConfig(options))
 }
 
-export function merchantDeleteJson<T>(url: string, options?: MerchantRequestOptions) {
-  return merchantAlova.Delete<T>(url, undefined, merchantConfig(options))
+export function workspaceDeleteJson<T>(url: string, options?: WorkspaceRequestOptions) {
+  return workspaceAlova.Delete<T>(url, undefined, workspaceConfig(options))
 }

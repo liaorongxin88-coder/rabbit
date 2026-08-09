@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
@@ -11,6 +10,8 @@ import 'package:rabbit_flutter/src/ui/batches/widgets/create_batch_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
 class HouseDetailScreen extends ConsumerWidget {
   const HouseDetailScreen({super.key, required this.houseId});
@@ -199,7 +200,7 @@ class _HouseDetailContent extends ConsumerWidget {
               iconColor: palette.primary,
               iconBackground: palette.primarySoft,
               title: '人员管理',
-              message: '管理兔舍成员权限：添加普通人员、游客，或转让管理员。',
+              message: '管理兔舍成员权限：添加生产人员、设备管理员、游客，或新增共同所有者。',
               actionLabel: '管理',
               onTap: () => context.go(
                 '/houses/${house.id}/members?name=${Uri.encodeComponent(house.name)}',
@@ -297,7 +298,7 @@ class _LeaveHouseSectionState extends ConsumerState<_LeaveHouseSection> {
           Text('退出兔舍', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(
-            '您不是该兔舍管理员。若不再参与此兔舍，可主动退出。',
+            '您不是该兔舍所有者。若不再参与此兔舍，可主动退出。',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),

@@ -25,36 +25,51 @@ class FarmingWorkspaceIT extends E2eTestSupport {
         JsonNode workspace = catalog.get("workspaces").get(0);
         Assertions.assertEquals("RABBIT:" + houseId, workspace.get("workspaceKey").asText());
         Assertions.assertEquals(houseId, workspace.get("resourceId").asLong());
-        Assertions.assertEquals(owner.userId, workspace.get("ownerUserId").asLong());
+        Assertions.assertFalse(workspace.has("ownerUserId"));
         Assertions.assertEquals("北区兔场", workspace.get("name").asText());
         Assertions.assertEquals("RABBIT", workspace.get("businessType").asText());
-        Assertions.assertEquals("MERCHANT_OWNER", workspace.get("role").asText());
+        Assertions.assertEquals("OWNER", workspace.get("role").asText());
+        Assertions.assertFalse(workspace.has("merchantId"));
         Assertions.assertTrue(containsText(workspace.get("permissions"), "rabbit:rabbits:add"));
         Assertions.assertEquals("X-House-Id", workspace.get("scopeHeader").asText());
     }
 
     @Test
-    void merchantFilterCannotExposeAnotherTenantsWorkspace() {
+    void catalogOnlyExposesDirectlyAssociatedFarms() {
         UserSession firstOwner = register("workspace_first");
-        createHouse(firstOwner, "第一商户兔场", 1, 1, 1);
-        JsonNode firstCatalog = api.getOk("/api/workspaces", firstOwner.token, null);
-        long firstMerchantId = firstCatalog.get("workspaces").get(0).get("merchantId").asLong();
-
         UserSession secondOwner = register("workspace_second");
-        createHouse(secondOwner, "第二商户兔场", 1, 1, 1);
+        UserSession outsider = register("workspace_outsider");
+        long firstHouseId = createHouse(firstOwner, "第一兔场", 1, 1, 1);
+        long secondHouseId = createHouse(secondOwner, "第二兔场", 1, 1, 1);
+        long outsiderHouseId = createHouse(outsider, "外部兔场", 1, 1, 1);
 
-        JsonNode filtered = api.getOk(
-                "/api/workspaces?merchantId=" + firstMerchantId,
-                secondOwner.token,
-                null
-        );
+        api.postOk("/api/house-members", firstOwner.token, firstHouseId, obj(
+                "userName", secondOwner.userName,
+                "role", "VIEWER",
+                "requestId", requestId("workspace_viewer")
+        ));
 
-        Assertions.assertEquals(1, filtered.get("modules").size());
-        Assertions.assertTrue(filtered.get("workspaces").isEmpty());
+        JsonNode secondCatalog = api.getOk("/api/workspaces", secondOwner.token, null);
+
+        Assertions.assertEquals(1, secondCatalog.get("modules").size());
+        Assertions.assertEquals(2, secondCatalog.get("workspaces").size());
+        Assertions.assertTrue(containsWorkspace(secondCatalog.get("workspaces"), firstHouseId));
+        Assertions.assertTrue(containsWorkspace(secondCatalog.get("workspaces"), secondHouseId));
+        Assertions.assertFalse(containsWorkspace(secondCatalog.get("workspaces"), outsiderHouseId));
+
+        JsonNode firstCatalog = api.getOk("/api/workspaces", firstOwner.token, null);
+        Assertions.assertEquals(1, firstCatalog.get("workspaces").size());
+        Assertions.assertTrue(containsWorkspace(firstCatalog.get("workspaces"), firstHouseId));
+        Assertions.assertFalse(containsWorkspace(firstCatalog.get("workspaces"), secondHouseId));
     }
 
     private boolean containsText(JsonNode values, String expected) {
         return StreamSupport.stream(values.spliterator(), false)
                 .anyMatch(value -> expected.equals(value.asText()));
+    }
+
+    private boolean containsWorkspace(JsonNode workspaces, long resourceId) {
+        return StreamSupport.stream(workspaces.spliterator(), false)
+                .anyMatch(workspace -> resourceId == workspace.path("resourceId").asLong());
     }
 }

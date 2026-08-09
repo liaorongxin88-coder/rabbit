@@ -8,13 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/app.dart';
 import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/settings_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/local_app_settings_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/local_app_settings_store.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
@@ -24,6 +21,10 @@ import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
 
 void main() {
   testWidgets('shows login screen before session is restored', (tester) async {
@@ -367,6 +368,42 @@ void main() {
     );
   });
 
+  testWidgets('disabled restored account is cleared and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'disabled_user',
+      'houseId.3': 8,
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'disabled-token'});
+    final houseRepository = _RecordingHouseRepository();
+    final authRepository = _FakeAuthRepository(
+      validationError: const ApiException(
+        '账号已停用',
+        businessCode: 403,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('今日预警!'), findsNothing);
+    expect(houseRepository.calls, 0);
+    expect(authRepository.validationCalls, 1);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
+  });
+
   testWidgets(
       'unauthorized event clears an active session and returns to login',
       (tester) async {
@@ -381,7 +418,18 @@ void main() {
       ProviderScopeWrapper(
         authRepository: authRepository,
         overrides: [
-          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
           homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
         ],
       ),
@@ -412,9 +460,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScopeWrapper(
         overrides: [
-          housesProvider.overrideWith((_) async {
-            throw AssertionError('profile should not load houses');
-          }),
+          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
           homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
         ],
       ),

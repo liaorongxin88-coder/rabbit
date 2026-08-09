@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Building2Icon, RabbitIcon, ShieldCheckIcon, UserCogIcon, UsersIcon, type LucideIcon } from 'lucide-react'
+import { RabbitIcon, UserCogIcon, UsersIcon, WarehouseIcon, type LucideIcon } from 'lucide-react'
 import { loginAdmin } from '@/api/admin'
+import { BrandLogo } from '@/components/brand-logo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -43,9 +44,7 @@ export function LoginPage() {
       <div className="motion-page mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <section className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <ShieldCheckIcon aria-hidden="true" />
-            </div>
+            <BrandLogo className="h-14 w-16" />
             <div>
               <p className="text-sm font-semibold">Rabbit SaaS</p>
               <p className="text-xs text-muted-foreground">平台管理端</p>
@@ -53,16 +52,16 @@ export function LoginPage() {
           </div>
           <div className="max-w-2xl">
             <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
-              商户、用户关系和业务概览的统一入口
+              兔场、业务用户和运行状态的统一入口
             </h1>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              平台管理员在这里维护商户资料、账号权限和业务运营状态。
+              平台管理员在这里维护兔场状态、用户访问和平台账号权限。
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <LoginSignal icon={Building2Icon} title="商户资料" text="创建、筛选和维护商户基础信息" />
-            <LoginSignal icon={UsersIcon} title="商户账号" text="在商户上下文创建和维护登录账号" />
-            <LoginSignal icon={UserCogIcon} title="账号权限" text="维护管理端账号和角色" />
+            <LoginSignal icon={WarehouseIcon} title="兔场运营" text="查看兔场状态、成员和业务规模" />
+            <LoginSignal icon={UsersIcon} title="业务用户" text="查看手机号绑定和兔场关联" />
+            <LoginSignal icon={UserCogIcon} title="平台权限" text="维护管理端账号和角色" />
           </div>
         </section>
 
@@ -104,9 +103,9 @@ export function LoginPage() {
                 登录
               </Button>
               <Button type="button" variant="ghost" asChild>
-                <Link to="/merchant/login">
+                <Link to="/workspace/login">
                   <RabbitIcon data-icon="inline-start" />
-                  商户工作台登录
+                  兔场工作台登录
                 </Link>
               </Button>
             </form>

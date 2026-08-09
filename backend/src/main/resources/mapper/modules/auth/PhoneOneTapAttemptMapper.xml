@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.auth.mapper.PhoneOneTapAttemptMapper">
+    <resultMap id="PhoneOneTapAttemptMap" type="com.rabbit.app.modules.auth.entity.PhoneOneTapAttempt">
+        <id column="id" property="id"/>
+        <result column="request_id" property="requestId"/>
+        <result column="provider" property="provider"/>
+        <result column="token_hash" property="tokenHash"/>
+        <result column="request_ip" property="requestIp"/>
+        <result column="status" property="status"/>
+        <result column="lease_id" property="leaseId"/>
+        <result column="lease_expires_time" property="leaseExpiresTime"/>
+        <result column="response_code" property="responseCode"/>
+        <result column="response_message" property="responseMessage"/>
+        <result column="user_id" property="userId"/>
+        <result column="success_time" property="successTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="columns">
+        id, request_id, provider, token_hash, request_ip, status,
+        lease_id, lease_expires_time, response_code, response_message,
+        user_id, success_time, create_time, update_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into phone_one_tap_attempts (
+            request_id, provider, token_hash, request_ip, status, lease_id, lease_expires_time
+        ) values (
+            #{requestId}, #{provider}, #{tokenHash}, #{requestIp}, #{status},
+            #{leaseId}, #{leaseExpiresTime}
+        )
+    </insert>
+
+    <select id="selectByRequestIdForUpdate" resultMap="PhoneOneTapAttemptMap">
+        select <include refid="columns"/>
+        from phone_one_tap_attempts
+        where request_id = #{requestId}
+        for update
+    </select>
+
+    <select id="selectByTokenHashForUpdate" resultMap="PhoneOneTapAttemptMap">
+        select <include refid="columns"/>
+        from phone_one_tap_attempts
+        where token_hash = #{tokenHash}
+        for update
+    </select>
+
+    <update id="replaceLease">
+        update phone_one_tap_attempts
+        set lease_id = #{leaseId}, lease_expires_time = #{leaseExpiresTime},
+            update_time = now()
+        where id = #{id} and status = 'PROCESSING' and lease_id = #{expectedLeaseId}
+    </update>
+
+    <select id="selectOwnedProcessingForUpdate" resultMap="PhoneOneTapAttemptMap">
+        select <include refid="columns"/>
+        from phone_one_tap_attempts
+        where id = #{id} and status = 'PROCESSING' and lease_id = #{leaseId}
+          and lease_expires_time &gt;= #{now}
+        for update
+    </select>
+
+    <update id="markSucceeded">
+        update phone_one_tap_attempts
+        set status = 'SUCCEEDED', user_id = #{userId}, response_code = null,
+            response_message = null, success_time = #{successTime}, update_time = now()
+        where id = #{id} and status = 'PROCESSING' and lease_id = #{leaseId}
+    </update>
+
+    <update id="markFailed">
+        update phone_one_tap_attempts
+        set status = 'FAILED', response_code = #{responseCode},
+            response_message = #{responseMessage}, update_time = now()
+        where id = #{id} and status = 'PROCESSING' and lease_id = #{leaseId}
+    </update>
+
+    <delete id="deleteExpiredAttempts">
+        delete from phone_one_tap_attempts
+        where (
+            status in ('SUCCEEDED', 'FAILED') and update_time &lt; #{cutoff}
+        ) or (
+            status = 'PROCESSING' and lease_expires_time &lt; #{cutoff}
+        )
+        order by id
+        limit #{limit}
+    </delete>
+</mapper>

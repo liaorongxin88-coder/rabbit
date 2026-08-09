@@ -50,12 +50,12 @@ mvn -Pe2e verify
 .\tools\demo_flow_full.ps1 -BaseUrl "http://localhost:8080"
 ```
 
-这些脚本适合验证核心业务链路：注册/登录、兔舍、笼位、兔只、批次、事件提醒和繁殖性能。
+这些脚本适合验证核心业务链路：注册/登录、兔场、笼位、兔只、批次、事件提醒和繁殖性能。
 
 ## Flutter 验证
 
 ```bash
-cd flutter_app
+cd app
 ./rabbit check
 ./rabbit apk dev --debug
 ```
@@ -66,6 +66,10 @@ cd flutter_app
 - model、repository、provider 或业务逻辑改动跑 `./rabbit test`。
 - Android 构建配置、依赖或 manifest 改动跑 `./rabbit apk dev --debug`。
 
+运营商一键登录的本地测试只证明 Flutter/Kotlin 通道、后端供应商契约、防重放、账号归一和
+短信回退。正式验收还必须使用控制台已登记包名与签名的 Android 真机、有效 SIM 和蜂窝网络，
+至少覆盖移动、联通、电信；模拟器或测试 Provider 不能替代该证据。
+
 如果 Flutter SDK cache 权限导致命令失败，先修复本机 Flutter SDK/cache 权限，再判断项目代码是否有问题。
 
 ## Flutter Android 设备 E2E
@@ -75,7 +79,7 @@ cd flutter_app
 前置条件是 `http://127.0.0.1:8080` 后端和 `rabbit-mysql-1` 已运行且指向本地开发库 `rabbit_app`。预检不通过时 runner 会在注入 fixture 和启动模拟器之前退出。
 
 ```bash
-cd flutter_app
+cd app
 ./scripts/android_e2e.sh
 ```
 
@@ -97,7 +101,7 @@ RABBIT_ANDROID_E2E_PROFILE=accessibility-stress \
 
 `visual-baseline` 使用 100% 系统字体，作为设计还原、日常回归和对外交付截图；runner 会拒绝用其他字号伪装成该档位，并在每张截图前断言系统字号与 App 有效字号仍和测试配置一致。`accessibility-stress` 使用 200% 系统字体，并验证 App 的人体工学上限为 150%。压力档只验证可达性、换行和溢出边界，不能作为视觉还原或交付截图基准。
 
-截图、截图清单、fixture 标识、设备物理尺寸、测试档位和数据库断言保存在 `flutter_app/build/android-e2e/<run_id>/`。脚本会验证 7 张业务流程截图完整存在，可修改模拟器字体比例并在结束时恢复；实体机默认不修改系统设置，只有显式设置 `RABBIT_ANDROID_E2E_ALLOW_DEVICE_SETTINGS=1` 才执行字体矩阵。真机 NFC、TalkBack、左右手持机误触和疲劳仍需人工验收。
+截图、截图清单、fixture 标识、设备物理尺寸、测试档位和数据库断言保存在 `app/build/android-e2e/<run_id>/`。脚本会验证 7 张业务流程截图完整存在，可修改模拟器字体比例并在结束时恢复；实体机默认不修改系统设置，只有显式设置 `RABBIT_ANDROID_E2E_ALLOW_DEVICE_SETTINGS=1` 才执行字体矩阵。真机 NFC、TalkBack、左右手持机误触和疲劳仍需人工验收。
 
 ## Admin 验证
 
@@ -122,7 +126,7 @@ curl -s -H 'Content-Type: application/json' \
 纯文档改动不要求跑应用构建。建议检查：
 
 ```bash
-rg -n "file:///|d:/rabbit|TODO|TBD" README.md E2E_TESTING.md CONTRIBUTING.md backend/README.md flutter_app/README.md admin/README.md docs
+rg -n "file:///|d:/rabbit|TODO|TBD" README.md E2E_TESTING.md CONTRIBUTING.md backend/README.md app/README.md admin/README.md docs
 ```
 
 如果文档涉及命令或路径，优先用当前仓库实际文件验证路径仍存在。
@@ -136,4 +140,4 @@ cd android
 ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.baseUrl=http://10.0.2.2:8080
 ```
 
-当前仓库维护重心已转向 `flutter_app/`。除非恢复原生 Android 目录，否则该命令只作为历史记录保留。
+当前仓库维护重心已转向 `app/`。除非恢复原生 Android 目录，否则该命令只作为历史记录保留。

@@ -24,7 +24,7 @@ class HousePermission {
 
   String get roleLabel {
     if (isAdmin) {
-      return '管理员';
+      return '所有者';
     }
     if (perms == 'view') {
       return '游客';

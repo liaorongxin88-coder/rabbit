@@ -8,13 +8,14 @@ public class AuthTokenResponse {
     private String userName;
     private Boolean phoneBound;
     private String maskedPhone;
+    private Boolean hasPassword;
     private List<String> permissions = List.of();
 
     public AuthTokenResponse() {
     }
 
     public AuthTokenResponse(String token, Long userId, String userName) {
-        this(token, userId, userName, false, null);
+        this(token, userId, userName, false, null, false);
     }
 
     public AuthTokenResponse(
@@ -22,13 +23,15 @@ public class AuthTokenResponse {
             Long userId,
             String userName,
             Boolean phoneBound,
-            String maskedPhone
+            String maskedPhone,
+            Boolean hasPassword
     ) {
         this.token = token;
         this.userId = userId;
         this.userName = userName;
         this.phoneBound = phoneBound;
         this.maskedPhone = maskedPhone;
+        this.hasPassword = hasPassword;
     }
 
     public String getToken() {
@@ -69,6 +72,14 @@ public class AuthTokenResponse {
 
     public void setMaskedPhone(String maskedPhone) {
         this.maskedPhone = maskedPhone;
+    }
+
+    public Boolean getHasPassword() {
+        return hasPassword;
+    }
+
+    public void setHasPassword(Boolean hasPassword) {
+        this.hasPassword = hasPassword;
     }
 
     public List<String> getPermissions() {

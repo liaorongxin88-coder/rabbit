@@ -69,7 +69,6 @@ public class HouseController {
         Long userId = requireLogin();
         RabbitHouse h = houseService.createHouse(
                 userId,
-                req.getMerchantId(),
                 req.getName(),
                 req.getLayoutRows(),
                 req.getLayoutCols(),

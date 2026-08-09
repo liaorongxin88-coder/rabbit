@@ -14,6 +14,8 @@ void main() {
 
     await AppConfig.load();
 
+    expect(AppConfig.carrierAuthEnabled, isFalse);
+
     if (definedBaseUrl.trim().isNotEmpty) {
       expect(AppConfig.defaultBaseUrl, definedBaseUrl);
       return;

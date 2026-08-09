@@ -22,14 +22,16 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  auth:
+    phone-hash-secret: e2e-only-phone-hash-secret-0123456789abcdef
   cors:
     allowed-origins: http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top
   jwt:
-    secret: rabbit-app-e2e-secret-change-me-32bytes
+    secret: e2e-only-app-jwt-secret-0123456789abcdef
     expire-seconds: 604800
   admin:
     jwt:
-      secret: rabbit-app-e2e-admin-secret-change-me
+      secret: e2e-only-admin-jwt-secret-0123456789abcdef
       expire-seconds: 604800
     bootstrap:
       enabled: true
@@ -37,6 +39,9 @@ app:
       password: admin123456
   wechat:
     enabled: false
+  sms:
+    enabled: true
+    code-secret: e2e-only-sms-code-secret-0123456789abcdef
   hardware:
     enabled: false
     gateway: noop

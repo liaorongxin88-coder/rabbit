@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/profile/view_models/profile_providers.dart';
 
 class AccountSettingsScreen extends ConsumerWidget {
   const AccountSettingsScreen({super.key});
@@ -119,6 +120,15 @@ class _AccountSettingsContentState
                       widget.profile.openidBound ? '微信已绑定' : '微信未绑定',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.profile.phoneBound
+                          ? widget.profile.maskedPhone.isEmpty
+                              ? '手机号已绑定'
+                              : '手机号：${widget.profile.maskedPhone}'
+                          : '手机号未绑定',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                 ),
               ),
@@ -167,20 +177,25 @@ class _AccountSettingsContentState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('登录密码', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _oldPasswordController,
-                  decoration: const InputDecoration(labelText: '旧密码'),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return '请输入旧密码';
-                    }
-                    return null;
-                  },
+                Text(
+                  widget.profile.hasPassword ? '登录密码' : '设置登录密码',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
+                if (widget.profile.hasPassword) ...[
+                  TextFormField(
+                    controller: _oldPasswordController,
+                    decoration: const InputDecoration(labelText: '旧密码'),
+                    obscureText: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return '请输入旧密码';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
                   controller: _newPasswordController,
                   decoration: const InputDecoration(labelText: '新密码'),
@@ -215,7 +230,9 @@ class _AccountSettingsContentState
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.lock_reset_outlined),
-                  label: const Text('修改密码'),
+                  label: Text(
+                    widget.profile.hasPassword ? '修改密码' : '设置密码',
+                  ),
                 ),
               ],
             ),
@@ -255,13 +272,15 @@ class _AccountSettingsContentState
     setState(() => _savingPassword = true);
     try {
       await ref.read(accountRepositoryProvider).updatePassword(
-            oldPassword: _oldPasswordController.text,
+            oldPassword:
+                widget.profile.hasPassword ? _oldPasswordController.text : '',
             newPassword: _newPasswordController.text,
           );
       _oldPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
-      _showMessage('密码已修改');
+      ref.invalidate(userProfileProvider);
+      _showMessage(widget.profile.hasPassword ? '密码已修改' : '密码已设置');
     } catch (error) {
       _showMessage(_errorMessage(error));
     } finally {

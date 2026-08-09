@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:rabbit_flutter/src/data/services/local_app_settings_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/local_app_settings_store.dart';
 import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
 
 final localAppSettingsControllerProvider = StateNotifierProvider<

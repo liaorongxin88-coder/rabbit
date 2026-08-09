@@ -20,6 +20,7 @@
         <jjwt.version>0.11.5</jjwt.version>
         <mybatis-spring-boot.version>3.0.5</mybatis-spring-boot.version>
         <aliyun-dysmsapi.version>4.1.1</aliyun-dysmsapi.version>
+        <aliyun-dypnsapi.version>2.0.0</aliyun-dypnsapi.version>
         <archunit.version>1.4.2</archunit.version>
     </properties>
 
@@ -80,6 +81,11 @@
             <groupId>com.aliyun</groupId>
             <artifactId>dysmsapi20170525</artifactId>
             <version>${aliyun-dysmsapi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>dypnsapi20170525</artifactId>
+            <version>${aliyun-dypnsapi.version}</version>
         </dependency>
 
         <dependency>

@@ -7,10 +7,11 @@
 
 Flutter、JDK 21 和 Android SDK 通常可自动发现。只有自动发现失败时，才从 `toolchain.local.env.example` 复制并填写缺失路径，然后运行 `./rabbit bootstrap`。当前 shell 中的 `RABBIT_FLUTTER_BIN`、`RABBIT_FLUTTER_HOME`、`RABBIT_JAVA_HOME`、`RABBIT_ANDROID_SDK_ROOT` 优先于本地文件。
 
-Flutter 客户端通过编译期变量读取后端地址：
+Flutter 客户端通过编译期变量读取后端地址和运营商一键登录开关：
 
 ```dart
 String.fromEnvironment('RABBIT_API_BASE_URL')
+String.fromEnvironment('RABBIT_CARRIER_AUTH_ENABLED')
 ```
 
 因此配置文件必须在 `flutter run` 或 `flutter build` 时传入，不能只设置 shell 环境变量。
@@ -36,7 +37,16 @@ Android Studio Run Configuration 里的 `Environment variables` 不等同于 Flu
 ```properties
 RABBIT_BUILD_ENV=dev
 RABBIT_API_BASE_URL=http://10.0.2.2:8080
+RABBIT_CARRIER_AUTH_ENABLED=false
 ```
+
+`RABBIT_CARRIER_AUTH_ENABLED` 默认必须保持 `false`。只有目标 Android
+构建已经接入经过验收的运营商 SDK adapter，并且后端已配置同一 provider
+时才可开启。开关开启后，客户端仍会等用户同意隐私政策和用户协议，再查询
+原生 adapter 能力；后端地址还必须是 HTTPS，否则不会查询能力、显示入口或
+发送短期认证凭证。未来原生 adapter 应在用户确认后的网络认证阶段处理 SDK
+自身的超时，Flutter 不为整个交互授权生命周期设置固定超时。无 SDK、用户取消
+或认证失败时继续使用短信验证码登录。
 
 ## Android flavor
 

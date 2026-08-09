@@ -3,15 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
 class HousesScreen extends ConsumerWidget {
   const HousesScreen({super.key});
@@ -99,8 +100,8 @@ class _HousesContentState extends ConsumerState<_HousesContent> {
     if (houses.isEmpty) {
       return EmptyState(
         icon: Icons.storefront_outlined,
-        title: '暂无兔舍',
-        message: '先创建兔舍，然后进入兔舍管理笼位和兔只。',
+        title: '尚未加入兔舍',
+        message: '可以创建兔舍，或等待管理员通过手机号邀请后刷新。',
         actionLabel: '创建兔舍',
         onAction: () => _showCreateHouseSheet(context),
       );

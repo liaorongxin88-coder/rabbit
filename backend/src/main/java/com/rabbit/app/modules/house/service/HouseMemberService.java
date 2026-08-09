@@ -5,17 +5,11 @@ import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.dto.HouseMemberItem;
-import com.rabbit.app.modules.house.dto.UserSearchItem;
 import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
-import com.rabbit.app.modules.merchant.entity.MerchantHousePolicy;
-import com.rabbit.app.modules.merchant.entity.MerchantMembership;
-import com.rabbit.app.modules.merchant.mapper.MerchantHousePolicyMapper;
-import com.rabbit.app.modules.merchant.service.MerchantMembershipService;
 import com.rabbit.app.security.permission.HouseRole;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -23,244 +17,285 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class HouseMemberService {
+    private static final String STATUS_ENABLED = "ENABLED";
+
     private final HouseUserMapper houseUserMapper;
-    private final SysUserMapper sysUserMapper;
     private final RabbitHouseMapper rabbitHouseMapper;
+    private final SysUserMapper sysUserMapper;
     private final RequestDedupService requestDedupService;
-    private final MerchantMembershipService membershipService;
-    private final MerchantHousePolicyMapper policyMapper;
 
     public HouseMemberService(
             HouseUserMapper houseUserMapper,
-            SysUserMapper sysUserMapper,
             RabbitHouseMapper rabbitHouseMapper,
-            RequestDedupService requestDedupService,
-            MerchantMembershipService membershipService,
-            MerchantHousePolicyMapper policyMapper
+            SysUserMapper sysUserMapper,
+            RequestDedupService requestDedupService
     ) {
         this.houseUserMapper = houseUserMapper;
-        this.sysUserMapper = sysUserMapper;
         this.rabbitHouseMapper = rabbitHouseMapper;
+        this.sysUserMapper = sysUserMapper;
         this.requestDedupService = requestDedupService;
-        this.membershipService = membershipService;
-        this.policyMapper = policyMapper;
     }
 
     public List<HouseMemberItem> listMembers(Long houseId) {
         return houseUserMapper.selectMembersByHouse(houseId);
     }
 
-    public List<UserSearchItem> searchCandidates(Long houseId, String keyword, int limit) {
-        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
-        if (house == null) {
-            throw new BizException(404, "兔舍不存在");
-        }
-        if (house.getMerchantId() == null) {
-            throw new BizException(500, "兔舍未归属商户");
-        }
-        String q = keyword == null ? "" : keyword.trim();
-        if (q.isEmpty()) {
-            return List.of();
-        }
-        if (limit <= 0) {
-            limit = 10;
-        }
-        if (limit > 20) {
-            limit = 20;
-        }
-        List<Long> exclude = houseUserMapper.selectMemberUserIds(houseId);
-        List<SysUser> users = sysUserMapper.searchByMerchant(house.getMerchantId(), q, exclude, limit);
-        List<UserSearchItem> items = new ArrayList<UserSearchItem>();
-        for (SysUser user : users) {
-            UserSearchItem item = new UserSearchItem();
-            item.setUserId(user.getUserId());
-            item.setUserName(user.getUserName());
-            items.add(item);
-        }
-        return items;
-    }
-
     @Transactional
-    public void addMember(Long houseId, Long operatorUserId, String operator, String userName, String role, String perms, Boolean isAdmin, String requestId) {
+    public void addMember(
+            Long houseId,
+            Long operatorUserId,
+            String operator,
+            String userName,
+            String role,
+            String perms,
+            Boolean isAdmin,
+            String requestId
+    ) {
+        RabbitHouse lockedHouse = lockHouse(houseId);
         String api = "houseMember.add";
         if (requestDedupService.shouldSkipAsDone(houseId, operatorUserId, api, requestId)) {
             return;
         }
+        requireEnabled(lockedHouse);
         requestDedupService.markProcessing(houseId, operatorUserId, api, requestId);
         try {
-            SysUser user = sysUserMapper.selectByUserName(userName);
-            if (user == null) {
+            SysUser user = sysUserMapper.selectByUserName(userName == null ? null : userName.trim());
+            if (user == null || !STATUS_ENABLED.equals(user.getStatus())) {
                 throw new BizException(404, "用户不存在");
             }
-            assertSameMerchant(houseId, user);
             if (houseUserMapper.selectByUserAndHouse(user.getUserId(), houseId) != null) {
-                throw new BizException(409, "用户已是兔舍成员");
+                throw new BizException(409, "用户已是兔场成员");
             }
-            assertMemberLimit(houseId);
             HouseRole normalizedRole = normalizeRole(role, perms, isAdmin, false);
-            HouseUser hu = new HouseUser();
-            hu.setHouseId(houseId);
-            hu.setUserId(user.getUserId());
-            hu.setRole(normalizedRole.code());
-            hu.setPerms(normalizedRole.legacyPermission());
-            hu.setIsAdmin(normalizedRole.administrator());
-            hu.setCreateBy(operator);
-            hu.setUpdateBy(operator);
+            HouseUser member = new HouseUser();
+            member.setHouseId(houseId);
+            member.setUserId(user.getUserId());
+            member.setRole(normalizedRole.code());
+            member.setStatus(STATUS_ENABLED);
+            member.setPerms(normalizedRole.legacyPermission());
+            member.setIsAdmin(normalizedRole.administrator());
+            member.setCreateBy(operator);
+            member.setUpdateBy(operator);
             try {
-                houseUserMapper.insert(hu);
-            } catch (DuplicateKeyException e) {
-                throw new BizException(409, "用户已是兔舍成员");
+                houseUserMapper.insert(member);
+            } catch (DuplicateKeyException duplicate) {
+                throw new BizException(409, "用户已是兔场成员");
             }
             requestDedupService.markDone(houseId, operatorUserId, api, requestId);
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, e.getMessage());
-            throw e;
+        } catch (RuntimeException exception) {
+            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, exception.getMessage());
+            throw exception;
         }
     }
 
     @Transactional
-    public void updateMember(Long houseId, Long targetUserId, Long operatorUserId, String operator, String role, String perms, Boolean isAdmin, String requestId) {
+    public void updateMember(
+            Long houseId,
+            Long targetUserId,
+            Long operatorUserId,
+            String operator,
+            String role,
+            String perms,
+            Boolean isAdmin,
+            String requestId
+    ) {
+        SysUser lockedTargetUser = sysUserMapper.selectByIdForUpdate(targetUserId);
+        RabbitHouse lockedHouse = lockHouse(houseId);
         String api = "houseMember.update";
         if (requestDedupService.shouldSkipAsDone(houseId, operatorUserId, api, requestId)) {
             return;
         }
+        requireEnabled(lockedHouse);
         requestDedupService.markProcessing(houseId, operatorUserId, api, requestId);
         try {
-            HouseUser current = houseUserMapper.selectByUserAndHouse(targetUserId, houseId);
-            if (current == null) {
-                throw new BizException(404, "成员不存在");
-            }
-            assertMemberManagementEnabled(houseId);
+            HouseUser current = requireMember(houseId, targetUserId);
             HouseRole currentRole = roleOf(current);
-            HouseRole newRole = normalizeRole(role, perms, isAdmin, true);
-            if (role == null && perms == null && isAdmin == null) {
-                newRole = currentRole;
+            HouseRole nextRole = role == null && perms == null && isAdmin == null
+                    ? currentRole
+                    : normalizeRole(role, perms, isAdmin, true);
+            if (currentRole != HouseRole.OWNER && nextRole == HouseRole.OWNER
+                    && (lockedTargetUser == null || !STATUS_ENABLED.equals(lockedTargetUser.getStatus()))) {
+                throw new BizException(409, "停用用户不能设为兔场所有者");
             }
-            if (currentRole == HouseRole.OWNER && newRole != HouseRole.OWNER) {
-                throw new BizException(400, "请先将其他成员设为所有者完成转让");
+            if (STATUS_ENABLED.equals(current.getStatus())
+                    && currentRole == HouseRole.OWNER
+                    && nextRole != HouseRole.OWNER) {
+                assertAnotherEnabledOwner(houseId);
             }
-            if (newRole == HouseRole.OWNER) {
-                houseUserMapper.demoteOtherOwners(houseId, targetUserId, operator);
-                rabbitHouseMapper.updateOwner(houseId, targetUserId, operator);
-            }
-            int n = houseUserMapper.updateMember(
+            int updated = houseUserMapper.updateMember(
                     houseId,
                     targetUserId,
-                    newRole.code(),
-                    newRole.legacyPermission(),
-                    newRole.administrator(),
+                    nextRole.code(),
+                    current.getStatus(),
+                    nextRole.legacyPermission(),
+                    nextRole.administrator(),
                     operator
             );
-            if (n <= 0) {
-                throw new BizException(400, "更新失败");
+            if (updated <= 0) {
+                throw new BizException(404, "成员不存在");
             }
             requestDedupService.markDone(houseId, operatorUserId, api, requestId);
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, e.getMessage());
-            throw e;
+        } catch (RuntimeException exception) {
+            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, exception.getMessage());
+            throw exception;
         }
     }
 
     @Transactional
     public void removeMember(Long houseId, Long targetUserId, Long operatorUserId, String requestId) {
+        sysUserMapper.selectByIdForUpdate(targetUserId);
+        RabbitHouse lockedHouse = lockHouse(houseId);
         String api = "houseMember.remove";
         if (requestDedupService.shouldSkipAsDone(houseId, operatorUserId, api, requestId)) {
             return;
         }
+        requireEnabled(lockedHouse);
         requestDedupService.markProcessing(houseId, operatorUserId, api, requestId);
         try {
-            HouseUser current = houseUserMapper.selectByUserAndHouse(targetUserId, houseId);
-            if (current == null) {
+            HouseUser current = requireMember(houseId, targetUserId);
+            if (STATUS_ENABLED.equals(current.getStatus()) && roleOf(current) == HouseRole.OWNER) {
+                assertAnotherEnabledOwner(houseId);
+            }
+            if (houseUserMapper.deleteMember(houseId, targetUserId) <= 0) {
                 throw new BizException(404, "成员不存在");
             }
-            assertMemberManagementEnabled(houseId);
-            if (roleOf(current) == HouseRole.OWNER) {
-                throw new BizException(400, "兔场所有者不能移除，请先转让所有权");
-            }
-            int n = houseUserMapper.deleteMember(houseId, targetUserId);
-            if (n <= 0) {
-                throw new BizException(400, "移除失败");
-            }
             requestDedupService.markDone(houseId, operatorUserId, api, requestId);
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, e.getMessage());
-            throw e;
+        } catch (RuntimeException exception) {
+            requestDedupService.markFailed(houseId, operatorUserId, api, requestId, exception.getMessage());
+            throw exception;
         }
     }
 
     @Transactional
     public void leaveHouse(Long houseId, Long userId, String requestId) {
+        sysUserMapper.selectByIdForUpdate(userId);
+        RabbitHouse lockedHouse = lockHouse(houseId);
         String api = "houseMember.leave";
         if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
             return;
         }
+        requireEnabled(lockedHouse);
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
-            HouseUser current = houseUserMapper.selectByUserAndHouse(userId, houseId);
-            if (current == null) {
-                throw new BizException(404, "您不是该兔舍成员");
+            HouseUser current = requireMember(houseId, userId);
+            if (STATUS_ENABLED.equals(current.getStatus()) && roleOf(current) == HouseRole.OWNER) {
+                assertAnotherEnabledOwner(houseId);
             }
-            if (roleOf(current) == HouseRole.OWNER) {
-                throw new BizException(400, "兔场所有者不能直接退出，请先转让所有权");
-            }
-            int n = houseUserMapper.deleteMember(houseId, userId);
-            if (n <= 0) {
+            if (houseUserMapper.deleteMember(houseId, userId) <= 0) {
                 throw new BizException(400, "退出失败");
             }
             requestDedupService.markDone(houseId, userId, api, requestId);
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
-            throw e;
+        } catch (RuntimeException exception) {
+            requestDedupService.markFailed(houseId, userId, api, requestId, exception.getMessage());
+            throw exception;
         }
     }
 
-    private void assertSameMerchant(Long houseId, SysUser user) {
-        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
-        if (house == null) {
-            throw new BizException(404, "兔舍不存在");
-        }
-        if (house.getMerchantId() == null) {
-            throw new BizException(500, "兔舍未归属商户");
-        }
-        MerchantMembership membership = membershipService.requireActiveMembership(user.getUserId(), house.getMerchantId());
-        if (membership == null) {
-            throw new BizException(400, "只能添加同商户下的账号");
-        }
+    @Transactional
+    public String joinByInvitation(Long houseId, Long userId, String role, String operator) {
+        return join(houseId, userId, HouseRole.parseAssignable(role, false), operator, true);
     }
 
-    private void assertMemberLimit(Long houseId) {
-        MerchantHousePolicy policy = assertMemberManagementEnabled(houseId);
-        if (houseUserMapper.countMembers(houseId) >= policy.getMaxMembersPerHouse()) {
-            throw new BizException(409, "已达到单兔场成员数量上限");
-        }
+    @Transactional
+    public String joinByAdmin(Long houseId, Long userId, String role, String operator) {
+        return join(houseId, userId, HouseRole.parseAssignable(role, true), operator, false);
     }
 
-    private MerchantHousePolicy assertMemberManagementEnabled(Long houseId) {
-        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
-        if (house == null || house.getMerchantId() == null) {
+    private String join(Long houseId, Long userId, HouseRole requested, String operator, boolean requireEnabledHouse) {
+        SysUser user = sysUserMapper.selectByIdForUpdate(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        if (!STATUS_ENABLED.equals(user.getStatus())) {
+            throw new BizException(409, "停用用户不能加入兔场");
+        }
+        RabbitHouse lockedHouse = lockHouse(houseId);
+        if (requireEnabledHouse) {
+            requireEnabled(lockedHouse);
+        }
+        HouseUser current = houseUserMapper.selectByUserAndHouse(userId, houseId);
+        if (current == null) {
+            HouseUser member = new HouseUser();
+            member.setHouseId(houseId);
+            member.setUserId(userId);
+            member.setRole(requested.code());
+            member.setStatus(STATUS_ENABLED);
+            member.setPerms(requested.legacyPermission());
+            member.setIsAdmin(requested.administrator());
+            member.setCreateBy(operator);
+            member.setUpdateBy(operator);
+            try {
+                houseUserMapper.insert(member);
+                return requested.code();
+            } catch (DuplicateKeyException duplicate) {
+                current = houseUserMapper.selectByUserAndHouse(userId, houseId);
+                if (current == null) {
+                    throw duplicate;
+                }
+            }
+        }
+
+        HouseRole currentRole = roleOf(current);
+        HouseRole effectiveRole = STATUS_ENABLED.equals(current.getStatus())
+                && currentRole.rank() >= requested.rank()
+                ? currentRole
+                : requested;
+        if (!STATUS_ENABLED.equals(current.getStatus()) || effectiveRole != currentRole) {
+            houseUserMapper.updateMember(
+                    houseId,
+                    userId,
+                    effectiveRole.code(),
+                    STATUS_ENABLED,
+                    effectiveRole.legacyPermission(),
+                    effectiveRole.administrator(),
+                    operator
+            );
+        }
+        return effectiveRole.code();
+    }
+
+    private HouseUser requireMember(Long houseId, Long userId) {
+        HouseUser member = houseUserMapper.selectByUserAndHouse(userId, houseId);
+        if (member == null) {
+            throw new BizException(404, "成员不存在");
+        }
+        return member;
+    }
+
+    private RabbitHouse lockHouse(Long houseId) {
+        RabbitHouse house = rabbitHouseMapper.selectByIdForUpdate(houseId);
+        if (house == null || Boolean.TRUE.equals(house.getIsDeleted())) {
             throw new BizException(404, "兔场不存在");
         }
-        MerchantHousePolicy policy = policyMapper.selectByMerchantId(house.getMerchantId());
-        if (policy == null || !Boolean.TRUE.equals(policy.getHouseMemberManagementEnabled())) {
-            throw new BizException(403, "商户未开通兔场成员管理权限");
+        return house;
+    }
+
+    private void requireEnabled(RabbitHouse house) {
+        if (!STATUS_ENABLED.equals(house.getStatus())) {
+            throw new BizException(403, "兔场已停用");
         }
-        return policy;
+    }
+
+    private void assertAnotherEnabledOwner(Long houseId) {
+        if (houseUserMapper.countEnabledOwners(houseId) <= 1) {
+            throw new BizException(409, "兔场至少需要一名启用的所有者");
+        }
     }
 
     private HouseRole normalizeRole(String role, String perms, Boolean isAdmin, boolean allowOwner) {
-        HouseRole normalized;
         if (role != null && !role.trim().isEmpty()) {
-            normalized = HouseRole.parseAssignable(role, allowOwner);
-        } else if (Boolean.TRUE.equals(isAdmin)) {
-            normalized = allowOwner ? HouseRole.OWNER : HouseRole.MANAGER;
-        } else if ("control".equals(perms)) {
-            normalized = HouseRole.MANAGER;
-        } else if ("view".equals(perms)) {
-            normalized = HouseRole.VIEWER;
-        } else {
-            normalized = HouseRole.STAFF;
+            return HouseRole.parseAssignable(role, allowOwner);
         }
-        return normalized;
+        if (Boolean.TRUE.equals(isAdmin)) {
+            return allowOwner ? HouseRole.OWNER : HouseRole.MANAGER;
+        }
+        if ("control".equals(perms)) {
+            return HouseRole.MANAGER;
+        }
+        if ("view".equals(perms)) {
+            return HouseRole.VIEWER;
+        }
+        return HouseRole.STAFF;
     }
 
     private HouseRole roleOf(HouseUser member) {

@@ -7,6 +7,7 @@ public class HouseUser {
     private Long houseId;
     private Long userId;
     private String role;
+    private String status;
     private String perms;
     private Boolean isAdmin;
     private Date joinTime;
@@ -45,6 +46,14 @@ public class HouseUser {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public String getPerms() {

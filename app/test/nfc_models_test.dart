@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/services/nfc_hardware_service.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/nfc_hardware_service.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 
 void main() {

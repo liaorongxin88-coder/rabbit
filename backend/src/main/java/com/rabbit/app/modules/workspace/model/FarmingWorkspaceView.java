@@ -7,8 +7,6 @@ import java.util.Objects;
 public record FarmingWorkspaceView(
         String workspaceKey,
         Long resourceId,
-        Long merchantId,
-        Long ownerUserId,
         String name,
         String businessType,
         String businessName,
@@ -20,8 +18,6 @@ public record FarmingWorkspaceView(
     public FarmingWorkspaceView {
         businessType = requireText(businessType, "businessType").toUpperCase(Locale.ROOT);
         resourceId = requirePositive(resourceId, "resourceId");
-        merchantId = requirePositive(merchantId, "merchantId");
-        ownerUserId = requirePositive(ownerUserId, "ownerUserId");
         workspaceKey = requireText(workspaceKey, "workspaceKey");
         if (!workspaceKey.equals(businessType + ":" + resourceId)) {
             throw new IllegalArgumentException("workspaceKey must match businessType and resourceId");

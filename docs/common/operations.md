@@ -43,7 +43,9 @@ docker compose up -d --build --no-deps backend
 - `APP_SMS_TEMPLATE_PARAM_NAME`
 - `JAVA_OPTS`
 
-生产必须替换所有默认 secret 和默认管理员密码。开启短信登录前还必须配置独立
+应用 JWT、管理 JWT 和手机号摘要密钥没有默认值，部署时必须提供独立稳定随机值；应用与管理
+JWT 密钥不能相同。后端拒绝空值、短值和公开占位值。短信验证码密钥仅在启用短信时必填。
+生产还必须替换默认管理员密码。开启短信登录前还必须配置独立
 RAM AccessKey、审核通过的短信签名和验证码模板，具体见
 [../backend/sms-auth.md](../backend/sms-auth.md)。
 

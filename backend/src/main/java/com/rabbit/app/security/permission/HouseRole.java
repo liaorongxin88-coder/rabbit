@@ -6,8 +6,7 @@ public enum HouseRole implements ScopedRole {
     VIEWER(1, "view", false),
     STAFF(2, "edit", false),
     MANAGER(3, "control", false),
-    OWNER(4, "control", true),
-    MERCHANT_OWNER(5, "control", true);
+    OWNER(4, "control", true);
 
     private final int rank;
     private final String legacyPermission;
@@ -26,7 +25,7 @@ public enum HouseRole implements ScopedRole {
         } catch (IllegalArgumentException e) {
             throw new BizException(400, "兔场成员角色不合法");
         }
-        if (role == MERCHANT_OWNER || (role == OWNER && !allowOwner)) {
+        if (role == OWNER && !allowOwner) {
             throw new BizException(400, allowOwner ? "兔场成员角色不合法" : "新增成员不能直接设为兔场所有者");
         }
         return role;
@@ -35,10 +34,7 @@ public enum HouseRole implements ScopedRole {
     public static HouseRole fromStored(String role, String legacyPermission, Boolean legacyAdmin) {
         if (role != null && !role.isBlank()) {
             try {
-                HouseRole parsed = HouseRole.valueOf(normalize(role));
-                if (parsed != MERCHANT_OWNER) {
-                    return parsed;
-                }
+                return HouseRole.valueOf(normalize(role));
             } catch (IllegalArgumentException ignored) {
                 // Fall through to legacy columns for migrated records.
             }

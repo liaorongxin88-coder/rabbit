@@ -2,53 +2,54 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import {
-  clearMerchantSession,
   clearSession,
-  getMerchantSession,
+  clearWorkspaceSession,
   getSession,
+  getWorkspaceSession,
   subscribeAdminSession,
-  subscribeMerchantSession,
+  subscribeWorkspaceSession,
 } from '@/lib/auth'
-import type { AdminSession, MerchantSession } from '@/types/api'
+import type { AdminSession, WorkspaceSession } from '@/types/api'
 import { hasPermission } from '@/lib/permissions'
 import { AppShell } from '@/components/app-shell'
-import { MerchantShell } from '@/components/merchant-shell'
-import { MerchantWorkspaceProvider } from '@/components/merchant-workspace-context'
+import { WorkspaceShell } from '@/components/workspace-shell'
+import { WorkspaceProvider } from '@/components/workspace-context'
 import { Spinner } from '@/components/ui/spinner'
 import { AccountsPage } from '@/pages/accounts-page'
 import { DashboardPage } from '@/pages/dashboard-page'
+import { FarmDetailPage } from '@/pages/farm-detail-page'
+import { FarmsPage } from '@/pages/farms-page'
 import { LoginPage } from '@/pages/login-page'
-import { MerchantDetailPage } from '@/pages/merchant-detail-page'
-import { MerchantsPage } from '@/pages/merchants-page'
+import { UsersPage } from '@/pages/users-page'
 
-const MerchantDashboardPage = lazy(() =>
-  import('@/pages/merchant-dashboard-page').then((module) => ({
-    default: module.MerchantDashboardPage,
+const WorkspaceDashboardPage = lazy(() =>
+  import('@/pages/workspace-dashboard-page').then((module) => ({
+    default: module.WorkspaceDashboardPage,
   })),
 )
-const MerchantHousesPage = lazy(() =>
-  import('@/pages/merchant-houses-page').then((module) => ({
-    default: module.MerchantHousesPage,
+const WorkspaceFarmsPage = lazy(() =>
+  import('@/pages/workspace-farms-page').then((module) => ({
+    default: module.WorkspaceFarmsPage,
   })),
 )
-const MerchantLivestockPage = lazy(() =>
-  import('@/pages/merchant-livestock-page').then((module) => ({
-    default: module.MerchantLivestockPage,
+const WorkspaceLivestockPage = lazy(() =>
+  import('@/pages/workspace-livestock-page').then((module) => ({
+    default: module.WorkspaceLivestockPage,
   })),
 )
-const MerchantLoginPage = lazy(() =>
-  import('@/pages/merchant-login-page').then((module) => ({
-    default: module.MerchantLoginPage,
+const WorkspaceLoginPage = lazy(() =>
+  import('@/pages/workspace-login-page').then((module) => ({
+    default: module.WorkspaceLoginPage,
   })),
 )
-const MerchantMembersPage = lazy(() =>
-  import('@/pages/merchant-members-page').then((module) => ({
-    default: module.MerchantMembersPage,
+const WorkspaceMembersPage = lazy(() =>
+  import('@/pages/workspace-members-page').then((module) => ({
+    default: module.WorkspaceMembersPage,
   })),
 )
-const MerchantProductionPage = lazy(() =>
-  import('@/pages/merchant-production-page').then((module) => ({
-    default: module.MerchantProductionPage,
+const WorkspaceProductionPage = lazy(() =>
+  import('@/pages/workspace-production-page').then((module) => ({
+    default: module.WorkspaceProductionPage,
   })),
 )
 
@@ -63,12 +64,12 @@ function RequireAdminAuth({ children }: { children: React.ReactNode }) {
   return children
 }
 
-function RequireMerchantAuth({ children }: { children: React.ReactNode }) {
+function RequireWorkspaceAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const session = useMerchantSession()
+  const session = useWorkspaceSession()
 
   if (!session) {
-    return <Navigate to="/merchant/login" state={{ from: location }} replace />
+    return <Navigate to="/workspace/login" state={{ from: location }} replace />
   }
 
   return children
@@ -92,8 +93,11 @@ function ShellRoutes() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage session={session} />} />
-        <Route path="/merchants" element={<MerchantsPage />} />
-        <Route path="/merchants/:merchantId" element={<MerchantDetailPage />} />
+        <Route path="/farms" element={<FarmsPage />} />
+        <Route path="/farms/:farmId" element={<FarmDetailPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/merchants" element={<Navigate to="/farms" replace />} />
+        <Route path="/merchants/:legacyId" element={<Navigate to="/farms" replace />} />
         <Route
           path="/accounts"
           element={
@@ -110,34 +114,40 @@ function ShellRoutes() {
   )
 }
 
-function MerchantShellRoutes() {
+function WorkspaceShellRoutes() {
   const navigate = useNavigate()
-  const session = useMerchantSession()
+  const session = useWorkspaceSession()
 
   if (!session) {
-    return <Navigate to="/merchant/login" replace />
+    return <Navigate to="/workspace/login" replace />
   }
 
   function handleLogout() {
-    clearMerchantSession()
-    navigate('/merchant/login', { replace: true })
+    clearWorkspaceSession()
+    navigate('/workspace/login', { replace: true })
   }
 
   return (
-    <MerchantWorkspaceProvider session={session}>
-      <MerchantShell onLogout={handleLogout}>
+    <WorkspaceProvider session={session}>
+      <WorkspaceShell onLogout={handleLogout}>
         <Routes>
-          <Route index element={<Navigate to="/merchant/dashboard" replace />} />
-          <Route path="dashboard" element={<MerchantDashboardPage />} />
-          <Route path="houses" element={<MerchantHousesPage />} />
-          <Route path="livestock" element={<MerchantLivestockPage />} />
-          <Route path="production" element={<MerchantProductionPage />} />
-          <Route path="members" element={<MerchantMembersPage />} />
-          <Route path="*" element={<Navigate to="/merchant/dashboard" replace />} />
+          <Route index element={<Navigate to="/workspace/dashboard" replace />} />
+          <Route path="dashboard" element={<WorkspaceDashboardPage />} />
+          <Route path="farms" element={<WorkspaceFarmsPage />} />
+          <Route path="livestock" element={<WorkspaceLivestockPage />} />
+          <Route path="production" element={<WorkspaceProductionPage />} />
+          <Route path="members" element={<WorkspaceMembersPage />} />
+          <Route path="*" element={<Navigate to="/workspace/dashboard" replace />} />
         </Routes>
-      </MerchantShell>
-    </MerchantWorkspaceProvider>
+      </WorkspaceShell>
+    </WorkspaceProvider>
   )
+}
+
+function LegacyWorkspaceRedirect() {
+  const location = useLocation()
+  const destination = location.pathname.replace(/^\/merchant/, '/workspace')
+  return <Navigate to={`${destination}${location.search}${location.hash}`} replace />
 }
 
 function useAdminSession(): AdminSession | null {
@@ -151,13 +161,13 @@ function useAdminSession(): AdminSession | null {
   return session
 }
 
-function useMerchantSession(): MerchantSession | null {
-  const [session, setSessionState] = useState<MerchantSession | null>(() =>
-    getMerchantSession(),
+function useWorkspaceSession(): WorkspaceSession | null {
+  const [session, setSessionState] = useState<WorkspaceSession | null>(() =>
+    getWorkspaceSession(),
   )
 
   useEffect(
-    () => subscribeMerchantSession(() => setSessionState(getMerchantSession())),
+    () => subscribeWorkspaceSession(() => setSessionState(getWorkspaceSession())),
     [],
   )
 
@@ -175,15 +185,17 @@ function App() {
         }
       >
         <Routes>
-          <Route path="/merchant/login" element={<MerchantLoginPage />} />
+          <Route path="/workspace/login" element={<WorkspaceLoginPage />} />
           <Route
-            path="/merchant/*"
+            path="/workspace/*"
             element={
-              <RequireMerchantAuth>
-                <MerchantShellRoutes />
-              </RequireMerchantAuth>
+              <RequireWorkspaceAuth>
+                <WorkspaceShellRoutes />
+              </RequireWorkspaceAuth>
             }
           />
+          <Route path="/merchant/login" element={<Navigate to="/workspace/login" replace />} />
+          <Route path="/merchant/*" element={<LegacyWorkspaceRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/*"

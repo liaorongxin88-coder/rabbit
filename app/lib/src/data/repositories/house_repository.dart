@@ -6,32 +6,9 @@ import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/house_member.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 
 final houseRepositoryProvider = Provider<HouseRepository>((ref) {
   return HouseRepository(ref.watch(apiClientProvider));
-});
-
-final housesProvider = FutureProvider<List<RabbitHouse>>((ref) {
-  final session = ref.watch(authControllerProvider).valueOrNull;
-  if (session == null) {
-    return Future.value(const <RabbitHouse>[]);
-  }
-  return ref.watch(houseRepositoryProvider).listHouses();
-});
-
-final housePermissionProvider =
-    FutureProvider.family<HousePermission, int>((ref, houseId) {
-  final session = ref.watch(authControllerProvider).valueOrNull;
-  if (session == null || houseId <= 0) {
-    return Future.value(const HousePermission(perms: 'view', isAdmin: false));
-  }
-  return ref.watch(houseRepositoryProvider).getMyPermission(houseId);
-});
-
-final houseMembersProvider =
-    FutureProvider.family<List<HouseMember>, int>((ref, houseId) {
-  return ref.watch(houseRepositoryProvider).listMembers(houseId);
 });
 
 class HouseRepository {
@@ -112,39 +89,17 @@ class HouseRepository {
     );
   }
 
-  Future<List<UserSearchItem>> searchMemberCandidates({
+  Future<void> inviteMember({
     required int houseId,
-    required String keyword,
-  }) {
-    return _api.get<List<UserSearchItem>>(
-      '/api/house-members/search-users',
-      houseId: houseId,
-      query: {'q': keyword.trim()},
-      decode: (data) {
-        if (data is! List) {
-          return const <UserSearchItem>[];
-        }
-        return data
-            .whereType<Map>()
-            .map((item) =>
-                UserSearchItem.fromJson(Map<String, dynamic>.from(item)))
-            .toList();
-      },
-    );
-  }
-
-  Future<void> addMember({
-    required int houseId,
-    required String userName,
-    required String perms,
+    required String phone,
+    required String role,
   }) {
     return _api.post<void>(
-      '/api/house-members',
+      '/api/house-invitations',
       houseId: houseId,
       body: {
-        'userName': userName.trim(),
-        'perms': perms,
-        'isAdmin': false,
+        'phone': phone.trim(),
+        'role': role,
         'requestId': _uuid.v4(),
       },
       decode: (_) {},

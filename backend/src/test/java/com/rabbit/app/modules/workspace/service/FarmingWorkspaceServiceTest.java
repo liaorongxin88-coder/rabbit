@@ -12,24 +12,24 @@ import org.junit.jupiter.api.Test;
 
 class FarmingWorkspaceServiceTest {
     @Test
-    void aggregatesModulesAndOnlyNarrowsByMerchant() {
+    void aggregatesModulesAndAllProviderWorkspacesForTheUser() {
         FarmingWorkspaceProvider rabbit = provider(
                 "rabbit",
-                workspace("RABBIT", 10L, 100L, "甲兔场"),
-                workspace("RABBIT", 11L, 200L, "乙兔场")
+                workspace("RABBIT", 10L, "甲兔场"),
+                workspace("RABBIT", 11L, "乙兔场")
         );
         FarmingWorkspaceProvider poultry = provider(
                 "poultry",
-                workspace("POULTRY", 20L, 100L, "鸡舍")
+                workspace("POULTRY", 20L, "鸡舍")
         );
         FarmingWorkspaceService service = new FarmingWorkspaceService(List.of(rabbit, poultry));
 
-        FarmingWorkspaceCatalog catalog = service.listForUser(7L, 100L);
+        FarmingWorkspaceCatalog catalog = service.listForUser(7L);
 
         assertEquals(List.of("POULTRY", "RABBIT"), catalog.modules().stream()
                 .map(FarmingModuleDefinition::code)
                 .toList());
-        assertEquals(List.of("RABBIT:10", "POULTRY:20"), catalog.workspaces().stream()
+        assertEquals(List.of("RABBIT:11", "RABBIT:10", "POULTRY:20"), catalog.workspaces().stream()
                 .map(FarmingWorkspaceView::workspaceKey)
                 .toList());
     }
@@ -62,12 +62,10 @@ class FarmingWorkspaceServiceTest {
         };
     }
 
-    private FarmingWorkspaceView workspace(String businessType, Long resourceId, Long merchantId, String name) {
+    private FarmingWorkspaceView workspace(String businessType, Long resourceId, String name) {
         return new FarmingWorkspaceView(
                 FarmingWorkspaceView.key(businessType, resourceId),
                 resourceId,
-                merchantId,
-                7L,
                 name,
                 businessType,
                 businessType + " farming",

@@ -10,7 +10,7 @@ public class NfcCageIT extends E2eTestSupport {
     @Test
     void signedCageQueueBindingResolutionAndReplacementWorkEndToEnd() {
         UserSession owner = register("nfc_cage");
-        UserSession viewer = createMerchantAccount(owner, "nfc_viewer");
+        UserSession viewer = register("nfc_viewer");
         long houseId = createHouse(owner, "NFC兔舍", 1, 2, 1);
         List<Long> cages = cageIds(owner, houseId);
         api.postOk("/api/house-members", owner.token, houseId, obj(

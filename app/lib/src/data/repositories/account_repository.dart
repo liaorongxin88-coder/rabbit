@@ -8,10 +8,6 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
   return AccountRepository(ref.watch(apiClientProvider));
 });
 
-final userProfileProvider = FutureProvider<UserProfile>((ref) {
-  return ref.watch(accountRepositoryProvider).loadProfile();
-});
-
 class AccountRepository {
   AccountRepository(this._api);
 

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.admin.mapper.AdminFarmMapper">
+    <resultMap id="AdminFarmMap" type="com.rabbit.app.modules.admin.dto.AdminFarmItem">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="status" property="status"/>
+        <result column="owner_names_text" property="ownerNamesText"/>
+        <result column="owner_count" property="ownerCount"/>
+        <result column="member_count" property="memberCount"/>
+        <result column="cage_count" property="cageCount"/>
+        <result column="rabbit_count" property="rabbitCount"/>
+        <result column="layout_rows" property="layoutRows"/>
+        <result column="layout_cols" property="layoutCols"/>
+        <result column="layout_layers" property="layoutLayers"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="AuditLogMap" type="com.rabbit.app.modules.audit.entity.AuditLog">
+        <id column="id" property="id"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="user_id" property="userId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="method" property="method"/>
+        <result column="path" property="path"/>
+        <result column="query_string" property="queryString"/>
+        <result column="status" property="status"/>
+        <result column="api_code" property="apiCode"/>
+        <result column="api_message" property="apiMessage"/>
+        <result column="cost_ms" property="costMs"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="ip" property="ip"/>
+        <result column="user_agent" property="userAgent"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="FarmColumns">
+        h.id, h.name, h.status, h.layout_rows, h.layout_cols, h.layout_layers,
+        h.remark, h.create_time, h.update_time,
+        (select count(1) from house_users members
+         join sys_user member_users on member_users.user_id = members.user_id and member_users.status = 'ENABLED'
+         where members.house_id = h.id and members.status = 'ENABLED') as member_count,
+        (select count(1) from house_users owners
+         join sys_user owner_users on owner_users.user_id = owners.user_id and owner_users.status = 'ENABLED'
+         where owners.house_id = h.id and owners.status = 'ENABLED' and owners.role = 'OWNER') as owner_count,
+        (select group_concat(owner_users.user_name order by owner_users.user_name separator '\n')
+         from house_users owners
+         join sys_user owner_users on owner_users.user_id = owners.user_id and owner_users.status = 'ENABLED'
+         where owners.house_id = h.id and owners.status = 'ENABLED' and owners.role = 'OWNER') as owner_names_text,
+        (select count(1) from cages c where c.house_id = h.id) as cage_count,
+        (select count(1) from rabbits r where r.house_id = h.id) as rabbit_count
+    </sql>
+
+    <sql id="FarmFilter">
+        h.is_deleted = false
+        <if test="keyword != null and keyword != ''">
+            and (h.name like concat('%', #{keyword}, '%')
+                 or h.remark like concat('%', #{keyword}, '%')
+                 or cast(h.id as char) = #{keyword}
+                 or exists (
+                     select 1
+                     from house_users keyword_owner
+                     join sys_user keyword_owner_user
+                       on keyword_owner_user.user_id = keyword_owner.user_id
+                      and keyword_owner_user.status = 'ENABLED'
+                     where keyword_owner.house_id = h.id
+                       and keyword_owner.role = 'OWNER'
+                       and keyword_owner.status = 'ENABLED'
+                       and keyword_owner_user.user_name like concat('%', #{keyword}, '%')
+                 ))
+        </if>
+        <if test="status != null and status != ''">
+            and h.status = #{status}
+        </if>
+    </sql>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from rabbit_houses h
+        where <include refid="FarmFilter"/>
+    </select>
+
+    <select id="selectPage" resultMap="AdminFarmMap">
+        select <include refid="FarmColumns"/>
+        from rabbit_houses h
+        where <include refid="FarmFilter"/>
+        order by h.id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectById" resultMap="AdminFarmMap">
+        select <include refid="FarmColumns"/>
+        from rabbit_houses h
+        where h.id = #{houseId} and h.is_deleted = false
+    </select>
+
+    <select id="countOwnerMembershipByUserId" resultType="long">
+        select count(1)
+        from house_users
+        where house_id = #{houseId}
+          and user_id = #{userId}
+          and role = 'OWNER'
+    </select>
+
+    <select id="countOwnerMembershipByPhoneHash" resultType="long">
+        select count(1)
+        from house_users hu
+        join sys_user u on u.user_id = hu.user_id
+        where hu.house_id = #{houseId}
+          and hu.role = 'OWNER'
+          and u.phone_hash = #{phoneHash}
+    </select>
+
+    <select id="countBatches" resultType="long">
+        select count(1) from batches where house_id = #{houseId}
+    </select>
+
+    <select id="selectRecentAuditLogs" resultMap="AuditLogMap">
+        select id, trace_id, user_id, house_id, method, path, query_string, status,
+               api_code, api_message, cost_ms, error_message, ip, user_agent, create_time
+        from audit_logs
+        where house_id = #{houseId}
+        order by create_time desc, id desc
+        limit #{limit}
+    </select>
+</mapper>

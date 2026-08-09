@@ -5,10 +5,11 @@
 <mapper namespace="com.rabbit.app.modules.auth.mapper.SysUserMapper">
     <resultMap id="SysUserMap" type="com.rabbit.app.modules.auth.entity.SysUser">
         <id column="user_id" property="userId"/>
-        <result column="merchant_id" property="merchantId"/>
         <result column="user_name" property="userName"/>
         <result column="password" property="password"/>
+        <result column="password_initialized" property="passwordInitialized"/>
         <result column="openid" property="openid"/>
+        <result column="status" property="status"/>
         <result column="phone_country_code" property="phoneCountryCode"/>
         <result column="phone_hash" property="phoneHash"/>
         <result column="phone_masked" property="phoneMasked"/>
@@ -18,39 +19,55 @@
     </resultMap>
 
     <select id="selectByUserName" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid,
+        select user_id, user_name, password, password_initialized, openid, status,
                phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where user_name = #{userName}
     </select>
 
     <select id="selectByOpenid" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid,
+        select user_id, user_name, password, password_initialized, openid, status,
                phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where openid = #{openid}
     </select>
 
     <select id="selectByPhoneHash" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid,
+        select user_id, user_name, password, password_initialized, openid, status,
                phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where phone_hash = #{phoneHash}
     </select>
 
+    <select id="selectByPhoneHashForUpdate" resultMap="SysUserMap">
+        select user_id, user_name, password, password_initialized, openid, status,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
+        from sys_user
+        where phone_hash = #{phoneHash}
+        for update
+    </select>
+
     <select id="selectById" resultMap="SysUserMap">
-        select user_id, merchant_id, user_name, password, openid,
+        select user_id, user_name, password, password_initialized, openid, status,
                phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
         from sys_user
         where user_id = #{userId}
     </select>
 
+    <select id="selectByIdForUpdate" resultMap="SysUserMap">
+        select user_id, user_name, password, password_initialized, openid, status,
+               phone_country_code, phone_hash, phone_masked, phone_bound_time, create_time, update_time
+        from sys_user
+        where user_id = #{userId}
+        for update
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="userId">
         insert into sys_user (
-            merchant_id, user_name, password, openid,
+            user_name, password, password_initialized, openid, status,
             phone_country_code, phone_hash, phone_masked, phone_bound_time
         ) values (
-            #{merchantId}, #{userName}, #{password}, #{openid},
+            #{userName}, #{password}, #{passwordInitialized}, #{openid}, #{status},
             #{phoneCountryCode}, #{phoneHash}, #{phoneMasked}, #{phoneBoundTime}
         )
     </insert>
@@ -77,22 +94,18 @@
         where user_id = #{userId}
     </update>
 
-    <select id="searchByMerchant" resultMap="SysUserMap">
-        select u.user_id, u.merchant_id, u.user_name, u.password, u.openid,
-               u.phone_country_code, u.phone_hash, u.phone_masked, u.phone_bound_time,
-               u.create_time, u.update_time
-        from sys_user u
-        join merchant_users mu on mu.user_id = u.user_id
-                              and mu.merchant_id = #{merchantId}
-                              and mu.status = 'ENABLED'
-        where u.user_name like concat('%', #{keyword}, '%')
-        <if test="excludeUserIds != null and excludeUserIds.size() > 0">
-            and u.user_id not in
-            <foreach collection="excludeUserIds" item="id" open="(" separator="," close=")">
-                #{id}
-            </foreach>
-        </if>
-        order by u.user_name asc
-        limit #{limit}
-    </select>
+    <update id="updatePasswordAndInitialize">
+        update sys_user
+        set password = #{password},
+            password_initialized = true,
+            update_time = now()
+        where user_id = #{userId}
+    </update>
+
+    <update id="updateStatus">
+        update sys_user
+        set status = #{status},
+            update_time = now()
+        where user_id = #{userId}
+    </update>
 </mapper>

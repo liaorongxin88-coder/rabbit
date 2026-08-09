@@ -9,15 +9,6 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository(ref.watch(apiClientProvider));
 });
 
-final userSettingProvider = FutureProvider<GlobalSetting>((ref) async {
-  return ref.watch(settingsRepositoryProvider).getSetting();
-});
-
-final houseSettingProvider =
-    FutureProvider.family<HouseSettingState, int>((ref, houseId) async {
-  return ref.watch(settingsRepositoryProvider).getHouseSetting(houseId);
-});
-
 class SettingsRepository {
   SettingsRepository(this._api);
 

@@ -1,6 +1,6 @@
 server:
   port: 8080
-  forward-headers-strategy: framework
+  forward-headers-strategy: ${APP_FORWARD_HEADERS_STRATEGY:none}
 
 spring:
   datasource:
@@ -20,15 +20,15 @@ mybatis:
 
 app:
   auth:
-    phone-hash-secret: ${APP_PHONE_HASH_SECRET:rabbit-phone-dev-secret-change-me}
+    phone-hash-secret: ${APP_PHONE_HASH_SECRET:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}
   jwt:
-    secret: ${APP_JWT_SECRET:rabbit-app-dev-secret-change-me-32bytes}
+    secret: ${APP_JWT_SECRET:}
     expire-seconds: 604800
   admin:
     jwt:
-      secret: ${APP_ADMIN_JWT_SECRET:rabbit-app-admin-dev-secret-change-me}
+      secret: ${APP_ADMIN_JWT_SECRET:}
       expire-seconds: ${APP_ADMIN_JWT_EXPIRE_SECONDS:${app.jwt.expire-seconds}}
     bootstrap:
       enabled: ${APP_ADMIN_BOOTSTRAP_ENABLED:true}
@@ -40,7 +40,7 @@ app:
     secret:
   sms:
     enabled: ${APP_SMS_ENABLED:false}
-    code-secret: ${APP_SMS_CODE_SECRET:rabbit-sms-dev-secret-change-me}
+    code-secret: ${APP_SMS_CODE_SECRET:}
     verification:
       code-length: 6
       ttl-seconds: ${APP_SMS_CODE_TTL_SECONDS:300}
@@ -58,6 +58,24 @@ app:
       sign-name: ${APP_SMS_SIGN_NAME:}
       template-code: ${APP_SMS_TEMPLATE_CODE:}
       template-param-name: ${APP_SMS_TEMPLATE_PARAM_NAME:code}
+  phone-one-tap:
+    enabled: ${APP_PHONE_ONE_TAP_ENABLED:false}
+    allowed-providers: ${APP_PHONE_ONE_TAP_ALLOWED_PROVIDERS:aliyun}
+    token-hash-secret: ${APP_PHONE_ONE_TAP_TOKEN_HASH_SECRET:}
+    success-retry-window-seconds: ${APP_PHONE_ONE_TAP_SUCCESS_RETRY_WINDOW_SECONDS:30}
+    processing-lease-seconds: ${APP_PHONE_ONE_TAP_PROCESSING_LEASE_SECONDS:15}
+    attempt-retention-days: ${APP_PHONE_ONE_TAP_ATTEMPT_RETENTION_DAYS:7}
+    rate-bucket-retention-hours: ${APP_PHONE_ONE_TAP_RATE_BUCKET_RETENTION_HOURS:2}
+    cleanup-cron: ${APP_PHONE_ONE_TAP_CLEANUP_CRON:0 35 3 * * ?}
+    connect-timeout-ms: ${APP_PHONE_ONE_TAP_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${APP_PHONE_ONE_TAP_READ_TIMEOUT_MS:3000}
+    rate-limit:
+      ip-minute-limit: ${APP_PHONE_ONE_TAP_IP_MINUTE_LIMIT:10}
+      ip-hour-limit: ${APP_PHONE_ONE_TAP_IP_HOUR_LIMIT:60}
+    aliyun:
+      endpoint: ${APP_PHONE_ONE_TAP_ALIYUN_ENDPOINT:dypnsapi.aliyuncs.com}
+      access-key-id: ${APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_ID:}
+      access-key-secret: ${APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_SECRET:}
   hardware:
     enabled: false
     gateway: noop

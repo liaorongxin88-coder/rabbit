@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/outbound_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/report_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/outbound_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/outbound_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/outbound.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
 class OutboundEntry {
   const OutboundEntry({

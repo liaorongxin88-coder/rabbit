@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.auth.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.config.ApplicationSecretValidator;
 import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
 import com.rabbit.app.modules.auth.entity.SmsVerificationCode;
 import com.rabbit.app.modules.auth.mapper.SmsVerificationCodeMapper;
@@ -29,6 +30,7 @@ public class SmsVerificationService {
     private final SmsVerificationCodeMapper mapper;
     private final SmsSender sender;
     private final PhoneIdentityService phoneIdentityService;
+    private final boolean enabled;
     private final String codeSecret;
     private final int codeLength;
     private final int ttlSeconds;
@@ -45,7 +47,8 @@ public class SmsVerificationService {
             SmsVerificationCodeMapper mapper,
             SmsSender sender,
             PhoneIdentityService phoneIdentityService,
-            @Value("${app.sms.code-secret:rabbit-sms-dev-secret-change-me}") String codeSecret,
+            @Value("${app.sms.enabled:false}") boolean enabled,
+            @Value("${app.sms.code-secret:}") String codeSecret,
             @Value("${app.sms.verification.code-length:6}") int codeLength,
             @Value("${app.sms.verification.ttl-seconds:300}") int ttlSeconds,
             @Value("${app.sms.verification.resend-seconds:60}") int resendSeconds,
@@ -58,6 +61,7 @@ public class SmsVerificationService {
                 mapper,
                 sender,
                 phoneIdentityService,
+                enabled,
                 codeSecret,
                 codeLength,
                 ttlSeconds,
@@ -75,6 +79,7 @@ public class SmsVerificationService {
             SmsVerificationCodeMapper mapper,
             SmsSender sender,
             PhoneIdentityService phoneIdentityService,
+            boolean enabled,
             String codeSecret,
             int codeLength,
             int ttlSeconds,
@@ -89,6 +94,7 @@ public class SmsVerificationService {
         this.mapper = mapper;
         this.sender = sender;
         this.phoneIdentityService = phoneIdentityService;
+        this.enabled = enabled;
         this.codeSecret = codeSecret;
         this.codeLength = codeLength;
         this.ttlSeconds = ttlSeconds;
@@ -103,6 +109,7 @@ public class SmsVerificationService {
     }
 
     public SmsCodeSendResponse sendCode(String rawPhone, String requestIp) {
+        requireEnabled();
         String phone = PhoneNumbers.normalizeMainlandMobile(rawPhone);
         String phoneHash = phoneIdentityService.hash(phone);
         String normalizedIp = normalizeRequestIp(requestIp);
@@ -146,6 +153,7 @@ public class SmsVerificationService {
 
     @Transactional(noRollbackFor = BizException.class)
     public String verifyCode(String rawPhone, String code) {
+        requireEnabled();
         String phone = PhoneNumbers.normalizeMainlandMobile(rawPhone);
         String phoneHash = phoneIdentityService.hash(phone);
         String normalizedCode = code == null ? "" : code.trim();
@@ -231,13 +239,19 @@ public class SmsVerificationService {
     }
 
     private void validateSettings() {
-        if (codeSecret == null || codeSecret.length() < 16) {
-            throw new IllegalArgumentException("app.sms.code-secret 至少需要16个字符");
+        if (enabled) {
+            ApplicationSecretValidator.requireConfigured("APP_SMS_CODE_SECRET", codeSecret);
         }
         if (codeLength < 4 || codeLength > 8 || ttlSeconds <= 0 || resendSeconds <= 0
                 || maxAttempts <= 0 || phoneHourLimit <= 0 || phoneDayLimit < phoneHourLimit
                 || ipHourLimit <= 0) {
             throw new IllegalArgumentException("短信验证码参数配置不正确");
+        }
+    }
+
+    private void requireEnabled() {
+        if (!enabled) {
+            throw new BizException(503, "短信登录暂未启用");
         }
     }
 

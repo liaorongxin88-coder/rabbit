@@ -41,6 +41,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/login",
                         "/api/auth/sms/code",
                         "/api/auth/sms/login",
+                        "/api/auth/phone-one-tap-login",
                         "/api/auth/wechat-login"
                 );
         registry.addInterceptor(new AuthorizationInterceptor(accessControlService))
@@ -51,6 +52,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/login",
                         "/api/auth/sms/code",
                         "/api/auth/sms/login",
+                        "/api/auth/phone-one-tap-login",
                         "/api/auth/wechat-login"
                 );
     }

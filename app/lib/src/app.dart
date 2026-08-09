@@ -5,12 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_intent_service.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/nfc_intent_service.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/routing/router.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_pending_sync_controller.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/local_app_settings_controller.dart';
 
@@ -121,6 +122,16 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(housesProvider, (_, next) {
+      final houses = next.valueOrNull;
+      if (houses != null) {
+        unawaited(
+          ref
+              .read(authControllerProvider.notifier)
+              .reconcileHouseIds(houses.map((house) => house.id)),
+        );
+      }
+    });
     ref.listen(authControllerProvider, (_, next) {
       if (next.valueOrNull != null) {
         unawaited(_processPendingNfc());

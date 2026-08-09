@@ -21,16 +21,14 @@ public class FarmingWorkspaceService {
         rejectDuplicateModuleCodes(this.providers);
     }
 
-    public FarmingWorkspaceCatalog listForUser(Long userId, Long merchantId) {
+    public FarmingWorkspaceCatalog listForUser(Long userId) {
         List<FarmingModuleDefinition> modules = providers.stream()
                 .map(FarmingWorkspaceProvider::module)
                 .toList();
         List<FarmingWorkspaceView> workspaces = providers.stream()
                 .flatMap(provider -> provider.listForUser(userId).stream())
-                .filter(workspace -> merchantId == null || merchantId.equals(workspace.merchantId()))
                 .sorted(Comparator
-                        .comparing(FarmingWorkspaceView::merchantId)
-                        .thenComparing(FarmingWorkspaceView::name)
+                        .comparing(FarmingWorkspaceView::name)
                         .thenComparing(FarmingWorkspaceView::workspaceKey))
                 .toList();
         return new FarmingWorkspaceCatalog(modules, workspaces);

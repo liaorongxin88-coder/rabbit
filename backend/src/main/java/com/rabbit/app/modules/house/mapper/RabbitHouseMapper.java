@@ -11,11 +11,11 @@ public interface RabbitHouseMapper {
 
     RabbitHouse selectById(@Param("houseId") Long houseId);
 
+    RabbitHouse selectByIdForUpdate(@Param("houseId") Long houseId);
+
     List<RabbitHouse> selectByUserId(@Param("userId") Long userId);
 
     List<RabbitHouse> selectAllActive();
-
-    long countByMerchantId(@Param("merchantId") Long merchantId);
 
     RabbitHouse selectByCreatorAndRequestId(@Param("createBy") String createBy, @Param("requestId") String requestId);
 
@@ -23,7 +23,7 @@ public interface RabbitHouseMapper {
 
     int markDeleted(@Param("houseId") Long houseId, @Param("updateBy") String updateBy);
 
-    int updateOwner(@Param("houseId") Long houseId,
-                    @Param("ownerUserId") Long ownerUserId,
-                    @Param("updateBy") String updateBy);
+    int updateStatus(@Param("houseId") Long houseId,
+                     @Param("status") String status,
+                     @Param("updateBy") String updateBy);
 }

@@ -68,6 +68,91 @@ void main() {
     client.dispose();
   });
 
+  test('disabled account business response emits an unauthorized event',
+      () async {
+    final client = _clientFor(
+      statusCode: 200,
+      body: {'code': 403, 'message': '账号已停用', 'data': null},
+    );
+    var unauthorizedEvents = 0;
+    final subscription = client.unauthorizedEvents.listen(
+      (_) => unauthorizedEvents += 1,
+    );
+
+    await expectLater(
+      client.get<void>('/protected', decode: (_) {}),
+      throwsA(
+        isA<ApiException>()
+            .having(
+              (error) => error.businessCode,
+              'businessCode',
+              403,
+            )
+            .having(
+              (error) => error.invalidatesSession,
+              'invalidatesSession',
+              isTrue,
+            ),
+      ),
+    );
+
+    expect(unauthorizedEvents, 1);
+    await subscription.cancel();
+    client.dispose();
+  });
+
+  test('disabled account HTTP response emits an unauthorized event', () async {
+    final client = _clientFor(
+      statusCode: 403,
+      body: {'code': 403, 'message': '账号已停用', 'data': null},
+    );
+    var unauthorizedEvents = 0;
+    final subscription = client.unauthorizedEvents.listen(
+      (_) => unauthorizedEvents += 1,
+    );
+
+    await expectLater(
+      client.get<void>('/protected', decode: (_) {}),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.invalidatesSession,
+          'invalidatesSession',
+          isTrue,
+        ),
+      ),
+    );
+
+    expect(unauthorizedEvents, 1);
+    await subscription.cancel();
+    client.dispose();
+  });
+
+  test('ordinary forbidden response does not invalidate the session', () async {
+    final client = _clientFor(
+      statusCode: 200,
+      body: {'code': 403, 'message': '无权访问该兔舍', 'data': null},
+    );
+    var unauthorizedEvents = 0;
+    final subscription = client.unauthorizedEvents.listen(
+      (_) => unauthorizedEvents += 1,
+    );
+
+    await expectLater(
+      client.get<void>('/protected', decode: (_) {}),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.invalidatesSession,
+          'invalidatesSession',
+          isFalse,
+        ),
+      ),
+    );
+
+    expect(unauthorizedEvents, 0);
+    await subscription.cancel();
+    client.dispose();
+  });
+
   test('GET forwards cancellation to Dio', () async {
     final client = _clientFor(
       statusCode: 200,

@@ -1,13 +1,15 @@
 import {
-  Building2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
   UserCogIcon,
+  UsersIcon,
+  WarehouseIcon,
   XIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { BrandLogo } from '@/components/brand-logo'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { AdminSession } from '@/types/api'
@@ -16,10 +18,11 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/dashboard', label: '运营概览', icon: LayoutDashboardIcon },
-  { to: '/merchants', label: '商户管理', icon: Building2Icon },
+  { to: '/farms', label: '兔场管理', icon: WarehouseIcon },
+  { to: '/users', label: '业务用户', icon: UsersIcon },
   {
     to: '/accounts',
-    label: '账号管理',
+    label: '管理员账号',
     icon: UserCogIcon,
     permission: 'platform:accounts:list',
   },
@@ -42,10 +45,8 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-card lg:flex lg:flex-col">
-        <div className="flex h-16 items-center gap-3 px-5">
-          <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <LayoutDashboardIcon aria-hidden="true" />
-          </div>
+        <div className="flex h-16 items-center gap-2 px-4">
+          <BrandLogo className="h-10 w-12" />
           <Link to="/dashboard" className="flex flex-col">
             <span className="text-sm font-semibold">Rabbit SaaS</span>
             <span className="text-xs text-muted-foreground">平台管理端</span>
@@ -93,8 +94,9 @@ export function AppShell({
             >
               {mobileMenuOpen ? <XIcon aria-hidden="true" /> : <MenuIcon aria-hidden="true" />}
             </Button>
-            <Link to="/dashboard" className="truncate text-sm font-semibold">
-              Rabbit SaaS
+            <Link to="/dashboard" className="flex min-w-0 items-center gap-1.5">
+              <BrandLogo className="h-8 w-9" />
+              <span className="truncate text-sm font-semibold">Rabbit SaaS</span>
             </Link>
           </div>
           <Button variant="outline" size="sm" onClick={onLogout}>

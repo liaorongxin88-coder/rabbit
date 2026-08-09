@@ -96,11 +96,46 @@ class SmsVerificationServiceTest {
         assertEquals("FAILED", mapper.item.getStatus());
     }
 
+    @Test
+    void disabledSmsDoesNotRequireASecretAndFailsClosed() {
+        FakeMapper mapper = new FakeMapper();
+        SmsVerificationService service = new SmsVerificationService(
+                mapper,
+                new RecordingSender(),
+                new PhoneIdentityService("test-phone-secret-with-enough-entropy"),
+                false,
+                "",
+                6,
+                300,
+                60,
+                5,
+                5,
+                10,
+                20,
+                CLOCK,
+                () -> "123456"
+        );
+
+        BizException sendError = assertThrows(
+                BizException.class,
+                () -> service.sendCode("13800138000", "127.0.0.1")
+        );
+        BizException loginError = assertThrows(
+                BizException.class,
+                () -> service.verifyCode("13800138000", "123456")
+        );
+
+        assertEquals(503, sendError.getCode());
+        assertEquals(503, loginError.getCode());
+        assertEquals(0, mapper.recentPhoneCount);
+    }
+
     private SmsVerificationService service(FakeMapper mapper, SmsSender sender) {
         return new SmsVerificationService(
                 mapper,
                 sender,
                 new PhoneIdentityService("test-phone-secret-with-enough-entropy"),
+                true,
                 "test-sms-secret-with-enough-entropy",
                 6,
                 300,

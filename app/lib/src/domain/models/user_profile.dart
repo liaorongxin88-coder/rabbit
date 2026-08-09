@@ -3,6 +3,9 @@ class UserProfile {
     required this.userId,
     required this.userName,
     required this.openidBound,
+    this.phoneBound = false,
+    this.maskedPhone = '',
+    this.hasPassword = true,
     this.permissions = const <String>[],
     this.createTime,
     this.updateTime,
@@ -11,6 +14,9 @@ class UserProfile {
   final int userId;
   final String userName;
   final bool openidBound;
+  final bool phoneBound;
+  final String maskedPhone;
+  final bool hasPassword;
   final List<String> permissions;
   final DateTime? createTime;
   final DateTime? updateTime;
@@ -20,6 +26,10 @@ class UserProfile {
       userId: _intValue(json['userId']),
       userName: json['userName'] as String? ?? '',
       openidBound: json['openidBound'] == true,
+      phoneBound: json['phoneBound'] == true,
+      maskedPhone: json['maskedPhone'] as String? ?? '',
+      hasPassword:
+          json['hasPassword'] is bool ? json['hasPassword'] == true : true,
       permissions: (json['permissions'] as List<dynamic>? ?? const <dynamic>[])
           .whereType<String>()
           .toList(growable: false),

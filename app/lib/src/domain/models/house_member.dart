@@ -15,7 +15,7 @@ class HouseMember {
 
   String get roleLabel {
     if (isAdmin) {
-      return '管理员';
+      return '所有者';
     }
     if (perms == 'view') {
       return '游客';
@@ -80,22 +80,5 @@ class HouseMember {
       return DateTime.tryParse(value);
     }
     return null;
-  }
-}
-
-class UserSearchItem {
-  const UserSearchItem({
-    required this.userId,
-    required this.userName,
-  });
-
-  final int userId;
-  final String userName;
-
-  static UserSearchItem fromJson(Map<String, dynamic> json) {
-    return UserSearchItem(
-      userId: HouseMember._intValue(json['userId']),
-      userName: json['userName'] as String? ?? '',
-    );
   }
 }

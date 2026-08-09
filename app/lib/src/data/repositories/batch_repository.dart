@@ -5,26 +5,9 @@ import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
-import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 
 final batchRepositoryProvider = Provider<BatchRepository>((ref) {
   return BatchRepository(ref.watch(apiClientProvider));
-});
-
-final currentHouseBatchesProvider = FutureProvider<List<Batch>>((ref) async {
-  final houseId = ref.watch(authControllerProvider).valueOrNull?.houseId ?? 0;
-  if (houseId <= 0) {
-    return const <Batch>[];
-  }
-  return ref.watch(batchRepositoryProvider).listBatches(houseId);
-});
-
-final houseBatchesProvider =
-    FutureProvider.family<List<Batch>, int>((ref, houseId) async {
-  if (houseId <= 0) {
-    return const <Batch>[];
-  }
-  return ref.watch(batchRepositoryProvider).listBatches(houseId);
 });
 
 class BatchRepository {

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
-import 'package:rabbit_flutter/src/data/services/nfc_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_pending_sync_controller.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
 
 class NfcWriteSetupScreen extends ConsumerStatefulWidget {
   const NfcWriteSetupScreen({super.key, required this.houseId});

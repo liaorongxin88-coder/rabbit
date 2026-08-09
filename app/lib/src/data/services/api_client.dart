@@ -7,15 +7,24 @@ import 'package:rabbit_flutter/src/config/app_config.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 
+final apiBaseUrlProvider = Provider<String>((_) => AppConfig.defaultBaseUrl);
+
 final apiClientProvider = Provider<ApiClient>((ref) {
   final sessionStore = ref.watch(sessionStoreProvider);
-  final client = ApiClient(sessionStore);
+  final client = ApiClient(
+    sessionStore,
+    baseUrl: ref.watch(apiBaseUrlProvider),
+  );
   ref.onDispose(client.dispose);
   return client;
 });
 
 class ApiClient {
-  ApiClient(this._sessionStore, {Dio? dio}) : _dio = dio ?? _buildDio();
+  ApiClient(
+    this._sessionStore, {
+    Dio? dio,
+    String? baseUrl,
+  }) : _dio = dio ?? _buildDio(baseUrl ?? AppConfig.defaultBaseUrl);
 
   final SessionStore _sessionStore;
   final Dio _dio;
@@ -23,10 +32,20 @@ class ApiClient {
 
   Stream<void> get unauthorizedEvents => _unauthorizedController.stream;
 
-  static Dio _buildDio() {
+  bool get usesSecureTransport => isSecureBaseUrl(_dio.options.baseUrl);
+
+  static bool isSecureBaseUrl(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl.trim());
+    return uri != null &&
+        uri.scheme.toLowerCase() == 'https' &&
+        uri.hasAuthority &&
+        uri.host.isNotEmpty;
+  }
+
+  static Dio _buildDio(String baseUrl) {
     return Dio(
       BaseOptions(
-        baseUrl: AppConfig.defaultBaseUrl,
+        baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),
         sendTimeout: const Duration(seconds: 30),
@@ -120,21 +139,26 @@ class ApiClient {
 
       final code = _intValue(body['code']);
       if (code != null && code != 0) {
-        if (code == 401) {
+        final exception = ApiException(
+          _messageFrom(body),
+          businessCode: code,
+        );
+        if (exception.invalidatesSession) {
           _unauthorizedController.add(null);
         }
-        throw ApiException(_messageFrom(body), businessCode: code);
+        throw exception;
       }
 
       return decode(body['data']);
     } on DioException catch (error) {
-      if (error.response?.statusCode == 401) {
-        _unauthorizedController.add(null);
-      }
-      throw ApiException(
+      final exception = ApiException(
         _dioMessage(error),
         statusCode: error.response?.statusCode,
       );
+      if (exception.invalidatesSession) {
+        _unauthorizedController.add(null);
+      }
+      throw exception;
     }
   }
 

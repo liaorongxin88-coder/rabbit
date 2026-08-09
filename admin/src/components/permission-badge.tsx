@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
-import { houseRoleLabels, merchantRoleLabels } from '@/lib/permission-labels'
-import type { HousePermission, MerchantRole } from '@/types/api'
+import { houseRoleLabels } from '@/lib/permission-labels'
+import type { HousePermission, HouseRole } from '@/types/api'
 
 export function HousePermissionBadge({ permission }: { permission: HousePermission | null }) {
   return (
@@ -10,6 +10,6 @@ export function HousePermissionBadge({ permission }: { permission: HousePermissi
   )
 }
 
-export function MerchantRoleBadge({ role }: { role: MerchantRole }) {
-  return <Badge variant={role === 'OWNER' ? 'default' : 'secondary'}>{merchantRoleLabels[role]}</Badge>
+export function HouseRoleBadge({ role }: { role: HouseRole }) {
+  return <Badge variant={role === 'OWNER' ? 'default' : 'secondary'}>{houseRoleLabels[role]}</Badge>
 }

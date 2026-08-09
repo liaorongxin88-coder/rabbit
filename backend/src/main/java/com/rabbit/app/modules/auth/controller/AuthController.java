@@ -5,6 +5,7 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
 import com.rabbit.app.modules.auth.dto.LoginRequest;
 import com.rabbit.app.modules.auth.dto.PhoneLoginRequest;
+import com.rabbit.app.modules.auth.dto.PhoneOneTapLoginRequest;
 import com.rabbit.app.modules.auth.dto.RegisterRequest;
 import com.rabbit.app.modules.auth.dto.SendSmsCodeRequest;
 import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
@@ -14,6 +15,7 @@ import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.dto.WechatLoginRequest;
 import com.rabbit.app.modules.auth.service.AuthService;
 import com.rabbit.app.modules.auth.service.PhoneAuthService;
+import com.rabbit.app.modules.auth.service.PhoneOneTapLoginService;
 import com.rabbit.app.modules.auth.service.SmsVerificationService;
 import com.rabbit.app.modules.auth.service.WechatService;
 import com.rabbit.app.security.AuthContext;
@@ -37,17 +39,20 @@ public class AuthController {
     private final WechatService wechatService;
     private final SmsVerificationService smsVerificationService;
     private final PhoneAuthService phoneAuthService;
+    private final PhoneOneTapLoginService phoneOneTapLoginService;
 
     public AuthController(
             AuthService authService,
             WechatService wechatService,
             SmsVerificationService smsVerificationService,
-            PhoneAuthService phoneAuthService
+            PhoneAuthService phoneAuthService,
+            PhoneOneTapLoginService phoneOneTapLoginService
     ) {
         this.authService = authService;
         this.wechatService = wechatService;
         this.smsVerificationService = smsVerificationService;
         this.phoneAuthService = phoneAuthService;
+        this.phoneOneTapLoginService = phoneOneTapLoginService;
     }
 
     @PostMapping("/register")
@@ -71,6 +76,19 @@ public class AuthController {
     @PostMapping("/sms/login")
     public ApiResponse<AuthTokenResponse> phoneLogin(@Valid @RequestBody PhoneLoginRequest req) {
         return ApiResponse.ok(phoneAuthService.loginOrRegister(req.getPhone(), req.getCode()));
+    }
+
+    @PostMapping("/phone-one-tap-login")
+    public ApiResponse<AuthTokenResponse> phoneOneTapLogin(
+            @Valid @RequestBody PhoneOneTapLoginRequest req,
+            HttpServletRequest request
+    ) {
+        return ApiResponse.ok(phoneOneTapLoginService.login(
+                req.getProvider(),
+                req.getAccessToken(),
+                req.getRequestId(),
+                request.getRemoteAddr()
+        ));
     }
 
     @PostMapping("/wechat-login")

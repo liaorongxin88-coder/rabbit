@@ -1,5 +1,5 @@
 import { deleteJson, getJson, postJson, putJson } from '@/lib/request'
-import type { AdminAccount, AdminRole, MerchantAccount, PageResult } from '@/types/api'
+import type { AdminAccount, AdminRole, PageResult } from '@/types/api'
 
 export interface AdminAccountListParams {
   page: number
@@ -12,18 +12,6 @@ export interface AdminAccountPayload {
   password?: string
   role: AdminRole
   enabled: boolean
-}
-
-export interface MerchantAccountListParams {
-  page: number
-  pageSize: number
-  keyword?: string
-}
-
-export interface MerchantAccountPayload {
-  userName: string
-  password?: string
-  confirmPassword?: string
 }
 
 export function listAdminAccounts(params: AdminAccountListParams) {
@@ -44,16 +32,4 @@ export function updateAdminAccount(accountId: number, payload: AdminAccountPaylo
 
 export function deleteAdminAccount(accountId: number) {
   return deleteJson<void>(`/api/admin/accounts/${accountId}`).send()
-}
-
-export function listMerchantAccounts(params: MerchantAccountListParams) {
-  return getJson<PageResult<MerchantAccount>>('/api/admin/accounts/merchant-accounts', {
-    page: params.page,
-    pageSize: params.pageSize,
-    keyword: params.keyword || undefined,
-  }).send()
-}
-
-export function updateMerchantAccount(userId: number, payload: MerchantAccountPayload) {
-  return putJson<MerchantAccount>(`/api/admin/accounts/merchant-accounts/${userId}`, payload).send()
 }

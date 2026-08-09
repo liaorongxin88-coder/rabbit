@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/outbound_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/outbound_local_store.dart';
+import 'package:rabbit_flutter/src/data/services/storage/outbound_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/outbound.dart';
 import 'package:rabbit_flutter/src/ui/outbound/view_models/outbound_controller.dart';
 

@@ -1,7 +1,6 @@
 USE rabbit_app;
 
 SET @demo_user_id = IFNULL((SELECT user_id FROM sys_user WHERE user_name = 'demo' ORDER BY user_id DESC LIMIT 1), 1);
-SET @demo_merchant_id = (SELECT merchant_id FROM sys_user WHERE user_id = @demo_user_id);
 
 SET @old_house_id = (SELECT id FROM rabbit_houses WHERE name = '演示兔场A' ORDER BY id DESC LIMIT 1);
 
@@ -18,16 +17,17 @@ DELETE FROM breeding_performance WHERE house_id = @old_house_id;
 DELETE FROM rabbits WHERE house_id = @old_house_id;
 DELETE FROM cages WHERE house_id = @old_house_id;
 DELETE FROM global_setting WHERE house_id = @old_house_id OR user_id = @demo_user_id;
+DELETE FROM house_invitations WHERE house_id = @old_house_id;
 DELETE FROM house_users WHERE house_id = @old_house_id;
 DELETE FROM rabbit_houses WHERE id = @old_house_id;
 
-INSERT INTO rabbit_houses(merchant_id, owner_user_id, name, layout_rows, layout_cols, layout_layers, remark, create_by, update_by)
-VALUES (@demo_merchant_id, @demo_user_id, '演示兔场A', 4, 5, 1, 'demo 数据', 'system', 'system');
+INSERT INTO rabbit_houses(status, name, layout_rows, layout_cols, layout_layers, remark, create_by, update_by)
+VALUES ('ENABLED', '演示兔场A', 4, 5, 1, 'demo 数据', 'system', 'system');
 
 SET @house_id = LAST_INSERT_ID();
 
-INSERT INTO house_users(house_id, user_id, role, perms, is_admin)
-VALUES (@house_id, @demo_user_id, 'OWNER', 'control', TRUE);
+INSERT INTO house_users(house_id, user_id, role, status, perms, is_admin)
+VALUES (@house_id, @demo_user_id, 'OWNER', 'ENABLED', 'control', TRUE);
 
 INSERT INTO global_setting(house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days, remark, create_by, update_by)
 VALUES (NULL, @demo_user_id, 7, 10, 3, 25, 10, 90, 120, 'demo 设置', 'system', 'system');
@@ -44,11 +44,11 @@ SET @cage2 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number='A
 SET @cage3 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number='A-03' LIMIT 1);
 SET @cage4 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number='A-04' LIMIT 1);
 
-INSERT INTO rabbits(house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active, remark, create_by, update_by)
+INSERT INTO rabbits(house_id, cage_id, mother_id, type, gender, breed, arrival_method, arrival_date, weight, is_active, create_by, update_by)
 VALUES
-  (@house_id, @cage1, NULL, '0', '1', '新西兰', '1', NOW() - INTERVAL 200 DAY, 4.2, TRUE, NULL, 'system', 'system'),
-  (@house_id, @cage2, NULL, '0', '0', '新西兰', '1', NOW() - INTERVAL 180 DAY, 3.9, TRUE, NULL, 'system', 'system'),
-  (@house_id, @cage3, NULL, '2', '0', '加利福尼亚', '1', NOW() - INTERVAL 60 DAY, 2.8, TRUE, NULL, 'system', 'system');
+  (@house_id, @cage1, NULL, '0', '1', '新西兰', '1', NOW() - INTERVAL 200 DAY, 4.2, TRUE, 'system', 'system'),
+  (@house_id, @cage2, NULL, '0', '0', '新西兰', '1', NOW() - INTERVAL 180 DAY, 3.9, TRUE, 'system', 'system'),
+  (@house_id, @cage3, NULL, '2', '0', '加利福尼亚', '1', NOW() - INTERVAL 60 DAY, 2.8, TRUE, 'system', 'system');
 
 SET @rabbit_male = (SELECT id FROM rabbits WHERE house_id=@house_id AND gender='1' ORDER BY id ASC LIMIT 1);
 SET @rabbit_female = (SELECT id FROM rabbits WHERE house_id=@house_id AND gender='0' AND type='0' ORDER BY id ASC LIMIT 1);

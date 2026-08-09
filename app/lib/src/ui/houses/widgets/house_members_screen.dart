@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
@@ -8,6 +9,7 @@ import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 
 class HouseMembersScreen extends ConsumerStatefulWidget {
   const HouseMembersScreen({
@@ -24,15 +26,14 @@ class HouseMembersScreen extends ConsumerStatefulWidget {
 }
 
 class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
-  final _searchController = TextEditingController();
-  var _searching = false;
-  var _adding = false;
-  List<UserSearchItem> _candidates = const [];
-  String? _searchError;
+  final _phoneController = TextEditingController();
+  var _inviteRole = 'STAFF';
+  var _inviting = false;
+  String? _inviteError;
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -51,7 +52,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
             return const EmptyState(
               icon: Icons.lock_outline,
               title: '无管理权限',
-              message: '仅兔舍管理员可以查看和管理成员。',
+              message: '仅兔舍所有者可以查看和管理成员。',
             );
           }
           return members.when(
@@ -86,68 +87,75 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('添加成员', style: Theme.of(context).textTheme.titleMedium),
+              Text('邀请成员', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Text(
-                '搜索同商户下账号，添加为生产人员、设备管理员或游客。',
+                '通过对方的手机号邀请加入当前兔舍。',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: '输入用户名搜索',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchController.text.trim().isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _candidates = const [];
-                              _searchError = null;
-                            });
-                          },
-                        ),
+                key: const ValueKey('house-invitation-phone-field'),
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                autofillHints: const [AutofillHints.telephoneNumber],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(11),
+                ],
+                decoration: const InputDecoration(
+                  labelText: '手机号',
+                  hintText: '输入11位手机号',
+                  prefixIcon: Icon(Icons.phone_android_outlined),
                 ),
-                onSubmitted: (_) => _searchUsers(),
+                onChanged: (_) {
+                  if (_inviteError != null) {
+                    setState(() => _inviteError = null);
+                  }
+                },
+                onSubmitted: (_) => _inviteMember(),
               ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('house-invitation-role-field'),
+                value: _inviteRole,
+                decoration: const InputDecoration(
+                  labelText: '邀请角色',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'STAFF', child: Text('生产人员')),
+                  DropdownMenuItem(value: 'MANAGER', child: Text('设备管理员')),
+                  DropdownMenuItem(value: 'VIEWER', child: Text('游客（只读）')),
+                ],
+                onChanged: _inviting
+                    ? null
+                    : (value) => setState(
+                          () => _inviteRole = value ?? _inviteRole,
+                        ),
+              ),
+              if (_inviteError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _inviteError!,
+                  style: TextStyle(color: palette.danger),
+                ),
+              ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _searching ? null : _searchUsers,
-                  icon: _searching
+                  key: const ValueKey('submit-house-invitation'),
+                  onPressed: _inviting ? null : _inviteMember,
+                  icon: _inviting
                       ? const SizedBox.square(
                           dimension: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.person_search_outlined),
-                  label: const Text('查找账号'),
+                      : const Icon(Icons.person_add_alt_1_outlined),
+                  label: const Text('发送邀请'),
                 ),
               ),
-              if (_searchError != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _searchError!,
-                  style: TextStyle(color: palette.danger),
-                ),
-              ],
-              if (_candidates.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                for (final candidate in _candidates)
-                  _CandidateTile(
-                    userName: candidate.userName,
-                    adding: _adding,
-                    onAddOrdinary: () =>
-                        _addMember(candidate.userName, perms: 'edit'),
-                    onAddControl: () =>
-                        _addMember(candidate.userName, perms: 'control'),
-                    onAddGuest: () =>
-                        _addMember(candidate.userName, perms: 'view'),
-                  ),
-              ],
             ],
           ),
         ),
@@ -185,63 +193,27 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
     );
   }
 
-  Future<void> _searchUsers() async {
-    final keyword = _searchController.text.trim();
-    if (keyword.isEmpty) {
-      setState(() => _searchError = '请输入要搜索的用户名');
+  Future<void> _inviteMember() async {
+    final phone = _phoneController.text.trim();
+    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
+      setState(() => _inviteError = '请输入有效手机号');
       return;
     }
     setState(() {
-      _searching = true;
-      _searchError = null;
+      _inviting = true;
+      _inviteError = null;
     });
     try {
-      final items =
-          await ref.read(houseRepositoryProvider).searchMemberCandidates(
-                houseId: widget.houseId,
-                keyword: keyword,
-              );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _candidates = items;
-        if (items.isEmpty) {
-          _searchError = '未找到可添加的同商户账号';
-        }
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _candidates = const [];
-        _searchError = error is ApiException ? error.message : error.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _searching = false);
-      }
-    }
-  }
-
-  Future<void> _addMember(String userName, {required String perms}) async {
-    setState(() => _adding = true);
-    try {
-      await ref.read(houseRepositoryProvider).addMember(
+      await ref.read(houseRepositoryProvider).inviteMember(
             houseId: widget.houseId,
-            userName: userName,
-            perms: perms,
+            phone: phone,
+            role: _inviteRole,
           );
       ref.invalidate(houseMembersProvider(widget.houseId));
       if (mounted) {
-        setState(() {
-          _candidates = const [];
-          _searchError = null;
-        });
-        _searchController.clear();
+        _phoneController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已添加 $userName')),
+          const SnackBar(content: Text('邀请已提交')),
         );
       }
     } catch (error) {
@@ -254,7 +226,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _adding = false);
+        setState(() => _inviting = false);
       }
     }
   }
@@ -263,51 +235,54 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text(member.userName),
-                subtitle: Text('${member.roleLabel} · ${member.permLabel}'),
-              ),
-              if (!member.isAdmin)
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 ListTile(
-                  leading: const Icon(Icons.edit_outlined),
-                  title: const Text('设为生产人员'),
-                  onTap: () => Navigator.pop(context, 'ordinary'),
+                  title: Text(member.userName),
+                  subtitle: Text('${member.roleLabel} · ${member.permLabel}'),
                 ),
-              if (!member.isAdmin)
+                if (!member.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined),
+                    title: const Text('设为生产人员'),
+                    onTap: () => Navigator.pop(context, 'ordinary'),
+                  ),
+                if (!member.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.settings_remote_outlined),
+                    title: const Text('设为设备管理员'),
+                    onTap: () => Navigator.pop(context, 'control'),
+                  ),
+                if (!member.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.visibility_outlined),
+                    title: const Text('设为游客（只读）'),
+                    onTap: () => Navigator.pop(context, 'guest'),
+                  ),
+                if (!member.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.admin_panel_settings_outlined),
+                    title: const Text('设为所有者'),
+                    onTap: () => Navigator.pop(context, 'owner'),
+                  ),
                 ListTile(
-                  leading: const Icon(Icons.settings_remote_outlined),
-                  title: const Text('设为设备管理员'),
-                  onTap: () => Navigator.pop(context, 'control'),
+                  leading: Icon(
+                    Icons.person_remove_outlined,
+                    color: AppPalette.of(context).danger,
+                  ),
+                  title: Text(
+                    member.isAdmin ? '移除所有者' : '移除成员',
+                    style: TextStyle(color: AppPalette.of(context).danger),
+                  ),
+                  onTap: () => Navigator.pop(context, 'remove'),
                 ),
-              if (!member.isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.visibility_outlined),
-                  title: const Text('设为游客（只读）'),
-                  onTap: () => Navigator.pop(context, 'guest'),
-                ),
-              if (!member.isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.admin_panel_settings_outlined),
-                  title: const Text('转让管理员'),
-                  onTap: () => Navigator.pop(context, 'transfer'),
-                ),
-              ListTile(
-                leading: Icon(Icons.person_remove_outlined,
-                    color: AppPalette.of(context).danger),
-                title: Text(
-                  member.isAdmin ? '移除管理员（需先转让）' : '移除成员',
-                  style: TextStyle(color: AppPalette.of(context).danger),
-                ),
-                onTap: member.isAdmin
-                    ? null
-                    : () => Navigator.pop(context, 'remove'),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -322,8 +297,8 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
         await _updateMember(member, perms: 'control', isAdmin: false);
       case 'guest':
         await _updateMember(member, perms: 'view', isAdmin: false);
-      case 'transfer':
-        await _confirmTransferAdmin(member);
+      case 'owner':
+        await _confirmAddOwner(member);
       case 'remove':
         await _confirmRemove(member);
     }
@@ -359,12 +334,15 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
     }
   }
 
-  Future<void> _confirmTransferAdmin(HouseMember member) async {
+  Future<void> _confirmAddOwner(HouseMember member) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('转让管理员'),
-        content: Text('确认将兔舍管理员转让给 ${member.userName}？转让后您将变为普通成员。'),
+        title: const Text('新增共同所有者'),
+        content: Text(
+          '确认将 ${member.userName} 设为兔舍所有者？'
+          '设置后，您和 ${member.userName} 都将保留所有者权限。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -372,7 +350,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认转让'),
+            child: const Text('设为所有者'),
           ),
         ],
       ),
@@ -384,11 +362,16 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
   }
 
   Future<void> _confirmRemove(HouseMember member) async {
+    final isOwner = member.isAdmin;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('移除成员'),
-        content: Text('确认将 ${member.userName} 移出兔舍？'),
+        title: Text(isOwner ? '移除所有者' : '移除成员'),
+        content: Text(
+          isOwner
+              ? '确认将所有者 ${member.userName} 移出兔舍？'
+              : '确认将 ${member.userName} 移出兔舍？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -424,52 +407,6 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
         );
       }
     }
-  }
-}
-
-class _CandidateTile extends StatelessWidget {
-  const _CandidateTile({
-    required this.userName,
-    required this.adding,
-    required this.onAddOrdinary,
-    required this.onAddControl,
-    required this.onAddGuest,
-  });
-
-  final String userName;
-  final bool adding;
-  final VoidCallback onAddOrdinary;
-  final VoidCallback onAddControl;
-  final VoidCallback onAddGuest;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        spacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 120,
-            child:
-                Text(userName, style: Theme.of(context).textTheme.titleMedium),
-          ),
-          TextButton(
-            onPressed: adding ? null : onAddGuest,
-            child: const Text('游客'),
-          ),
-          OutlinedButton(
-            onPressed: adding ? null : onAddOrdinary,
-            child: const Text('生产'),
-          ),
-          FilledButton(
-            onPressed: adding ? null : onAddControl,
-            child: const Text('设备'),
-          ),
-        ],
-      ),
-    );
   }
 }
 

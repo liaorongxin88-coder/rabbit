@@ -9,11 +9,6 @@ final nfcRepositoryProvider = Provider<NfcRepository>((ref) {
   return NfcRepository(ref.watch(apiClientProvider));
 });
 
-final nfcCageWriteQueueProvider =
-    FutureProvider.family<List<NfcCageQueueItem>, int>((ref, houseId) {
-  return ref.watch(nfcRepositoryProvider).listWriteQueue(houseId);
-});
-
 abstract interface class NfcBindingGateway {
   Future<NfcCageBinding> bind({
     required int houseId,

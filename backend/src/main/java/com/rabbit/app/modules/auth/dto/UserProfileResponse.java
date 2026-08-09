@@ -10,6 +10,7 @@ public class UserProfileResponse {
     private Boolean openidBound;
     private Boolean phoneBound;
     private String maskedPhone;
+    private Boolean hasPassword;
     private Date createTime;
     private Date updateTime;
     private List<String> permissions = List.of();
@@ -23,6 +24,7 @@ public class UserProfileResponse {
         this.openidBound = user.getOpenid() != null && !user.getOpenid().trim().isEmpty();
         this.phoneBound = user.getPhoneBoundTime() != null;
         this.maskedPhone = user.getPhoneMasked();
+        this.hasPassword = Boolean.TRUE.equals(user.getPasswordInitialized());
         this.createTime = user.getCreateTime();
         this.updateTime = user.getUpdateTime();
     }
@@ -65,6 +67,14 @@ public class UserProfileResponse {
 
     public void setMaskedPhone(String maskedPhone) {
         this.maskedPhone = maskedPhone;
+    }
+
+    public Boolean getHasPassword() {
+        return hasPassword;
+    }
+
+    public void setHasPassword(Boolean hasPassword) {
+        this.hasPassword = hasPassword;
     }
 
     public Date getCreateTime() {

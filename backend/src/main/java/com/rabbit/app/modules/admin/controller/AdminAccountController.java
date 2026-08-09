@@ -3,11 +3,8 @@ package com.rabbit.app.modules.admin.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.modules.admin.dto.AdminAccountItem;
 import com.rabbit.app.modules.admin.dto.CreateAdminAccountRequest;
-import com.rabbit.app.modules.admin.dto.MerchantAccountItem;
 import com.rabbit.app.modules.admin.dto.PageResult;
 import com.rabbit.app.modules.admin.dto.UpdateAdminAccountRequest;
-import com.rabbit.app.modules.admin.dto.UpdateMerchantAccountRequest;
-import com.rabbit.app.modules.admin.service.MerchantAccountAdminService;
 import com.rabbit.app.modules.admin.service.PlatformAdminAccountService;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.RequiresPermission;
@@ -28,14 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/accounts")
 public class AdminAccountController {
     private final PlatformAdminAccountService platformAdminAccountService;
-    private final MerchantAccountAdminService merchantAccountAdminService;
 
-    public AdminAccountController(
-            PlatformAdminAccountService platformAdminAccountService,
-            MerchantAccountAdminService merchantAccountAdminService
-    ) {
+    public AdminAccountController(PlatformAdminAccountService platformAdminAccountService) {
         this.platformAdminAccountService = platformAdminAccountService;
-        this.merchantAccountAdminService = merchantAccountAdminService;
     }
 
     @GetMapping
@@ -44,21 +36,6 @@ public class AdminAccountController {
                                                           @RequestParam(value = "pageSize", required = false) Integer pageSize,
                                                           @RequestParam(value = "keyword", required = false) String keyword) {
         return ApiResponse.ok(platformAdminAccountService.list(keyword, page, pageSize));
-    }
-
-    @GetMapping("/merchant-accounts")
-    @RequiresPermission(PermissionCode.PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_LIST)
-    public ApiResponse<PageResult<MerchantAccountItem>> listMerchantAccounts(@RequestParam(value = "page", required = false) Integer page,
-                                                                             @RequestParam(value = "pageSize", required = false) Integer pageSize,
-                                                                             @RequestParam(value = "keyword", required = false) String keyword) {
-        return ApiResponse.ok(merchantAccountAdminService.list(keyword, page, pageSize));
-    }
-
-    @PutMapping("/merchant-accounts/{userId}")
-    @RequiresPermission(PermissionCode.PLATFORM_GLOBAL_MERCHANT_ACCOUNTS_EDIT)
-    public ApiResponse<MerchantAccountItem> updateMerchantAccount(@PathVariable("userId") Long userId,
-                                                                  @Valid @RequestBody UpdateMerchantAccountRequest req) {
-        return ApiResponse.ok(merchantAccountAdminService.update(userId, req.getUserName(), req.getPassword(), req.getConfirmPassword()));
     }
 
     @GetMapping("/{accountId}")

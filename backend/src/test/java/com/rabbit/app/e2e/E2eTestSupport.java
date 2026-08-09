@@ -53,51 +53,6 @@ public abstract class E2eTestSupport {
         return new UserSession(userName, password, token, userId);
     }
 
-    protected UserSession createMerchantAccount(UserSession existingAccount, String prefix) {
-        String adminToken = platformAdminToken();
-        JsonNode accountPage = api.getOk(
-                "/api/admin/accounts/merchant-accounts?page=1&pageSize=20&keyword=" + existingAccount.userName,
-                adminToken,
-                null
-        );
-        Long merchantId = null;
-        for (JsonNode account : accountPage.get("items")) {
-            if (existingAccount.userName.equals(account.get("userName").asText())) {
-                merchantId = account.get("merchantId").asLong();
-                break;
-            }
-        }
-        if (merchantId == null) {
-            throw new AssertionError("merchant account not found: " + existingAccount.userName);
-        }
-
-        String userName = prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        String password = "123456";
-        api.postOk("/api/admin/merchants/" + merchantId + "/accounts", adminToken, null, obj(
-                "userName", userName,
-                "password", password,
-                "confirmPassword", password
-        ));
-        JsonNode auth = api.postOk("/api/auth/login", null, null, obj(
-                "userName", userName,
-                "password", password
-        ));
-        return new UserSession(
-                userName,
-                password,
-                auth.get("token").asText(),
-                auth.get("userId").asLong()
-        );
-    }
-
-    private String platformAdminToken() {
-        JsonNode auth = api.postOk("/api/admin/auth/login", null, null, obj(
-                "userName", "admin",
-                "password", "admin123456"
-        ));
-        return auth.get("token").asText();
-    }
-
     protected long createHouse(UserSession user, String name, int rows, int cols, int layers) {
         JsonNode house = api.postOk("/api/houses", user.token, null, obj(
                 "name", name,

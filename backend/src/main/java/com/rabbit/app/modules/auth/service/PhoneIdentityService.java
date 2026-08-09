@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.auth.service;
 
+import com.rabbit.app.config.ApplicationSecretValidator;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 import javax.crypto.Mac;
@@ -12,11 +13,9 @@ public class PhoneIdentityService {
     private final String hashSecret;
 
     public PhoneIdentityService(
-            @Value("${app.auth.phone-hash-secret:rabbit-phone-dev-secret-change-me}") String hashSecret
+            @Value("${app.auth.phone-hash-secret:}") String hashSecret
     ) {
-        if (hashSecret == null || hashSecret.length() < 16) {
-            throw new IllegalArgumentException("app.auth.phone-hash-secret 至少需要16个字符");
-        }
+        ApplicationSecretValidator.requireConfigured("APP_PHONE_HASH_SECRET", hashSecret);
         this.hashSecret = hashSecret;
     }
 

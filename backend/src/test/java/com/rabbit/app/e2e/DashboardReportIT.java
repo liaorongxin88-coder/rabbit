@@ -45,7 +45,7 @@ public class DashboardReportIT extends E2eTestSupport {
                 null,
                 null,
                 403,
-                "无商户权限"
+                "无兔场权限"
         );
     }
 }

@@ -95,11 +95,11 @@ public class AuthHousePermissionIT extends E2eTestSupport {
     @Test
     void housePermissionsProgressFromNoAccessToViewEditAndControl() {
         UserSession owner = register("owner");
-        UserSession member = createMerchantAccount(owner, "member");
+        UserSession member = register("member");
         long houseId = createHouse(owner, "perm_house", 1, 4, 1);
         List<Long> cages = cageIds(owner, houseId);
 
-        api.expectError("/api/cages", HttpMethod.GET, member.token, houseId, null, 403, "无兔舍权限");
+        api.expectError("/api/cages", HttpMethod.GET, member.token, houseId, null, 403, "无兔场权限");
         api.expectError("/api/cages", HttpMethod.GET, owner.token, null, null, 400, "缺少X-House-Id");
 
         api.postOk("/api/house-members", owner.token, houseId, obj(
@@ -124,14 +124,14 @@ public class AuthHousePermissionIT extends E2eTestSupport {
         ));
         long rabbitId = createRabbit(member, houseId, cages.get(0), "0", "0", "member_can_edit");
         Assertions.assertTrue(rabbitId > 0);
-        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅管理员");
+        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅兔场所有者可操作");
 
         api.putOk("/api/house-members/" + member.userId, owner.token, houseId, obj(
                 "perms", "control",
                 "isAdmin", false,
                 "requestId", requestId("member_control")
         ));
-        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅管理员");
+        api.expectError("/api/house-members", HttpMethod.GET, member.token, houseId, null, 403, "仅兔场所有者可操作");
         JsonNode hardware = api.getOk("/api/hardware/status", member.token, houseId);
         Assertions.assertFalse(hardware.get("enabled").asBoolean());
     }
@@ -139,7 +139,7 @@ public class AuthHousePermissionIT extends E2eTestSupport {
     @Test
     void houseMemberLeaveAndControlMember() {
         UserSession owner = register("owner_leave");
-        UserSession member = createMerchantAccount(owner, "member_leave");
+        UserSession member = register("member_leave");
         long houseId = createHouse(owner, "leave_house", 1, 3, 1);
 
         api.postOk("/api/house-members", owner.token, houseId, obj(
@@ -158,6 +158,6 @@ public class AuthHousePermissionIT extends E2eTestSupport {
                 houseId,
                 null
         );
-        api.expectError("/api/cages", HttpMethod.GET, member.token, houseId, null, 403, "无兔舍权限");
+        api.expectError("/api/cages", HttpMethod.GET, member.token, houseId, null, 403, "无兔场权限");
     }
 }

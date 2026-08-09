@@ -1,13 +1,14 @@
 package com.rabbit.app.security;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.rabbit.app.security.permission.HouseRole;
-import com.rabbit.app.security.permission.MerchantRole;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.PermissionScope;
 import com.rabbit.app.security.permission.PlatformRole;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -29,18 +30,17 @@ class PermissionModelTest {
     }
 
     @Test
-    void merchantAndPlatformRolesKeepTheirOwnScopes() {
-        List<String> merchantAdmin = PermissionCode.granted(PermissionScope.MERCHANT, MerchantRole.ADMIN);
-        List<String> merchantOwner = PermissionCode.granted(PermissionScope.MERCHANT, MerchantRole.OWNER);
+    void platformRolesExposeFarmAndUserAdministrationWithoutMerchantPermissions() {
         List<String> platformAdmin = PermissionCode.granted(PermissionScope.PLATFORM, PlatformRole.ADMIN);
         List<String> superAdmin = PermissionCode.granted(PermissionScope.PLATFORM, PlatformRole.SUPER_ADMIN);
 
-        assertTrue(merchantAdmin.contains("merchant:houses:add"));
-        assertFalse(merchantAdmin.contains("merchant:members:list"));
-        assertTrue(merchantOwner.contains("merchant:members:list"));
-        assertTrue(platformAdmin.contains("platform:merchants:list"));
+        assertTrue(platformAdmin.contains("platform:farms:list"));
+        assertTrue(platformAdmin.contains("platform:users:list"));
         assertFalse(platformAdmin.contains("platform:accounts:list"));
         assertTrue(superAdmin.contains("platform:accounts:list"));
+        assertTrue(Arrays.stream(PermissionCode.values())
+                .map(PermissionCode::code)
+                .noneMatch(code -> code.startsWith("merchant:") || code.startsWith("platform:merchant")));
     }
 
     @Test
@@ -49,7 +49,20 @@ class PermissionModelTest {
 
         assertTrue(business.contains("account:profile:query"));
         assertTrue(business.contains("rabbit:houses:list"));
-        assertFalse(business.contains("merchant:members:list"));
+        assertTrue(business.contains("workspaces:list"));
+        assertTrue(business.stream().noneMatch(code -> code.startsWith("merchant:")));
         assertFalse(business.contains("rabbit:rabbits:list"));
+    }
+
+    @Test
+    void theOnlyAuthorizationScopesAreBusinessHouseAndPlatform() {
+        assertEquals(
+                List.of("BUSINESS", "HOUSE", "PLATFORM"),
+                Arrays.stream(PermissionScope.values()).map(Enum::name).toList()
+        );
+        assertEquals(
+                List.of("VIEWER", "STAFF", "MANAGER", "OWNER"),
+                Arrays.stream(HouseRole.values()).map(Enum::name).toList()
+        );
     }
 }

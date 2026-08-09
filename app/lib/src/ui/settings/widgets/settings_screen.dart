@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/domain/legal_documents.dart';
+import 'package:rabbit_flutter/src/config/legal_documents.dart';
 import 'package:rabbit_flutter/src/ui/auth/widgets/legal_document_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
