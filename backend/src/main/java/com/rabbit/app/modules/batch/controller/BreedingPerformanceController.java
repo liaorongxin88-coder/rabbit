@@ -5,7 +5,7 @@ import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.BreedingPerformance;
-import com.rabbit.app.modules.batch.mapper.BreedingPerformanceMapper;
+import com.rabbit.app.modules.batch.service.BreedingPerformanceQueryService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
 import java.util.List;
@@ -21,11 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class BreedingPerformanceController {
     private final HouseService houseService;
-    private final BreedingPerformanceMapper breedingPerformanceMapper;
+    private final BreedingPerformanceQueryService breedingPerformanceQueryService;
 
-    public BreedingPerformanceController(HouseService houseService, BreedingPerformanceMapper breedingPerformanceMapper) {
+    public BreedingPerformanceController(HouseService houseService, BreedingPerformanceQueryService breedingPerformanceQueryService) {
         this.houseService = houseService;
-        this.breedingPerformanceMapper = breedingPerformanceMapper;
+        this.breedingPerformanceQueryService = breedingPerformanceQueryService;
     }
 
     @GetMapping("/breeding-performance")
@@ -34,10 +34,10 @@ public class BreedingPerformanceController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
         if (rabbitId != null) {
-            BreedingPerformance bp = breedingPerformanceMapper.selectByRabbit(houseId, rabbitId);
+            BreedingPerformance bp = breedingPerformanceQueryService.getByRabbit(houseId, rabbitId);
             return ApiResponse.ok(bp);
         }
-        List<BreedingPerformance> all = breedingPerformanceMapper.selectByHouse(houseId);
+        List<BreedingPerformance> all = breedingPerformanceQueryService.listByHouse(houseId);
         return ApiResponse.ok(all);
     }
 

@@ -6,8 +6,6 @@ services:
       MYSQL_ROOT_PASSWORD: rabbit_root
       MYSQL_DATABASE: rabbit_app
       TZ: Asia/Shanghai
-    #    ports:
-    #      - "3306:3306"
     volumes:
       - rabbit_mysql_data:/var/lib/mysql
     healthcheck:
@@ -29,8 +27,8 @@ services:
   redis:
     image: redis:7.4-alpine
     profiles: ["redis"]
-    ports:
-      - "${CACHE_REDIS_BIND_ADDRESS:-127.0.0.1}:${CACHE_REDIS_HOST_PORT:-16380}:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -41,8 +39,8 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     profiles: ["valkey"]
-    ports:
-      - "${CACHE_VALKEY_BIND_ADDRESS:-127.0.0.1}:${CACHE_VALKEY_HOST_PORT:-16381}:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s

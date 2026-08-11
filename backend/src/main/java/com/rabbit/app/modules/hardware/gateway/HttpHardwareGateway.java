@@ -1,7 +1,9 @@
 package com.rabbit.app.modules.hardware.gateway;
 
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
@@ -50,11 +52,16 @@ public class HttpHardwareGateway implements HardwareGateway {
         body.put("batchId", batchId);
         body.put("rabbitIds", rabbitIds);
         HttpEntity<Map<String, Object>> req = new HttpEntity<Map<String, Object>>(body, headers);
-        ResponseEntity<Map> resp = restTemplate.postForEntity(baseUrl + path, req, Map.class);
+        ResponseEntity<Map<String, Object>> resp = restTemplate.exchange(
+                baseUrl + path,
+                HttpMethod.POST,
+                req,
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                });
         if (!resp.getStatusCode().is2xxSuccessful()) {
-            throw new RuntimeException("hardware gateway http " + resp.getStatusCodeValue());
+            throw new RuntimeException("hardware gateway http " + resp.getStatusCode().value());
         }
-        Map m = resp.getBody();
+        Map<String, Object> m = resp.getBody();
         if (m != null && m.get("code") != null) {
             try {
                 int code = Integer.parseInt(String.valueOf(m.get("code")));
@@ -80,4 +87,3 @@ public class HttpHardwareGateway implements HardwareGateway {
         return t;
     }
 }
-

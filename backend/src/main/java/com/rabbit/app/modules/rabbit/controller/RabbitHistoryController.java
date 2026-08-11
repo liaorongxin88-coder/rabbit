@@ -6,7 +6,7 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
-import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.rabbit.service.RabbitRecordQueryService;
 import com.rabbit.app.security.AuthContext;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -21,11 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class RabbitHistoryController {
     private final HouseService houseService;
-    private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
+    private final RabbitRecordQueryService rabbitRecordQueryService;
 
-    public RabbitHistoryController(HouseService houseService, RabbitStatusHistoryMapper rabbitStatusHistoryMapper) {
+    public RabbitHistoryController(HouseService houseService, RabbitRecordQueryService rabbitRecordQueryService) {
         this.houseService = houseService;
-        this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
+        this.rabbitRecordQueryService = rabbitRecordQueryService;
     }
 
     @GetMapping("/rabbit-status-history")
@@ -33,7 +33,7 @@ public class RabbitHistoryController {
     public ApiResponse<List<RabbitStatusHistory>> list(@RequestHeader("X-House-Id") Long houseId, @RequestParam("rabbitId") Long rabbitId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        return ApiResponse.ok(rabbitStatusHistoryMapper.selectByRabbit(houseId, rabbitId));
+        return ApiResponse.ok(rabbitRecordQueryService.listStatusHistory(houseId, rabbitId));
     }
 
     private Long requireLogin() {

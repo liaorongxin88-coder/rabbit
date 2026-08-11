@@ -1,7 +1,6 @@
 package com.rabbit.app.modules.nfc.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 public class BindNfcTagRequest {
     @NotBlank(message = "tagUid不能为空")
@@ -74,4 +73,3 @@ public class BindNfcTagRequest {
         this.requestId = requestId;
     }
 }
-

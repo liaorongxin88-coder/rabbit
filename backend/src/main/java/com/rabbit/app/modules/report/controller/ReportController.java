@@ -3,19 +3,18 @@ package com.rabbit.app.modules.report.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BreedingSummary;
+import com.rabbit.app.modules.batch.service.BreedingPerformanceQueryService;
 import com.rabbit.app.modules.event.dto.EventAckSummary;
+import com.rabbit.app.modules.event.service.EventService;
 import com.rabbit.app.modules.feed.dto.FeedSummary;
+import com.rabbit.app.modules.feed.entity.FeedLog;
+import com.rabbit.app.modules.feed.service.FeedService;
+import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.report.dto.DashboardSummary;
 import com.rabbit.app.modules.report.service.DashboardReportService;
-import com.rabbit.app.modules.batch.mapper.BreedingPerformanceMapper;
-import com.rabbit.app.modules.event.mapper.EventAckMapper;
-import com.rabbit.app.modules.feed.mapper.FeedLogMapper;
-import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.RequiresPermission;
-import com.rabbit.app.modules.feed.service.FeedService;
-import com.rabbit.app.modules.house.service.HouseService;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,29 +30,25 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Date;
 import java.util.List;
-import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api/reports")
 public class ReportController {
     private final HouseService houseService;
-    private final FeedLogMapper feedLogMapper;
-    private final BreedingPerformanceMapper breedingPerformanceMapper;
-    private final EventAckMapper eventAckMapper;
     private final FeedService feedService;
+    private final BreedingPerformanceQueryService breedingPerformanceQueryService;
+    private final EventService eventService;
     private final DashboardReportService dashboardReportService;
 
     public ReportController(HouseService houseService,
-                            FeedLogMapper feedLogMapper,
-                            BreedingPerformanceMapper breedingPerformanceMapper,
-                            EventAckMapper eventAckMapper,
                             FeedService feedService,
+                            BreedingPerformanceQueryService breedingPerformanceQueryService,
+                            EventService eventService,
                             DashboardReportService dashboardReportService) {
         this.houseService = houseService;
-        this.feedLogMapper = feedLogMapper;
-        this.breedingPerformanceMapper = breedingPerformanceMapper;
-        this.eventAckMapper = eventAckMapper;
         this.feedService = feedService;
+        this.breedingPerformanceQueryService = breedingPerformanceQueryService;
+        this.eventService = eventService;
         this.dashboardReportService = dashboardReportService;
     }
 
@@ -74,7 +69,7 @@ public class ReportController {
         houseService.assertHousePermission(userId, houseId, "view");
         Date fromDate = from == null ? null : new Date(from);
         Date toDate = to == null ? null : new Date(to);
-        return ApiResponse.ok(feedLogMapper.selectSummary(houseId, fromDate, toDate));
+        return ApiResponse.ok(feedService.summarize(houseId, fromDate, toDate));
     }
 
     @GetMapping(value = "/feed-logs.csv")
@@ -150,7 +145,7 @@ public class ReportController {
     public ApiResponse<BreedingSummary> breedingSummary(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        return ApiResponse.ok(breedingPerformanceMapper.selectSummary(houseId));
+        return ApiResponse.ok(breedingPerformanceQueryService.summarize(houseId));
     }
 
     @GetMapping("/event-ack-summary")
@@ -163,13 +158,7 @@ public class ReportController {
         houseService.assertHousePermission(userId, houseId, "view");
         Date fromDate = from == null ? null : new Date(from);
         Date toDate = to == null ? null : new Date(to);
-        if ("生产".equals(category)) {
-            return ApiResponse.ok(eventAckMapper.selectProdAckSummary(houseId, fromDate, toDate));
-        }
-        if ("后备成熟".equals(category)) {
-            return ApiResponse.ok(eventAckMapper.selectReplacementAckSummary(houseId, fromDate, toDate));
-        }
-        throw new BizException(400, "category不合法");
+        return ApiResponse.ok(eventService.summarize(houseId, category, fromDate, toDate));
     }
 
     @GetMapping(value = "/event-ack-summary.csv")
@@ -182,14 +171,7 @@ public class ReportController {
         houseService.assertHousePermission(userId, houseId, "view");
         Date fromDate = from == null ? null : new Date(from);
         Date toDate = to == null ? null : new Date(to);
-        EventAckSummary s;
-        if ("生产".equals(category)) {
-            s = eventAckMapper.selectProdAckSummary(houseId, fromDate, toDate);
-        } else if ("后备成熟".equals(category)) {
-            s = eventAckMapper.selectReplacementAckSummary(houseId, fromDate, toDate);
-        } else {
-            throw new BizException(400, "category不合法");
-        }
+        EventAckSummary s = eventService.summarize(houseId, category, fromDate, toDate);
 
         StreamingResponseBody body = outputStream -> {
             writeUtf8Bom(outputStream);
@@ -243,11 +225,4 @@ public class ReportController {
         os.write(s.getBytes(StandardCharsets.UTF_8));
     }
 
-    private byte[] withUtf8Bom(String s) {
-        byte[] body = s == null ? new byte[0] : s.getBytes(StandardCharsets.UTF_8);
-        byte[] bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-        byte[] out = Arrays.copyOf(bom, bom.length + body.length);
-        System.arraycopy(body, 0, out, bom.length, body.length);
-        return out;
-    }
 }

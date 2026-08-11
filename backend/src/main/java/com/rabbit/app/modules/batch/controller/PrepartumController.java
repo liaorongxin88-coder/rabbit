@@ -5,7 +5,7 @@ import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.PrepartumRecord;
-import com.rabbit.app.modules.batch.mapper.PrepartumRecordMapper;
+import com.rabbit.app.modules.batch.service.PrepartumQueryService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
 import java.util.List;
@@ -19,11 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class PrepartumController {
     private final HouseService houseService;
-    private final PrepartumRecordMapper prepartumRecordMapper;
+    private final PrepartumQueryService prepartumQueryService;
 
-    public PrepartumController(HouseService houseService, PrepartumRecordMapper prepartumRecordMapper) {
+    public PrepartumController(HouseService houseService, PrepartumQueryService prepartumQueryService) {
         this.houseService = houseService;
-        this.prepartumRecordMapper = prepartumRecordMapper;
+        this.prepartumQueryService = prepartumQueryService;
     }
 
     @GetMapping("/prepartum-records")
@@ -33,7 +33,7 @@ public class PrepartumController {
                                                   @RequestParam(value = "rabbitId", required = false) Long rabbitId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        return ApiResponse.ok(prepartumRecordMapper.selectByHouse(houseId, batchId, rabbitId));
+        return ApiResponse.ok(prepartumQueryService.list(houseId, batchId, rabbitId));
     }
 
     private Long requireLogin() {

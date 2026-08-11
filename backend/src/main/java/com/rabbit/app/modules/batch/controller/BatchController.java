@@ -13,13 +13,14 @@ import com.rabbit.app.modules.batch.dto.PrepartumRequest;
 import com.rabbit.app.modules.batch.dto.WeaningRequest;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
-import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
+import com.rabbit.app.modules.batch.service.BatchQueryService;
 import com.rabbit.app.modules.batch.service.BatchService;
 import com.rabbit.app.modules.event.dto.EventItem;
 import com.rabbit.app.modules.event.service.EventService;
 import com.rabbit.app.modules.hardware.service.HardwareLinkService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
+import com.rabbit.app.modules.rabbit.service.ReplacementService;
 import com.rabbit.app.modules.sale.dto.SaleRequest;
 import com.rabbit.app.modules.treatment.entity.TreatmentRecord;
 import com.rabbit.app.modules.treatment.service.TreatmentService;
@@ -46,18 +47,28 @@ import org.springframework.web.bind.annotation.RestController;
 public class BatchController {
     private final HouseService houseService;
     private final BatchService batchService;
-    private final BatchRabbitMapper batchRabbitMapper;
+    private final BatchQueryService batchQueryService;
     private final EventService eventService;
     private final TreatmentService treatmentService;
     private final HardwareLinkService hardwareLinkService;
+    private final ReplacementService replacementService;
 
-    public BatchController(HouseService houseService, BatchService batchService, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService) {
+    public BatchController(
+            HouseService houseService,
+            BatchService batchService,
+            BatchQueryService batchQueryService,
+            EventService eventService,
+            TreatmentService treatmentService,
+            HardwareLinkService hardwareLinkService,
+            ReplacementService replacementService
+    ) {
         this.houseService = houseService;
         this.batchService = batchService;
-        this.batchRabbitMapper = batchRabbitMapper;
+        this.batchQueryService = batchQueryService;
         this.eventService = eventService;
         this.treatmentService = treatmentService;
         this.hardwareLinkService = hardwareLinkService;
+        this.replacementService = replacementService;
     }
 
     @GetMapping("/batches")
@@ -68,9 +79,9 @@ public class BatchController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
         if (page == null && pageSize == null && (q == null || q.trim().isEmpty())) {
-            return ApiResponse.ok(batchService.listBatches(houseId));
+            return ApiResponse.ok(batchQueryService.listBatches(houseId));
         }
-        return ApiResponse.ok(batchService.listBatchesPage(houseId, q, page == null ? 1 : page, pageSize == null ? 20 : pageSize));
+        return ApiResponse.ok(batchQueryService.listBatchesPage(houseId, q, page == null ? 1 : page, pageSize == null ? 20 : pageSize));
     }
 
     @PostMapping("/batches")
@@ -86,7 +97,7 @@ public class BatchController {
     public ApiResponse<Batch> getBatch(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        Batch b = batchService.getBatch(houseId, batchId);
+        Batch b = batchQueryService.getBatch(houseId, batchId);
         if (b == null || !houseId.equals(b.getHouseId())) {
             throw new BizException(400, "批次不存在");
         }
@@ -103,11 +114,11 @@ public class BatchController {
     ) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        Batch b = batchService.getBatch(houseId, batchId);
+        Batch b = batchQueryService.getBatch(houseId, batchId);
         if (b == null || !houseId.equals(b.getHouseId())) {
             throw new BizException(400, "批次不存在");
         }
-        return ApiResponse.ok(batchRabbitMapper.selectItemsByBatch(batchId, role, active));
+        return ApiResponse.ok(batchQueryService.listBatchRabbits(batchId, role, active));
     }
 
     @PostMapping("/batches/{batchId}/mating")
@@ -213,14 +224,14 @@ public class BatchController {
         java.util.Set<Long> suppressedReview = eventService.getSuppressedIds(userId, houseId, "治疗复查");
 
         boolean x = onlyUnnotified != null && onlyUnnotified;
-        List<BatchRabbit> due = batchService.listDueBatchEvents(houseId, x);
+        List<BatchRabbit> due = batchQueryService.listDueBatchEvents(houseId, x);
         for (BatchRabbit br : due) {
             if (suppressedProd.contains(br.getId())) {
                 continue;
             }
             items.add(new EventItem(br.getId(), "生产", br.getNextEventType(), br.getNextEventDate(), br.getBatchId(), br.getRabbitId(), br.getCurrentStatus()));
         }
-        List<ReplacementRecord> dueRep = batchService.listDueReplacement(houseId, x);
+        List<ReplacementRecord> dueRep = replacementService.listDue(houseId, x);
         for (ReplacementRecord rr : dueRep) {
             if (suppressedRep.contains(rr.getId())) {
                 continue;

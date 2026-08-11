@@ -2,15 +2,13 @@ package com.rabbit.app.modules.rabbit.controller;
 
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
-import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.MarkNotifiedRequest;
 import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
-import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
+import com.rabbit.app.modules.rabbit.service.ReplacementService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.RequiresPermission;
-import com.rabbit.app.util.DateUtil;
 import jakarta.validation.Valid;
 import java.util.Date;
 import java.util.List;
@@ -29,13 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
 public class ReplacementController {
     private final HouseService houseService;
-    private final ReplacementRecordMapper replacementRecordMapper;
-    private final RequestDedupService requestDedupService;
+    private final ReplacementService replacementService;
 
-    public ReplacementController(HouseService houseService, ReplacementRecordMapper replacementRecordMapper, RequestDedupService requestDedupService) {
+    public ReplacementController(HouseService houseService, ReplacementService replacementService) {
         this.houseService = houseService;
-        this.replacementRecordMapper = replacementRecordMapper;
-        this.requestDedupService = requestDedupService;
+        this.replacementService = replacementService;
     }
 
     @GetMapping("/replacement-records")
@@ -49,12 +45,9 @@ public class ReplacementController {
     ) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        int p = page == null || page <= 0 ? 1 : page;
-        int ps = pageSize == null || pageSize <= 0 ? 50 : Math.min(pageSize, 200);
-        int offset = (p - 1) * ps;
         Date fromDt = from == null || from <= 0 ? null : new Date(from);
         Date toDt = to == null || to <= 0 ? null : new Date(to);
-        return ApiResponse.ok(replacementRecordMapper.selectByHouse(houseId, matureNotified, fromDt, toDt, offset, ps));
+        return ApiResponse.ok(replacementService.list(houseId, matureNotified, fromDt, toDt, page, pageSize));
     }
 
     @PostMapping("/replacement-records/mark-notified")
@@ -62,21 +55,8 @@ public class ReplacementController {
     public ApiResponse<Void> markNotified(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody MarkNotifiedRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        String api = "replacement.markNotified";
-        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, req.getRequestId())) {
-            return ApiResponse.ok(null);
-        }
-        requestDedupService.markProcessing(houseId, userId, api, req.getRequestId());
-        try {
-            for (Long id : req.getRecordIds()) {
-                replacementRecordMapper.markNotified(houseId, id, DateUtil.now(), String.valueOf(userId));
-            }
-            requestDedupService.markDone(houseId, userId, api, req.getRequestId());
-            return ApiResponse.ok(null);
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(houseId, userId, api, req.getRequestId(), e.getMessage());
-            throw e;
-        }
+        replacementService.markNotified(userId, houseId, req.getRecordIds(), req.getRequestId());
+        return ApiResponse.ok(null);
     }
 
     private Long requireLogin() {

@@ -5,6 +5,7 @@ import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.modules.feed.entity.FeedLogRabbit;
+import com.rabbit.app.modules.feed.dto.FeedSummary;
 import com.rabbit.app.modules.feed.mapper.FeedLogMapper;
 import com.rabbit.app.modules.feed.mapper.FeedLogRabbitMapper;
 import com.rabbit.app.modules.inventory.entity.InventoryItem;
@@ -187,6 +188,10 @@ public class FeedService {
 
     public List<FeedLog> list(Long houseId) {
         return feedLogMapper.selectByHouse(houseId);
+    }
+
+    public FeedSummary summarize(Long houseId, Date from, Date to) {
+        return feedLogMapper.selectSummary(houseId, from, to);
     }
 
     public List<FeedLog> listPage(Long houseId, Date from, Date to, int page, int pageSize) {

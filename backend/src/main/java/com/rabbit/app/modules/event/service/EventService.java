@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.event.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.event.dto.EventAckSummary;
 import com.rabbit.app.modules.event.entity.EventAck;
 import com.rabbit.app.modules.event.mapper.EventAckMapper;
 import com.rabbit.app.util.DateUtil;
@@ -55,5 +56,15 @@ public class EventService {
     public Set<Long> getSuppressedIds(Long userId, Long houseId, String category) {
         List<Long> ids = eventAckMapper.selectSuppressedRecordIds(userId, houseId, category, DateUtil.now());
         return new HashSet<Long>(ids);
+    }
+
+    public EventAckSummary summarize(Long houseId, String category, Date from, Date to) {
+        if ("生产".equals(category)) {
+            return eventAckMapper.selectProdAckSummary(houseId, from, to);
+        }
+        if ("后备成熟".equals(category)) {
+            return eventAckMapper.selectReplacementAckSummary(houseId, from, to);
+        }
+        throw new BizException(400, "category不合法");
     }
 }

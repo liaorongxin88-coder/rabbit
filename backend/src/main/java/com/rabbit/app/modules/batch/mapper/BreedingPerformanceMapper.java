@@ -1,7 +1,5 @@
 package com.rabbit.app.modules.batch.mapper;
 
-import com.rabbit.app.modules.batch.dto.BreedingSummary;
-import com.rabbit.app.modules.batch.entity.BreedingPerformance;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;

@@ -72,9 +72,11 @@ docker compose up -d --build
 ```
 
 也可以不设置 `COMPOSE_PROFILES`，继续使用 `docker compose --profile valkey up -d --build`。
-切换 provider 后需重建 backend 容器。开发用 Redis/Valkey 分别在宿主机回环地址的 `16380`、
-`16381` 端口提供集成测试入口，不会监听局域网地址；服务没有持久化卷，重启会使当时尚未消费
-的短信验证码失效，客户端需要重新获取。
+切换 provider 后需重建 backend 容器。Redis/Valkey 通过 `expose: 6379` 仅在 Compose 内部
+网络中供 backend 以 `redis:6379` 或 `valkey:6379` 访问，不向宿主机发布端口。需要从宿主机
+运行缓存集成测试时，应通过单独的测试容器或显式的临时 Compose override 绑定回环地址，不能
+修改默认部署文件开放端口。缓存服务没有持久化卷，重启会使当时尚未消费的短信验证码失效，
+客户端需要重新获取。
 
 ## 业务接入
 

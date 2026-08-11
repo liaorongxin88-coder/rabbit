@@ -3,7 +3,7 @@ package com.rabbit.app.modules.event.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.event.entity.EventReminderLog;
-import com.rabbit.app.modules.event.mapper.EventReminderLogMapper;
+import com.rabbit.app.modules.event.service.EventReminderLogQueryService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
@@ -21,11 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiresPermission(PermissionCode.RABBIT_AUDIT_LIST)
 public class EventReminderLogController {
     private final HouseService houseService;
-    private final EventReminderLogMapper eventReminderLogMapper;
+    private final EventReminderLogQueryService eventReminderLogQueryService;
 
-    public EventReminderLogController(HouseService houseService, EventReminderLogMapper eventReminderLogMapper) {
+    public EventReminderLogController(HouseService houseService, EventReminderLogQueryService eventReminderLogQueryService) {
         this.houseService = houseService;
-        this.eventReminderLogMapper = eventReminderLogMapper;
+        this.eventReminderLogQueryService = eventReminderLogQueryService;
     }
 
     @GetMapping("")
@@ -37,10 +37,9 @@ public class EventReminderLogController {
     ) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "control");
-        Integer x = limit == null || limit <= 0 ? 200 : Math.min(limit, 2000);
         Date fromDt = from == null || from <= 0 ? null : new Date(from);
         Date toDt = to == null || to <= 0 ? null : new Date(to);
-        return ApiResponse.ok(eventReminderLogMapper.selectByHouseAndDateRange(houseId, fromDt, toDt, x));
+        return ApiResponse.ok(eventReminderLogQueryService.list(houseId, fromDt, toDt, limit));
     }
 
     private Long requireLogin() {

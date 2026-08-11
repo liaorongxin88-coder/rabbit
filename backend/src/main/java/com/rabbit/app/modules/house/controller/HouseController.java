@@ -4,7 +4,7 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.cage.dto.CageSummary;
 import com.rabbit.app.modules.cage.entity.Cage;
-import com.rabbit.app.modules.cage.mapper.CageMapper;
+import com.rabbit.app.modules.cage.service.CageQueryService;
 import com.rabbit.app.modules.cage.service.CageSummaryService;
 import com.rabbit.app.modules.house.dto.CreateHouseRequest;
 import com.rabbit.app.modules.house.dto.HousePermissionInfo;
@@ -35,14 +35,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class HouseController {
     private final HouseService houseService;
-    private final CageMapper cageMapper;
+    private final CageQueryService cageQueryService;
     private final CageNfcTagService cageNfcTagService;
     private final NfcTagService nfcTagService;
     private final CageSummaryService cageSummaryService;
 
-    public HouseController(HouseService houseService, CageMapper cageMapper, CageNfcTagService cageNfcTagService, NfcTagService nfcTagService, CageSummaryService cageSummaryService) {
+    public HouseController(HouseService houseService, CageQueryService cageQueryService, CageNfcTagService cageNfcTagService, NfcTagService nfcTagService, CageSummaryService cageSummaryService) {
         this.houseService = houseService;
-        this.cageMapper = cageMapper;
+        this.cageQueryService = cageQueryService;
         this.cageNfcTagService = cageNfcTagService;
         this.nfcTagService = nfcTagService;
         this.cageSummaryService = cageSummaryService;
@@ -105,7 +105,7 @@ public class HouseController {
     public ApiResponse<List<Cage>> listCages(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
-        return ApiResponse.ok(cageMapper.selectByHouseId(houseId));
+        return ApiResponse.ok(cageQueryService.listByHouse(houseId));
     }
 
     @PostMapping("/cages/nfc-tags")
