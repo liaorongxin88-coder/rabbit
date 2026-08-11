@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 public class E2eApiClient {
     private final TestRestTemplate restTemplate;
@@ -31,8 +32,28 @@ public class E2eApiClient {
         return expectOk(exchange(path, HttpMethod.POST, token, houseId, body));
     }
 
+    public JsonNode postResponse(String path, String token, Long houseId, Object body) {
+        return root(exchange(path, HttpMethod.POST, token, houseId, body));
+    }
+
+    public JsonNode postResponseWithHeaders(
+            String path,
+            String token,
+            Long houseId,
+            Object body,
+            Map<String, String> extraHeaders
+    ) {
+        HttpHeaders headers = headers(token, houseId);
+        extraHeaders.forEach(headers::set);
+        return root(exchange(path, HttpMethod.POST, headers, body));
+    }
+
     public JsonNode putOk(String path, String token, Long houseId, Object body) {
         return expectOk(exchange(path, HttpMethod.PUT, token, houseId, body));
+    }
+
+    public JsonNode putResponse(String path, String token, Long houseId, Object body) {
+        return root(exchange(path, HttpMethod.PUT, token, houseId, body));
     }
 
     public JsonNode deleteOk(String path, String token, Long houseId) {
@@ -58,6 +79,15 @@ public class E2eApiClient {
 
     private ResponseEntity<String> exchange(String path, HttpMethod method, String token, Long houseId, Object body) {
         HttpHeaders headers = headers(token, houseId);
+        return exchange(path, method, headers, body);
+    }
+
+    private ResponseEntity<String> exchange(
+            String path,
+            HttpMethod method,
+            HttpHeaders headers,
+            Object body
+    ) {
         headers.setContentType(MediaType.APPLICATION_JSON);
         return restTemplate.exchange(baseUrl + path, method, new HttpEntity<Object>(body, headers), String.class);
     }

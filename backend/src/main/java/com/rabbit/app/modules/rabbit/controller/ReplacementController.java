@@ -8,7 +8,8 @@ import com.rabbit.app.modules.rabbit.dto.MarkNotifiedRequest;
 import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
 import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.util.DateUtil;
 import jakarta.validation.Valid;
 import java.util.Date;
@@ -25,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
 public class ReplacementController {
     private final HouseService houseService;
     private final ReplacementRecordMapper replacementRecordMapper;
@@ -57,7 +58,7 @@ public class ReplacementController {
     }
 
     @PostMapping("/replacement-records/mark-notified")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_EDIT)
     public ApiResponse<Void> markNotified(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody MarkNotifiedRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");

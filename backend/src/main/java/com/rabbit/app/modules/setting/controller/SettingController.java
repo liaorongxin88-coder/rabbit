@@ -9,7 +9,8 @@ import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.HouseContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,12 +34,14 @@ public class SettingController {
     }
 
     @GetMapping("/settings")
+    @RequiresPermission(PermissionCode.USER_SETTINGS_QUERY)
     public ApiResponse<GlobalSetting> get() {
         Long userId = requireLogin();
         return ApiResponse.ok(settingService.getOrCreateUserSetting(userId));
     }
 
     @PutMapping("/settings")
+    @RequiresPermission(PermissionCode.USER_SETTINGS_EDIT)
     public ApiResponse<Void> update(@Valid @RequestBody UpdateSettingRequest req) {
         Long userId = requireLogin();
         String api = "settings.update";
@@ -57,7 +60,7 @@ public class SettingController {
     }
 
     @GetMapping("/house-settings")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_SETTINGS_QUERY)
     public ApiResponse<HouseSettingResponse> getHouseSetting() {
         Long userId = requireLogin();
         Long houseId = requireHouse();
@@ -68,7 +71,7 @@ public class SettingController {
     }
 
     @PutMapping("/house-settings")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_SETTINGS_EDIT)
     public ApiResponse<Void> updateHouseSetting(@Valid @RequestBody UpdateSettingRequest req) {
         Long userId = requireLogin();
         Long houseId = requireHouse();

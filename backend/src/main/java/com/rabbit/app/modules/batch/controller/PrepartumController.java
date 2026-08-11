@@ -1,5 +1,7 @@
 package com.rabbit.app.modules.batch.controller;
 
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.PrepartumRecord;
@@ -25,6 +27,7 @@ public class PrepartumController {
     }
 
     @GetMapping("/prepartum-records")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<PrepartumRecord>> list(@RequestHeader("X-House-Id") Long houseId,
                                                   @RequestParam(value = "batchId", required = false) Long batchId,
                                                   @RequestParam(value = "rabbitId", required = false) Long rabbitId) {
@@ -41,4 +44,3 @@ public class PrepartumController {
         return userId;
     }
 }
-

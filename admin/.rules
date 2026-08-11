@@ -14,24 +14,41 @@ If a requested UI change conflicts with `DESIGN.md`, either preserve the design 
 
 ## Product Scope
 
-`admin/` is the Rabbit SaaS platform management console. It serves platform staff, not merchant business users.
+`admin/` contains two deliberately isolated operational surfaces:
+
+- The Rabbit SaaS platform console under `/login` and the existing platform routes. It serves platform staff.
+- The Rabbit Farm business workspace under `/workspace/**`. It serves business users and uses the same user identity as the Flutter client.
+
+The durable business relationship is `business user -> rabbit-farm membership -> rabbit farm`. Do not introduce an intermediate organization, account-group, or policy container between users and rabbit farms.
 
 First-version scope stays narrow:
 
 - Platform admin login and logout.
-- Merchant list, create, edit, and enable / disable; creating a merchant also provisions its required initial business login account.
-- Merchant account creation inside a merchant; each business account belongs to exactly one merchant and every merchant retains at least one account.
-- Read-only merchant overview for rabbit houses, cages, rabbits, and recent audit records.
+- Rabbit-farm list, create, edit, and enable / disable; creating a rabbit farm assigns an existing business user, or an invited phone identity, as its initial owner.
+- Business-user lookup and status inspection, including masked phone identity and accessible rabbit-farm count.
+- Rabbit-farm membership roles. A business user may join multiple rabbit farms, and every rabbit farm retains at least one enabled OWNER; multiple co-owners are allowed.
+- Read-only rabbit-farm overview for cages, rabbits, production data, members, and recent audit records.
 
-Do not add billing, package plans, merchant self-registration, customer support impersonation, cross-merchant business data editing, or platform operation modules unless the task explicitly requests them.
+Business-workspace scope includes:
+
+- Business-user login and logout.
+- Rabbit-farm selection with persisted per-user context.
+- Rabbit-farm dashboard summaries.
+- Rabbit-farm, cage, rabbit, production-batch, and rabbit-farm-member workflows allowed by the current rabbit-farm role and permission.
+- Web-safe production actions that do not depend on mobile peripherals.
+
+Do not add billing, package plans, public self-registration, customer support impersonation, cross-farm business data editing, or unrelated platform operation modules unless the task explicitly requests them. MQTT, NFC tag writing/resolution, Bluetooth, cameras, and hardware-triggered production controls remain pending outside the business web workspace. Keep non-hardware business state changes such as aphrodisiac start/finish available with hardware triggering disabled.
 
 ## Engineering Boundaries
 
 - Do not modify backend API contracts from admin UI work unless the user explicitly asks for backend support.
 - Do not modify Flutter or Android clients for admin UI tasks.
-- Do not bypass the backend SaaS boundaries: platform admin APIs use `/api/admin/**`; merchant business APIs remain under existing `/api/**` flows.
-- Preserve read-only boundaries for business production data. Admin may inspect summaries and previews, but must not edit rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
-- Merchant enable / disable is the only high-risk write operation in the first version.
+- Do not bypass the backend security boundaries: platform admin APIs use `/api/admin/**`; business APIs remain under existing `/api/**` flows.
+- Preserve read-only boundaries for business production data in platform routes. Platform admins may inspect summaries and previews, but must not edit rabbit houses, cages, rabbits, feed, treatment, breeding, or sales data.
+- Business workspace routes may write production data only through existing `/api/**` flows and must send the selected `X-House-Id` for house-scoped operations.
+- Platform-admin and business-user sessions, tokens, route guards, request clients, and logout flows must remain separate.
+- Rabbit-farm enable / disable, business-user enable / disable, owner membership changes, and member-role changes are high-risk write operations. Changing user state affects that user's access to every rabbit farm; changing farm state must not silently change user state.
+- A phone number is a business-user authentication identity, not a rabbit-farm attribute. Phone login must resolve a user first; rabbit-farm access must then be authorized through that user's rabbit-farm membership.
 
 ## Tech Stack
 
@@ -53,8 +70,9 @@ Keep Vite on the current newer main major already configured in `package.json`; 
 - `src/components/`: domain and layout components shared by admin pages.
 - `src/components/ui/`: shadcn-style primitive components. Keep them generic and prop-driven.
 - `src/api/`: business API methods. Components must import request functions from here instead of calling raw HTTP clients.
-- `src/lib/request.ts`: single alova instance, base URL, token injection, `ApiResponse<T>` unwrapping, and common error handling.
-- `src/lib/auth.ts`: platform admin session storage and token access.
+- `src/lib/request.ts`: isolated platform and business-workspace alova clients, base URL, token injection, `X-House-Id` injection, `ApiResponse<T>` unwrapping, and common error handling.
+- `src/lib/auth.ts`: separate platform-admin and business-user session storage plus per-user rabbit-farm selection.
+- `src/lib/workspace.ts`: business workspace context contract and hook.
 - `src/types/`: API and domain TypeScript types.
 - `src/index.css`: Tailwind import, semantic color tokens, motion tokens, and global reusable animation classes.
 - `scripts/deploy.sh`: one-command static asset build and rsync deployment for `admin/dist/`.
@@ -62,11 +80,15 @@ Keep Vite on the current newer main major already configured in `package.json`; 
 
 ## API Rules
 
-- Admin login uses `POST /api/admin/auth/login`; do not reuse merchant business login.
+- Admin login uses `POST /api/admin/auth/login`; do not reuse business-user login.
 - Admin requests must send `Authorization: Bearer <token>` through the alova wrapper.
 - Admin requests must not send or require `X-House-Id`.
+- Business-user password login uses `POST /api/auth/login`; phone login uses the backend's dedicated phone-auth contracts. Both produce the same business-user session and use a token store separate from the platform session.
+- House-scoped business requests must send the selected `X-House-Id`; cross-house aggregate requests must use an explicit backend contract rather than omitting scope accidentally.
+- The rabbit-farm selector may only render and persist rabbit farms returned as accessible to the signed-in user. A stored selection must be discarded when it is no longer authorized.
+- Never infer rabbit-farm access from a phone number, client-provided user ID, or stale local selection. The backend must validate user membership for every `X-House-Id` request.
 - API response wrappers with `code !== 0` are business failures and must surface a clear toast or page state.
-- `401` clears the admin session and should lead the user back to login through existing route guards.
+- An admin-client `401` clears only the platform-admin session and leads to `/login`. A business-client `401` clears only the business-user session and leads to `/workspace/login`.
 - Components must not use bare `fetch`, ad hoc `axios`, or inline base URLs.
 - Vite development should proxy `/api` to the local backend container, currently `http://127.0.0.1:8080`, unless `VITE_API_BASE_URL` is intentionally provided for another environment.
 
@@ -118,9 +140,9 @@ Use semantic Tailwind tokens:
 - Search fields should not query on every keystroke unless debounce, loading feedback, and cancellation behavior are deliberately implemented.
 - Filter forms with inline actions must align buttons with the input/select row. Helper or description text belongs in a separate row below the controls when it would push buttons out of alignment.
 - Pagination, filters, tabs, and table actions must remain reachable on narrow screens.
-- Destructive or high-risk actions use destructive styling and clear verbs, for example `停用商户` or `删除`.
-- Merchant status changes should show a clear success toast naming the completed action.
-- Long merchant names, contact fields, OpenID, and IDs must truncate or wrap predictably without overlapping controls.
+- Destructive or high-risk actions use destructive styling and clear verbs, for example `停用兔场` or `移除成员`.
+- Rabbit-farm status and membership changes should show a clear success toast naming the completed action.
+- Long rabbit-farm names, user names, masked phone numbers, OpenID, and IDs must truncate or wrap predictably without overlapping controls.
 - Do not add in-app text explaining the UI design, animations, implementation details, or keyboard shortcuts.
 
 ## State And React Rules

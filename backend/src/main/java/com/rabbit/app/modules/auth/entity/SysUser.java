@@ -4,10 +4,15 @@ import java.util.Date;
 
 public class SysUser {
     private Long userId;
-    private Long merchantId;
     private String userName;
     private String password;
+    private Boolean passwordInitialized;
     private String openid;
+    private String status;
+    private String phoneCountryCode;
+    private String phoneHash;
+    private String phoneMasked;
+    private Date phoneBoundTime;
     private Date createTime;
     private Date updateTime;
 
@@ -17,14 +22,6 @@ public class SysUser {
 
     public void setUserId(Long userId) {
         this.userId = userId;
-    }
-
-    public Long getMerchantId() {
-        return merchantId;
-    }
-
-    public void setMerchantId(Long merchantId) {
-        this.merchantId = merchantId;
     }
 
     public String getUserName() {
@@ -43,12 +40,60 @@ public class SysUser {
         this.password = password;
     }
 
+    public Boolean getPasswordInitialized() {
+        return passwordInitialized;
+    }
+
+    public void setPasswordInitialized(Boolean passwordInitialized) {
+        this.passwordInitialized = passwordInitialized;
+    }
+
     public String getOpenid() {
         return openid;
     }
 
     public void setOpenid(String openid) {
         this.openid = openid;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getPhoneCountryCode() {
+        return phoneCountryCode;
+    }
+
+    public void setPhoneCountryCode(String phoneCountryCode) {
+        this.phoneCountryCode = phoneCountryCode;
+    }
+
+    public String getPhoneHash() {
+        return phoneHash;
+    }
+
+    public void setPhoneHash(String phoneHash) {
+        this.phoneHash = phoneHash;
+    }
+
+    public String getPhoneMasked() {
+        return phoneMasked;
+    }
+
+    public void setPhoneMasked(String phoneMasked) {
+        this.phoneMasked = phoneMasked;
+    }
+
+    public Date getPhoneBoundTime() {
+        return phoneBoundTime;
+    }
+
+    public void setPhoneBoundTime(Date phoneBoundTime) {
+        this.phoneBoundTime = phoneBoundTime;
     }
 
     public Date getCreateTime() {

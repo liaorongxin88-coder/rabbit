@@ -9,7 +9,8 @@ import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_ABNORMAL_LIST)
 public class AbnormalController {
     private final HouseService houseService;
     private final RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper;
@@ -52,7 +53,7 @@ public class AbnormalController {
     }
 
     @PostMapping("/abnormal/{id}/deal")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_ABNORMAL_EDIT)
     @Transactional
     public ApiResponse<Void> deal(@RequestHeader("X-House-Id") Long houseId, @PathVariable("id") Long id, @Valid @RequestBody DealRequest req) {
         Long userId = requireLogin();

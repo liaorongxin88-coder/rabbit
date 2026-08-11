@@ -1,6 +1,7 @@
 # Admin 文档
 
-Admin 是 Rabbit SaaS 平台管理控制台，源码位于 `admin/`。
+Admin 包含相互隔离的平台管理端和业务工作台，源码位于 `admin/`。平台管理端面向平台管理员，
+业务工作台面向拥有兔场成员关系的普通业务账号。
 
 ## 先读
 
@@ -12,7 +13,7 @@ Admin 是 Rabbit SaaS 平台管理控制台，源码位于 `admin/`。
 
 ## 模块索引
 
-- [modules/platform-admin.md](modules/platform-admin.md)：平台管理员、商户管理、只读业务边界和请求规则。
+- [modules/platform-admin.md](modules/platform-admin.md)：平台账号、兔场、业务用户、工作台和请求边界。
 
 ## 常用命令
 

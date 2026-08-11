@@ -5,17 +5,18 @@
 Rabbit 当前由三块主要应用组成：
 
 - `backend/`：所有业务数据、权限、审计、提醒、迁移和平台管理 API 的来源。
-- `flutter_app/`：当前移动端重构方向，面向兔场业务用户。
-- `admin/`：平台运营控制台，面向 SaaS 平台管理员。
+- `app/`：Flutter Android 客户端，面向兔场业务用户。
+- `admin/`：平台运营控制台，面向平台管理员。
 
 `tools/` 只放演示和回归脚本，`docs/` 只放当前维护文档。
 
 ## 后端
 
-后端使用 Spring Boot + MyBatis + MySQL。源码按业务模块放在 `backend/src/main/java/com/rabbit/app/modules/`：
+后端使用 Spring Boot + MyBatis + MySQL。源码按业务模块放在
+`backend/src/main/java/com/rabbit/app/modules/`：
 
-- `auth`：普通业务用户注册、登录、微信登录兼容。
-- `house`：兔舍、成员和权限。
+- `auth`：业务账号、手机号短信登录和微信登录兼容。
+- `house`：兔场、成员、精确手机号邀请和权限。
 - `cage`：笼位维护和笼位概览。
 - `rabbit`：兔只录入、编辑、状态、异常、离场和后备。
 - `batch`：催情、配种、摸胎、备产、分娩、断奶、出售和繁殖性能。
@@ -25,61 +26,95 @@ Rabbit 当前由三块主要应用组成：
 - `audit`：接口审计。
 - `dedup`：写请求幂等去重。
 - `hardware`：硬件联动网关，默认 noop。
-- `admin`：平台管理员、商户和平台侧概览。
-- `report`、`setting`：报表和全局设置。
+- `workspace`：多养殖业务工作空间契约和模块注册；当前由兔场模块提供 `RABBIT` 适配。
+- `admin`：平台管理员、业务账号、兔场和平台侧概览。
+- `report`、`setting`：报表和账号级设置。
 
-数据库结构由 Flyway 管理，迁移目录为 `backend/src/main/resources/db/migration/`。`db/schema.sql` 只作为当前结构参考，不作为常规初始化入口。
+数据库结构由 Flyway 管理，迁移目录为
+`backend/src/main/resources/db/migration/`。`db/schema.sql` 只作为当前结构参考，
+不作为常规初始化入口。
+
+## 领域模型
+
+Rabbit 采用“全局账号直接加入兔场”的模型：
+
+```text
+sys_user
+  -> house_users
+       -> rabbit_houses
+            -> cages / rabbits / batches / records
+```
+
+- `sys_user` 是认证身份和账号状态的来源，不拥有隐式业务空间。
+- `house_users` 是账号与兔场之间唯一的授权关系，保存角色和成员状态。
+- `rabbit_houses` 是业务数据隔离边界。产品文案使用“兔场”，兼容 API、表名和请求头继续使用 `house`。
+- 生产数据继续通过 `house_id` 归属兔场；没有直接 `house_id` 的明细通过父记录关联校验。
+- 同一账号可以加入多个兔场，同一兔场可以有多位共同 `OWNER`。
+
+账号、兔场和成员都必须处于可用状态，访问才成立：
+
+```text
+enabled account -> enabled house -> enabled house membership -> role -> permission
+```
+
+兔场角色为 `OWNER`、`MANAGER`、`STAFF`、`VIEWER`。所有权以
+`house_users.role=OWNER` 为准，允许多位共同所有者；降级、移除或退出时必须至少保留一位
+有效 `OWNER`。
+
+## 认证与零兔场状态
+
+手机号是移动端账号的稳定绑定锚点。当前已实现短信验证码认证和运营商一键登录后端换号；
+官方 Android SDK 仍待控制台与真机接入。两种方式都落到同一个 `phone_hash` 账号，不能另建
+一套账号身份。
+
+手机号首次验证成功时只创建 `sys_user`，不会自动创建兔场。该账号已经完成认证，可以获得
+正式 JWT，但 `GET /api/houses` 允许返回空列表。客户端此时进入创建或加入兔场流程；只有建立
+有效 `house_users` 关系后，才能访问对应兔场的生产数据。
+
+按手机号发出的精确邀请会保存号码 HMAC 和脱敏值，不保存明文。无论目标账号是否已存在，
+邀请接口都只返回 `SUBMITTED`；成员关系在该手机号下一次完成可信短信登录时建立，以免通过
+邀请响应枚举账号。
+
+手机号账号默认 `hasPassword=false`。用户首次设置登录密码时不要求旧密码；设置成功后
+`hasPassword=true`，以后修改必须校验旧密码。
 
 ## 权限与数据隔离
 
 普通业务 API：
 
 - 登录后使用 `Authorization: Bearer <token>`。
-- 兔舍域请求必须带 `X-House-Id: <houseId>`。
-- 权限分为 `view`、`edit`、`control`。
-- 查询和写入必须按兔舍隔离；没有直接 `house_id` 的从表需要通过父表关联过滤。
+- 兔场域请求必须带 `X-House-Id: <houseId>`。
+- `GET /api/houses` 和 `GET /api/workspaces` 只返回当前账号直接加入且状态有效的兔场。
+- 账号级接口不要求当前兔场，因此零兔场账号仍可维护资料、设置密码、创建兔场和接受邀请。
+- 兔场域权限使用 `rabbit:*` 动作权限码；客户端按返回的 `permissions` 控制入口，后端仍执行最终校验。
+- 旧 `view`、`edit`、`control`、`isAdmin` 仅用于兼容历史客户端。
 
 平台管理 API：
 
-- 使用 `/api/admin/**`。
-- 使用平台管理员 JWT。
+- 使用 `/api/admin/**` 和独立的平台管理员 JWT。
 - 不发送 `X-House-Id`。
-- 第一版只能管理商户及其业务账号并查看概览，不直接编辑商户生产数据。
+- 可管理账号与兔场状态、处理无有效所有者的兔场并查看平台概览。
+- 默认不直接编辑兔场生产数据。
+
+## 工作空间
+
+当前保持单个 Spring Boot 模块化单体。现有兔场通过 `RABBIT:<houseId>` 投影为工作空间，
+仍使用原表、原业务状态机和 `X-House-Id`，不新增通用工作空间表。
+
+跨模块依赖使用 workspace 的 `model` 和 `spi` 契约。兔养殖适配器属于
+`house.workspace`，通用 workspace 核心不依赖任何具体养殖模块；详细决策见
+[多养殖业务工作空间](../backend/modules/farming-workspaces.md)。
 
 ## Flutter 客户端
 
-Flutter Android 客户端位于 `flutter_app/`，包名为 `com.rabbit.app.flutter`，避免覆盖历史原生 Android App。
+Flutter Android 客户端位于 `app/`。关键客户端状态包括：
 
-目录职责：
-
-- `lib/src/config/`：运行时配置。
-- `lib/src/data/services/`：HTTP、会话存储等底层服务。
-- `lib/src/data/repositories/`：面向功能的 API 封装和数据组织。
-- `lib/src/domain/models/`：跨层复用的数据模型。
-- `lib/src/routing/`：go_router 路由表和导航守卫。
-- `lib/src/ui/`：页面、组件、主题和 view model。
-
-兔舍管理当前采用多级流程：
-
-```text
-兔舍列表 -> 兔舍详情 -> 笼位管理 / 兔只管理
-```
-
-新增兔只必须从具体笼位进入，保持笼位上下文；兔只列表页主要用于查看和编辑。
+- 正式 session：JWT、账号资料、`phoneBound`、`maskedPhone` 和 `hasPassword`。
+- 当前兔场：客户端偏好，可以为空；每次使用前必须确认仍在可访问兔场列表中。
+- 零兔场：进入创建或加入兔场页面，不把空列表当成登录失败。
 
 ## 平台管理后台
 
-Admin 位于 `admin/`，是 React + TypeScript + Vite 应用。它只服务平台管理员，不是商户业务后台。
-
-关键边界：
-
-- 请求统一走 `src/lib/request.ts` 和 `src/api/`。
-- 平台登录使用 `POST /api/admin/auth/login`。
-- 商户业务数据以只读概览为主。
-- 可写操作集中在商户创建、编辑、启停，以及在商户下新增业务账号。
-
-UI 和工程规则分别见 `admin/DESIGN.md` 与 `admin/.rules`。
-
-## 历史 Android 客户端
-
-历史原生 Android 客户端不再作为当前维护入口。后续移动端功能默认落在 `flutter_app/`，除非任务明确要求恢复或修改原生 Android。
+Admin 位于 `admin/`，是 React + TypeScript + Vite 应用。它只服务平台管理员，不是兔场
+生产操作端。平台侧以账号和兔场为导航对象，可查看状态与只读概览；生产写入仍由持有有效
+兔场成员关系的业务账号完成。

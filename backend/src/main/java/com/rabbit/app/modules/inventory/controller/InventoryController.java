@@ -9,7 +9,8 @@ import com.rabbit.app.modules.inventory.entity.InventoryItem;
 import com.rabbit.app.modules.inventory.entity.InventoryTx;
 import com.rabbit.app.modules.inventory.service.InventoryService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,7 +32,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @Validated
 @RestController
 @RequestMapping("/api/inventory")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_INVENTORY_LIST)
 public class InventoryController {
     private final HouseService houseService;
     private final InventoryService inventoryService;
@@ -49,7 +50,7 @@ public class InventoryController {
     }
 
     @PostMapping("/items")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_INVENTORY_EDIT)
     public ApiResponse<InventoryItem> createItem(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateInventoryItemRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -62,7 +63,7 @@ public class InventoryController {
     }
 
     @PostMapping("/txs")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_INVENTORY_EDIT)
     public ApiResponse<Void> addTx(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateInventoryTxRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -81,6 +82,7 @@ public class InventoryController {
     }
 
     @GetMapping(value = "/items.csv")
+    @RequiresPermission(PermissionCode.RABBIT_INVENTORY_EXPORT)
     public org.springframework.http.ResponseEntity<StreamingResponseBody> exportItemsCsv(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -111,6 +113,7 @@ public class InventoryController {
     }
 
     @GetMapping(value = "/txs.csv")
+    @RequiresPermission(PermissionCode.RABBIT_INVENTORY_EXPORT)
     public org.springframework.http.ResponseEntity<StreamingResponseBody> exportTxsCsv(@RequestHeader("X-House-Id") Long houseId,
                                                                                       @RequestParam("itemId") Long itemId,
                                                                                       @RequestParam(value = "from", required = false) Long from,

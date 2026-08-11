@@ -5,7 +5,8 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.audit.entity.AuditLog;
 import com.rabbit.app.modules.audit.service.AuditLogService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +33,7 @@ public class AuditLogController {
     }
 
     @GetMapping("/audit-logs")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_AUDIT_LIST)
     public ApiResponse<List<AuditLog>> list(@RequestHeader("X-House-Id") Long houseId,
                                             @RequestParam(value = "userId", required = false) Long userId,
                                             @RequestParam(value = "path", required = false) String path,
@@ -48,7 +49,7 @@ public class AuditLogController {
     }
 
     @GetMapping(value = "/audit-logs.csv")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_AUDIT_EXPORT)
     public org.springframework.http.ResponseEntity<StreamingResponseBody> exportCsv(@RequestHeader("X-House-Id") Long houseId,
                                                                                    @RequestParam(value = "userId", required = false) Long userId,
                                                                                    @RequestParam(value = "path", required = false) String path,

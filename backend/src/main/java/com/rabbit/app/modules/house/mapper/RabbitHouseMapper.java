@@ -11,6 +11,8 @@ public interface RabbitHouseMapper {
 
     RabbitHouse selectById(@Param("houseId") Long houseId);
 
+    RabbitHouse selectByIdForUpdate(@Param("houseId") Long houseId);
+
     List<RabbitHouse> selectByUserId(@Param("userId") Long userId);
 
     List<RabbitHouse> selectAllActive();
@@ -20,4 +22,8 @@ public interface RabbitHouseMapper {
     int updateBasic(@Param("houseId") Long houseId, @Param("name") String name, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
     int markDeleted(@Param("houseId") Long houseId, @Param("updateBy") String updateBy);
+
+    int updateStatus(@Param("houseId") Long houseId,
+                     @Param("status") String status,
+                     @Param("updateBy") String updateBy);
 }

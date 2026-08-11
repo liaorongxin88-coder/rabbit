@@ -112,9 +112,10 @@ model mapping and rollout boundaries explicit.
 
 ## Deferred rollout work
 
-- Dedicated outbound/early-sale permissions, a feature flag, product analytics, and a separate
-  append-only audit-event stream should be added before broad rollout. This slice retains durable
-  task/request/order/departure histories and existing house permissions.
+- Dedicated outbound list/query/edit permission codes are enforced at the API boundary. Early sale
+  additionally requires the house `control` capability. A feature flag, product analytics, and a
+  separate append-only audit-event stream should still be added before broad rollout. This slice
+  retains durable task/request/order/departure histories.
 - Very large houses should add paged or incremental precheck responses and list virtualization based
   on measured field sizes. The first slice returns one complete house scope so selection totals are
   authoritative.

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.admin.mapper.AdminBusinessUserMapper">
+    <resultMap id="AdminBusinessUserMap" type="com.rabbit.app.modules.admin.dto.AdminBusinessUserItem">
+        <id column="user_id" property="userId"/>
+        <result column="user_name" property="userName"/>
+        <result column="phone_bound" property="phoneBound"/>
+        <result column="phone_masked" property="phoneMasked"/>
+        <result column="status" property="status"/>
+        <result column="house_count" property="houseCount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="UserFilter">
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (u.user_name like concat('%', #{keyword}, '%')
+                     or u.phone_masked like concat('%', #{keyword}, '%')
+                     or cast(u.user_id as char) = #{keyword})
+            </if>
+            <if test="status != null and status != ''">
+                and u.status = #{status}
+            </if>
+        </where>
+    </sql>
+
+    <select id="count" resultType="long">
+        select count(1) from sys_user u
+        <include refid="UserFilter"/>
+    </select>
+
+    <select id="selectPage" resultMap="AdminBusinessUserMap">
+        select u.user_id, u.user_name, (u.phone_bound_time is not null) as phone_bound,
+               u.phone_masked, u.status, u.create_time, u.update_time,
+               (select count(1)
+                from house_users hu
+                join rabbit_houses h on h.id = hu.house_id and h.is_deleted = false
+                where hu.user_id = u.user_id and hu.status = 'ENABLED') as house_count
+        from sys_user u
+        <include refid="UserFilter"/>
+        order by u.create_time desc, u.user_id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="selectById" resultMap="AdminBusinessUserMap">
+        select u.user_id, u.user_name, (u.phone_bound_time is not null) as phone_bound,
+               u.phone_masked, u.status, u.create_time, u.update_time,
+               (select count(1)
+                from house_users hu
+                join rabbit_houses h on h.id = hu.house_id and h.is_deleted = false
+                where hu.user_id = u.user_id and hu.status = 'ENABLED') as house_count
+        from sys_user u
+        where u.user_id = #{userId}
+    </select>
+
+    <select id="selectOwnedHouseIdsForUpdate" resultType="long">
+        select h.id
+        from rabbit_houses h
+        join house_users hu on hu.house_id = h.id
+                           and hu.user_id = #{userId}
+                           and hu.role = 'OWNER'
+                           and hu.status = 'ENABLED'
+        where h.is_deleted = false
+        order by h.id
+        for update
+    </select>
+
+    <select id="countNonDeletedHousesWhereSoleOwner" resultType="long">
+        select count(1)
+        from rabbit_houses h
+        join house_users target on target.house_id = h.id
+                               and target.user_id = #{userId}
+                               and target.role = 'OWNER'
+                               and target.status = 'ENABLED'
+        where h.is_deleted = false
+          and not exists (
+              select 1
+              from house_users other
+              join sys_user other_user on other_user.user_id = other.user_id
+                                      and other_user.status = 'ENABLED'
+              where other.house_id = h.id
+                and other.user_id != #{userId}
+                and other.role = 'OWNER'
+                and other.status = 'ENABLED'
+          )
+    </select>
+</mapper>

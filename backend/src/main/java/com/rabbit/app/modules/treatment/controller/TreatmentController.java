@@ -8,7 +8,8 @@ import com.rabbit.app.modules.treatment.dto.CreateTreatmentRequest;
 import com.rabbit.app.modules.treatment.entity.TreatmentRecord;
 import com.rabbit.app.modules.treatment.service.TreatmentService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_TREATMENTS_LIST)
 public class TreatmentController {
     private final HouseService houseService;
     private final TreatmentService treatmentService;
@@ -35,7 +36,7 @@ public class TreatmentController {
     }
 
     @PostMapping("/treatments")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_TREATMENTS_EDIT)
     public ApiResponse<TreatmentRecord> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateTreatmentRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -61,7 +62,7 @@ public class TreatmentController {
     }
 
     @PostMapping("/treatments/{id}/complete")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_TREATMENTS_EDIT)
     public ApiResponse<Void> complete(@RequestHeader("X-House-Id") Long houseId,
                                       @PathVariable("id") Long id,
                                       @Valid @RequestBody CompleteTreatmentRequest req) {

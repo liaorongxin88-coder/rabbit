@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "deploy": "bash scripts/deploy.sh",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.17",

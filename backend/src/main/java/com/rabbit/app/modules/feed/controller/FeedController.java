@@ -7,7 +7,8 @@ import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.modules.feed.service.FeedService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.Date;
 import java.util.List;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_FEED_LIST)
 public class FeedController {
     private final HouseService houseService;
     private final FeedService feedService;
@@ -34,7 +35,7 @@ public class FeedController {
     }
 
     @PostMapping("/feed-logs")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_FEED_ADD)
     public ApiResponse<Void> add(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody FeedLogRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");

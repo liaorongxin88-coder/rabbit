@@ -41,11 +41,15 @@ Rabbit 是面向兔场生产管理的一体化系统，当前仓库包含后端 
 ### 后端和 MySQL
 
 ```bash
-export APP_NFC_TAG_SIGNING_KEYS="1=$(openssl rand -hex 32)"
+cp .env.example .env
+# 将所有 change-me 占位值替换为分别生成的稳定随机值
 docker compose up -d --build
 ```
 
-`APP_NFC_TAG_SIGNING_KEYS` 没有默认值，必须显式配置并持久保存；更换密钥时保留旧 key，再提升 `APP_NFC_TAG_ACTIVE_KEY_ID`，否则既有标签将无法验证。
+Compose 要求 `.env` 提供应用 JWT、管理 JWT、手机号摘要和 NFC 标签签名密钥；应用 JWT 与
+管理 JWT 必须不同。短信默认关闭，`APP_SMS_CODE_SECRET` 仅在启用短信时必需。后端拒绝
+`change-me` 等公开占位值。所有持久密钥都应独立生成并稳定保存；轮换 NFC 密钥时保留旧 key，
+再提升 `APP_NFC_TAG_ACTIVE_KEY_ID`，否则既有标签将无法验证。
 
 默认服务：
 
@@ -53,16 +57,15 @@ docker compose up -d --build
 - MySQL: `localhost:3306`
 - MySQL root 密码: `rabbit_root`
 
-生产环境还必须覆盖 `APP_JWT_SECRET`、`APP_ADMIN_JWT_SECRET` 和平台管理员 bootstrap 密码。
+生产环境还必须覆盖或关闭平台管理员 bootstrap 密码。
 
 ### Flutter Android 客户端
 
 ```bash
 cd flutter_app
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit bootstrap
+./rabbit check
+./rabbit apk dev --debug
 ```
 
 Android 模拟器默认后端地址为 `http://10.0.2.2:8080`。
@@ -89,9 +92,8 @@ mvn --file backend/pom.xml -Pe2e verify
 
 # Flutter
 cd flutter_app
-flutter analyze
-flutter test
-flutter build apk --debug
+./rabbit check
+./rabbit apk dev --debug
 
 # Admin
 pnpm --dir admin lint

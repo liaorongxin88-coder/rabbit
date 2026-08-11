@@ -1,7 +1,16 @@
 import { createAlova } from 'alova'
 import adapterFetch from 'alova/fetch'
 import { toast } from 'sonner'
-import { clearSession, getToken } from '@/lib/auth'
+import {
+  clearSession,
+  getToken,
+  clearWorkspaceSession,
+  getWorkspaceToken,
+} from '@/lib/auth'
+import {
+  shouldClearRequestSession,
+  type RequestSessionScope,
+} from '@/lib/request-auth'
 import type { ApiResponse } from '@/types/api'
 
 type JsonBody = object | string
@@ -33,43 +42,64 @@ async function parseApiResponse(response: Response) {
   }
 }
 
-const alova = createAlova({
-  baseURL: API_BASE_URL,
-  requestAdapter: adapterFetch(),
-  beforeRequest(method) {
-    const token = getToken()
-    if (token) {
-      method.config.headers = {
-        ...method.config.headers,
-        Authorization: `Bearer ${token}`,
-      }
-    }
-  },
-  responded: {
-    async onSuccess(response) {
-      const payload = await parseApiResponse(response)
-      if (!payload || typeof payload.code !== 'number') {
-        throw new Error('响应格式不合法')
-      }
-      if (payload.code !== 0) {
-        if (payload.code === 401) {
-          clearSession()
+function createRequestClient(
+  token: () => string,
+  clearAuth: () => void,
+  scope: RequestSessionScope,
+) {
+  return createAlova({
+    baseURL: API_BASE_URL,
+    requestAdapter: adapterFetch(),
+    beforeRequest(method) {
+      const accessToken = token()
+      if (accessToken) {
+        method.config.headers = {
+          ...method.config.headers,
+          Authorization: `Bearer ${accessToken}`,
         }
-        throw new Error(payload.message || '请求失败')
       }
-      return payload.data
     },
-    onError(error) {
-      const message = getRequestErrorMessage(error)
-      toast.error(message)
-      throw new Error(message)
+    responded: {
+      async onSuccess(response) {
+        const payload = await parseApiResponse(response)
+        if (!payload || typeof payload.code !== 'number') {
+          throw new Error('响应格式不合法')
+        }
+        if (payload.code !== 0) {
+          const message = payload.message || '请求失败'
+          if (shouldClearRequestSession(scope, payload.code, message)) {
+            const hadSession = Boolean(token())
+            clearAuth()
+            if (hadSession) {
+              toast.error(message)
+            }
+            throw new Error(message)
+          }
+          toast.error(message)
+          throw new Error(message)
+        }
+        return payload.data
+      },
+      onError(error) {
+        const message = getRequestErrorMessage(error)
+        toast.error(message)
+        throw new Error(message)
+      },
     },
-  },
-})
+  })
+}
+
+const alova = createRequestClient(getToken, clearSession, 'admin')
+const workspaceAlova = createRequestClient(
+  getWorkspaceToken,
+  clearWorkspaceSession,
+  'workspace',
+)
 
 export function getJson<T>(url: string, params?: Record<string, unknown>) {
   return alova.Get<T>(url, {
     params,
+    cacheFor: 0,
   })
 }
 
@@ -83,4 +113,45 @@ export function putJson<T>(url: string, data?: JsonBody) {
 
 export function deleteJson<T>(url: string) {
   return alova.Delete<T>(url)
+}
+
+interface WorkspaceRequestOptions {
+  houseId?: number | null
+  params?: Record<string, unknown>
+}
+
+function workspaceConfig(options?: WorkspaceRequestOptions) {
+  return {
+    params: options?.params,
+    headers: options?.houseId
+      ? { 'X-House-Id': String(options.houseId) }
+      : undefined,
+  }
+}
+
+export function workspaceGetJson<T>(url: string, options?: WorkspaceRequestOptions) {
+  return workspaceAlova.Get<T>(url, {
+    ...workspaceConfig(options),
+    cacheFor: 0,
+  })
+}
+
+export function workspacePostJson<T>(
+  url: string,
+  data?: JsonBody,
+  options?: WorkspaceRequestOptions,
+) {
+  return workspaceAlova.Post<T>(url, data, workspaceConfig(options))
+}
+
+export function workspacePutJson<T>(
+  url: string,
+  data?: JsonBody,
+  options?: WorkspaceRequestOptions,
+) {
+  return workspaceAlova.Put<T>(url, data, workspaceConfig(options))
+}
+
+export function workspaceDeleteJson<T>(url: string, options?: WorkspaceRequestOptions) {
+  return workspaceAlova.Delete<T>(url, undefined, workspaceConfig(options))
 }

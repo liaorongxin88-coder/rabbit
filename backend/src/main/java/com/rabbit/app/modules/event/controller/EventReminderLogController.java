@@ -6,7 +6,8 @@ import com.rabbit.app.modules.event.entity.EventReminderLog;
 import com.rabbit.app.modules.event.mapper.EventReminderLogMapper;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import java.util.Date;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/event-reminder-logs")
-@HousePerm("control")
+@RequiresPermission(PermissionCode.RABBIT_AUDIT_LIST)
 public class EventReminderLogController {
     private final HouseService houseService;
     private final EventReminderLogMapper eventReminderLogMapper;
@@ -50,4 +51,3 @@ public class EventReminderLogController {
         return userId;
     }
 }
-

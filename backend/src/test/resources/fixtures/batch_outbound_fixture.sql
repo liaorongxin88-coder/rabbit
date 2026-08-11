@@ -9,23 +9,12 @@ SET @prefix = CONCAT('batch-outbound-fixture:', @run_id);
 
 START TRANSACTION;
 
-INSERT INTO merchants (name, contact_name, status, remark, create_by, update_by)
-VALUES (
-    CONCAT('Batch outbound fixture ', @run_id),
-    'Automated test fixture',
-    'ENABLED',
-    CONCAT(@prefix, ':merchant'),
-    @actor,
-    @actor
-);
-SET @merchant_id = LAST_INSERT_ID();
-
-INSERT INTO sys_user (merchant_id, user_name, password)
+INSERT INTO sys_user (user_name, password, status)
 VALUES
-    (@merchant_id, @actor, @password_hash),
-    (@merchant_id, CONCAT('outbound_fixture_', @run_id, '_edit'), @password_hash),
-    (@merchant_id, CONCAT('outbound_fixture_', @run_id, '_view'), @password_hash),
-    (@merchant_id, CONCAT('outbound_fixture_', @run_id, '_concurrent'), @password_hash);
+    (@actor, @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_edit'), @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_view'), @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_concurrent'), @password_hash, 'ENABLED');
 
 SET @user_control = (SELECT user_id FROM sys_user WHERE user_name = @actor);
 SET @user_edit = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outbound_fixture_', @run_id, '_edit'));
@@ -33,12 +22,12 @@ SET @user_view = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outboun
 SET @user_concurrent = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outbound_fixture_', @run_id, '_concurrent'));
 
 INSERT INTO rabbit_houses (
-    merchant_id, name, layout_rows, layout_cols, layout_layers,
+    name, status, layout_rows, layout_cols, layout_layers,
     request_id, remark, create_by, update_by
 )
 VALUES (
-    @merchant_id,
     CONCAT('H-GOLDEN-', @run_id),
+    'ENABLED',
     2,
     6,
     1,
@@ -50,12 +39,12 @@ VALUES (
 SET @primary_house_id = LAST_INSERT_ID();
 
 INSERT INTO rabbit_houses (
-    merchant_id, name, layout_rows, layout_cols, layout_layers,
+    name, status, layout_rows, layout_cols, layout_layers,
     request_id, remark, create_by, update_by
 )
 VALUES (
-    @merchant_id,
     CONCAT('H-GOLDEN-BRANCH-', @run_id),
+    'ENABLED',
     1,
     2,
     1,
@@ -66,16 +55,16 @@ VALUES (
 );
 SET @branch_house_id = LAST_INSERT_ID();
 
-INSERT INTO house_users (house_id, user_id, perms, is_admin, create_by, update_by)
+INSERT INTO house_users (house_id, user_id, role, status, perms, is_admin, create_by, update_by)
 VALUES
-    (@primary_house_id, @user_control, 'control', TRUE, @actor, @actor),
-    (@primary_house_id, @user_edit, 'edit', FALSE, @actor, @actor),
-    (@primary_house_id, @user_view, 'view', FALSE, @actor, @actor),
-    (@primary_house_id, @user_concurrent, 'control', FALSE, @actor, @actor),
-    (@branch_house_id, @user_control, 'control', TRUE, @actor, @actor),
-    (@branch_house_id, @user_edit, 'edit', FALSE, @actor, @actor),
-    (@branch_house_id, @user_view, 'view', FALSE, @actor, @actor),
-    (@branch_house_id, @user_concurrent, 'control', FALSE, @actor, @actor);
+    (@primary_house_id, @user_control, 'OWNER', 'ENABLED', 'control', TRUE, @actor, @actor),
+    (@primary_house_id, @user_edit, 'STAFF', 'ENABLED', 'edit', FALSE, @actor, @actor),
+    (@primary_house_id, @user_view, 'VIEWER', 'ENABLED', 'view', FALSE, @actor, @actor),
+    (@primary_house_id, @user_concurrent, 'MANAGER', 'ENABLED', 'control', FALSE, @actor, @actor),
+    (@branch_house_id, @user_control, 'OWNER', 'ENABLED', 'control', TRUE, @actor, @actor),
+    (@branch_house_id, @user_edit, 'STAFF', 'ENABLED', 'edit', FALSE, @actor, @actor),
+    (@branch_house_id, @user_view, 'VIEWER', 'ENABLED', 'view', FALSE, @actor, @actor),
+    (@branch_house_id, @user_concurrent, 'MANAGER', 'ENABLED', 'control', FALSE, @actor, @actor);
 
 INSERT INTO cages (
     house_id, cage_number, row_code, layer_index, position_index,
@@ -187,7 +176,7 @@ SELECT
     b.id,
     r.id,
     '断奶',
-    '商品兔',
+    'fattening',
     '成长期',
     NOW() - INTERVAL 7 DAY,
     CASE
@@ -222,7 +211,7 @@ COMMIT;
 
 SELECT
     @run_id AS run_id,
-    @merchant_id AS merchant_id,
+    NULL AS retired_scope_id,
     @primary_house_id AS primary_house_id,
     @branch_house_id AS branch_house_id,
     '123456' AS fixture_password;

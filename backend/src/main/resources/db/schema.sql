@@ -1,36 +1,41 @@
 CREATE DATABASE IF NOT EXISTS rabbit_app DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 USE rabbit_app;
 
-CREATE TABLE IF NOT EXISTS merchants (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(100) NOT NULL,
-  contact_name VARCHAR(64),
-  contact_phone VARCHAR(32),
-  status VARCHAR(20) NOT NULL DEFAULT 'ENABLED',
-  remark TEXT,
-  create_by VARCHAR(64),
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_by VARCHAR(64),
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY idx_merchants_status_id (status, id),
-  KEY idx_merchants_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT INTO merchants (name, contact_name, contact_phone, status, remark, create_by, update_by)
-SELECT '默认商户', '系统初始化', '', 'ENABLED', '结构初始化创建', 'schema', 'schema'
-WHERE NOT EXISTS (SELECT 1 FROM merchants);
-
 CREATE TABLE IF NOT EXISTS sys_user (
   user_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  merchant_id BIGINT NOT NULL,
   user_name VARCHAR(64) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
+  password_initialized BOOLEAN NOT NULL DEFAULT TRUE,
   openid VARCHAR(128),
+  phone_country_code VARCHAR(8),
+  phone_hash CHAR(64),
+  phone_masked VARCHAR(32),
+  phone_bound_time DATETIME,
+  status VARCHAR(20) NOT NULL DEFAULT 'ENABLED',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_sys_user_openid (openid),
-  KEY idx_sys_user_merchant (merchant_id, user_id),
-  CONSTRAINT fk_sys_user_merchant FOREIGN KEY (merchant_id) REFERENCES merchants (id)
+  UNIQUE KEY uk_sys_user_phone_hash (phone_hash),
+  KEY idx_sys_user_status (status, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sms_verification_codes (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  phone_hash CHAR(64) NOT NULL,
+  purpose VARCHAR(32) NOT NULL,
+  code_hash CHAR(64) NOT NULL,
+  request_ip VARCHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  send_bucket BIGINT NOT NULL,
+  expires_time DATETIME NOT NULL,
+  consumed_time DATETIME,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sms_phone_purpose_bucket (phone_hash, purpose, send_bucket),
+  KEY idx_sms_phone_purpose_status_time (phone_hash, purpose, status, create_time),
+  KEY idx_sms_ip_status_time (request_ip, status, create_time),
+  KEY idx_sms_expiry (expires_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS platform_admins (
@@ -47,7 +52,7 @@ CREATE TABLE IF NOT EXISTS platform_admins (
 
 CREATE TABLE IF NOT EXISTS rabbit_houses (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  merchant_id BIGINT,
+  status VARCHAR(20) NOT NULL DEFAULT 'ENABLED',
   name VARCHAR(100) NOT NULL,
   layout_rows INT NOT NULL DEFAULT 0,
   layout_cols INT NOT NULL DEFAULT 0,
@@ -60,14 +65,15 @@ CREATE TABLE IF NOT EXISTS rabbit_houses (
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_house_creator_req (create_by, request_id),
-  KEY idx_rabbit_houses_merchant (merchant_id, is_deleted, id),
-  CONSTRAINT fk_rabbit_houses_merchant FOREIGN KEY (merchant_id) REFERENCES merchants (id)
+  KEY idx_rabbit_houses_status (status, is_deleted, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS house_users (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'VIEWER',
+  status VARCHAR(20) NOT NULL DEFAULT 'ENABLED',
   perms VARCHAR(10) NOT NULL DEFAULT 'view',
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
   join_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -77,8 +83,35 @@ CREATE TABLE IF NOT EXISTS house_users (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_house_user (house_id, user_id),
   KEY idx_user_id (user_id),
+  KEY idx_house_users_user_house (user_id, house_id),
+  KEY idx_house_users_house_role (house_id, role, user_id),
+  KEY idx_house_users_user_status (user_id, status, house_id),
   CONSTRAINT fk_house_users_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_house_users_user FOREIGN KEY (user_id) REFERENCES sys_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS house_invitations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT NOT NULL,
+  phone_hash CHAR(64) NOT NULL,
+  phone_masked VARCHAR(32) NOT NULL,
+  role VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  request_id VARCHAR(64) NOT NULL,
+  invited_by_user_id BIGINT NOT NULL,
+  accepted_user_id BIGINT,
+  expires_time DATETIME NOT NULL,
+  accepted_time DATETIME,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_house_invitations_request (house_id, invited_by_user_id, request_id),
+  KEY idx_house_invitations_house_phone_status (house_id, phone_hash, status, id),
+  KEY idx_house_invitations_phone_status_expiry (phone_hash, status, expires_time),
+  KEY idx_house_invitations_inviter (invited_by_user_id, status, house_id),
+  KEY idx_house_invitations_accepted_user (accepted_user_id, status, house_id),
+  CONSTRAINT fk_house_invitations_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_house_invitations_inviter FOREIGN KEY (invited_by_user_id) REFERENCES sys_user (user_id),
+  CONSTRAINT fk_house_invitations_accepted_user FOREIGN KEY (accepted_user_id) REFERENCES sys_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS cages (
@@ -300,6 +333,7 @@ CREATE TABLE IF NOT EXISTS parturition_records (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_pr_house_batch (house_id, batch_id, id),
   KEY idx_pr_house_rabbit (house_id, rabbit_id, id),
+  KEY idx_pr_house_birth_id (house_id, birth_date, id),
   KEY idx_pr_batch (batch_id),
   KEY idx_pr_rabbit (rabbit_id),
   CONSTRAINT fk_pr_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
@@ -343,6 +377,7 @@ CREATE TABLE IF NOT EXISTS weaning_records (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_wr_house_batch (house_id, batch_id, id),
   KEY idx_wr_house_rabbit (house_id, rabbit_id, id),
+  KEY idx_wr_house_weaning_id (house_id, weaning_date, id),
   KEY idx_wr_batch (batch_id),
   KEY idx_wr_rabbit (rabbit_id),
   KEY idx_wr_target_cage (target_cage_id),
@@ -717,6 +752,38 @@ CREATE TABLE IF NOT EXISTS request_dedup (
   KEY idx_request_dedup_update (update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS phone_one_tap_attempts (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  request_id VARCHAR(64) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  request_ip VARCHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  lease_id VARCHAR(64) NOT NULL,
+  lease_expires_time DATETIME(3),
+  response_code INT,
+  response_message VARCHAR(128),
+  user_id BIGINT,
+  success_time DATETIME(3),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_phone_one_tap_request_id (request_id),
+  UNIQUE KEY uk_phone_one_tap_token_hash (token_hash),
+  KEY idx_phone_one_tap_ip_time (request_ip, create_time),
+  KEY idx_phone_one_tap_status_time (status, update_time),
+  KEY idx_phone_one_tap_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS phone_one_tap_rate_buckets (
+  request_ip VARCHAR(64) NOT NULL,
+  bucket_type VARCHAR(16) NOT NULL,
+  bucket_start DATETIME NOT NULL,
+  request_count INT NOT NULL DEFAULT 0,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (request_ip, bucket_type, bucket_start),
+  KEY idx_phone_one_tap_bucket_start (bucket_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   trace_id VARCHAR(64),
@@ -734,6 +801,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   user_agent VARCHAR(255),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_audit_house_time (house_id, create_time),
+  KEY idx_audit_house_id (house_id, id),
   KEY idx_audit_user_time (user_id, create_time),
   KEY idx_audit_trace (trace_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

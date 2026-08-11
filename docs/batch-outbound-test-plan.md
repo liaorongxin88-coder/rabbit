@@ -2,7 +2,7 @@
 
 ## 1. 文档目的
 
-本方案将飞书《养兔 App 批量出库 PRD》revision 12 转换为可重复执行的人工验收、Flutter 自动化、后端 API E2E 和数据库一致性检查。测试对象是当前 `feat/batch-outbound` 实现，业务口径以 PRD 为准，当前实现边界以 `batch-outbound-implementation.md` 为准。
+本方案将飞书《养兔 App 批量出库 PRD》revision 12 转换为可重复执行的人工验收、Flutter 自动化、后端 API E2E 和数据库一致性检查。测试对象是当前主线实现，业务口径以 PRD 为准，当前实现边界以 `batch-outbound-implementation.md` 为准。
 
 一条用例不能同时覆盖“出售”和“留种”等互斥结果。本方案使用一个固定的黄金兔舍作为基线，在冻结快照处分叉执行成功、冲突、权限撤回、断网和事务失败场景。用例设计优先确认业务交互是否符合养殖现场的人体工学，再验证状态和数据结果；不能用“最终数据正确”掩盖操作难以完成、容易误触或反馈难以理解的问题。只有所有 P0 分支都通过，才能认为核心出库链路具备发布条件。
 
@@ -88,7 +88,7 @@ ERG-01、ERG-03、ERG-04 和 ERG-09 必须录屏；ERG-02 留存尺寸检查截�
 
 ### 3.3 本地测试数据注入
 
-手工执行数据脚本时只允许使用独立测试库 `rabbit_app_e2e`。Android runner 可以在确认本地 Flyway V11 后向开发库 `rabbit_app` 追加本轮数据，以便 Dev APK 经真实后端联调；不得指向共享测试库或生产库。脚本采用追加式隔离：每次生成新的商户、四个账号、主兔舍和分支兔舍，不删除已有数据；执行结果会打印本轮 `run_id`、账号、兔舍 ID、兔只 ID 和资格汇总。四个账号的测试密码统一为 `123456`。
+手工执行数据脚本时只允许使用独立测试库 `rabbit_app_e2e`。Android runner 可以在确认本地 Flyway V11 后向开发库 `rabbit_app` 追加本轮数据，以便 Dev APK 经真实后端联调；不得指向共享测试库或生产库。脚本采用追加式隔离：每次生成四个账号、主兔舍和分支兔舍，并通过直接兔场成员关系授权，不删除已有数据；执行结果会打印本轮 `run_id`、账号、兔舍 ID、兔只 ID 和资格汇总。四个账号的测试密码统一为 `123456`。
 
 ```bash
 docker exec -i rabbit-e2e-mysql \
@@ -267,14 +267,14 @@ mvn -Pe2e -Dit.test=BatchOutboundIT verify
 Flutter 定向测试：
 
 ```bash
-cd flutter_app
+cd app
 ./scripts/test_flutter.sh test test/outbound_controller_test.dart test/outbound_flow_screen_test.dart
 ```
 
 Android 设备级黄金流程（使用 `rabbit_app`，每轮追加隔离 fixture）：
 
 ```bash
-cd flutter_app
+cd app
 ./scripts/android_e2e.sh
 ```
 
@@ -288,7 +288,7 @@ RABBIT_ANDROID_E2E_TEXT_SCALE=2.0 ./scripts/android_e2e.sh
 
 ```bash
 cd backend && mvn -Pe2e verify
-cd ../flutter_app && flutter analyze && ./scripts/test_flutter.sh test
+cd ../app && ./rabbit check
 ```
 
 ## 8. 数据库对账断言
@@ -316,4 +316,4 @@ cd ../flutter_app && flutter analyze && ./scripts/test_flutter.sh test
 
 ## 10. 当前发布风险
 
-当前实现说明已明确延后专用出库权限、功能开关、产品埋点、独立审计事件流、自动对账、大兔舍分页/虚拟化以及可靠 outbox。因此现阶段可以用本方案验收核心原子出库链路，但不能据此宣称 PRD 的全部上线检查项已经完成。灰度发布前至少还需要：功能开关、可查询的对账结果、关键指标与告警、1000 只规模基线、最低 Android 版本，以及 ERG-01 至 ERG-10 的真机人体工学证据。
+当前实现已经具备专用出库 list/query/edit 权限，并对提前出售继续校验兔场 `control` 能力；功能开关、产品埋点、独立审计事件流、自动对账、大兔舍分页/虚拟化以及可靠 outbox 仍未完成。因此现阶段可以用本方案验收核心原子出库链路，但不能据此宣称 PRD 的全部上线检查项已经完成。灰度发布前至少还需要：功能开关、可查询的对账结果、关键指标与告警、1000 只规模基线、最低 Android 版本，以及 ERG-01 至 ERG-10 的真机人体工学证据。

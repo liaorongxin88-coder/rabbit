@@ -29,6 +29,8 @@ import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
 import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
+import com.rabbit.app.modules.outbound.dto.OutboundDtos;
+import com.rabbit.app.modules.outbound.service.OutboundEligibilityService;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
@@ -59,6 +61,7 @@ public class BatchService {
     private final CageMapper cageMapper;
     private final ReplacementRecordMapper replacementRecordMapper;
     private final RequestDedupService requestDedupService;
+    private final OutboundEligibilityService outboundEligibilityService;
     private final int commodityCageCapacity;
 
     public BatchService(
@@ -78,6 +81,7 @@ public class BatchService {
         CageMapper cageMapper,
         ReplacementRecordMapper replacementRecordMapper,
         RequestDedupService requestDedupService,
+        OutboundEligibilityService outboundEligibilityService,
         @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
         this.batchMapper = batchMapper;
@@ -96,6 +100,7 @@ public class BatchService {
         this.cageMapper = cageMapper;
         this.replacementRecordMapper = replacementRecordMapper;
         this.requestDedupService = requestDedupService;
+        this.outboundEligibilityService = outboundEligibilityService;
         this.commodityCageCapacity =
             commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
     }
@@ -1324,6 +1329,37 @@ public class BatchService {
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
             Batch batch = requireBatchActive(houseId, batchId);
+
+            List<Long> uniqueRabbitIds = rabbitIds.stream().distinct().toList();
+            if (uniqueRabbitIds.size() != rabbitIds.size()) {
+                throw new BizException(400, "rabbitIds包含重复值");
+            }
+            List<Long> lockedIds = outboundEligibilityService.lockRabbitIds(
+                houseId,
+                uniqueRabbitIds
+            );
+            if (lockedIds.size() != uniqueRabbitIds.size()) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            List<OutboundDtos.RabbitEligibilityView> eligibility =
+                outboundEligibilityService.evaluate(
+                    outboundEligibilityService.rowsByIds(
+                        houseId,
+                        uniqueRabbitIds
+                    )
+                );
+            if (eligibility.size() != uniqueRabbitIds.size()) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            for (OutboundDtos.RabbitEligibilityView item : eligibility) {
+                if (!OutboundEligibilityService.NORMAL.equals(item.eligibility())) {
+                    throw new BizException(
+                        409,
+                        "兔只 #" + item.rabbitId() + " 不可直接出售：" +
+                        item.message() + "；请使用安全出库流程"
+                    );
+                }
+            }
 
             for (Long rabbitId : rabbitIds) {
                 Rabbit r = rabbitMapper.selectById(houseId, rabbitId);

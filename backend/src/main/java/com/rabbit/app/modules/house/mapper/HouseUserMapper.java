@@ -16,6 +16,8 @@ public interface HouseUserMapper {
 
     int updateMember(@Param("houseId") Long houseId,
                      @Param("userId") Long userId,
+                     @Param("role") String role,
+                     @Param("status") String status,
                      @Param("perms") String perms,
                      @Param("isAdmin") Boolean isAdmin,
                      @Param("updateBy") String updateBy);
@@ -24,9 +26,9 @@ public interface HouseUserMapper {
 
     int countAdmins(@Param("houseId") Long houseId);
 
-    int clearOtherAdmins(@Param("houseId") Long houseId,
-                         @Param("exceptUserId") Long exceptUserId,
-                         @Param("updateBy") String updateBy);
+    int countMembers(@Param("houseId") Long houseId);
+
+    int countEnabledOwners(@Param("houseId") Long houseId);
 
     List<Long> selectMemberUserIds(@Param("houseId") Long houseId);
 }

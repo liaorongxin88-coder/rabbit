@@ -4,8 +4,8 @@ import java.util.Date;
 
 public class RabbitHouse {
     private Long id;
-    private Long merchantId;
     private String name;
+    private String status;
     private Integer layoutRows;
     private Integer layoutCols;
     private Integer layoutLayers;
@@ -25,20 +25,20 @@ public class RabbitHouse {
         this.id = id;
     }
 
-    public Long getMerchantId() {
-        return merchantId;
-    }
-
-    public void setMerchantId(Long merchantId) {
-        this.merchantId = merchantId;
-    }
-
     public String getName() {
         return name;
     }
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public Integer getLayoutRows() {

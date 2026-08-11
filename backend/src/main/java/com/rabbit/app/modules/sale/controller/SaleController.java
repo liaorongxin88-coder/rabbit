@@ -8,7 +8,8 @@ import com.rabbit.app.modules.sale.dto.SaleOrderDetail;
 import com.rabbit.app.modules.sale.entity.SaleOrder;
 import com.rabbit.app.modules.sale.service.SaleService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("view")
+@RequiresPermission(PermissionCode.RABBIT_SALES_LIST)
 public class SaleController {
     private final HouseService houseService;
     private final SaleService saleService;
@@ -35,7 +36,7 @@ public class SaleController {
     }
 
     @PostMapping("/sales")
-    @HousePerm("edit")
+    @RequiresPermission(PermissionCode.RABBIT_SALES_ADD)
     public ApiResponse<SaleOrder> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateSaleOrderRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
@@ -52,6 +53,7 @@ public class SaleController {
     }
 
     @GetMapping("/sales/{id}")
+    @RequiresPermission(PermissionCode.RABBIT_SALES_QUERY)
     public ApiResponse<SaleOrderDetail> detail(@RequestHeader("X-House-Id") Long houseId, @PathVariable("id") Long id) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");

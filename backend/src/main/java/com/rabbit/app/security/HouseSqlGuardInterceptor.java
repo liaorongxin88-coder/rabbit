@@ -59,7 +59,7 @@ public class HouseSqlGuardInterceptor implements Interceptor {
         if (!shouldIgnore(ms.getId(), ignoreNoWhereIds) && !s.contains(" where ")) {
             throw new BizException(500, "SQL缺少WHERE过滤: " + ms.getId());
         }
-        if (hasHouseId(parameter) && !s.contains("house_id")) {
+        if (hasHouseId(parameter) && !s.contains("house_id") && !isRabbitHousePrimaryKeyScoped(s)) {
             throw new BizException(500, "SQL缺少house_id过滤: " + ms.getId());
         }
         Object result = invocation.proceed();
@@ -82,6 +82,12 @@ public class HouseSqlGuardInterceptor implements Interceptor {
 
     private String normalizeSql(String sql) {
         return sql.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private boolean isRabbitHousePrimaryKeyScoped(String sql) {
+        boolean writesRabbitHouse = sql.startsWith("update rabbit_houses ")
+                || sql.startsWith("delete from rabbit_houses ");
+        return writesRabbitHouse && sql.matches(".*\\bwhere\\s+id\\s*=.*");
     }
 
     private boolean shouldIgnore(String msId, String config) {

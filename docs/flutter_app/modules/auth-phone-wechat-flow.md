@@ -1,133 +1,170 @@
-# 手机号和微信登录交互
+# 手机号认证和兔场进入流程
 
-Flutter 客户端需要把“认证身份”和“可进入业务”分开。只有拿到已绑定手机号的正式 token 才能进入首页、兔舍、数据面板和我的页面。
+Flutter 客户端必须把账号认证与兔场授权分开。手机号已经验证但没有兔场是有效登录态，不能
+清除 JWT 或退回登录页。
 
-## 入口布局
+## 当前实现状态
 
-登录页建议按优先级展示：
+当前 App 已接入：
 
-1. `本机号码一键登录`：主按钮。
-2. `微信快捷登录`：次按钮。
-3. `账号密码登录`：折叠或底部入口，用于兼容旧账号。
+- 手机号验证码登录：`POST /api/auth/sms/code`、`POST /api/auth/sms/login`。
+- 手机号账号的 `phoneBound`、`maskedPhone` 和 `hasPassword` 会话字段。
+- 零兔场、单兔场和多兔场的进入逻辑。
+- 精确手机号邀请：`POST /api/house-invitations`。
+- 首次设置密码与后续修改密码：`PUT /api/auth/password`。
+- 供应商无关的一键登录能力探测、Kotlin 通道和后端 token 交换。
+- 用户名密码登录兼容。
 
-页面文案需要明确：手机号用于账号绑定和找回，不绑定手机号无法使用。
+当前 App 还**没有导入阿里云官方号码认证 AAR**，原生 adapter 因此报告不可用，所有已提交
+环境的 `RABBIT_CARRIER_AUTH_ENABLED` 也默认 `false`。这意味着调用链和回退逻辑可做本地
+自动化测试，但现有 APK 不会展示一个无法完成真实取号的一键登录按钮。微信快捷登录后的
+`bindingToken`、`/bind-phone` 路由和账号绑定流程仍未实现。
 
-## 状态机
+## 当前状态机
 
 ```text
 打开 App
-  -> 无 session: 登录页
-  -> 有正式 token: 首页
-  -> 有 bindingToken: 绑定手机号页
+  -> 无正式 session: 登录页
+  -> 有正式 token: 拉取 /api/auth/me 和 /api/houses
+       -> houses 为空: 显示零兔场页
+       -> houses 只有一个: 自动选中该兔场
+       -> houses 有多个: 保留仍有效的最近兔场，否则要求选择
 
-手机号一键登录成功
-  -> 正式 token
-  -> 首页
+手机号短信登录成功
+  -> 保存正式 token 和账号资料
+  -> 重新拉取兔场列表
+  -> 不自动创建占位兔场
 
-微信快捷登录成功且已绑定手机号
-  -> 正式 token
-  -> 首页
-
-微信快捷登录成功但未绑定手机号
-  -> bindingToken
-  -> 绑定手机号页
-
-账号密码登录成功但未绑定手机号
-  -> bindingToken
-  -> 绑定手机号页
+运营商一键登录成功
+  -> 原生授权页返回一次性 token
+  -> POST /api/auth/phone-one-tap-login
+  -> 仅保存后端返回的正式 session
+  -> 重新拉取兔场列表
 ```
 
-## 路由
+精确手机号邀请只会在目标账号下一次可信手机号登录时生效，因此短信登录成功后必须重新拉取
+兔场列表，不能使用登录前的缓存决定路由。
 
-建议新增：
+## 当前 Session 与兔场选择
 
-- `/login`
-- `/bind-phone`
-
-路由守卫：
-
-- 没有正式 token 时访问业务页，跳转 `/login`。
-- 只有 `bindingToken` 时访问业务页，跳转 `/bind-phone`。
-- 已有正式 token 时访问 `/login` 或 `/bind-phone`，跳转首页。
-
-## Session 存储
-
-正式 session：
+正式 session 包含：
 
 - `token`
 - `userId`
 - `userName`
-- `phoneBound=true`
+- `phoneBound`
 - `maskedPhone`
-- `currentHouseId`
+- `hasPassword`
+- `permissions`
+- `currentHouseId`：可空的本地偏好，不是授权事实
 
-绑定 session：
+规则：
 
+- 正式 token 存 `flutter_secure_storage`。
+- 零兔场时清除 `currentHouseId`，但保留正式 session。
+- 单兔场时自动选择唯一兔场。
+- 多兔场时只保留仍存在于最新列表中的 `currentHouseId`；否则清除并要求选择。
+- 每个兔场域请求发送 `X-House-Id`；客户端选择不能替代后端授权。
+- `SUSPENDED` 或 `ORPHANED` 兔场不能作为当前兔场进入生产页面。
+
+## 当前手机号验证码登录
+
+```http
+POST /api/auth/sms/code
+POST /api/auth/sms/login
+```
+
+短信登录响应中的 `hasPassword=false` 表示该手机号账号尚未设置可用密码，不影响正式 JWT、
+零兔场状态或手机号邀请匹配。
+
+## 当前零兔场页面
+
+手机号首次登录且没有有效邀请时，`GET /api/houses` 返回空数组。页面提供：
+
+- 创建兔场；成功后创建者成为第一位 `OWNER`。
+- 等待兔场所有者按当前手机号邀请，并在收到邀请后重新使用手机号登录。
+
+登录只能证明账号身份，不能替用户决定兔场名称、布局或所有权，因此不能自动创建空兔场。
+
+## 当前精确手机号邀请
+
+兔场成员页只向有 `rabbit:house-members:add` 权限的 `OWNER` 展示邀请入口：
+
+```http
+POST /api/house-invitations
+X-House-Id: <currentHouseId>
+
+{
+  "phone": "13800138000",
+  "role": "STAFF",
+  "requestId": "uuid"
+}
+```
+
+- 成功响应始终是 `{"status":"SUBMITTED","role":"STAFF"}`。
+- UI 不得根据响应判断手机号是否已经注册，也不展示 `JOINED` 或账号存在状态。
+- 无论目标账号是否存在，成员关系都在该手机号下一次可信登录时建立；提交邀请后可提示“已提交”。
+- 邀请角色不包含 `OWNER`；共同所有权只能在成员加入后由现有 `OWNER` 明确授予。
+- 不提供手机号模糊搜索，也不展示完整手机号。
+
+## 当前设置与修改密码
+
+账号设置页根据 `hasPassword` 改变表单：
+
+- `false`：显示“设置登录密码”，不要求旧密码。
+- `true`：显示“修改密码”，要求并校验旧密码。
+
+成功后刷新 `/api/auth/me` 和本地 session，使 `hasPassword=true`。设置密码不会创建新账号，
+也不会改变当前账号的任何兔场成员关系。
+
+## 当前兔场状态与共同 OWNER
+
+- 同一兔场允许多位共同 `OWNER`，成员页按多条 `role=OWNER` 展示。
+- 客户端不能假定只有一位所有者，也不能在提升新 `OWNER` 后降级其他所有者。
+- 后端拒绝最后一位有效 `OWNER` 的降级、停用、移除或退出时，客户端保留原列表并展示错误。
+- 账号、兔场或成员关系失效时，清除失效的 `currentHouseId` 并刷新列表。
+
+## 当前一键登录客户端边界
+
+Flutter 已提供 `CarrierAuthService`、MethodChannel、Kotlin `CarrierAuthAdapter`、后端 repository
+调用和登录页入口。入口只有同时满足以下条件才显示：
+
+- `RABBIT_CARRIER_AUTH_ENABLED=true`。
+- 原生 adapter 报告当前设备与 SDK 可用。
+- 用户在拉起授权前已确认 App 用户协议和隐私政策。
+
+短期 token 只作为函数局部值提交给 `POST /api/auth/phone-one-tap-login`，不写 secure storage、
+SharedPreferences 或日志。成功后只保存后端正式 JWT；用户取消、SDK 不可用、超时或后端失败
+都保留短信验证码入口。重复点击只能启动一次授权流程；Flutter 不限制用户阅读授权页的时间，
+网络认证超时由未来接入的原生 adapter 在 SDK 对应阶段报告。
+
+当前原生实现是明确的 unavailable adapter，不包含测试手机号或生产 Fake。接入真实阿里云
+adapter 时还需：
+
+1. 从控制台下载并固定官方 Android AAR 版本与校验值。
+2. 分别登记 `com.rabbit.app.flutter.dev`、`com.rabbit.app.flutter.test`、
+   `com.rabbit.app.flutter` 及其实际签名。
+3. 在用户确认 Rabbit 隐私政策之后才初始化 SDK，并使用官方授权页，不仿制或绕过授权确认。
+4. 用带有效 SIM、开启蜂窝数据且关闭 VPN 的真机验证移动、联通、电信及失败回退。
+
+模拟器和本地 Fake 只能验证应用层状态机，不能作为真实取号、授权页合规或三网验收证据。
+
+## 后续适配：微信快捷登录与绑定手机号（未实现）
+
+当前没有以下能力或接口：
+
+- `POST /api/auth/wechat-quick-login`
 - `bindingToken`
-- `provider`
-- `maskedProviderName`
-- 过期时间
+- `POST /api/auth/bind-phone`
+- `/bind-phone` 路由
+- `MERGE_REQUIRED` 账号冲突处理
 
-正式 token 存 `flutter_secure_storage`。`bindingToken` 也应存安全存储，但 TTL 很短，绑定成功或退出登录必须清除。
+后续实现时，微信 code 验证成功但手机号未绑定的账号只能获得短期 `bindingToken`；绑定页需
+通过短信验证码或运营商服务端换号取得可信手机号。绑定成功后清除短期 token，保存正式
+session，重新拉取兔场列表。两个已有账号都存在兔场关系时必须进入显式冲突处理，不能静默
+覆盖或迁移成员关系。
 
-## 接口处理
+## 隐私约束
 
-### 手机号一键登录
-
-客户端调用运营商或聚合 SDK 拿到 `accessToken` 后：
-
-```http
-POST /api/auth/phone-one-tap-login
-```
-
-成功后保存正式 session 并进入首页。
-
-### 微信快捷登录
-
-客户端调用微信 SDK 拿到 `code` 后：
-
-```http
-POST /api/auth/wechat-quick-login
-```
-
-响应如果有 `token`：
-
-- 保存正式 session。
-- 进入首页。
-
-响应如果有 `bindingRequired=true`：
-
-- 保存 `bindingToken`。
-- 跳转 `/bind-phone`。
-
-### 绑定手机号
-
-绑定页优先使用本机号码一键认证：
-
-```http
-POST /api/auth/bind-phone
-Authorization: Bearer <bindingToken>
-```
-
-成功后清除 `bindingToken`，保存正式 session，进入首页。
-
-如果一键认证不可用，后续可展示短信验证码备用流程。短信流程也必须拿到正式 token 后才能进入业务。
-
-## 错误态
-
-| 错误 | UI 处理 |
-| --- | --- |
-| 手机号一键认证不可用 | 展示短信验证码备用入口 |
-| 微信取消授权 | 留在登录页，提示用户已取消 |
-| `bindingToken` 过期 | 清除绑定态，回登录页重新认证 |
-| 手机号已绑定其它活跃账号 | 展示冲突说明，不自动覆盖 |
-| `MERGE_REQUIRED` | 展示“账号需要合并处理”，提供联系客服或后续确认入口 |
-| 网络失败 | 保持当前页，允许重试 |
-
-## 页面约束
-
-- 不要让未绑定手机号的用户进入首页或任何业务 tab。
-- 不要把微信 openid 或 unionid 展示给普通用户。
-- 手机号只展示脱敏值，例如 `138****8000`。
-- 登录页保持工具型，不做营销页。
-- 主按钮使用当前 App 主蓝或绿色体系，错误和冲突才使用红色。
+手机号只展示脱敏值，例如 `138****8000`。App 不展示或记录完整手机号、openid、unionid、
+运营商 token、微信 code、短信验证码或账号内部生成的用户名。

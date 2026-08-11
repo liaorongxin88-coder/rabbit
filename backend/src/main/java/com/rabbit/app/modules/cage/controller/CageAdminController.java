@@ -8,7 +8,8 @@ import com.rabbit.app.modules.cage.dto.UpdateCageRequest;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.service.CageAdminService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("control")
 public class CageAdminController {
     private final CageAdminService cageAdminService;
 
@@ -31,6 +31,7 @@ public class CageAdminController {
     }
 
     @PostMapping("/cages")
+    @RequiresPermission(PermissionCode.RABBIT_CAGES_ADD)
     public ApiResponse<Cage> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateCageRequest req) {
         Long userId = requireLogin();
         return ApiResponse.ok(cageAdminService.create(userId, houseId, req.getCageNumber(), req.getRowCode(),
@@ -38,6 +39,7 @@ public class CageAdminController {
     }
 
     @PutMapping("/cages/{id}")
+    @RequiresPermission(PermissionCode.RABBIT_CAGES_EDIT)
     public ApiResponse<Cage> update(@RequestHeader("X-House-Id") Long houseId, @org.springframework.web.bind.annotation.PathVariable("id") Long id, @Valid @RequestBody UpdateCageRequest req) {
         Long userId = requireLogin();
         return ApiResponse.ok(cageAdminService.update(userId, houseId, id, req.getCageNumber(), req.getRowCode(),
@@ -45,6 +47,7 @@ public class CageAdminController {
     }
 
     @DeleteMapping("/cages/{id}")
+    @RequiresPermission(PermissionCode.RABBIT_CAGES_REMOVE)
     public ApiResponse<Object> delete(@RequestHeader("X-House-Id") Long houseId, @org.springframework.web.bind.annotation.PathVariable("id") Long id) {
         Long userId = requireLogin();
         cageAdminService.delete(userId, houseId, id);
@@ -52,12 +55,14 @@ public class CageAdminController {
     }
 
     @PutMapping("/cages/{id}/rabbit-count")
+    @RequiresPermission(PermissionCode.RABBIT_CAGES_EDIT)
     public ApiResponse<Cage> setRabbitCount(@RequestHeader("X-House-Id") Long houseId, @org.springframework.web.bind.annotation.PathVariable("id") Long id, @Valid @RequestBody SetCageRabbitCountRequest req) {
         Long userId = requireLogin();
         return ApiResponse.ok(cageAdminService.setRabbitCount(userId, houseId, id, req.getRabbitCount()));
     }
 
     @PostMapping("/cages/recount-rabbit-count")
+    @RequiresPermission(PermissionCode.RABBIT_CAGES_RECOUNT)
     public ApiResponse<Integer> recountRabbitCount(@RequestHeader("X-House-Id") Long houseId) {
         Long userId = requireLogin();
         return ApiResponse.ok(cageAdminService.recountRabbitCount(userId, houseId));

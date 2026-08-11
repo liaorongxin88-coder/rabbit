@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.house.mapper.HouseInvitationMapper">
+    <resultMap id="HouseInvitationMap" type="com.rabbit.app.modules.house.entity.HouseInvitation">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="phone_hash" property="phoneHash"/>
+        <result column="phone_masked" property="phoneMasked"/>
+        <result column="role" property="role"/>
+        <result column="status" property="status"/>
+        <result column="request_id" property="requestId"/>
+        <result column="invited_by_user_id" property="invitedByUserId"/>
+        <result column="accepted_user_id" property="acceptedUserId"/>
+        <result column="expires_time" property="expiresTime"/>
+        <result column="accepted_time" property="acceptedTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, house_id, phone_hash, phone_masked, role, status, request_id,
+        invited_by_user_id, accepted_user_id, expires_time, accepted_time,
+        create_time, update_time
+    </sql>
+
+    <select id="selectByRequestIdForUpdate" resultMap="HouseInvitationMap">
+        select <include refid="Columns"/>
+        from house_invitations
+        where house_id = #{houseId}
+          and invited_by_user_id = #{invitedByUserId}
+          and request_id = #{requestId}
+        limit 1
+        for update
+    </select>
+
+    <select id="selectPendingByPhoneForUpdate" resultMap="HouseInvitationMap">
+        select <include refid="Columns"/>
+        from house_invitations
+        where phone_hash = #{phoneHash}
+          and status = 'PENDING'
+          and expires_time &gt; #{now}
+        order by house_id, id desc
+        for update
+    </select>
+
+    <insert id="insertOrKeepExisting">
+        insert into house_invitations (
+            house_id, phone_hash, phone_masked, role, status, request_id,
+            invited_by_user_id, accepted_user_id, expires_time, accepted_time
+        ) values (
+            #{houseId}, #{phoneHash}, #{phoneMasked}, #{role}, #{status}, #{requestId},
+            #{invitedByUserId}, #{acceptedUserId}, #{expiresTime}, #{acceptedTime}
+        )
+        on duplicate key update id = id
+    </insert>
+
+    <update id="markAcceptedByHouseAndPhone">
+        update house_invitations
+        set status = 'ACCEPTED',
+            accepted_user_id = #{acceptedUserId},
+            accepted_time = #{acceptedTime},
+            update_time = now()
+        where house_id = #{houseId}
+          and phone_hash = #{phoneHash}
+          and status = 'PENDING'
+    </update>
+</mapper>

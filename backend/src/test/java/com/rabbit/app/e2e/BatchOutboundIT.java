@@ -20,6 +20,42 @@ public class BatchOutboundIT extends E2eTestSupport {
     private RabbitService rabbitService;
 
     @Test
+    void legacyBatchSaleCannotBypassOutboundEligibility() {
+        UserSession owner = register("legacy_sale_guard");
+        long houseId = createHouse(owner, "legacy_sale_guard_house", 1, 3, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        long normalRabbit = createRabbit(owner, houseId, cages.get(0), "2", "0", "normal");
+        long earlyRabbit = createRabbit(owner, houseId, cages.get(1), "2", "1", "early");
+        long quarantinedRabbit = createRabbit(owner, houseId, cages.get(2), "2", "0", "quarantined");
+        long normalBatch = attachSaleStage(houseId, normalRabbit, -1);
+        long earlyBatch = attachSaleStage(houseId, earlyRabbit, 7);
+        long quarantinedBatch = attachSaleStage(houseId, quarantinedRabbit, -1);
+        jdbc.update("update rabbits set is_quarantined = true where id = ?", quarantinedRabbit);
+
+        api.expectError("/api/batches/" + earlyBatch + "/sale", HttpMethod.POST, owner.token, houseId, obj(
+                "rabbitIds", List.of(earlyRabbit),
+                "saleDate", LocalDate.now().toString(),
+                "requestId", requestId("legacy_early_sale")
+        ), 409, "请使用安全出库流程");
+        api.expectError("/api/batches/" + quarantinedBatch + "/sale", HttpMethod.POST, owner.token, houseId, obj(
+                "rabbitIds", List.of(quarantinedRabbit),
+                "saleDate", LocalDate.now().toString(),
+                "requestId", requestId("legacy_quarantined_sale")
+        ), 409, "请使用安全出库流程");
+
+        api.postOk("/api/batches/" + normalBatch + "/sale", owner.token, houseId, obj(
+                "rabbitIds", List.of(normalRabbit),
+                "saleDate", LocalDate.now().toString(),
+                "requestId", requestId("legacy_normal_sale")
+        ));
+        Assertions.assertEquals(0, jdbc.queryForObject(
+                "select count(*) from rabbits where id = ? and is_active = true", Integer.class, normalRabbit));
+        Assertions.assertEquals(2, jdbc.queryForObject(
+                "select count(*) from rabbits where id in (?, ?) and is_active = true", Integer.class,
+                earlyRabbit, quarantinedRabbit));
+    }
+
+    @Test
     void mixedEligibilitySubmitRetryAndPayloadMismatch() {
         UserSession owner = register("outbound_owner");
         long houseId = createHouse(owner, "outbound_house", 1, 2, 1);
@@ -279,7 +315,7 @@ public class BatchOutboundIT extends E2eTestSupport {
     @Test
     void earlySaleAndReplacementRequireControlAndSubmitRechecksFrozenItems() {
         UserSession owner = register("outbound_auth_owner");
-        UserSession member = createMerchantAccount(owner, "outbound_auth_member");
+        UserSession member = register("outbound_auth_member");
         long houseId = createHouse(owner, "outbound_auth_house", 1, 4, 1);
         List<Long> cages = cageIds(owner, houseId);
         long normalRabbit = createRabbit(owner, houseId, cages.get(0), "2", "0", "normal_auth");
@@ -483,13 +519,14 @@ public class BatchOutboundIT extends E2eTestSupport {
         ));
     }
 
-    private void attachSaleStage(long houseId, long rabbitId, int daysFromNow) {
+    private long attachSaleStage(long houseId, long rabbitId, int daysFromNow) {
         String requestId = requestId("batch");
         jdbc.update("insert into batches (house_id, batch_code, status, start_date, request_id, create_by, update_by) values (?, ?, '进行中', now(), ?, 'e2e', 'e2e')",
                 houseId, "B-" + rabbitId, requestId);
         long batchId = jdbc.queryForObject("select id from batches where house_id = ? and request_id = ?", Long.class, houseId, requestId);
-        jdbc.update("insert into batch_rabbits (batch_id, rabbit_id, join_reason, batch_role, current_status, next_event_date, next_event_type, is_active, join_date, create_by, update_by) values (?, ?, '断奶', '商品兔', '成长期', timestampadd(day, ?, now()), '出售', true, now(), 'e2e', 'e2e')",
+        jdbc.update("insert into batch_rabbits (batch_id, rabbit_id, join_reason, batch_role, current_status, next_event_date, next_event_type, is_active, join_date, create_by, update_by) values (?, ?, '断奶', 'fattening', '成长期', timestampadd(day, ?, now()), '出售', true, now(), 'e2e', 'e2e')",
                 batchId, rabbitId, daysFromNow);
+        return batchId;
     }
 
     private long version(JsonNode task, long rabbitId) {

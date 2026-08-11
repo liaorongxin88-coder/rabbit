@@ -3,10 +3,19 @@ package com.rabbit.app.modules.house.dto;
 import jakarta.validation.constraints.NotBlank;
 
 public class UpdateHouseMemberRequest {
+    private String role;
     private String perms;
     private Boolean isAdmin;
     @NotBlank(message = "requestId不能为空")
     private String requestId;
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
 
     public String getPerms() {
         return perms;

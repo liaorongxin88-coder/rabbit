@@ -1,5 +1,7 @@
 package com.rabbit.app.modules.rabbit.controller;
 
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.ParturitionRecord;
@@ -40,6 +42,7 @@ public class RecordQueryController {
     }
 
     @GetMapping("/pregnancy-check-records")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<PregnancyCheckRecord>> listPregnancyChecks(@RequestHeader("X-House-Id") Long houseId,
                                                                        @RequestParam(value = "batchId", required = false) Long batchId,
                                                                        @RequestParam(value = "rabbitId", required = false) Long rabbitId,
@@ -57,6 +60,7 @@ public class RecordQueryController {
     }
 
     @GetMapping("/parturition-records")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<ParturitionRecord>> listParturitions(@RequestHeader("X-House-Id") Long houseId,
                                                                  @RequestParam(value = "batchId", required = false) Long batchId,
                                                                  @RequestParam(value = "rabbitId", required = false) Long rabbitId,
@@ -74,6 +78,7 @@ public class RecordQueryController {
     }
 
     @GetMapping("/weaning-records")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<WeaningRecord>> listWeanings(@RequestHeader("X-House-Id") Long houseId,
                                                         @RequestParam(value = "batchId", required = false) Long batchId,
                                                         @RequestParam(value = "rabbitId", required = false) Long rabbitId,
@@ -91,6 +96,7 @@ public class RecordQueryController {
     }
 
     @GetMapping("/departure-records")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<List<RabbitDepartureRecord>> listDepartureRecords(@RequestHeader("X-House-Id") Long houseId,
                                                                         @RequestParam(value = "rabbitId", required = false) Long rabbitId,
                                                                         @RequestParam(value = "fromTs", required = false) Long fromTs,
@@ -126,4 +132,3 @@ public class RecordQueryController {
         return userId;
     }
 }
-

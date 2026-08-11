@@ -1,259 +1,233 @@
-# 手机号和微信登录设计
+# 手机号认证现状与后续适配契约
 
-目标：手机号是 Rabbit App 的用户绑定锚点。无论用户通过手机号一键登录、微信快捷登录、旧用户名密码登录，还是历史 openid 登录，最终都必须绑定并验证手机号后才能使用业务功能。
+手机号是 Rabbit 移动账号的稳定绑定锚点，`phone_hash` 是服务端查找账号和匹配精确手机号
+邀请的唯一键。认证账号与兔场成员关系相互独立；完成认证但没有兔场是合法状态。
 
-## 设计原则
+## 实现状态
 
-- 手机号是业务用户的唯一绑定主键，同一个手机号只能对应一个 `sys_user`。
-- 微信、密码、运营商一键登录 token 都只是登录凭证，不是业务用户主键。
-- 未绑定手机号的身份只能拿到短期 `bindingToken`，不能拿正式业务 JWT。
-- 正式业务 JWT 只发给已绑定手机号的用户。
-- 所有 `/api/**` 业务接口继续使用正式 JWT；绑定流程只走 `/api/auth/**`。
-- 旧 openid-only 用户必须在下一次登录时绑定手机号后才能继续使用。
+以下状态以当前后端代码为准：
 
-## 登录状态
-
-| 状态 | 含义 | 可访问范围 |
+| 能力 | 状态 | 当前接口 |
 | --- | --- | --- |
-| `ANONYMOUS` | 未认证 | `/api/auth/*` |
-| `PRE_AUTH` | 已验证某种外部凭证，但手机号未绑定 | 仅绑定手机号、取消登录 |
-| `AUTHENTICATED` | 已绑定手机号并持有正式 JWT | 全部授权业务接口 |
-| `MERGE_REQUIRED` | 快捷身份和手机号命中不同用户且都有业务数据 | 只读冲突提示，需用户确认或客服处理 |
+| 短信验证码发送与登录 | 已实现 | `POST /api/auth/sms/code`、`POST /api/auth/sms/login` |
+| 手机号 HMAC 账号、零兔场登录 | 已实现 | 短信登录、`GET /api/auth/me`、`GET /api/houses` |
+| 精确手机号邀请 | 已实现 | `POST /api/house-invitations` |
+| `hasPassword` 首次设置密码 | 已实现 | `PUT /api/auth/password` |
+| 用户名密码登录 | 已实现并保留 | `POST /api/auth/register`、`POST /api/auth/login` |
+| 旧微信登录兼容 | 已实现并保留 | `POST /api/auth/wechat-login` |
+| 阿里云本机号码一键登录后端 | 已实现，默认关闭 | `POST /api/auth/phone-one-tap-login` |
+| Android 官方号码认证 SDK | **待控制台 AAR 和真机接入** | Flutter 入口默认隐藏 |
+| 微信快捷登录后强制绑定手机 | **未实现** | 无 `wechat-quick-login`、`bindingToken` 或 `bind-phone` 接口 |
 
-## 推荐数据模型
+一键登录后端已经具备真实 token 换号、幂等和账号归一能力，但只有 Android 官方 SDK、控制台
+方案和后端凭证都配置完成时才能开启。微信绑定仍是后续契约，不能据此调用尚不存在的 API。
 
-在现有 `sys_user` 基础上新增手机号绑定字段：
+## 当前账号数据
 
-```sql
-alter table sys_user
-  add column phone_country_code varchar(8) null after openid,
-  add column phone_hash varchar(128) null after phone_country_code,
-  add column phone_cipher varchar(512) null after phone_hash,
-  add column phone_masked varchar(32) null after phone_cipher,
-  add column phone_bound_time datetime null after phone_masked,
-  add unique key uk_sys_user_phone_hash (phone_hash);
+`sys_user` 保存手机号身份和账号状态：
+
+```text
+phone_country_code
+phone_hash             unique, server-side HMAC
+phone_masked           display only
+phone_bound_time
+password_initialized   exposed as hasPassword
+status                 ENABLED / DISABLED
 ```
 
-建议新增统一身份表，逐步替代 `sys_user.openid` 单字段绑定：
+- `phone_hash` 用于唯一约束、短信登录查找和精确手机号邀请匹配。
+- `phone_masked` 仅用于展示，例如 `138****8000`。
+- 完整手机号不写入用户表、日志、审计详情或异常消息。
+- `password_initialized=false` 表示内部随机哈希不是用户可用密码。
+- 账号可以没有任何兔场；兔场访问只由 `house_users` 决定。
 
-```sql
-create table if not exists auth_identities (
-  id bigint primary key auto_increment,
-  user_id bigint not null,
-  provider varchar(32) not null,
-  provider_subject varchar(191) not null,
-  provider_app varchar(64),
-  verified_time datetime not null default current_timestamp,
-  create_time datetime not null default current_timestamp,
-  update_time datetime not null default current_timestamp on update current_timestamp,
-  unique key uk_auth_identity_provider_subject (provider, provider_subject),
-  key idx_auth_identity_user (user_id),
-  constraint fk_auth_identity_user foreign key (user_id) references sys_user (user_id)
-) engine=InnoDB default charset=utf8mb4;
+## 当前手机号短信登录
+
+```http
+POST /api/auth/sms/code
+Content-Type: application/json
+
+{"phone":"13800138000"}
 ```
 
-`provider` 建议值：
+```http
+POST /api/auth/sms/login
+Content-Type: application/json
 
-- `PHONE_ONE_TAP`
-- `PHONE_SMS`
-- `WECHAT_OPENID`
-- `WECHAT_UNIONID`
-- `PASSWORD`
+{"phone":"13800138000","code":"123456"}
+```
 
-手机号存储建议：
+登录事务：
 
-- `phone_hash`：用于唯一约束和查询，使用服务端 pepper 后的 SHA-256/HMAC。
-- `phone_cipher`：用于必要展示或客服核对，使用应用级加密。
-- `phone_masked`：用于前端展示，例如 `138****8000`。
-- 不在日志、审计详情、异常消息中输出完整手机号。
+1. 消费一次性验证码并标准化手机号。
+2. 以服务端 pepper 计算 `phone_hash`，加锁查询账号。
+3. 账号不存在时只创建 `sys_user`，不创建兔场，并设置
+   `status=ENABLED`、`password_initialized=false`。
+4. 接受该 `phone_hash` 尚在有效期内的精确手机号邀请。
+5. 返回正式 JWT、`phoneBound=true`、`maskedPhone` 和 `hasPassword`。
+6. 客户端读取兔场列表，决定进入业务、选择兔场或显示零兔场页。
 
-## Token 设计
+并发首次登录依靠 `phone_hash` 唯一约束和冲突后回查，不能创建重复账号。
 
-### `bindingToken`
+## 当前精确手机号邀请
 
-短期 token，仅用于绑定手机号。
+```http
+POST /api/house-invitations
+Authorization: Bearer <token>
+X-House-Id: <houseId>
+Content-Type: application/json
 
-建议：
+{
+  "phone": "13800138000",
+  "role": "STAFF",
+  "requestId": "uuid"
+}
+```
 
-- TTL：5 到 10 分钟。
-- claims 包含 `purpose=bind_phone`。
-- claims 包含已验证身份：`provider`、`providerSubject`、可选 `legacyUserId`。
-- 不被 `JwtAuthenticationFilter` 识别为业务登录态。
+当前防枚举契约：
 
-### 正式业务 JWT
+- 接口统一返回 `{"status":"SUBMITTED","role":"STAFF"}`，不透露目标手机号是否已有账号。
+- 无论目标手机号是否已经注册，都先追加一条 `PENDING` 邀请；邀请不会在提交时直接建立成员关系。
+- 目标账号下一次通过短信验证码完成可信手机号登录时，后端接受仍有效的邀请并建立成员关系。
+- 同一手机号和兔场存在多条有效邀请时，以最新一条的角色为准，并一次性解决此前待处理记录。
+- 邀请只保存 `phone_hash` 和脱敏值，不保存明文手机号。
+- 角色只能是 `MANAGER`、`STAFF`、`VIEWER`；共同 `OWNER` 必须在加入后明确授予。
+- 不提供手机号模糊搜索，也不通过响应或错误消息枚举平台账号。
+- `(house_id, invited_by_user_id, request_id)` 保证追加式幂等；同一 `requestId` 不能改投其他手机号或角色。
 
-正式 token 只在手机号已绑定后生成：
+短信验证码和运营商服务端换号都是可信手机号入口，并复用同一个邀请接受事务；没有独立的
+运营商账号或另一套邀请状态。
 
-- claims 包含 `userId`。
-- 可选包含 `phoneBound=true`，便于以后做快速拒绝。
-- 现有业务接口只接受正式 token。
+## 当前零兔场和密码语义
 
-## API 设计
+手机号首次登录且没有有效邀请时，`GET /api/houses` 返回空数组。账号仍可访问账号资料、设置
+密码、创建兔场和工作空间列表，但不能访问任何需要 `X-House-Id` 的生产接口。
 
-### 手机号一键登录/注册
+手机号账号首次创建时返回 `hasPassword=false`。内部随机哈希仅保证密码列不可直接使用，不是
+用户密码。
+
+```http
+PUT /api/auth/password
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "oldPassword": "",
+  "newPassword": "new-secure-password"
+}
+```
+
+- `hasPassword=false`：允许省略或传空 `oldPassword`，设置后原子更新密码哈希和
+  `password_initialized=true`。
+- `hasPassword=true`：必须提供并校验旧密码。
+- `GET /api/auth/me` 和登录响应都返回 `hasPassword`。
+- 设置密码不会创建新账号，也不会改变任何 `house_users` 关系。
+
+V15 之前的历史账号无法从密码哈希证明密码是系统随机值还是用户已设置的真实密码，因此迁移
+时保守保持 `password_initialized=true`；只有明确的重置哨兵账号会设为 `false`，并同时停用。
+这避免持有旧 JWT 的会话在不知道旧密码时覆盖真实密码。V15 之后新建的短信账号由后端明确
+写入 `password_initialized=false`，仍可使用上述首次设置密码流程。
+
+## 当前微信兼容边界
+
+`POST /api/auth/wechat-login` 是现有兼容接口，可使用微信 `code`，并在开发兼容模式下接收
+`openid`。它按 `sys_user.openid` 查找或创建账号，当前会直接返回正式 JWT；它**不会**返回
+`bindingToken`，也不会强制绑定手机号。
+
+因此当前不能声称“所有微信账号已经绑定手机”。在后续绑定流程落地前，手机号邀请只会在该
+用户使用相同手机号完成短信登录后匹配；不得根据微信身份猜测手机号或静默合并账号。
+
+## 当前：阿里云运营商一键登录后端
+
+后端使用阿里云号码认证服务 `GetMobile`，只接受 Android SDK 取得的不透明一次性 token：
 
 ```http
 POST /api/auth/phone-one-tap-login
-```
+Content-Type: application/json
 
-请求：
-
-```json
 {
-  "provider": "carrier",
-  "accessToken": "carrier-token-from-sdk",
+  "provider": "aliyun",
+  "accessToken": "short-lived-token-from-sdk",
   "requestId": "uuid"
 }
 ```
 
-流程：
+处理规则：
 
-1. 后端调用运营商或聚合认证服务校验 `accessToken`。
-2. 拿到可信手机号并标准化。
-3. 按 `phone_hash` 查用户。
-4. 用户不存在则创建用户并写入手机号绑定字段。
-5. 写入或更新 `auth_identities(provider=PHONE_ONE_TAP)`。
-6. 返回正式业务 JWT。
+1. `provider` 必须在服务端白名单；客户端不能选择任意 endpoint，也不能提交手机号。
+2. 后端只保存 `provider + accessToken` 的 HMAC 摘要，不保存原 token 或换取到的明文手机号。
+3. `requestId` 和 token 摘要各自唯一；同一请求只在成功后的短幂等窗口内可重新签发 JWT，
+   窗口从首次成功起算且不会被重试延长，过期后固定拒绝。
+4. 同一 `requestId` 改投其他 token 返回冲突，同一 token 换 `requestId` 被视为重放。
+5. 供应商换号在数据库事务之外执行；成功后进入现有 `loginOrRegisterPhone` 事务，复用
+   `phone_hash`、停用检查、邀请接受、零兔场和 JWT 响应。
+6. 匿名请求通过数据库时间桶做原子的分钟和小时 IP 限流，并在幂等命中前计数；默认不信任
+   客户端转发头。供应商错误、超时和内部异常只返回固定脱敏消息。
+7. 阿里云调用设置短连接/读取超时，关闭 SDK 自动重试；结果不确定时客户端必须重新取 token。
+8. `PROCESSING` 使用短租约和 lease id；进程崩溃后可由新请求安全接管，旧调用结果不能覆盖接管者。
+   租约必须严格大于连接超时、读取超时与 1000 ms 安全余量之和，否则启用时后端拒绝启动。
+   终态尝试和限流桶按保留期定时清理，避免记录永久增长。
 
-响应：
+V17 新增 `phone_one_tap_attempts`，只保存幂等、防重放需要的摘要及状态，不保存手机号；V18 为
+处理租约增加 lease id，并新增原子 IP 限流桶。
+相关环境变量：
 
-```json
-{
-  "token": "jwt",
-  "userId": 10001,
-  "userName": "u_10001",
-  "phoneBound": true,
-  "maskedPhone": "138****8000"
-}
+```text
+APP_PHONE_ONE_TAP_ENABLED=false
+APP_PHONE_ONE_TAP_ALLOWED_PROVIDERS=aliyun
+APP_PHONE_ONE_TAP_TOKEN_HASH_SECRET=<stable-random-secret>
+APP_PHONE_ONE_TAP_IP_MINUTE_LIMIT=10
+APP_PHONE_ONE_TAP_IP_HOUR_LIMIT=60
+APP_PHONE_ONE_TAP_CONNECT_TIMEOUT_MS=2000
+APP_PHONE_ONE_TAP_READ_TIMEOUT_MS=3000
+APP_PHONE_ONE_TAP_SUCCESS_RETRY_WINDOW_SECONDS=30
+APP_PHONE_ONE_TAP_PROCESSING_LEASE_SECONDS=15
+APP_PHONE_ONE_TAP_ATTEMPT_RETENTION_DAYS=7
+APP_PHONE_ONE_TAP_RATE_BUCKET_RETENTION_HOURS=2
+APP_PHONE_ONE_TAP_CLEANUP_CRON="0 35 3 * * ?"
+APP_PHONE_ONE_TAP_ALIYUN_ENDPOINT=dypnsapi.aliyuncs.com
+APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_ID=<ram-access-key-id>
+APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_SECRET=<ram-access-key-secret>
 ```
 
-### 微信快捷登录
+号码认证 RAM 身份只需 `dypns:GetMobile`，必须与短信
+`ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET` 分离。所有配置默认关闭；启用时缺少独立 HMAC 密钥、
+provider 或凭证，或者处理租约不满足供应商总超时加 1000 ms 安全余量，都会阻止后端启动。
 
-```http
-POST /api/auth/wechat-quick-login
-```
+`APP_FORWARD_HEADERS_STRATEGY` 默认 `none`。仅当后端不允许客户端直达、可信代理会覆盖所有
+转发头时才可设为 `framework`，否则来源 IP 限流必须使用实际 TCP 对端地址。
 
-请求：
+Android 仍需从阿里云控制台下载官方 AAR，为 `dev/staging/prod` 的包名及对应 debug/release
+签名分别登记方案，并完成隐私授权页和三网真机验证。在此之前 Flutter 的一键登录开关保持
+关闭，用户继续使用短信验证码。
 
-```json
-{
-  "code": "wechat-code"
-}
-```
+官方参考：[Android 客户端接入](https://help.aliyun.com/zh/pnvs/developer-reference/the-android-client-access)、
+[GetMobile API](https://help.aliyun.com/zh/pnvs/developer-reference/api-dypnsapi-2017-05-25-getmobile)、
+[合规指南](https://help.aliyun.com/zh/pnvs/security-and-compliance/number-certification-service-compliance-guidelines)。
 
-流程：
+## 后续：微信绑定手机号契约（未实现）
 
-1. 后端用 `code` 换取 `openid`，有条件时也拿 `unionid`。
-2. 查询 `auth_identities(WECHAT_UNIONID/WECHAT_OPENID)` 或兼容查询 `sys_user.openid`。
-3. 如果命中用户且已绑定手机号，返回正式业务 JWT。
-4. 如果未命中或命中用户未绑定手机号，返回 `bindingRequired=true` 和 `bindingToken`。
-5. App 跳转手机号绑定页。
+> 状态：当前没有 `POST /api/auth/wechat-quick-login`、`bindingToken`、
+> `POST /api/auth/bind-phone`、账号合并或换绑实现。
 
-响应：已绑定手机号
+后续实现应满足：
 
-```json
-{
-  "token": "jwt",
-  "userId": 10001,
-  "userName": "u_10001",
-  "phoneBound": true,
-  "maskedPhone": "138****8000"
-}
-```
+- 微信 code 验证成功但手机号未绑定时，只签发 5 到 10 分钟、
+  `purpose=bind_phone` 的 `bindingToken`；普通业务鉴权不得接受该 token。
+- 绑定接口必须用短信验证码或运营商服务端换号结果取得可信手机号。
+- 手机号尚无账号时可绑定到当前身份；手机号已有账号时必须显式处理身份归并。
+- 两个账号任一侧存在 `house_users` 时都属于有业务数据；两侧均有归属时不得静默迁移，需进入
+  明确的冲突处理流程。
+- 绑定成功后复用同一个 `phone_hash` 邀请接受事务并签发正式 JWT。
+- 共同 `OWNER` 也是业务归属，账号合并不得扩大、缩小或重写兔场权限。
 
-响应：需要绑定手机号
-
-```json
-{
-  "bindingRequired": true,
-  "bindingToken": "short-lived-token",
-  "provider": "WECHAT_OPENID",
-  "maskedProviderName": "微信"
-}
-```
-
-### 绑定手机号
-
-```http
-POST /api/auth/bind-phone
-Authorization: Bearer <bindingToken>
-```
-
-请求使用手机号一键认证结果：
-
-```json
-{
-  "phoneAuthProvider": "carrier",
-  "phoneAccessToken": "carrier-token-from-sdk",
-  "requestId": "uuid"
-}
-```
-
-如果一键认证不可用，后续可补短信验证码版本：
-
-```json
-{
-  "phone": "13800138000",
-  "smsCode": "123456",
-  "requestId": "uuid"
-}
-```
-
-流程：
-
-1. 校验 `bindingToken` 只能用于手机号绑定。
-2. 校验手机号来源可信。
-3. 按 `phone_hash` 查询现有用户。
-4. 如果手机号无用户：
-   - 若 `bindingToken` 带 `legacyUserId`，给该用户绑定手机号。
-   - 否则创建新用户并绑定手机号。
-5. 如果手机号已有用户：
-   - 将当前微信身份绑定到这个手机号用户。
-   - 如果 `legacyUserId` 也有业务数据，返回 `MERGE_REQUIRED`，不要静默合并。
-6. 返回正式业务 JWT。
-
-## 旧登录兼容
-
-现有接口建议保留但改变返回语义：
-
-- `POST /api/auth/register`：新注册必须携带并验证手机号；否则返回 400。
-- `POST /api/auth/login`：用户名密码正确但用户未绑定手机号时，返回 `bindingRequired=true` 和 `bindingToken`，不返回正式 JWT。
-- `POST /api/auth/wechat-login`：迁移为 `wechat-quick-login` 的兼容别名，不再为未绑定手机号的 openid 直接创建正式用户。
-
-## 后端拦截规则
-
-实施时需要确保：
-
-- `/api/auth/**` 允许匿名访问，但绑定接口只接受 `bindingToken`。
-- `JwtAuthenticationFilter` 不接受 `purpose=bind_phone` 的 token。
-- `HouseGuardInterceptor` 和业务权限逻辑继续只读取正式 `AuthContext.userId`。
-- 如果保留旧正式 JWT，一次性迁移前可在 Filter 中校验用户 `phone_bound_time`，未绑定则返回 403 和 `PHONE_BINDING_REQUIRED`。
-
-## 冲突处理
-
-| 场景 | 处理 |
-| --- | --- |
-| 微信首次登录，手机号无用户 | 创建用户，绑定手机号和微信 |
-| 微信首次登录，手机号已有用户 | 将微信身份绑定到该手机号用户 |
-| 旧 openid 用户无手机号，绑定新手机号 | 给旧用户补手机号 |
-| 旧 openid 用户有业务数据，手机号也已有业务用户 | 返回 `MERGE_REQUIRED`，人工或确认合并 |
-| 一个手机号尝试绑定多个用户 | 拒绝，以手机号用户为准 |
-| 一个微信身份尝试换绑其它手机号 | 拒绝或进入客服换绑流程 |
+这部分落地时必须同步修改后端拦截器、Flutter 路由守卫、短期 token 存储、测试和本文的实现
+状态表；在此之前，`bindingToken` 仅是规划术语。
 
 ## 审计和安全
 
-- 记录登录方式、绑定方式、绑定结果、失败原因和 traceId。
-- 审计中只写 masked phone，不写完整手机号。
-- 运营商 token、微信 code、短信验证码不得写入日志。
-- 绑定手机号、换绑手机号和冲突处理都需要限流。
-- 手机号绑定接口必须支持 `requestId` 幂等。
-
-## 实施顺序
-
-1. 新增 `sys_user` 手机号字段和 `auth_identities` 表。
-2. 新增 `bindingToken` 生成/校验能力。
-3. 新增手机号认证适配接口，先抽象 `PhoneAuthProvider`，具体供应商后接入。
-4. 改造微信登录：未绑定手机号时只返回绑定态。
-5. 改造用户名密码登录：未绑定手机号时只返回绑定态。
-6. Flutter 增加手机号一键登录、微信快捷登录和绑定手机号页面。
-7. 迁移旧 openid 用户，按首次登录触发绑定，不批量造手机号。
+- 记录登录方式、邀请处理结果、失败原因和 traceId，但只写脱敏手机号。
+- 运营商 token、微信 code、短信验证码和完整手机号不得写入日志。
+- 登录、发送验证码和邀请需要限流；邀请写接口保持 `requestId` 幂等。
+- 账号 `DISABLED` 时，已有 JWT 和新的手机号登录都必须被拒绝。
+- 兔场业务始终通过 `X-House-Id` 和实时 `house_users` 授权；认证方式不能扩大兔场权限。

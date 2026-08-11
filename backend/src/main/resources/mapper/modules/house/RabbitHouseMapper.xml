@@ -5,8 +5,8 @@
 <mapper namespace="com.rabbit.app.modules.house.mapper.RabbitHouseMapper">
     <resultMap id="RabbitHouseMap" type="com.rabbit.app.modules.house.entity.RabbitHouse">
         <id column="id" property="id"/>
-        <result column="merchant_id" property="merchantId"/>
         <result column="name" property="name"/>
+        <result column="status" property="status"/>
         <result column="layout_rows" property="layoutRows"/>
         <result column="layout_cols" property="layoutCols"/>
         <result column="layout_layers" property="layoutLayers"/>
@@ -20,34 +20,44 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbit_houses (merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, create_by, update_by)
-        values (#{merchantId}, #{name}, #{layoutRows}, #{layoutCols}, #{layoutLayers}, #{requestId}, #{remark}, #{createBy}, #{updateBy})
+        insert into rabbit_houses (name, status, layout_rows, layout_cols, layout_layers, request_id, remark, create_by, update_by)
+        values (#{name}, #{status}, #{layoutRows}, #{layoutCols}, #{layoutLayers}, #{requestId}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectById" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, name, status, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
         where id = #{houseId}
     </select>
 
+    <select id="selectByIdForUpdate" resultMap="RabbitHouseMap">
+        select id, name, status, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        from rabbit_houses
+        where id = #{houseId}
+        for update
+    </select>
+
     <select id="selectByUserId" resultMap="RabbitHouseMap">
-        select h.id, h.merchant_id, h.name, h.layout_rows, h.layout_cols, h.layout_layers, h.remark,
+        select h.id, h.name, h.status, h.layout_rows, h.layout_cols, h.layout_layers, h.remark,
                h.request_id, h.is_deleted, h.create_by, h.create_time, h.update_by, h.update_time
         from rabbit_houses h
-        inner join house_users hu on hu.house_id = h.id
-        where hu.user_id = #{userId} and h.is_deleted = false
+        join house_users hu on hu.house_id = h.id
+                           and hu.user_id = #{userId}
+                           and hu.status = 'ENABLED'
+        where h.is_deleted = false
+          and h.status = 'ENABLED'
         order by h.id desc
     </select>
 
     <select id="selectAllActive" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, name, status, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
-        where is_deleted = false
+        where is_deleted = false and status = 'ENABLED'
         order by id asc
     </select>
 
     <select id="selectByCreatorAndRequestId" resultMap="RabbitHouseMap">
-        select id, merchant_id, name, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
+        select id, name, status, layout_rows, layout_cols, layout_layers, request_id, remark, is_deleted, create_by, create_time, update_by, update_time
         from rabbit_houses
         where create_by = #{createBy} and request_id = #{requestId}
         limit 1
@@ -65,6 +75,14 @@
     <update id="markDeleted">
         update rabbit_houses
         set is_deleted = true,
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{houseId} and is_deleted = false
+    </update>
+
+    <update id="updateStatus">
+        update rabbit_houses
+        set status = #{status},
             update_by = #{updateBy},
             update_time = now()
         where id = #{houseId} and is_deleted = false

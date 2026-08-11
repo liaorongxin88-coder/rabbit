@@ -1,5 +1,7 @@
 package com.rabbit.app.modules.batch.controller;
 
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.BreedingPerformance;
@@ -27,6 +29,7 @@ public class BreedingPerformanceController {
     }
 
     @GetMapping("/breeding-performance")
+    @RequiresPermission(PermissionCode.RABBIT_RECORDS_LIST)
     public ApiResponse<?> list(@RequestHeader("X-House-Id") Long houseId, @RequestParam(value = "rabbitId", required = false) Long rabbitId) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
@@ -46,4 +49,3 @@ public class BreedingPerformanceController {
         return userId;
     }
 }
-

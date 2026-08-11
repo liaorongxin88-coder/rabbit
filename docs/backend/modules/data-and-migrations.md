@@ -15,13 +15,22 @@ backend/src/main/resources/db/migration/
 - 迁移不能写入密码、token、生产连接串或其它敏感信息。
 - `schema.sql` 只作结构参考，不是常规初始化入口。
 
+当前身份与归属模型的连续迁移：
+
+- V15 建立用户直接关联兔场和精确手机号邀请。
+- V16 删除运行时商户模型。
+- V17 新增匿名一键登录幂等/防重放记录，只保存 token HMAC 摘要、请求状态和限流信息，
+  不保存运营商原 token 或手机号。
+- V18 为一键登录处理记录增加可接管租约，并新增按 IP 和时间桶唯一的原子限流计数；终态记录
+  和过期限流桶由后端按配置保留期清理。
+
 ## 参考文件
 
 - `backend/src/main/resources/db/schema.sql`：当前全量结构参考。
 - `backend/src/main/resources/db/seed_demo.sql`：演示数据参考。
 - `tools/demo_flow.ps1`、`tools/demo_flow_full.ps1`：更推荐的演示数据生成方式，因为它们走真实 API。
 
-## 兔舍隔离
+## 兔场隔离
 
 核心生产和状态主记录直接带 `house_id`，包括：
 
@@ -31,9 +40,9 @@ backend/src/main/resources/db/migration/
 - `weaning_records`
 - `rabbit_status_history`
 
-明细表仍通过父表关联归属兔舍，例如：
+明细表仍通过父表关联归属兔场，例如：
 
 - `weaning_record_allocations` 通过 `weaning_records`。
 - `sale_order_items` 通过 `sale_orders`。
 
-涉及查询或写入时，不要只看当前表是否有 `house_id`；需要确认最终数据路径是否被兔舍上下文限制。
+涉及查询或写入时，不要只看当前表是否有 `house_id`；需要确认最终数据路径是否被兔场上下文限制。

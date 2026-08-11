@@ -13,7 +13,8 @@ import com.rabbit.app.modules.nfc.service.NfcCageService;
 import com.rabbit.app.modules.nfc.service.NfcTagAdminService;
 import com.rabbit.app.modules.nfc.service.NfcTagService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
@@ -41,20 +42,20 @@ public class NfcController {
     }
 
     @PostMapping("/nfc/tags")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_CONTROL)
     public ApiResponse<Object> bind(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody BindNfcTagRequest req) {
         Long userId = requireLogin();
         return ApiResponse.ok(nfcTagService.bind(userId, houseId, req.getTagUid(), req.getTargetType(), req.getTargetId(), req.getRabbitId(), req.getRecordId(), req.getRemark(), req.getRequestId()));
     }
 
     @GetMapping("/nfc/cages/write-queue")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_CONTROL)
     public ApiResponse<List<NfcCageQueueItem>> cageWriteQueue(@RequestHeader("X-House-Id") Long houseId) {
         return ApiResponse.ok(nfcCageService.listWriteQueue(requireLogin(), houseId));
     }
 
     @PostMapping("/nfc/cages/bind")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_CONTROL)
     public ApiResponse<NfcCageBindingView> bindCage(
             @RequestHeader("X-House-Id") Long houseId,
             @Valid @RequestBody BindNfcCageRequest request
@@ -63,7 +64,7 @@ public class NfcController {
     }
 
     @PostMapping("/nfc/cages/resolve")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_QUERY)
     public ApiResponse<NfcCageBindingView> resolveCage(
             @RequestHeader("X-House-Id") Long houseId,
             @Valid @RequestBody ResolveNfcCageRequest request
@@ -72,14 +73,14 @@ public class NfcController {
     }
 
     @GetMapping("/nfc/resolve")
-    @HousePerm("view")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_QUERY)
     public ApiResponse<NfcResolvedTarget> resolve(@RequestHeader("X-House-Id") Long houseId, @RequestParam("tagUid") String tagUid) {
         Long userId = requireLogin();
         return ApiResponse.ok(nfcTagService.resolve(userId, houseId, tagUid));
     }
 
     @GetMapping("/nfc/tags")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_CONTROL)
     public ApiResponse<List<NfcTagView>> list(@RequestHeader("X-House-Id") Long houseId,
                                               @RequestParam(value = "tagUid", required = false) String tagUid,
                                               @RequestParam(value = "targetType", required = false) String targetType,
@@ -91,7 +92,7 @@ public class NfcController {
     }
 
     @DeleteMapping("/nfc/tags")
-    @HousePerm("control")
+    @RequiresPermission(PermissionCode.RABBIT_NFC_CONTROL)
     public ApiResponse<Object> unbind(@RequestHeader("X-House-Id") Long houseId, @RequestParam("tagUid") String tagUid) {
         Long userId = requireLogin();
         nfcTagAdminService.unbind(userId, houseId, tagUid);

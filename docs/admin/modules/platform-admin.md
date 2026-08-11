@@ -1,31 +1,61 @@
-# 平台管理后台
+# 平台管理端与业务工作台
 
 ## 产品边界
 
-Admin 面向平台管理员，不是商户业务后台。
+Admin 包含两个相互隔离的界面：
+
+- 平台管理端：使用平台管理员身份管理业务账号、兔场状态和平台概览。
+- 业务工作台：使用普通业务账号选择自己直接加入的兔场并处理生产业务。
 
 当前范围：
 
 - 平台管理员登录和退出。
-- 商户列表、创建、编辑、启用和停用；创建商户时同步创建初始业务账号。
-- 在商户下新增业务账号；每个业务账号只属于一个商户。
-- 只读查看商户概览、兔舍、笼位、兔只和近期审计记录。
+- 业务账号列表、脱敏手机号、账号状态和可访问兔场数量。
+- 兔场列表、创建、编辑、启用、停用和只读生产概览。
+- `house_users` 直接成员关系、成员角色、成员状态和共同 `OWNER`。
+- 业务账号登录后在 `/workspace/**` 选择有权访问的兔场。
+- 按当前兔场权限处理笼位、兔只、生产批次和成员。
 
-不在第一版范围内：
+不在当前范围：
 
-- 计费套餐。
-- 商户自助注册。
-- 客服代运营或业务数据代编辑。
-- 跨商户生产数据写入。
+- 计费套餐和公开自助购买。
+- 客服代替兔场成员编辑生产数据。
+- 平台身份绕过 `house_users` 执行跨兔场生产写入。
 
-## API 边界
+## 身份与请求边界
 
-- 平台登录：`POST /api/admin/auth/login`
-- 平台请求：`/api/admin/**`
-- 请求层：`admin/src/lib/request.ts`
-- API 方法：`admin/src/api/`
+平台管理端：
 
-Admin 请求必须使用平台管理员 JWT，不发送 `X-House-Id`，不复用普通业务登录。
+- 登录：`POST /api/admin/auth/login`
+- 请求：`/api/admin/**`
+- 使用独立平台 JWT。
+- 不发送 `X-House-Id`。
+- 不复用普通业务登录态。
+
+业务工作台：
+
+- 使用普通业务 JWT。
+- 从 `GET /api/houses` 取得当前账号直接可访问的兔场。
+- 所有兔场范围请求发送 `X-House-Id`。
+- 后端每次重新校验账号、兔场、成员状态和角色。
+
+手机号是账号身份，不是兔场属性。平台和工作台只展示脱敏手机号，不提供手机号模糊枚举。
+共同 `OWNER` 以多条有效 `house_users.role=OWNER` 表示，界面不能假定每个兔场只有一个
+所有者。
+
+## 平台兔场写入契约
+
+- `POST /api/admin/farms` 创建兔场。请求包含 `name`、`layoutRows`、`layoutCols`、
+  `layoutLayers`、可选 `remark`、`requestId`，并且必须且只能传
+  `ownerUserId` 或 `ownerPhone` 之一。
+- `ownerUserId` 必须指向启用中的业务用户。`ownerPhone` 会按现有手机号身份规则解析；
+  未注册手机号只预置不可使用密码登录的业务身份，完成短信或一键登录验证后会进入同一身份。
+- 创建在同一事务中写入兔场、初始 `OWNER` 成员关系和初始笼位，并按平台管理员与
+  `requestId` 幂等；同一 `requestId` 复用于不同载荷会返回冲突。
+- `PUT /api/admin/farms/{farmId}` 只更新 `name` 和 `remark`。布局、笼位、兔只和生产数据
+  不通过平台兔场资料接口修改。
+- `PUT /api/admin/farms/{farmId}/status` 独立启用或停用兔场；启用前必须存在至少一名有效
+  `OWNER`。
 
 ## UI 和工程规则
 
@@ -34,6 +64,7 @@ Admin 请求必须使用平台管理员 JWT，不发送 `X-House-Id`，不复用
 - 页面放在 `admin/src/pages/`
 - 业务组件放在 `admin/src/components/`
 - 通用 primitive 放在 `admin/src/components/ui/`
+- 平台与业务会话必须使用不同的存储键和请求实例。
 
 涉及 UI、布局、文案、动效、表格、弹窗或响应式改动时，先读 `admin/DESIGN.md`。
 
@@ -44,4 +75,5 @@ pnpm --dir admin lint
 pnpm --dir admin build
 ```
 
-登录或请求层改动建议再用本地 dev server 验证 `/api/admin/auth/login`。
+登录或请求层改动还应验证平台 JWT 不会进入业务请求、业务 JWT 不会进入平台请求，以及
+切换兔场后 `X-House-Id` 与可见权限同步更新。

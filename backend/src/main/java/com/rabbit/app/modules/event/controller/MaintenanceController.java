@@ -8,7 +8,8 @@ import com.rabbit.app.modules.event.dto.EventReminderScanResult;
 import com.rabbit.app.modules.event.service.EventReminderScanService;
 import com.rabbit.app.modules.feed.service.FeedLogRabbitBackfillService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.util.DateUtil;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("control")
+@RequiresPermission(PermissionCode.RABBIT_MAINTENANCE_EXECUTE)
 public class MaintenanceController {
     private final FeedLogRabbitBackfillService backfillService;
     private final EventReminderScanService eventReminderScanService;

@@ -33,14 +33,18 @@ public class SecurityConfig {
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expire-seconds}") long expireSeconds
     ) {
+        ApplicationSecretValidator.requireConfigured("APP_JWT_SECRET", secret);
         return new JwtUtil(secret, expireSeconds);
     }
 
     @Bean
     public PlatformAdminJwtUtil platformAdminJwtUtil(
-            @Value("${app.admin.jwt.secret:${app.jwt.secret}}") String secret,
+            @Value("${app.admin.jwt.secret}") String secret,
+            @Value("${app.jwt.secret}") String appJwtSecret,
             @Value("${app.admin.jwt.expire-seconds:${app.jwt.expire-seconds}}") long expireSeconds
     ) {
+        ApplicationSecretValidator.requireConfigured("APP_ADMIN_JWT_SECRET", secret);
+        ApplicationSecretValidator.requireDistinctJwtSecrets(appJwtSecret, secret);
         return new PlatformAdminJwtUtil(secret, expireSeconds);
     }
 

@@ -11,7 +11,9 @@ import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
-import com.rabbit.app.security.HouseContext;
+import com.rabbit.app.security.AccessControlService;
+import com.rabbit.app.security.permission.HouseRole;
+import com.rabbit.app.security.permission.PermissionCode;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -22,22 +24,25 @@ import org.springframework.transaction.annotation.Transactional;
 public class HouseService {
     private final RabbitHouseMapper rabbitHouseMapper;
     private final HouseUserMapper houseUserMapper;
-    private final CageMapper cageMapper;
     private final SysUserMapper sysUserMapper;
+    private final CageMapper cageMapper;
     private final RequestDedupService requestDedupService;
+    private final AccessControlService accessControlService;
 
     public HouseService(
             RabbitHouseMapper rabbitHouseMapper,
             HouseUserMapper houseUserMapper,
-            CageMapper cageMapper,
             SysUserMapper sysUserMapper,
-            RequestDedupService requestDedupService
+            CageMapper cageMapper,
+            RequestDedupService requestDedupService,
+            AccessControlService accessControlService
     ) {
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.houseUserMapper = houseUserMapper;
-        this.cageMapper = cageMapper;
         this.sysUserMapper = sysUserMapper;
+        this.cageMapper = cageMapper;
         this.requestDedupService = requestDedupService;
+        this.accessControlService = accessControlService;
     }
 
     public List<RabbitHouse> listMyHouses(Long userId) {
@@ -48,10 +53,10 @@ public class HouseService {
         if (houseId == null || houseId <= 0) {
             throw new BizException(400, "houseId不能为空");
         }
-        assertHousePermission(userId, houseId, "control");
-        int n = rabbitHouseMapper.updateBasic(houseId, name, remark, String.valueOf(userId));
-        if (n <= 0) {
-            throw new BizException(404, "兔舍不存在或已删除");
+        accessControlService.requireHousePermission(userId, houseId, PermissionCode.RABBIT_HOUSES_EDIT);
+        int updated = rabbitHouseMapper.updateBasic(houseId, name, remark, String.valueOf(userId));
+        if (updated <= 0) {
+            throw new BizException(404, "兔场不存在或已删除");
         }
         return rabbitHouseMapper.selectById(houseId);
     }
@@ -60,19 +65,26 @@ public class HouseService {
         if (houseId == null || houseId <= 0) {
             throw new BizException(400, "houseId不能为空");
         }
-        assertHousePermission(userId, houseId, "control");
-        HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-        if (hu == null || hu.getIsAdmin() == null || !hu.getIsAdmin()) {
-            throw new BizException(403, "仅管理员可删除兔舍");
-        }
-        int n = rabbitHouseMapper.markDeleted(houseId, String.valueOf(userId));
-        if (n <= 0) {
-            throw new BizException(404, "兔舍不存在或已删除");
+        accessControlService.requireHousePermission(userId, houseId, PermissionCode.RABBIT_HOUSES_REMOVE);
+        if (rabbitHouseMapper.markDeleted(houseId, String.valueOf(userId)) <= 0) {
+            throw new BizException(404, "兔场不存在或已删除");
         }
     }
 
     @Transactional
-    public RabbitHouse createHouse(Long userId, String name, int rows, int cols, int layers, String remark, String requestId) {
+    public RabbitHouse createHouse(
+            Long userId,
+            String name,
+            int rows,
+            int cols,
+            int layers,
+            String remark,
+            String requestId
+    ) {
+        SysUser creator = sysUserMapper.selectByIdForUpdate(userId);
+        if (creator == null || !"ENABLED".equals(creator.getStatus())) {
+            throw new BizException(403, "账号已停用");
+        }
         String api = "house.create";
         String createBy = String.valueOf(userId);
         RabbitHouse existing = rabbitHouseMapper.selectByCreatorAndRequestId(createBy, requestId);
@@ -97,134 +109,87 @@ public class HouseService {
                 throw new BizException(400, "排数/列数/层数必须大于0");
             }
 
-            Long merchantId = resolveMerchantIdForNewHouse(userId);
             RabbitHouse house = new RabbitHouse();
             house.setName(name);
+            house.setStatus("ENABLED");
             house.setLayoutRows(rows);
             house.setLayoutCols(cols);
             house.setLayoutLayers(layers);
             house.setRemark(remark);
             house.setRequestId(requestId);
-            house.setMerchantId(merchantId);
             house.setCreateBy(createBy);
             house.setUpdateBy(createBy);
             try {
                 rabbitHouseMapper.insert(house);
-            } catch (DuplicateKeyException e) {
-                RabbitHouse dup = rabbitHouseMapper.selectByCreatorAndRequestId(createBy, requestId);
-                if (dup != null) {
+            } catch (DuplicateKeyException duplicate) {
+                RabbitHouse duplicateHouse = rabbitHouseMapper.selectByCreatorAndRequestId(createBy, requestId);
+                if (duplicateHouse != null) {
                     requestDedupService.markDone(0L, userId, api, requestId);
-                    return dup;
+                    return duplicateHouse;
                 }
-                throw e;
+                throw duplicate;
             }
 
-            HouseUser hu = new HouseUser();
-            hu.setHouseId(house.getId());
-            hu.setUserId(userId);
-            hu.setPerms("control");
-            hu.setIsAdmin(Boolean.TRUE);
-            hu.setCreateBy(createBy);
-            hu.setUpdateBy(createBy);
-            houseUserMapper.insert(hu);
+            HouseUser owner = new HouseUser();
+            owner.setHouseId(house.getId());
+            owner.setUserId(userId);
+            owner.setRole(HouseRole.OWNER.code());
+            owner.setStatus("ENABLED");
+            owner.setPerms(HouseRole.OWNER.legacyPermission());
+            owner.setIsAdmin(HouseRole.OWNER.administrator());
+            owner.setCreateBy(createBy);
+            owner.setUpdateBy(createBy);
+            houseUserMapper.insert(owner);
 
             List<Cage> cages = new ArrayList<Cage>();
-            for (int r = 1; r <= rows; r++) {
-                for (int c = 1; c <= cols; c++) {
-                    for (int l = 1; l <= layers; l++) {
+            for (int row = 1; row <= rows; row++) {
+                for (int column = 1; column <= cols; column++) {
+                    for (int layer = 1; layer <= layers; layer++) {
                         Cage cage = new Cage();
                         cage.setHouseId(house.getId());
-                        cage.setCageNumber(r + "-" + c + "-" + l);
-                        cage.setRowCode("R" + r);
-                        cage.setPositionIndex(c);
-                        cage.setLayerIndex(l);
+                        cage.setCageNumber(row + "-" + column + "-" + layer);
+                        cage.setRowCode("R" + row);
+                        cage.setPositionIndex(column);
+                        cage.setLayerIndex(layer);
                         cage.setStatus("0");
                         cage.setRabbitCount(0);
                         cage.setIsFed(Boolean.FALSE);
                         cage.setIsEnabled(Boolean.TRUE);
-                        cage.setCreateBy(String.valueOf(userId));
-                        cage.setUpdateBy(String.valueOf(userId));
+                        cage.setCreateBy(createBy);
+                        cage.setUpdateBy(createBy);
                         cages.add(cage);
                     }
                 }
             }
             cageMapper.insertBatch(cages);
-
             requestDedupService.markDone(0L, userId, api, requestId);
             return house;
-        } catch (RuntimeException e) {
-            requestDedupService.markFailed(0L, userId, api, requestId, e.getMessage());
-            throw e;
+        } catch (RuntimeException exception) {
+            requestDedupService.markFailed(0L, userId, api, requestId, exception.getMessage());
+            throw exception;
         }
-    }
-
-    private Long resolveMerchantIdForNewHouse(Long userId) {
-        SysUser user = sysUserMapper.selectById(userId);
-        if (user == null) {
-            throw new BizException(404, "用户不存在");
-        }
-        if (user.getMerchantId() == null) {
-            throw new BizException(500, "用户未归属商户");
-        }
-        return user.getMerchantId();
     }
 
     public void assertHousePermission(Long userId, Long houseId, String requiredPerm) {
-        HouseContext ctx = HouseContext.get();
-        boolean admin = false;
-        String p = null;
-        if (ctx != null && userId != null && houseId != null && userId.equals(ctx.getUserId()) && houseId.equals(ctx.getHouseId())) {
-            admin = ctx.isAdmin();
-            p = ctx.getPerms();
-        } else {
-            HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-            if (hu == null) {
-                throw new BizException(403, "无兔舍权限");
-            }
-            admin = hu.getIsAdmin() != null && hu.getIsAdmin();
-            p = hu.getPerms();
-        }
-        if (admin) {
-            return;
-        }
-        if ("view".equals(requiredPerm)) {
-            return;
-        }
-        if ("edit".equals(requiredPerm)) {
-            if ("edit".equals(p) || "control".equals(p)) {
-                return;
-            }
-        }
-        if ("control".equals(requiredPerm)) {
-            if ("control".equals(p)) {
-                return;
-            }
-        }
-        throw new BizException(403, "权限不足");
+        accessControlService.requireHouseLevel(userId, houseId, requiredPerm);
     }
 
     public void assertHouseAdmin(Long userId, Long houseId) {
-        HousePermissionInfo info = getMyHousePermission(userId, houseId);
-        if (info.getIsAdmin() == null || !info.getIsAdmin()) {
-            throw new BizException(403, "仅管理员可操作");
-        }
+        accessControlService.requireHouseOwner(userId, houseId);
     }
 
     public HousePermissionInfo getMyHousePermission(Long userId, Long houseId) {
-        HouseContext ctx = HouseContext.get();
-        if (ctx != null && userId != null && houseId != null && userId.equals(ctx.getUserId()) && houseId.equals(ctx.getHouseId())) {
-            HousePermissionInfo info = new HousePermissionInfo();
-            info.setPerms(ctx.getPerms());
-            info.setIsAdmin(ctx.isAdmin());
-            return info;
-        }
-        HouseUser hu = houseUserMapper.selectByUserAndHouse(userId, houseId);
-        if (hu == null) {
-            throw new BizException(403, "无兔舍权限");
-        }
+        AccessControlService.HouseAccess access = accessControlService.requireHousePermission(
+                userId,
+                houseId,
+                PermissionCode.RABBIT_HOUSES_QUERY
+        );
+        HouseRole role = access.role();
         HousePermissionInfo info = new HousePermissionInfo();
-        info.setPerms(hu.getPerms());
-        info.setIsAdmin(hu.getIsAdmin() != null && hu.getIsAdmin());
+        info.setPerms(role.legacyPermission());
+        info.setRole(role.code());
+        info.setIsAdmin(role.administrator());
+        info.setPermissions(access.permissions());
         return info;
     }
 }

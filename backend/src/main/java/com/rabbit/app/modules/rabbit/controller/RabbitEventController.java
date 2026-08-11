@@ -6,7 +6,8 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.RabbitEventRequest;
 import com.rabbit.app.modules.rabbit.service.RabbitService;
 import com.rabbit.app.security.AuthContext;
-import com.rabbit.app.security.HousePerm;
+import com.rabbit.app.security.permission.PermissionCode;
+import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@HousePerm("edit")
+@RequiresPermission(PermissionCode.RABBIT_RABBITS_EDIT)
 public class RabbitEventController {
     private final HouseService houseService;
     private final RabbitService rabbitService;

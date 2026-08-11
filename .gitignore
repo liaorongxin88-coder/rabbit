@@ -1,5 +1,8 @@
 target/
 .DS_Store
 .envrc
+/.env
 .gradle-test
 /.pnpm-store/
+rabbit-master/
+**/.idea/workspace.xml
