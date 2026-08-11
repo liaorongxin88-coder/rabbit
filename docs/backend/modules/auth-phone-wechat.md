@@ -13,14 +13,17 @@
 | 手机号 HMAC 账号、零兔场登录 | 已实现 | 短信登录、`GET /api/auth/me`、`GET /api/houses` |
 | 精确手机号邀请 | 已实现 | `POST /api/house-invitations` |
 | `hasPassword` 首次设置密码 | 已实现 | `PUT /api/auth/password` |
+| 登录态绑定 / 更换手机号 | 已实现 | `PUT /api/auth/phone` |
+| 短信找回密码 | 已实现 | `POST /api/auth/sms/reset-password` |
 | 用户名密码登录 | 已实现并保留 | `POST /api/auth/register`、`POST /api/auth/login` |
 | 旧微信登录兼容 | 已实现并保留 | `POST /api/auth/wechat-login` |
 | 阿里云本机号码一键登录后端 | 已实现，默认关闭 | `POST /api/auth/phone-one-tap-login` |
 | Android 官方号码认证 SDK | **待控制台 AAR 和真机接入** | Flutter 入口默认隐藏 |
-| 微信快捷登录后强制绑定手机 | **未实现** | 无 `wechat-quick-login`、`bindingToken` 或 `bind-phone` 接口 |
+| 微信快捷登录前强制绑定手机 | **未实现** | 无 `wechat-quick-login`、`bindingToken` 或账号合并接口 |
 
 一键登录后端已经具备真实 token 换号、幂等和账号归一能力，但只有 Android 官方 SDK、控制台
-方案和后端凭证都配置完成时才能开启。微信绑定仍是后续契约，不能据此调用尚不存在的 API。
+方案和后端凭证都配置完成时才能开启。普通登录态已可维护手机号；微信快捷登录前的强制绑定与
+已有手机号账号合并仍是后续契约，不能据此调用尚不存在的 API。
 
 ## 当前账号数据
 
@@ -47,14 +50,14 @@ status                 ENABLED / DISABLED
 POST /api/auth/sms/code
 Content-Type: application/json
 
-{"phone":"13800138000"}
+{"phone":"13800138000","purpose":"LOGIN_OR_REGISTER"}
 ```
 
 ```http
 POST /api/auth/sms/login
 Content-Type: application/json
 
-{"phone":"13800138000","code":"123456"}
+{"phone":"13800138000","code":"123456","purpose":"LOGIN_OR_REGISTER"}
 ```
 
 登录事务：
@@ -68,6 +71,32 @@ Content-Type: application/json
 6. 客户端读取兔场列表，决定进入业务、选择兔场或显示零兔场页。
 
 并发首次登录依靠 `phone_hash` 唯一约束和冲突后回查，不能创建重复账号。
+
+## 当前登录态手机号绑定与换绑
+
+已登录业务账号通过独立用途的验证码绑定或更换手机号：
+
+```http
+PUT /api/auth/phone
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "phone": "13800138001",
+  "code": "123456",
+  "currentPassword": "current-password"
+}
+```
+
+- 新手机号验证码必须以 `BIND_PHONE` purpose 获取，不能复用登录或重置密码验证码。
+- 首次绑定只要求正式 JWT 和新手机号验证码。
+- 已绑定手机号且已有密码时，换绑必须同时验证当前密码。
+- 已绑定手机号但尚未设置密码时，提交原手机号及以 `VERIFY_CURRENT_PHONE` purpose 获取的
+  原手机号验证码，再验证新手机号。
+- 新手机号已经属于其他账号时返回冲突，不静默合并账号或迁移兔场成员关系。
+- 最终写入再次校验原绑定状态和 `phone_hash` 唯一约束；并发换绑导致状态变化时要求刷新重试。
+- 绑定成功会接受新手机号仍有效的精确邀请；旧手机号已经建立的兔场成员关系不受影响。
+- 用户表仍只保存 `phone_hash`、脱敏值和绑定时间，不保存完整手机号。
 
 ## 当前精确手机号邀请
 
@@ -134,8 +163,9 @@ V15 之前的历史账号无法从密码哈希证明密码是系统随机值还�
 `openid`。它按 `sys_user.openid` 查找或创建账号，当前会直接返回正式 JWT；它**不会**返回
 `bindingToken`，也不会强制绑定手机号。
 
-因此当前不能声称“所有微信账号已经绑定手机”。在后续绑定流程落地前，手机号邀请只会在该
-用户使用相同手机号完成短信登录后匹配；不得根据微信身份猜测手机号或静默合并账号。
+因此当前不能声称“所有微信账号已经绑定手机”。已取得正式 JWT 的微信账号可以在账号设置中
+通过 `PUT /api/auth/phone` 绑定一个尚未属于其他账号的手机号；若手机号已有账号，后端拒绝
+绑定，不得根据微信身份猜测手机号或静默合并账号。
 
 ## 当前：阿里云运营商一键登录后端
 
@@ -208,7 +238,7 @@ Android 仍需从阿里云控制台下载官方 AAR，为 `dev/staging/prod` 的
 ## 后续：微信绑定手机号契约（未实现）
 
 > 状态：当前没有 `POST /api/auth/wechat-quick-login`、`bindingToken`、
-> `POST /api/auth/bind-phone`、账号合并或换绑实现。
+> 未登录强制绑定或账号合并实现。普通正式登录态的 `PUT /api/auth/phone` 不替代本契约。
 
 后续实现应满足：
 

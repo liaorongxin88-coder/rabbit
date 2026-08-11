@@ -9,6 +9,8 @@ public class PhoneLoginRequest {
     @NotBlank(message = "验证码不能为空")
     private String code;
 
+    private String purpose = "LOGIN_OR_REGISTER";
+
     public String getPhone() {
         return phone;
     }
@@ -23,5 +25,13 @@ public class PhoneLoginRequest {
 
     public void setCode(String code) {
         this.code = code;
+    }
+
+    public String getPurpose() {
+        return purpose;
+    }
+
+    public void setPurpose(String purpose) {
+        this.purpose = purpose;
     }
 }

@@ -7,9 +7,11 @@ import com.rabbit.app.modules.auth.dto.LoginRequest;
 import com.rabbit.app.modules.auth.dto.PhoneLoginRequest;
 import com.rabbit.app.modules.auth.dto.PhoneOneTapLoginRequest;
 import com.rabbit.app.modules.auth.dto.RegisterRequest;
+import com.rabbit.app.modules.auth.dto.ResetPasswordBySmsRequest;
 import com.rabbit.app.modules.auth.dto.SendSmsCodeRequest;
 import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
 import com.rabbit.app.modules.auth.dto.UpdatePasswordRequest;
+import com.rabbit.app.modules.auth.dto.UpdatePhoneRequest;
 import com.rabbit.app.modules.auth.dto.UpdateUserProfileRequest;
 import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.dto.WechatLoginRequest;
@@ -17,6 +19,7 @@ import com.rabbit.app.modules.auth.service.AuthService;
 import com.rabbit.app.modules.auth.service.PhoneAuthService;
 import com.rabbit.app.modules.auth.service.PhoneOneTapLoginService;
 import com.rabbit.app.modules.auth.service.SmsVerificationService;
+import com.rabbit.app.modules.auth.service.SmsVerificationPurpose;
 import com.rabbit.app.modules.auth.service.WechatService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
@@ -70,12 +73,26 @@ public class AuthController {
             @Valid @RequestBody SendSmsCodeRequest req,
             HttpServletRequest request
     ) {
-        return ApiResponse.ok(smsVerificationService.sendCode(req.getPhone(), request.getRemoteAddr()));
+        return ApiResponse.ok(smsVerificationService.sendCode(
+                req.getPhone(),
+                SmsVerificationPurpose.fromApiValue(req.getPurpose()),
+                request.getRemoteAddr()
+        ));
     }
 
     @PostMapping("/sms/login")
     public ApiResponse<AuthTokenResponse> phoneLogin(@Valid @RequestBody PhoneLoginRequest req) {
-        return ApiResponse.ok(phoneAuthService.loginOrRegister(req.getPhone(), req.getCode()));
+        return ApiResponse.ok(phoneAuthService.authenticate(
+                req.getPhone(),
+                req.getCode(),
+                SmsVerificationPurpose.fromApiValue(req.getPurpose())
+        ));
+    }
+
+    @PostMapping("/sms/reset-password")
+    public ApiResponse<Void> resetPasswordBySms(@Valid @RequestBody ResetPasswordBySmsRequest req) {
+        phoneAuthService.resetPassword(req.getPhone(), req.getCode(), req.getNewPassword());
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/phone-one-tap-login")
@@ -121,6 +138,19 @@ public class AuthController {
     public ApiResponse<Void> updatePassword(@Valid @RequestBody UpdatePasswordRequest req) {
         authService.updatePassword(requireLogin(), req.getOldPassword(), req.getNewPassword());
         return ApiResponse.ok(null);
+    }
+
+    @PutMapping("/phone")
+    @RequiresPermission(PermissionCode.ACCOUNT_PHONE_EDIT)
+    public ApiResponse<UserProfileResponse> updatePhone(@Valid @RequestBody UpdatePhoneRequest req) {
+        return ApiResponse.ok(phoneAuthService.updatePhone(
+                requireLogin(),
+                req.getPhone(),
+                req.getCode(),
+                req.getCurrentPassword(),
+                req.getCurrentPhone(),
+                req.getCurrentPhoneCode()
+        ));
     }
 
     private Long requireLogin() {

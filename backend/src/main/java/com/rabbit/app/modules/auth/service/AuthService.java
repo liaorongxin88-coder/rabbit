@@ -5,12 +5,14 @@ import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
 import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
+import com.rabbit.app.modules.auth.support.PhoneNumbers;
 import com.rabbit.app.modules.house.service.HouseInvitationService;
 import com.rabbit.app.security.JwtUtil;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.PermissionScope;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.dao.DuplicateKeyException;
@@ -72,19 +74,9 @@ public class AuthService {
     @Transactional
     public AuthTokenResponse loginOrRegisterPhone(String phone) {
         String phoneHash = phoneIdentityService.hash(phone);
-        String maskedPhone = phoneIdentityService.mask(phone);
         SysUser user = sysUserMapper.selectByPhoneHashForUpdate(phoneHash);
         if (user == null) {
-            SysUser created = new SysUser();
-            String userName = buildPhoneUserName();
-            created.setUserName(userName);
-            created.setStatus("ENABLED");
-            created.setPasswordInitialized(Boolean.FALSE);
-            created.setPhoneCountryCode("+86");
-            created.setPhoneHash(phoneHash);
-            created.setPhoneMasked(maskedPhone);
-            created.setPhoneBoundTime(new Date());
-            created.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+            SysUser created = newPhoneUser(phone, phoneHash);
             try {
                 sysUserMapper.insert(created);
                 user = created;
@@ -95,9 +87,49 @@ public class AuthService {
                 }
             }
         }
+        return completePhoneLogin(phoneHash, user);
+    }
+
+    @Transactional
+    public AuthTokenResponse loginPhone(String phone) {
+        String phoneHash = phoneIdentityService.hash(phone);
+        SysUser user = sysUserMapper.selectByPhoneHashForUpdate(phoneHash);
+        if (user == null) {
+            throw new BizException(400, "手机号未注册");
+        }
+        return completePhoneLogin(phoneHash, user);
+    }
+
+    @Transactional
+    public AuthTokenResponse registerPhone(String phone) {
+        String phoneHash = phoneIdentityService.hash(phone);
+        if (sysUserMapper.selectByPhoneHashForUpdate(phoneHash) != null) {
+            throw new BizException(400, "手机号已注册");
+        }
+        SysUser user = newPhoneUser(phone, phoneHash);
+        try {
+            sysUserMapper.insert(user);
+        } catch (DuplicateKeyException duplicate) {
+            throw new BizException(400, "手机号已注册");
+        }
+        return completePhoneLogin(phoneHash, user);
+    }
+
+    @Transactional
+    public void resetPasswordByPhone(String phone, String newPassword) {
+        String phoneHash = phoneIdentityService.hash(phone);
+        SysUser user = sysUserMapper.selectByPhoneHashForUpdate(phoneHash);
+        if (user == null) {
+            throw new BizException(400, "手机号未注册");
+        }
         requireEnabled(user);
-        houseInvitationService.acceptPending(phoneHash, user.getUserId());
-        return tokenResponse(user);
+        int updated = sysUserMapper.updatePasswordAndInitialize(
+                user.getUserId(),
+                passwordEncoder.encode(newPassword)
+        );
+        if (updated == 0) {
+            throw new BizException(404, "用户不存在");
+        }
     }
 
     @Transactional
@@ -172,6 +204,82 @@ public class AuthService {
         }
     }
 
+    public PhoneChangeAuthorization authorizePhoneChange(
+            Long userId,
+            String currentPassword,
+            String currentPhone
+    ) {
+        SysUser user = requireUser(userId);
+        if (user.getPhoneBoundTime() == null || user.getPhoneHash() == null) {
+            return new PhoneChangeAuthorization(null, null, false);
+        }
+
+        String expectedPhoneHash = user.getPhoneHash();
+        if (currentPassword != null && !currentPassword.isBlank()) {
+            if (!Boolean.TRUE.equals(user.getPasswordInitialized())) {
+                throw new BizException(400, "当前账号尚未设置密码，请验证原手机号");
+            }
+            if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+                throw new BizException(400, "当前密码不正确");
+            }
+            return new PhoneChangeAuthorization(expectedPhoneHash, null, false);
+        }
+
+        if (currentPhone == null || currentPhone.isBlank()) {
+            throw new BizException(400, "请验证当前密码或原手机号");
+        }
+        String normalizedCurrentPhone = PhoneNumbers.normalizeMainlandMobile(currentPhone);
+        if (!expectedPhoneHash.equals(phoneIdentityService.hash(normalizedCurrentPhone))) {
+            throw new BizException(400, "原手机号与当前账号不一致");
+        }
+        return new PhoneChangeAuthorization(expectedPhoneHash, normalizedCurrentPhone, true);
+    }
+
+    public void ensurePhoneAvailable(Long userId, String phone) {
+        String phoneHash = phoneIdentityService.hash(phone);
+        SysUser existing = sysUserMapper.selectByPhoneHash(phoneHash);
+        if (existing != null && !existing.getUserId().equals(userId)) {
+            throw new BizException(409, "该手机号已绑定其他账号");
+        }
+    }
+
+    @Transactional
+    public UserProfileResponse bindPhone(Long userId, String phone, String expectedCurrentPhoneHash) {
+        SysUser user = sysUserMapper.selectByIdForUpdate(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        requireEnabled(user);
+        if (!Objects.equals(user.getPhoneHash(), expectedCurrentPhoneHash)) {
+            throw new BizException(409, "手机号绑定状态已变化，请刷新后重试");
+        }
+
+        String phoneHash = phoneIdentityService.hash(phone);
+        if (phoneHash.equals(user.getPhoneHash())) {
+            throw new BizException(400, "新手机号不能与当前手机号相同");
+        }
+        SysUser existing = sysUserMapper.selectByPhoneHashForUpdate(phoneHash);
+        if (existing != null && !existing.getUserId().equals(userId)) {
+            throw new BizException(409, "该手机号已绑定其他账号");
+        }
+        try {
+            if (sysUserMapper.updatePhone(userId, "+86", phoneHash, phoneIdentityService.mask(phone)) == 0) {
+                throw new BizException(404, "用户不存在");
+            }
+        } catch (DuplicateKeyException duplicate) {
+            throw new BizException(409, "该手机号已绑定其他账号");
+        }
+        houseInvitationService.acceptPending(phoneHash, userId);
+        return getProfile(userId);
+    }
+
+    public record PhoneChangeAuthorization(
+            String expectedPhoneHash,
+            String normalizedCurrentPhone,
+            boolean currentPhoneCodeRequired
+    ) {
+    }
+
     private String buildWechatUserName(String openid) {
         String suffix = UUID.nameUUIDFromBytes(openid.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
         return "wx_" + suffix;
@@ -179,6 +287,25 @@ public class AuthService {
 
     private String buildPhoneUserName() {
         return "mobile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+    }
+
+    private SysUser newPhoneUser(String phone, String phoneHash) {
+        SysUser created = new SysUser();
+        created.setUserName(buildPhoneUserName());
+        created.setStatus("ENABLED");
+        created.setPasswordInitialized(Boolean.FALSE);
+        created.setPhoneCountryCode("+86");
+        created.setPhoneHash(phoneHash);
+        created.setPhoneMasked(phoneIdentityService.mask(phone));
+        created.setPhoneBoundTime(new Date());
+        created.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        return created;
+    }
+
+    private AuthTokenResponse completePhoneLogin(String phoneHash, SysUser user) {
+        requireEnabled(user);
+        houseInvitationService.acceptPending(phoneHash, user.getUserId());
+        return tokenResponse(user);
     }
 
     private AuthTokenResponse tokenResponse(SysUser user) {

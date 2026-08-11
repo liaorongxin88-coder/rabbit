@@ -6,12 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
-import com.rabbit.app.modules.auth.entity.SmsVerificationCode;
-import com.rabbit.app.modules.auth.mapper.SmsVerificationCodeMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class SmsVerificationServiceTest {
@@ -22,58 +21,86 @@ class SmsVerificationServiceTest {
 
     @Test
     void sendsHashedCodeAndConsumesItOnce() {
-        FakeMapper mapper = new FakeMapper();
+        FakeStore store = new FakeStore();
         RecordingSender sender = new RecordingSender();
-        SmsVerificationService service = service(mapper, sender);
+        SmsVerificationService service = service(store, sender);
 
-        SmsCodeSendResponse response = service.sendCode("+86 138-0013-8000", "127.0.0.1");
+        SmsCodeSendResponse response = service.sendCode(
+                "+86 138-0013-8000",
+                SmsVerificationPurpose.LOGIN,
+                "127.0.0.1"
+        );
 
         assertEquals("13800138000", sender.phone);
         assertEquals("123456", sender.code);
-        assertEquals("SENT", mapper.item.getStatus());
-        assertEquals(64, mapper.item.getPhoneHash().length());
-        assertNotEquals("13800138000", mapper.item.getPhoneHash());
-        assertEquals(64, mapper.item.getCodeHash().length());
-        assertNotEquals("123456", mapper.item.getCodeHash());
+        assertEquals(64, store.lastReservation.phoneHash().length());
+        assertNotEquals("13800138000", store.lastReservation.phoneHash());
+        assertEquals(64, store.lastReservation.codeHash().length());
+        assertNotEquals("123456", store.lastReservation.codeHash());
+        assertEquals(64, store.lastReservation.requestIpHash().length());
         assertEquals(300, response.getExpiresInSeconds());
         assertEquals(60, response.getRetryAfterSeconds());
 
-        assertEquals("13800138000", service.verifyCode("13800138000", "123456"));
-        assertEquals("CONSUMED", mapper.item.getStatus());
-
+        assertEquals(
+                "13800138000",
+                service.verifyCode("13800138000", "123456", SmsVerificationPurpose.LOGIN)
+        );
         BizException reused = assertThrows(
                 BizException.class,
-                () -> service.verifyCode("13800138000", "123456")
+                () -> service.verifyCode("13800138000", "123456", SmsVerificationPurpose.LOGIN)
         );
         assertEquals(400, reused.getCode());
     }
 
     @Test
-    void recordsFailedAttemptsWithoutConsumingTheCode() {
-        FakeMapper mapper = new FakeMapper();
-        SmsVerificationService service = service(mapper, new RecordingSender());
-        service.sendCode("13800138000", "127.0.0.1");
+    void isolatesCodesByBusinessPurpose() {
+        FakeStore store = new FakeStore();
+        SmsVerificationService service = service(store, new RecordingSender());
+        service.sendCode("13800138000", SmsVerificationPurpose.RESET_PASSWORD, "127.0.0.1");
 
-        BizException error = assertThrows(
+        BizException wrongPurpose = assertThrows(
                 BizException.class,
-                () -> service.verifyCode("13800138000", "000000")
+                () -> service.verifyCode("13800138000", "123456", SmsVerificationPurpose.LOGIN)
         );
 
-        assertEquals(400, error.getCode());
-        assertEquals(1, mapper.item.getAttemptCount());
-        assertEquals("SENT", mapper.item.getStatus());
+        assertEquals(400, wrongPurpose.getCode());
+        assertEquals(
+                "13800138000",
+                service.verifyCode("13800138000", "123456", SmsVerificationPurpose.RESET_PASSWORD)
+        );
     }
 
     @Test
-    void blocksRapidResendsBeforeCallingAliyun() {
-        FakeMapper mapper = new FakeMapper();
-        mapper.recentPhoneCount = 1;
+    void recordsFailedAttemptsAndLocksTheChallenge() {
+        FakeStore store = new FakeStore();
+        SmsVerificationService service = service(store, new RecordingSender());
+        service.sendCode("13800138000", SmsVerificationPurpose.LOGIN, "127.0.0.1");
+
+        for (int i = 0; i < 5; i++) {
+            BizException error = assertThrows(
+                    BizException.class,
+                    () -> service.verifyCode("13800138000", "000000", SmsVerificationPurpose.LOGIN)
+            );
+            assertEquals(400, error.getCode());
+        }
+
+        BizException locked = assertThrows(
+                BizException.class,
+                () -> service.verifyCode("13800138000", "123456", SmsVerificationPurpose.LOGIN)
+        );
+        assertEquals(400, locked.getCode());
+    }
+
+    @Test
+    void blocksRateLimitedRequestsBeforeCallingAliyun() {
+        FakeStore store = new FakeStore();
+        store.reserveResult = SmsVerificationStore.ReserveResult.RESEND_LIMIT;
         RecordingSender sender = new RecordingSender();
-        SmsVerificationService service = service(mapper, sender);
+        SmsVerificationService service = service(store, sender);
 
         BizException error = assertThrows(
                 BizException.class,
-                () -> service.sendCode("13800138000", "127.0.0.1")
+                () -> service.sendCode("13800138000", SmsVerificationPurpose.LOGIN, "127.0.0.1")
         );
 
         assertEquals(429, error.getCode());
@@ -81,26 +108,45 @@ class SmsVerificationServiceTest {
     }
 
     @Test
-    void marksReservationFailedWhenProviderRejectsTheMessage() {
-        FakeMapper mapper = new FakeMapper();
-        SmsVerificationService service = service(mapper, (phone, code) -> {
+    void cancelsReservationWhenProviderRejectsTheMessage() {
+        FakeStore store = new FakeStore();
+        SmsVerificationService service = service(store, (phone, code) -> {
             throw new BizException(502, "provider rejected");
         });
 
         BizException error = assertThrows(
                 BizException.class,
-                () -> service.sendCode("13800138000", "127.0.0.1")
+                () -> service.sendCode("13800138000", SmsVerificationPurpose.LOGIN, "127.0.0.1")
         );
 
         assertEquals(502, error.getCode());
-        assertEquals("FAILED", mapper.item.getStatus());
+        assertEquals(true, store.cancelled);
+    }
+
+    @Test
+    void failsClosedWhenCacheIsUnavailable() {
+        FakeStore store = new FakeStore();
+        store.unavailable = true;
+        SmsVerificationService service = service(store, new RecordingSender());
+
+        BizException sendError = assertThrows(
+                BizException.class,
+                () -> service.sendCode("13800138000", SmsVerificationPurpose.LOGIN, "127.0.0.1")
+        );
+        BizException verifyError = assertThrows(
+                BizException.class,
+                () -> service.verifyCode("13800138000", "123456", SmsVerificationPurpose.LOGIN)
+        );
+
+        assertEquals(503, sendError.getCode());
+        assertEquals(503, verifyError.getCode());
     }
 
     @Test
     void disabledSmsDoesNotRequireASecretAndFailsClosed() {
-        FakeMapper mapper = new FakeMapper();
+        FakeStore store = new FakeStore();
         SmsVerificationService service = new SmsVerificationService(
-                mapper,
+                store,
                 new RecordingSender(),
                 new PhoneIdentityService("test-phone-secret-with-enough-entropy"),
                 false,
@@ -127,12 +173,12 @@ class SmsVerificationServiceTest {
 
         assertEquals(503, sendError.getCode());
         assertEquals(503, loginError.getCode());
-        assertEquals(0, mapper.recentPhoneCount);
+        assertEquals(null, store.lastReservation);
     }
 
-    private SmsVerificationService service(FakeMapper mapper, SmsSender sender) {
+    private SmsVerificationService service(FakeStore store, SmsSender sender) {
         return new SmsVerificationService(
-                mapper,
+                store,
                 sender,
                 new PhoneIdentityService("test-phone-secret-with-enough-entropy"),
                 true,
@@ -162,71 +208,71 @@ class SmsVerificationServiceTest {
         }
     }
 
-    private static class FakeMapper implements SmsVerificationCodeMapper {
-        SmsVerificationCode item;
-        int recentPhoneCount;
-        int recentIpCount;
+    private static class FakeStore implements SmsVerificationStore {
+        private final Map<String, ActiveChallenge> active = new HashMap<>();
+        private ReserveResult reserveResult = ReserveResult.RESERVED;
+        private Reservation lastReservation;
+        private boolean cancelled;
+        private boolean unavailable;
 
         @Override
-        public int insert(SmsVerificationCode item) {
-            item.setId(1L);
-            this.item = item;
-            return 1;
+        public ReserveResult reserve(Reservation reservation) {
+            requireAvailable();
+            lastReservation = reservation;
+            return reserveResult;
         }
 
         @Override
-        public int countRecentByPhone(String phone, String purpose, Date fromTime) {
-            return recentPhoneCount;
+        public ActivationResult activate(Reservation reservation) {
+            requireAvailable();
+            active.put(key(reservation.phoneHash(), reservation.purpose()),
+                    new ActiveChallenge(reservation.codeHash(), 0));
+            return ActivationResult.ACTIVATED;
         }
 
         @Override
-        public int countRecentByIp(String requestIp, Date fromTime) {
-            return recentIpCount;
+        public void cancel(Reservation reservation) {
+            requireAvailable();
+            cancelled = true;
         }
 
         @Override
-        public SmsVerificationCode selectLatestActiveForUpdate(String phone, String purpose, Date now) {
-            if (item == null || !"SENT".equals(item.getStatus()) || !item.getExpiresTime().after(now)) {
-                return null;
+        public VerificationResult verifyAndConsume(
+                String phoneHash,
+                SmsVerificationPurpose purpose,
+                String submittedCodeHash,
+                int maxAttempts
+        ) {
+            requireAvailable();
+            String key = key(phoneHash, purpose);
+            ActiveChallenge challenge = active.get(key);
+            if (challenge == null) {
+                return VerificationResult.MISSING;
             }
-            return item;
-        }
-
-        @Override
-        public int markSent(Long id) {
-            item.setStatus("SENT");
-            return 1;
-        }
-
-        @Override
-        public int markFailed(Long id) {
-            item.setStatus("FAILED");
-            return 1;
-        }
-
-        @Override
-        public int recordFailedAttempt(Long id, int maxAttempts) {
-            int attempts = item.getAttemptCount() + 1;
-            item.setAttemptCount(attempts);
-            if (attempts >= maxAttempts) {
-                item.setStatus("LOCKED");
+            if (!challenge.codeHash.equals(submittedCodeHash)) {
+                int attempts = challenge.attempts + 1;
+                if (attempts >= maxAttempts) {
+                    active.remove(key);
+                    return VerificationResult.LOCKED;
+                }
+                active.put(key, new ActiveChallenge(challenge.codeHash, attempts));
+                return VerificationResult.WRONG;
             }
-            return 1;
+            active.remove(key);
+            return VerificationResult.VERIFIED;
         }
 
-        @Override
-        public int markConsumed(Long id, Date consumedTime) {
-            if (!"SENT".equals(item.getStatus())) {
-                return 0;
+        private void requireAvailable() {
+            if (unavailable) {
+                throw new SmsVerificationStoreUnavailableException("offline");
             }
-            item.setStatus("CONSUMED");
-            item.setConsumedTime(consumedTime);
-            return 1;
         }
 
-        @Override
-        public int deleteCreatedBefore(Date cutoff, int limit) {
-            return 0;
+        private static String key(String phoneHash, SmsVerificationPurpose purpose) {
+            return purpose.name() + ":" + phoneHash;
         }
+    }
+
+    private record ActiveChallenge(String codeHash, int attempts) {
     }
 }

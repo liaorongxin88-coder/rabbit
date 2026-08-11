@@ -19,25 +19,6 @@ CREATE TABLE IF NOT EXISTS sys_user (
   KEY idx_sys_user_status (status, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS sms_verification_codes (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  phone_hash CHAR(64) NOT NULL,
-  purpose VARCHAR(32) NOT NULL,
-  code_hash CHAR(64) NOT NULL,
-  request_ip VARCHAR(64) NOT NULL,
-  status VARCHAR(16) NOT NULL,
-  attempt_count INT NOT NULL DEFAULT 0,
-  send_bucket BIGINT NOT NULL,
-  expires_time DATETIME NOT NULL,
-  consumed_time DATETIME,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_sms_phone_purpose_bucket (phone_hash, purpose, send_bucket),
-  KEY idx_sms_phone_purpose_status_time (phone_hash, purpose, status, create_time),
-  KEY idx_sms_ip_status_time (request_ip, status, create_time),
-  KEY idx_sms_expiry (expires_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS platform_admins (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_name VARCHAR(64) NOT NULL UNIQUE,

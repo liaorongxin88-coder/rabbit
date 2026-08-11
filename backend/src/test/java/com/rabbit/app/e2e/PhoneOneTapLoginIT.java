@@ -23,10 +23,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @TestPropertySource(properties = {
         "app.phone-one-tap.enabled=true",
@@ -42,7 +42,7 @@ import org.springframework.test.context.TestPropertySource;
 public class PhoneOneTapLoginIT extends E2eTestSupport {
     private static final String ENDPOINT = "/api/auth/phone-one-tap-login";
 
-    @MockBean
+    @MockitoBean
     private PhoneOneTapProvider provider;
 
     @Autowired

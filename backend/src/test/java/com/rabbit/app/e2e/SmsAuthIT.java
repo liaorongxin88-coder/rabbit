@@ -2,6 +2,9 @@ package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.rabbit.app.modules.auth.service.SmsSender;
+import com.rabbit.app.modules.auth.service.SmsVerificationPurpose;
+import com.rabbit.app.modules.auth.service.SmsVerificationStore;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -16,18 +19,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 public class SmsAuthIT extends E2eTestSupport {
-    @MockBean
+    @MockitoBean
     private SmsSender smsSender;
+
+    @MockitoBean
+    private SmsVerificationStore smsVerificationStore;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private final Map<String, String> sentCodes = new ConcurrentHashMap<>();
+    private final TestSmsVerificationStore testStore = new TestSmsVerificationStore();
 
     @BeforeEach
     void captureSmsCodes() throws Exception {
@@ -36,6 +43,27 @@ public class SmsAuthIT extends E2eTestSupport {
             sentCodes.put(invocation.getArgument(0, String.class), invocation.getArgument(1, String.class));
             return null;
         }).when(smsSender).sendVerificationCode(Mockito.anyString(), Mockito.anyString());
+        testStore.clear();
+        Mockito.when(smsVerificationStore.reserve(Mockito.any()))
+                .thenAnswer(invocation -> testStore.reserve(invocation.getArgument(0)));
+        Mockito.when(smsVerificationStore.activate(Mockito.any()))
+                .thenAnswer(invocation -> testStore.activate(invocation.getArgument(0)));
+        Mockito.doAnswer(invocation -> {
+            testStore.cancel(invocation.getArgument(0));
+            return null;
+        }).when(smsVerificationStore).cancel(Mockito.any());
+        Mockito.when(smsVerificationStore.verifyAndConsume(
+                        Mockito.anyString(),
+                        Mockito.any(SmsVerificationPurpose.class),
+                        Mockito.anyString(),
+                        Mockito.anyInt()
+                ))
+                .thenAnswer(invocation -> testStore.verifyAndConsume(
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3)
+                ));
     }
 
     @Test
@@ -75,7 +103,6 @@ public class SmsAuthIT extends E2eTestSupport {
         Assertions.assertEquals("OWNER", permission.get("role").asText());
         Assertions.assertEquals(1, countMembersByRole(firstSession, houseId, "OWNER"));
 
-        jdbcTemplate.update("DELETE FROM sms_verification_codes");
         JsonNode secondAuth = loginByPhone("+86 13800138001");
 
         Assertions.assertEquals(firstAuth.get("userId").asLong(), secondAuth.get("userId").asLong());
@@ -126,6 +153,124 @@ public class SmsAuthIT extends E2eTestSupport {
     }
 
     @Test
+    void explicitPurposesAreIsolatedAndResetPasswordUsesOnlyResetCode() {
+        String phone = "13800138011";
+        String registerCode = sendCode(phone, "REGISTER");
+        JsonNode registered = api.postOk("/api/auth/sms/login", null, null, obj(
+                "phone", phone,
+                "code", registerCode,
+                "purpose", "REGISTER"
+        ));
+
+        String loginCode = sendCode(phone, "LOGIN");
+        JsonNode loggedIn = api.postOk("/api/auth/sms/login", null, null, obj(
+                "phone", phone,
+                "code", loginCode,
+                "purpose", "LOGIN"
+        ));
+        Assertions.assertEquals(registered.get("userId").asLong(), loggedIn.get("userId").asLong());
+
+        String resetCode = sendCode(phone, "RESET_PASSWORD");
+        api.expectError("/api/auth/sms/login", HttpMethod.POST, null, null, obj(
+                "phone", phone,
+                "code", resetCode,
+                "purpose", "RESET_PASSWORD"
+        ), 400, "该验证码用途不能用于手机号登录");
+        api.postOk("/api/auth/sms/reset-password", null, null, obj(
+                "phone", phone,
+                "code", resetCode,
+                "newPassword", "reset-123456"
+        ));
+
+        JsonNode passwordLogin = api.postOk("/api/auth/login", null, null, obj(
+                "userName", registered.get("userName").asText(),
+                "password", "reset-123456"
+        ));
+        Assertions.assertEquals(registered.get("userId").asLong(), passwordLogin.get("userId").asLong());
+
+        api.expectError("/api/auth/sms/reset-password", HttpMethod.POST, null, null, obj(
+                "phone", phone,
+                "code", resetCode,
+                "newPassword", "another-123456"
+        ), 400, "验证码无效或已过期");
+    }
+
+    @Test
+    void accountCanBindAndChangePhoneAfterPasswordVerification() {
+        UserSession account = register("phone_binding_account");
+        String firstPhone = "13800138012";
+        String firstCode = sendCode(firstPhone, "BIND_PHONE");
+
+        JsonNode bound = api.putOk("/api/auth/phone", account.token, null, obj(
+                "phone", firstPhone,
+                "code", firstCode
+        ));
+        Assertions.assertTrue(bound.get("phoneBound").asBoolean());
+        Assertions.assertEquals("138****8012", bound.get("maskedPhone").asText());
+
+        String secondPhone = "13800138013";
+        String secondCode = sendCode(secondPhone, "BIND_PHONE");
+        api.expectError("/api/auth/phone", HttpMethod.PUT, account.token, null, obj(
+                "phone", secondPhone,
+                "code", secondCode,
+                "currentPassword", "wrong-password"
+        ), 400, "当前密码不正确");
+        JsonNode changed = api.putOk("/api/auth/phone", account.token, null, obj(
+                "phone", secondPhone,
+                "code", secondCode,
+                "currentPassword", account.password
+        ));
+        Assertions.assertEquals("138****8013", changed.get("maskedPhone").asText());
+
+        String loginCode = sendCode(secondPhone, "LOGIN");
+        JsonNode login = api.postOk("/api/auth/sms/login", null, null, obj(
+                "phone", secondPhone,
+                "code", loginCode,
+                "purpose", "LOGIN"
+        ));
+        Assertions.assertEquals(account.userId, login.get("userId").asLong());
+
+        String conflictPhone = "13800138014";
+        loginByPhone(conflictPhone);
+        String conflictCode = sendCode(conflictPhone, "BIND_PHONE");
+        api.expectError("/api/auth/phone", HttpMethod.PUT, account.token, null, obj(
+                "phone", conflictPhone,
+                "code", conflictCode,
+                "currentPassword", account.password
+        ), 409, "该手机号已绑定其他账号");
+    }
+
+    @Test
+    void passwordlessPhoneAccountMustVerifyItsCurrentPhoneBeforeChangingIt() {
+        String currentPhone = "13800138015";
+        JsonNode account = loginByPhone(currentPhone);
+        String nextPhone = "13800138016";
+        String nextCode = sendCode(nextPhone, "BIND_PHONE");
+
+        api.expectError("/api/auth/phone", HttpMethod.PUT, account.get("token").asText(), null, obj(
+                "phone", nextPhone,
+                "code", nextCode
+        ), 400, "请验证当前密码或原手机号");
+
+        String currentCode = sendCode(currentPhone, "VERIFY_CURRENT_PHONE");
+        JsonNode changed = api.putOk("/api/auth/phone", account.get("token").asText(), null, obj(
+                "phone", nextPhone,
+                "code", nextCode,
+                "currentPhone", currentPhone,
+                "currentPhoneCode", currentCode
+        ));
+        Assertions.assertEquals("138****8016", changed.get("maskedPhone").asText());
+
+        String loginCode = sendCode(nextPhone, "LOGIN");
+        JsonNode login = api.postOk("/api/auth/sms/login", null, null, obj(
+                "phone", nextPhone,
+                "code", loginCode,
+                "purpose", "LOGIN"
+        ));
+        Assertions.assertEquals(account.get("userId").asLong(), login.get("userId").asLong());
+    }
+
+    @Test
     void exactPhoneInvitationsAreRedeemedOnlyAfterTheNextSmsLoginWithoutLeakingPhone() {
         UserSession owner = register("phone_invite_owner");
         long houseId = createHouse(owner, "手机号邀请兔场", 1, 1, 1);
@@ -145,7 +290,6 @@ public class SmsAuthIT extends E2eTestSupport {
         assertNoPhoneFields(submittedAgain);
         Assertions.assertEquals(0, countMember(owner, houseId, existingUser.userId));
 
-        jdbcTemplate.update("DELETE FROM sms_verification_codes");
         JsonNode redeemedExistingAuth = loginByPhone("+86 13800138002");
         UserSession redeemedExistingUser = session(redeemedExistingAuth);
         Assertions.assertEquals(existingUser.userId, redeemedExistingUser.userId);
@@ -280,7 +424,6 @@ public class SmsAuthIT extends E2eTestSupport {
 
         JsonNode submission = invite(farmOwner, houseId, "13800138008", "STAFF");
         Assertions.assertEquals("SUBMITTED", submission.path("status").asText());
-        jdbcTemplate.update("DELETE FROM sms_verification_codes");
         UserSession restored = session(loginByPhone("+86 13800138008"));
 
         Assertions.assertEquals(phoneUser.userId, restored.userId);
@@ -315,6 +458,17 @@ public class SmsAuthIT extends E2eTestSupport {
                 "phone", phone,
                 "code", code
         ));
+    }
+
+    private String sendCode(String phone, String purpose) {
+        api.postOk("/api/auth/sms/code", null, null, obj(
+                "phone", phone,
+                "purpose", purpose
+        ));
+        String normalized = normalizePhone(phone);
+        String code = sentCodes.get(normalized);
+        Assertions.assertNotNull(code, "SMS code should be sent to " + normalized);
+        return code;
     }
 
     private JsonNode invite(UserSession owner, long houseId, String phone, String role) {
@@ -425,5 +579,70 @@ public class SmsAuthIT extends E2eTestSupport {
         Assertions.assertFalse(response.has("phone"));
         Assertions.assertFalse(response.has("phoneMasked"));
         Assertions.assertFalse(response.has("maskedPhone"));
+    }
+
+    private static final class TestSmsVerificationStore implements SmsVerificationStore {
+        private final Map<String, Reservation> pending = new HashMap<>();
+        private final Map<String, ActiveChallenge> active = new HashMap<>();
+
+        @Override
+        public synchronized ReserveResult reserve(Reservation reservation) {
+            pending.put(reservation.token(), reservation);
+            return ReserveResult.RESERVED;
+        }
+
+        @Override
+        public synchronized ActivationResult activate(Reservation reservation) {
+            if (pending.remove(reservation.token()) == null) {
+                return ActivationResult.MISSING;
+            }
+            active.put(
+                    key(reservation.phoneHash(), reservation.purpose()),
+                    new ActiveChallenge(reservation.codeHash(), 0)
+            );
+            return ActivationResult.ACTIVATED;
+        }
+
+        @Override
+        public synchronized void cancel(Reservation reservation) {
+            pending.remove(reservation.token());
+        }
+
+        @Override
+        public synchronized VerificationResult verifyAndConsume(
+                String phoneHash,
+                SmsVerificationPurpose purpose,
+                String submittedCodeHash,
+                int maxAttempts
+        ) {
+            String key = key(phoneHash, purpose);
+            ActiveChallenge challenge = active.get(key);
+            if (challenge == null) {
+                return VerificationResult.MISSING;
+            }
+            if (!challenge.codeHash.equals(submittedCodeHash)) {
+                int attempts = challenge.attempts + 1;
+                if (attempts >= maxAttempts) {
+                    active.remove(key);
+                    return VerificationResult.LOCKED;
+                }
+                active.put(key, new ActiveChallenge(challenge.codeHash, attempts));
+                return VerificationResult.WRONG;
+            }
+            active.remove(key);
+            return VerificationResult.VERIFIED;
+        }
+
+        synchronized void clear() {
+            pending.clear();
+            active.clear();
+        }
+
+        private static String key(String phoneHash, SmsVerificationPurpose purpose) {
+            return purpose.name() + ":" + phoneHash;
+        }
+    }
+
+    private record ActiveChallenge(String codeHash, int attempts) {
     }
 }

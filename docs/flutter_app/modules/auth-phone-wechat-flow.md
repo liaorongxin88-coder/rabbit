@@ -12,13 +12,15 @@ Flutter 客户端必须把账号认证与兔场授权分开。手机号已经验
 - 零兔场、单兔场和多兔场的进入逻辑。
 - 精确手机号邀请：`POST /api/house-invitations`。
 - 首次设置密码与后续修改密码：`PUT /api/auth/password`。
+- 登录态手机号绑定与更换：`PUT /api/auth/phone`。
+- 登录页短信找回密码：`POST /api/auth/sms/reset-password`。
 - 供应商无关的一键登录能力探测、Kotlin 通道和后端 token 交换。
 - 用户名密码登录兼容。
 
 当前 App 还**没有导入阿里云官方号码认证 AAR**，原生 adapter 因此报告不可用，所有已提交
 环境的 `RABBIT_CARRIER_AUTH_ENABLED` 也默认 `false`。这意味着调用链和回退逻辑可做本地
-自动化测试，但现有 APK 不会展示一个无法完成真实取号的一键登录按钮。微信快捷登录后的
-`bindingToken`、`/bind-phone` 路由和账号绑定流程仍未实现。
+自动化测试，但现有 APK 不会展示一个无法完成真实取号的一键登录按钮。微信快捷登录前的
+`bindingToken`、短期 token 绑定路由和账号合并流程仍未实现。
 
 ## 当前状态机
 
@@ -74,6 +76,9 @@ POST /api/auth/sms/code
 POST /api/auth/sms/login
 ```
 
+Flutter 当前对两个请求显式发送 `purpose=LOGIN_OR_REGISTER`。后端仍接受缺省 purpose，以兼容
+尚未升级的客户端；重置密码等流程必须使用各自 purpose，不能复用登录验证码。
+
 短信登录响应中的 `hasPassword=false` 表示该手机号账号尚未设置可用密码，不影响正式 JWT、
 零兔场状态或手机号邀请匹配。
 
@@ -117,6 +122,22 @@ X-House-Id: <currentHouseId>
 成功后刷新 `/api/auth/me` 和本地 session，使 `hasPassword=true`。设置密码不会创建新账号，
 也不会改变当前账号的任何兔场成员关系。
 
+登录页“忘记密码”使用 `RESET_PASSWORD` purpose 获取验证码，再提交
+`POST /api/auth/sms/reset-password`。登录验证码不能用于重置密码。
+
+## 当前手机号绑定与更换
+
+账号设置页显示脱敏后的当前手机号，并使用 `BIND_PHONE` purpose 验证新手机号：
+
+- 未绑定手机号：验证新手机号后直接绑定。
+- 已绑定且 `hasPassword=true`：验证当前密码和新手机号验证码后更换。
+- 已绑定且 `hasPassword=false`：输入原手机号，以 `VERIFY_CURRENT_PHONE` purpose 验证原手机号，
+  再验证新手机号后更换。
+- 成功后刷新 `/api/auth/me`；手机号已属于其他账号时保留当前绑定并展示冲突错误。
+
+三个验证码用途与 `LOGIN_OR_REGISTER` 相互隔离。客户端只展示脱敏手机号，不从后端读取或保存
+完整的当前手机号。
+
 ## 当前兔场状态与共同 OWNER
 
 - 同一兔场允许多位共同 `OWNER`，成员页按多条 `role=OWNER` 展示。
@@ -155,7 +176,7 @@ adapter 时还需：
 
 - `POST /api/auth/wechat-quick-login`
 - `bindingToken`
-- `POST /api/auth/bind-phone`
+- 微信短期 token 专用的绑定接口
 - `/bind-phone` 路由
 - `MERGE_REQUIRED` 账号冲突处理
 

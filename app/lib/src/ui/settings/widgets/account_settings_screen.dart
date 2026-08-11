@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/account_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/user_profile.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
@@ -136,6 +140,8 @@ class _AccountSettingsContentState
           ),
         ),
         const SizedBox(height: 12),
+        _PhoneSecurityCard(profile: widget.profile),
+        const SizedBox(height: 12),
         SectionCard(
           child: Form(
             key: _nameFormKey,
@@ -254,8 +260,8 @@ class _AccountSettingsContentState
       await ref
           .read(authControllerProvider.notifier)
           .setUserName(profile.userName);
-      ref.invalidate(userProfileProvider);
       _showMessage('用户名已保存');
+      ref.invalidate(userProfileProvider);
     } catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
@@ -279,8 +285,8 @@ class _AccountSettingsContentState
       _oldPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
-      ref.invalidate(userProfileProvider);
       _showMessage(widget.profile.hasPassword ? '密码已修改' : '密码已设置');
+      ref.invalidate(userProfileProvider);
     } catch (error) {
       _showMessage(_errorMessage(error));
     } finally {
@@ -304,5 +310,317 @@ class _AccountSettingsContentState
       return error.message;
     }
     return error.toString();
+  }
+}
+
+class _PhoneSecurityCard extends ConsumerStatefulWidget {
+  const _PhoneSecurityCard({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  ConsumerState<_PhoneSecurityCard> createState() => _PhoneSecurityCardState();
+}
+
+class _PhoneSecurityCardState extends ConsumerState<_PhoneSecurityCard> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPasswordController = TextEditingController();
+  final _currentPhoneController = TextEditingController();
+  final _currentPhoneCodeController = TextEditingController();
+  final _newPhoneController = TextEditingController();
+  final _newPhoneCodeController = TextEditingController();
+  Timer? _currentPhoneTimer;
+  Timer? _newPhoneTimer;
+  var _currentPhoneSeconds = 0;
+  var _newPhoneSeconds = 0;
+  var _sendingCurrentCode = false;
+  var _sendingNewCode = false;
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _currentPhoneTimer?.cancel();
+    _newPhoneTimer?.cancel();
+    _currentPasswordController.dispose();
+    _currentPhoneController.dispose();
+    _currentPhoneCodeController.dispose();
+    _newPhoneController.dispose();
+    _newPhoneCodeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final needsCurrentPhoneCode =
+        widget.profile.phoneBound && !widget.profile.hasPassword;
+    return SectionCard(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('手机号', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              widget.profile.phoneBound
+                  ? '当前绑定：${widget.profile.maskedPhone}'
+                  : '绑定后可使用短信登录和找回密码',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            if (widget.profile.phoneBound && widget.profile.hasPassword) ...[
+              TextFormField(
+                controller: _currentPasswordController,
+                decoration: const InputDecoration(labelText: '当前密码'),
+                obscureText: true,
+                autofillHints: const [AutofillHints.password],
+                validator: (value) =>
+                    value == null || value.isEmpty ? '请输入当前密码' : null,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (needsCurrentPhoneCode) ...[
+              TextFormField(
+                controller: _currentPhoneController,
+                decoration: const InputDecoration(labelText: '原手机号'),
+                keyboardType: TextInputType.phone,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 11,
+                validator: _validatePhone,
+              ),
+              const SizedBox(height: 12),
+              _CodeField(
+                controller: _currentPhoneCodeController,
+                label: '原手机号验证码',
+                sending: _sendingCurrentCode,
+                remainingSeconds: _currentPhoneSeconds,
+                onSend: _sendCurrentPhoneCode,
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _newPhoneController,
+              decoration: const InputDecoration(labelText: '新手机号'),
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              maxLength: 11,
+              validator: _validatePhone,
+            ),
+            const SizedBox(height: 12),
+            _CodeField(
+              controller: _newPhoneCodeController,
+              label: '新手机号验证码',
+              sending: _sendingNewCode,
+              remainingSeconds: _newPhoneSeconds,
+              onSend: _sendNewPhoneCode,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _saving ? null : _savePhone,
+              icon: _saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.phone_android_outlined),
+              label: Text(widget.profile.phoneBound ? '更换手机号' : '绑定手机号'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendCurrentPhoneCode() async {
+    if (_sendingCurrentCode || _currentPhoneSeconds > 0) return;
+    final error = _validatePhone(_currentPhoneController.text);
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    setState(() => _sendingCurrentCode = true);
+    try {
+      final delivery =
+          await ref.read(authRepositoryProvider).sendSmsCodeForPurpose(
+                _currentPhoneController.text,
+                'VERIFY_CURRENT_PHONE',
+              );
+      if (mounted) {
+        _startCountdown(
+          delivery.retryAfterSeconds,
+          currentPhone: true,
+        );
+        _showMessage('原手机号验证码已发送');
+      }
+    } catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _sendingCurrentCode = false);
+    }
+  }
+
+  Future<void> _sendNewPhoneCode() async {
+    if (_sendingNewCode || _newPhoneSeconds > 0) return;
+    final error = _validatePhone(_newPhoneController.text);
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    setState(() => _sendingNewCode = true);
+    try {
+      final delivery =
+          await ref.read(authRepositoryProvider).sendSmsCodeForPurpose(
+                _newPhoneController.text,
+                'BIND_PHONE',
+              );
+      if (mounted) {
+        _startCountdown(delivery.retryAfterSeconds, currentPhone: false);
+        _showMessage('新手机号验证码已发送');
+      }
+    } catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _sendingNewCode = false);
+    }
+  }
+
+  void _startCountdown(int seconds, {required bool currentPhone}) {
+    final existing = currentPhone ? _currentPhoneTimer : _newPhoneTimer;
+    existing?.cancel();
+    setState(() {
+      if (currentPhone) {
+        _currentPhoneSeconds = seconds;
+      } else {
+        _newPhoneSeconds = seconds;
+      }
+    });
+    final timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final remaining = currentPhone ? _currentPhoneSeconds : _newPhoneSeconds;
+      if (remaining <= 1) {
+        timer.cancel();
+        setState(() {
+          if (currentPhone) {
+            _currentPhoneSeconds = 0;
+          } else {
+            _newPhoneSeconds = 0;
+          }
+        });
+        return;
+      }
+      setState(() {
+        if (currentPhone) {
+          _currentPhoneSeconds -= 1;
+        } else {
+          _newPhoneSeconds -= 1;
+        }
+      });
+    });
+    if (currentPhone) {
+      _currentPhoneTimer = timer;
+    } else {
+      _newPhoneTimer = timer;
+    }
+  }
+
+  Future<void> _savePhone() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(accountRepositoryProvider).updatePhone(
+            phone: _newPhoneController.text,
+            code: _newPhoneCodeController.text,
+            currentPassword: _currentPasswordController.text,
+            currentPhone: _currentPhoneController.text,
+            currentPhoneCode: _currentPhoneCodeController.text,
+          );
+      _currentPasswordController.clear();
+      _currentPhoneController.clear();
+      _currentPhoneCodeController.clear();
+      _newPhoneController.clear();
+      _newPhoneCodeController.clear();
+      _showMessage(widget.profile.phoneBound ? '手机号已更换' : '手机号已绑定');
+      ref.invalidate(userProfileProvider);
+    } catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String? _validatePhone(String? value) {
+    return RegExp(r'^1[3-9]\d{9}$').hasMatch(value ?? '')
+        ? null
+        : '请输入有效的11位手机号';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _errorMessage(Object error) {
+    return error is ApiException ? error.message : error.toString();
+  }
+}
+
+class _CodeField extends StatelessWidget {
+  const _CodeField({
+    required this.controller,
+    required this.label,
+    required this.sending,
+    required this.remainingSeconds,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final bool sending;
+  final int remainingSeconds;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: controller,
+            decoration: InputDecoration(labelText: label),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: 6,
+            validator: (value) =>
+                RegExp(r'^\d{6}$').hasMatch(value ?? '') ? null : '请输入6位验证码',
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 116,
+          height: 56,
+          child: OutlinedButton(
+            onPressed: sending || remainingSeconds > 0 ? null : onSend,
+            child: sending
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      remainingSeconds > 0 ? '${remainingSeconds}s' : '获取验证码',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
   }
 }

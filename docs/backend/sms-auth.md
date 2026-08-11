@@ -18,10 +18,13 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET="<RAM AccessKey Secret>"
 export APP_SMS_SIGN_NAME="<审核通过的签名>"
 export APP_SMS_TEMPLATE_CODE="SMS_xxxxxxxxx"
 export APP_SMS_TEMPLATE_PARAM_NAME="code"
+export APP_CACHE_PROVIDER="redis"
+export APP_CACHE_HOST="<redis-or-valkey-host>"
 export APP_SMS_ENABLED=true
 ```
 
-先配置所有参数，最后再启用 `APP_SMS_ENABLED`。模板变量不是 `code` 时，只修改
+先配置 Redis/Valkey 和所有短信参数，最后再启用 `APP_SMS_ENABLED`。短信开启但
+`APP_CACHE_PROVIDER` 不是 `redis`/`valkey` 时，后端会拒绝启动。模板变量不是 `code` 时，只修改
 `APP_SMS_TEMPLATE_PARAM_NAME`。短信服务中国站默认 Endpoint 为
 `dysmsapi.aliyuncs.com`，需要覆盖时使用 `APP_SMS_ALIYUN_ENDPOINT`。
 
@@ -33,10 +36,24 @@ export APP_SMS_ENABLED=true
 POST /api/auth/sms/code
 Content-Type: application/json
 
-{"phone":"13800138000"}
+{"phone":"13800138000","purpose":"LOGIN_OR_REGISTER"}
 ```
 
 成功响应中的 `expiresInSeconds` 默认是 `300`，`retryAfterSeconds` 默认是 `60`。
+
+purpose 支持：
+
+| purpose | 用途 |
+| --- | --- |
+| `LOGIN_OR_REGISTER` | 兼容现有客户端，存在则登录、不存在则注册 |
+| `LOGIN` | 仅登录已有手机号账号 |
+| `REGISTER` | 仅注册新手机号账号 |
+| `RESET_PASSWORD` | 仅用于短信重置密码 |
+| `BIND_PHONE` | 仅用于验证准备绑定的新手机号 |
+| `VERIFY_CURRENT_PHONE` | 无密码账号换绑时验证原手机号 |
+
+purpose 会进入缓存 key 和验证码 HMAC。相同手机号的不同 purpose 相互隔离，验证码不能跨用途
+消费。请求不带 purpose 时默认 `LOGIN_OR_REGISTER`，用于兼容旧客户端。
 
 登录或注册：
 
@@ -44,12 +61,28 @@ Content-Type: application/json
 POST /api/auth/sms/login
 Content-Type: application/json
 
-{"phone":"13800138000","code":"123456"}
+{"phone":"13800138000","code":"123456","purpose":"LOGIN_OR_REGISTER"}
 ```
 
 手机号已绑定账号时直接登录；首次验证成功时只创建 `sys_user`，不会自动创建兔场。响应返回
 正式 JWT，并包含 `phoneBound=true`、脱敏后的 `maskedPhone` 和
 `hasPassword=false`。验证码只能成功使用一次。
+
+短信重置密码：
+
+```http
+POST /api/auth/sms/reset-password
+Content-Type: application/json
+
+{"phone":"13800138000","code":"123456","newPassword":"new-secure-password"}
+```
+
+验证码必须先通过 `/api/auth/sms/code` 以 `RESET_PASSWORD` purpose 获取。重置成功后旧密码
+失效；当前 JWT 机制尚无 token version，因此已签发 JWT 不会由本接口主动吊销。
+
+登录态手机号绑定 / 换绑使用 `PUT /api/auth/phone`。新手机号必须使用 `BIND_PHONE` 验证码；
+无可用密码的已有手机号账号还必须使用 `VERIFY_CURRENT_PHONE` 验证原手机号。目标手机号已绑定
+其他账号时拒绝操作，不执行账号合并。
 
 登录完成后客户端调用 `GET /api/houses`：
 
@@ -91,20 +124,27 @@ Content-Type: application/json
 
 ## 安全策略
 
-- `sys_user` 和验证码表只保存带服务端 pepper 的手机号 HMAC 摘要，不保存明文手机号。
-- 验证码只保存 HMAC-SHA256 摘要，默认 5 分钟过期。
+- MySQL 不再保存验证码、请求 IP 或验证码发送历史。
+- Redis/Valkey key 只包含手机号 HMAC、请求 IP HMAC、purpose 和随机 token，不含明文手机号/IP。
+- 验证码只以 HMAC-SHA256 摘要进入缓存，默认 5 分钟自动过期。
 - 同一手机号默认 60 秒内只能发送一次。
 - 同一手机号默认每小时最多 5 次、每天最多 10 次。
 - 同一来源 IP 默认每小时最多 20 次。
 - 单个验证码默认最多允许 5 次错误尝试。
 - 阿里云发送失败的验证码不能用于登录。
-- 验证码挑战记录默认保留 7 天，并由每日清理任务删除。
+- 发送、限流、错误次数和单次消费均由 Redis/Valkey Lua 脚本原子执行。
+- 缓存不可用时发送和校验均返回 503，不回退到 MySQL，也不绕过校验。
 - 账号、兔场或成员处于停用状态时，手机号验证不能绕过相应状态检查。
 
 可以通过 `APP_SMS_CODE_TTL_SECONDS`、`APP_SMS_RESEND_SECONDS`、
 `APP_SMS_MAX_ATTEMPTS`、`APP_SMS_PHONE_HOUR_LIMIT`、
 `APP_SMS_PHONE_DAY_LIMIT` 和 `APP_SMS_IP_HOUR_LIMIT` 调整限制。
-保留期和清理时间可通过 `APP_SMS_RETENTION_DAYS`、`APP_SMS_CLEANUP_CRON` 调整。
+
+## 从 MySQL 迁移
+
+Flyway `V19__move_sms_verification_to_cache.sql` 会删除旧的 `sms_verification_codes` 表。部署前必须
+先准备 Redis/Valkey 并更新环境变量。迁移时旧表内尚未消费的验证码不会复制到缓存，发布后的
+首次验证需要重新获取验证码。
 
 后端启用了 Spring Forwarded Header 处理。生产反向代理必须覆盖客户端传入的
 `Forwarded`/`X-Forwarded-For`，并且后端端口不应直接暴露到公网，否则 IP 限流依据可能
@@ -112,7 +152,7 @@ Content-Type: application/json
 
 ## 账号兼容边界
 
-现有用户名密码和 `/api/auth/wechat-login` 兼容接口继续保留。强制手机号绑定、短期
-`bindingToken`、微信身份合并和冲突处理当前尚未实现，后续契约见
+现有用户名密码和 `/api/auth/wechat-login` 兼容接口继续保留。普通登录态绑定 / 换绑已经
+实现；微信快捷登录前的强制手机号绑定、短期 `bindingToken`、身份合并和冲突处理仍未实现，后续契约见
 [手机号认证现状与后续适配契约](modules/auth-phone-wechat.md)。两个已有账号都存在兔场成员
 关系时，未来绑定流程不能静默合并。

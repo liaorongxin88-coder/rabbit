@@ -51,4 +51,36 @@ class AccountRepository {
       decode: (_) {},
     );
   }
+
+  Future<UserProfile> updatePhone({
+    required String phone,
+    required String code,
+    String currentPassword = '',
+    String currentPhone = '',
+    String currentPhoneCode = '',
+  }) {
+    final body = <String, dynamic>{
+      'phone': phone,
+      'code': code,
+    };
+    if (currentPassword.isNotEmpty) {
+      body['currentPassword'] = currentPassword;
+    }
+    if (currentPhone.isNotEmpty) {
+      body['currentPhone'] = currentPhone;
+    }
+    if (currentPhoneCode.isNotEmpty) {
+      body['currentPhoneCode'] = currentPhoneCode;
+    }
+    return _api.put<UserProfile>(
+      '/api/auth/phone',
+      body: body,
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('账号资料格式不正确');
+        }
+        return UserProfile.fromJson(Map<String, dynamic>.from(data));
+      },
+    );
+  }
 }

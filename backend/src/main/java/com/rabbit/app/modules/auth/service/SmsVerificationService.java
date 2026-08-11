@@ -3,31 +3,28 @@ package com.rabbit.app.modules.auth.service;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.config.ApplicationSecretValidator;
 import com.rabbit.app.modules.auth.dto.SmsCodeSendResponse;
-import com.rabbit.app.modules.auth.entity.SmsVerificationCode;
-import com.rabbit.app.modules.auth.mapper.SmsVerificationCodeMapper;
 import com.rabbit.app.modules.auth.support.PhoneNumbers;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.util.Date;
+import java.time.Duration;
 import java.util.HexFormat;
+import java.util.UUID;
 import java.util.function.Supplier;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SmsVerificationService {
-    public static final String PURPOSE_LOGIN_OR_REGISTER = "LOGIN_OR_REGISTER";
-    private static final String STATUS_PENDING = "PENDING";
+    private static final Logger log = LoggerFactory.getLogger(SmsVerificationService.class);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    private final SmsVerificationCodeMapper mapper;
+    private final SmsVerificationStore store;
     private final SmsSender sender;
     private final PhoneIdentityService phoneIdentityService;
     private final boolean enabled;
@@ -44,7 +41,7 @@ public class SmsVerificationService {
 
     @Autowired
     public SmsVerificationService(
-            SmsVerificationCodeMapper mapper,
+            SmsVerificationStore store,
             SmsSender sender,
             PhoneIdentityService phoneIdentityService,
             @Value("${app.sms.enabled:false}") boolean enabled,
@@ -58,7 +55,7 @@ public class SmsVerificationService {
             @Value("${app.sms.verification.ip-hour-limit:20}") int ipHourLimit
     ) {
         this(
-                mapper,
+                store,
                 sender,
                 phoneIdentityService,
                 enabled,
@@ -76,7 +73,7 @@ public class SmsVerificationService {
     }
 
     SmsVerificationService(
-            SmsVerificationCodeMapper mapper,
+            SmsVerificationStore store,
             SmsSender sender,
             PhoneIdentityService phoneIdentityService,
             boolean enabled,
@@ -91,7 +88,7 @@ public class SmsVerificationService {
             Clock clock,
             Supplier<String> codeGenerator
     ) {
-        this.mapper = mapper;
+        this.store = store;
         this.sender = sender;
         this.phoneIdentityService = phoneIdentityService;
         this.enabled = enabled;
@@ -109,50 +106,65 @@ public class SmsVerificationService {
     }
 
     public SmsCodeSendResponse sendCode(String rawPhone, String requestIp) {
+        return sendCode(rawPhone, SmsVerificationPurpose.LOGIN_OR_REGISTER, requestIp);
+    }
+
+    public SmsCodeSendResponse sendCode(
+            String rawPhone,
+            SmsVerificationPurpose purpose,
+            String requestIp
+    ) {
         requireEnabled();
         String phone = PhoneNumbers.normalizeMainlandMobile(rawPhone);
         String phoneHash = phoneIdentityService.hash(phone);
-        String normalizedIp = normalizeRequestIp(requestIp);
+        String requestIpHash = hashRequestIp(normalizeRequestIp(requestIp));
         long nowMillis = clock.millis();
-        enforceRateLimits(phoneHash, normalizedIp, nowMillis);
 
         String code = codeGenerator.get();
         if (code == null || !code.matches("\\d{" + codeLength + "}")) {
             throw new IllegalStateException("验证码生成器返回了无效结果");
         }
-        SmsVerificationCode item = new SmsVerificationCode();
-        item.setPhoneHash(phoneHash);
-        item.setPurpose(PURPOSE_LOGIN_OR_REGISTER);
-        item.setCodeHash(hash(phone, code));
-        item.setRequestIp(normalizedIp);
-        item.setStatus(STATUS_PENDING);
-        item.setAttemptCount(0);
-        item.setSendBucket(nowMillis / (resendSeconds * 1000L));
-        item.setExpiresTime(new Date(nowMillis + ttlSeconds * 1000L));
-
-        try {
-            mapper.insert(item);
-        } catch (DuplicateKeyException e) {
-            throw new BizException(429, "验证码发送过于频繁，请稍后重试");
-        }
+        SmsVerificationStore.Reservation reservation = new SmsVerificationStore.Reservation(
+                UUID.randomUUID().toString(),
+                phoneHash,
+                requestIpHash,
+                purpose,
+                hashCode(purpose, phone, code),
+                nowMillis,
+                Duration.ofSeconds(ttlSeconds),
+                Duration.ofSeconds(resendSeconds),
+                phoneHourLimit,
+                phoneDayLimit,
+                ipHourLimit
+        );
+        enforceReserveResult(reserve(reservation));
 
         try {
             sender.sendVerificationCode(phone, code);
-            if (mapper.markSent(item.getId()) != 1) {
-                throw new BizException(500, "验证码状态保存失败，请重新获取");
-            }
         } catch (BizException e) {
-            mapper.markFailed(item.getId());
+            cancelQuietly(reservation);
             throw e;
         } catch (Exception e) {
-            mapper.markFailed(item.getId());
+            cancelQuietly(reservation);
             throw new BizException(502, "验证码发送失败，请稍后重试");
+        }
+
+        SmsVerificationStore.ActivationResult activation = activate(reservation);
+        if (activation != SmsVerificationStore.ActivationResult.ACTIVATED) {
+            throw new BizException(500, "验证码状态保存失败，请重新获取");
         }
         return new SmsCodeSendResponse(ttlSeconds, resendSeconds);
     }
 
-    @Transactional(noRollbackFor = BizException.class)
     public String verifyCode(String rawPhone, String code) {
+        return verifyCode(rawPhone, code, SmsVerificationPurpose.LOGIN_OR_REGISTER);
+    }
+
+    public String verifyCode(
+            String rawPhone,
+            String code,
+            SmsVerificationPurpose purpose
+    ) {
         requireEnabled();
         String phone = PhoneNumbers.normalizeMainlandMobile(rawPhone);
         String phoneHash = phoneIdentityService.hash(phone);
@@ -161,73 +173,90 @@ public class SmsVerificationService {
             throw new BizException(400, "请输入" + codeLength + "位验证码");
         }
 
-        Date now = new Date(clock.millis());
-        SmsVerificationCode item = mapper.selectLatestActiveForUpdate(
+        SmsVerificationStore.VerificationResult result = verifyAndConsume(
                 phoneHash,
-                PURPOSE_LOGIN_OR_REGISTER,
-                now
+                purpose,
+                hashCode(purpose, phone, normalizedCode)
         );
-        if (item == null) {
+        if (result == SmsVerificationStore.VerificationResult.MISSING) {
             throw new BizException(400, "验证码无效或已过期");
         }
-        if (!constantTimeEquals(item.getCodeHash(), hash(phone, normalizedCode))) {
-            mapper.recordFailedAttempt(item.getId(), maxAttempts);
+        if (result == SmsVerificationStore.VerificationResult.WRONG
+                || result == SmsVerificationStore.VerificationResult.LOCKED) {
             throw new BizException(400, "验证码错误");
-        }
-        if (mapper.markConsumed(item.getId(), now) != 1) {
-            throw new BizException(409, "验证码已使用，请重新获取");
         }
         return phone;
     }
 
-    private void enforceRateLimits(String phoneHash, String requestIp, long nowMillis) {
-        if (mapper.countRecentByPhone(
-                phoneHash,
-                PURPOSE_LOGIN_OR_REGISTER,
-                new Date(nowMillis - resendSeconds * 1000L)
-        ) > 0) {
-            throw new BizException(429, "验证码发送过于频繁，请稍后重试");
-        }
-        if (mapper.countRecentByPhone(
-                phoneHash,
-                PURPOSE_LOGIN_OR_REGISTER,
-                new Date(nowMillis - 3_600_000L)
-        ) >= phoneHourLimit) {
-            throw new BizException(429, "该手机号获取验证码次数过多，请稍后再试");
-        }
-        if (mapper.countRecentByPhone(
-                phoneHash,
-                PURPOSE_LOGIN_OR_REGISTER,
-                new Date(nowMillis - 86_400_000L)
-        ) >= phoneDayLimit) {
-            throw new BizException(429, "该手机号今日获取验证码次数已达上限");
-        }
-        if (mapper.countRecentByIp(requestIp, new Date(nowMillis - 3_600_000L)) >= ipHourLimit) {
-            throw new BizException(429, "当前网络获取验证码次数过多，请稍后再试");
+    private SmsVerificationStore.ReserveResult reserve(SmsVerificationStore.Reservation reservation) {
+        try {
+            return store.reserve(reservation);
+        } catch (SmsVerificationStoreUnavailableException unavailable) {
+            throw cacheUnavailable(unavailable);
         }
     }
 
-    private String hash(String phone, String code) {
+    private SmsVerificationStore.ActivationResult activate(SmsVerificationStore.Reservation reservation) {
+        try {
+            return store.activate(reservation);
+        } catch (SmsVerificationStoreUnavailableException unavailable) {
+            throw cacheUnavailable(unavailable);
+        }
+    }
+
+    private SmsVerificationStore.VerificationResult verifyAndConsume(
+            String phoneHash,
+            SmsVerificationPurpose purpose,
+            String submittedCodeHash
+    ) {
+        try {
+            return store.verifyAndConsume(phoneHash, purpose, submittedCodeHash, maxAttempts);
+        } catch (SmsVerificationStoreUnavailableException unavailable) {
+            throw cacheUnavailable(unavailable);
+        }
+    }
+
+    private void cancelQuietly(SmsVerificationStore.Reservation reservation) {
+        try {
+            store.cancel(reservation);
+        } catch (SmsVerificationStoreUnavailableException unavailable) {
+            log.warn("Unable to cancel failed SMS cache reservation: purpose={}, error={}",
+                    reservation.purpose(), unavailable.getClass().getSimpleName());
+        }
+    }
+
+    private void enforceReserveResult(SmsVerificationStore.ReserveResult result) {
+        switch (result) {
+            case RESERVED -> {
+            }
+            case RESEND_LIMIT -> throw new BizException(429, "验证码发送过于频繁，请稍后重试");
+            case PHONE_HOUR_LIMIT -> throw new BizException(429, "该手机号获取验证码次数过多，请稍后再试");
+            case PHONE_DAY_LIMIT -> throw new BizException(429, "该手机号今日获取验证码次数已达上限");
+            case IP_HOUR_LIMIT -> throw new BizException(429, "当前网络获取验证码次数过多，请稍后再试");
+        }
+    }
+
+    private BizException cacheUnavailable(SmsVerificationStoreUnavailableException unavailable) {
+        log.warn("SMS verification cache unavailable: error={}", unavailable.getClass().getSimpleName());
+        return new BizException(503, "验证码服务暂不可用，请稍后重试");
+    }
+
+    private String hashCode(SmsVerificationPurpose purpose, String phone, String code) {
+        return hmac(purpose.name() + ":" + phone + ":" + code);
+    }
+
+    private String hashRequestIp(String requestIp) {
+        return hmac("REQUEST_IP:" + requestIp);
+    }
+
+    private String hmac(String value) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(codeSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(
-                    (PURPOSE_LOGIN_OR_REGISTER + ":" + phone + ":" + code)
-                            .getBytes(StandardCharsets.UTF_8)
-            ));
+            return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
             throw new IllegalStateException("无法生成验证码摘要", e);
         }
-    }
-
-    private boolean constantTimeEquals(String left, String right) {
-        if (left == null || right == null) {
-            return false;
-        }
-        return MessageDigest.isEqual(
-                left.getBytes(StandardCharsets.UTF_8),
-                right.getBytes(StandardCharsets.UTF_8)
-        );
     }
 
     private String normalizeRequestIp(String requestIp) {

@@ -36,6 +36,23 @@ export interface WorkspaceSession {
   permissions?: string[]
 }
 
+export interface WorkspaceUserProfile {
+  userId: number
+  userName: string
+  openidBound: boolean
+  phoneBound: boolean
+  maskedPhone: string | null
+  hasPassword: boolean
+  permissions?: string[]
+  createTime?: string | null
+  updateTime?: string | null
+}
+
+export interface SmsCodeDelivery {
+  expiresInSeconds: number
+  retryAfterSeconds: number
+}
+
 export type HouseRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER'
 
 export interface HouseInvitationRequest {

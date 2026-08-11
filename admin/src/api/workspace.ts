@@ -18,6 +18,8 @@ import type {
   Rabbit,
   RabbitHouse,
   WorkspaceSession,
+  WorkspaceUserProfile,
+  SmsCodeDelivery,
 } from '@/types/api'
 
 export function requestId() {
@@ -26,6 +28,43 @@ export function requestId() {
 
 export function loginWorkspace(data: { userName: string; password: string }) {
   return workspacePostJson<WorkspaceSession>('/api/auth/login', data)
+}
+
+export function sendWorkspaceSmsCode(phone: string, purpose: string) {
+  return workspacePostJson<SmsCodeDelivery>('/api/auth/sms/code', { phone, purpose })
+}
+
+export function resetWorkspacePasswordBySms(data: {
+  phone: string
+  code: string
+  newPassword: string
+}) {
+  return workspacePostJson<void>('/api/auth/sms/reset-password', data)
+}
+
+export function getWorkspaceProfile() {
+  return workspaceGetJson<WorkspaceUserProfile>('/api/auth/me')
+}
+
+export function updateWorkspaceUserName(userName: string) {
+  return workspacePutJson<WorkspaceUserProfile>('/api/auth/me', { userName })
+}
+
+export function updateWorkspacePassword(data: {
+  oldPassword?: string
+  newPassword: string
+}) {
+  return workspacePutJson<void>('/api/auth/password', data)
+}
+
+export function updateWorkspacePhone(data: {
+  phone: string
+  code: string
+  currentPassword?: string
+  currentPhone?: string
+  currentPhoneCode?: string
+}) {
+  return workspacePutJson<WorkspaceUserProfile>('/api/auth/phone', data)
 }
 
 export function listWorkspaceHouses() {

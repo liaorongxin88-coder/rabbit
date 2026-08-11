@@ -20,6 +20,7 @@ class PermissionAnnotationCoverageTest {
             "AuthController#login",
             "AuthController#sendSmsCode",
             "AuthController#phoneLogin",
+            "AuthController#resetPasswordBySms",
             "AuthController#phoneOneTapLogin",
             "AuthController#wechatLogin"
     );

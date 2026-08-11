@@ -27,6 +27,11 @@ const WorkspaceDashboardPage = lazy(() =>
     default: module.WorkspaceDashboardPage,
   })),
 )
+const WorkspaceAccountPage = lazy(() =>
+  import('@/pages/workspace-account-page').then((module) => ({
+    default: module.WorkspaceAccountPage,
+  })),
+)
 const WorkspaceFarmsPage = lazy(() =>
   import('@/pages/workspace-farms-page').then((module) => ({
     default: module.WorkspaceFarmsPage,
@@ -137,6 +142,7 @@ function WorkspaceShellRoutes() {
           <Route path="livestock" element={<WorkspaceLivestockPage />} />
           <Route path="production" element={<WorkspaceProductionPage />} />
           <Route path="members" element={<WorkspaceMembersPage />} />
+          <Route path="account" element={<WorkspaceAccountPage />} />
           <Route path="*" element={<Navigate to="/workspace/dashboard" replace />} />
         </Routes>
       </WorkspaceShell>

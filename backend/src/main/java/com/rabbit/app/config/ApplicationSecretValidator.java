@@ -14,7 +14,8 @@ public class ApplicationSecretValidator {
             @Value("${app.admin.jwt.secret:}") String adminJwtSecret,
             @Value("${app.auth.phone-hash-secret:}") String phoneHashSecret,
             @Value("${app.sms.enabled:false}") boolean smsEnabled,
-            @Value("${app.sms.code-secret:}") String smsCodeSecret
+            @Value("${app.sms.code-secret:}") String smsCodeSecret,
+            @Value("${app.cache.provider:none}") String cacheProvider
     ) {
         requireConfigured("APP_JWT_SECRET", jwtSecret);
         requireConfigured("APP_ADMIN_JWT_SECRET", adminJwtSecret);
@@ -22,6 +23,7 @@ public class ApplicationSecretValidator {
         requireConfigured("APP_PHONE_HASH_SECRET", phoneHashSecret);
         if (smsEnabled) {
             requireConfigured("APP_SMS_CODE_SECRET", smsCodeSecret);
+            requireSmsCache(cacheProvider);
         }
     }
 
@@ -39,6 +41,15 @@ public class ApplicationSecretValidator {
         if (jwtSecret != null && jwtSecret.equals(adminJwtSecret)) {
             throw new IllegalArgumentException(
                     "APP_ADMIN_JWT_SECRET must be different from APP_JWT_SECRET"
+            );
+        }
+    }
+
+    private static void requireSmsCache(String cacheProvider) {
+        String normalized = cacheProvider == null ? "" : cacheProvider.trim().toLowerCase(Locale.ROOT);
+        if (!"redis".equals(normalized) && !"valkey".equals(normalized)) {
+            throw new IllegalArgumentException(
+                    "APP_CACHE_PROVIDER must be redis or valkey when APP_SMS_ENABLED=true"
             );
         }
     }

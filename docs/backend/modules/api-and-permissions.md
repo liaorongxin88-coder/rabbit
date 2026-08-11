@@ -88,9 +88,11 @@ house_users.role grants requested permission
 - `POST /api/auth/login`
 - `POST /api/auth/sms/code`
 - `POST /api/auth/sms/login`
+- `POST /api/auth/sms/reset-password`
 - `POST /api/auth/phone-one-tap-login`
 - `POST /api/auth/wechat-login`
 - `GET /api/auth/me`
+- `PUT /api/auth/phone`（`account:phone:edit`）
 - `PUT /api/auth/password`
 
 以下是后续规划接口，当前不可调用：

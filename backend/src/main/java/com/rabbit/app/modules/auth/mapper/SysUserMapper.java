@@ -29,6 +29,11 @@ public interface SysUserMapper {
     int updatePasswordAndInitialize(@Param("userId") Long userId,
                                     @Param("password") String password);
 
+    int updatePhone(@Param("userId") Long userId,
+                    @Param("phoneCountryCode") String phoneCountryCode,
+                    @Param("phoneHash") String phoneHash,
+                    @Param("phoneMasked") String phoneMasked);
+
     int updateStatus(@Param("userId") Long userId,
                      @Param("status") String status);
 }
