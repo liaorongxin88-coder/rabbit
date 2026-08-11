@@ -41,6 +41,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/login",
                         "/api/auth/sms/code",
                         "/api/auth/sms/login",
+                        "/api/auth/sms/reset-password",
                         "/api/auth/phone-one-tap-login",
                         "/api/auth/wechat-login"
                 );
@@ -52,6 +53,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/login",
                         "/api/auth/sms/code",
                         "/api/auth/sms/login",
+                        "/api/auth/sms/reset-password",
                         "/api/auth/phone-one-tap-login",
                         "/api/auth/wechat-login"
                 );

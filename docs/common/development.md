@@ -39,6 +39,8 @@ JWT 密钥必须不同。Compose 会拒绝缺少前三个必需密钥的配置�
 短信和号码认证使用两套独立 RAM 凭证；不要让号码认证配置回退到
 `ALIBABA_CLOUD_ACCESS_KEY_*`。需要从局域网设备访问后端时，将
 `BACKEND_BIND_ADDRESS` 设置为 `0.0.0.0`；完成测试后恢复为 `127.0.0.1`。
+如果管理后台也通过局域网地址打开，还需把精确的 `http://<局域网IP>:5173` 加入
+`APP_CORS_ALLOWED_ORIGINS`；不要配置通配符来源。
 局域网直连和默认部署保持 `APP_FORWARD_HEADERS_STRATEGY=none`，避免客户端伪造
 `X-Forwarded-For` 绕过匿名限流。只有后端仅能被可信反向代理访问、且代理会覆盖客户端提供的
 转发头时，才可将它改为 `framework`。
@@ -49,6 +51,10 @@ JWT 密钥必须不同。Compose 会拒绝缺少前三个必需密钥的配置�
 - MySQL: `localhost:3306`
 - 数据库: `rabbit_app`
 - MySQL root 密码: `rabbit_root`
+
+应用缓存默认关闭。需要在本地启用 Redis 或 Valkey 时，按
+[后端缓存设计](../backend/cache.md) 配置根目录 `.env` 并启用对应 Compose profile。
+启用短信时缓存不再可选；`APP_CACHE_PROVIDER`、`APP_CACHE_HOST` 和 Compose profile 必须匹配。
 
 只刷新后端容器且保留 MySQL 数据：
 

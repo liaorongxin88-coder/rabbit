@@ -1,6 +1,7 @@
 import {
   LayoutDashboardIcon,
   LogOutIcon,
+  CircleUserRoundIcon,
   RabbitIcon,
   Rows3Icon,
   UsersIcon,
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/workspace/livestock', label: '兔群管理', icon: RabbitIcon },
   { to: '/workspace/production', label: '生产批次', icon: Rows3Icon },
   { to: '/workspace/members', label: '成员权限', icon: UsersIcon },
+  { to: '/workspace/account', label: '账号安全', icon: CircleUserRoundIcon },
 ]
 
 const roleLabels = {

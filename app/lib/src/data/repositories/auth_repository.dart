@@ -28,9 +28,16 @@ class AuthRepository {
   }
 
   Future<SmsCodeDelivery> sendSmsCode(String phone) {
+    return sendSmsCodeForPurpose(phone, 'LOGIN_OR_REGISTER');
+  }
+
+  Future<SmsCodeDelivery> sendSmsCodeForPurpose(
+    String phone,
+    String purpose,
+  ) {
     return _api.post<SmsCodeDelivery>(
       '/api/auth/sms/code',
-      body: {'phone': phone},
+      body: {'phone': phone, 'purpose': purpose},
       decode: (data) {
         if (data is! Map) {
           throw const ApiException('验证码发送结果格式不正确');
@@ -46,12 +53,29 @@ class AuthRepository {
     );
   }
 
+  Future<void> resetPasswordBySms({
+    required String phone,
+    required String code,
+    required String newPassword,
+  }) {
+    return _api.post<void>(
+      '/api/auth/sms/reset-password',
+      body: {
+        'phone': phone,
+        'code': code,
+        'newPassword': newPassword,
+      },
+      decode: (_) {},
+    );
+  }
+
   Future<AuthSession> loginWithPhone(String phone, String code) {
     return _api.post<AuthSession>(
       '/api/auth/sms/login',
       body: {
         'phone': phone,
         'code': code,
+        'purpose': 'LOGIN_OR_REGISTER',
       },
       decode: _decodeSession,
     );

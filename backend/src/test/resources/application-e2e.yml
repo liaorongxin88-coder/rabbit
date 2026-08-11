@@ -22,6 +22,9 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  cache:
+    provider: redis
+    host: 127.0.0.1
   auth:
     phone-hash-secret: e2e-only-phone-hash-secret-0123456789abcdef
   cors:

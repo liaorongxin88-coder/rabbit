@@ -71,7 +71,14 @@ class ApplicationSecretValidatorTest {
                 "APP_SMS_CODE_SECRET"
         );
         runner(JWT_SECRET, ADMIN_JWT_SECRET, PHONE_HASH_SECRET, true, SMS_CODE_SECRET)
+                .withPropertyValues("app.cache.provider=redis")
                 .run(context -> assertThat(context).hasNotFailed());
+        runner(JWT_SECRET, ADMIN_JWT_SECRET, PHONE_HASH_SECRET, true, SMS_CODE_SECRET)
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(rootCause(context.getStartupFailure()).getMessage())
+                            .contains("APP_CACHE_PROVIDER");
+                });
     }
 
     private void assertFailure(
@@ -86,10 +93,7 @@ class ApplicationSecretValidatorTest {
                 .run(context -> {
                     assertThat(context).hasFailed();
                     Throwable rootCause = context.getStartupFailure();
-                    while (rootCause.getCause() != null) {
-                        rootCause = rootCause.getCause();
-                    }
-                    assertThat(rootCause.getMessage()).contains(expectedMessage);
+                    assertThat(rootCause(rootCause).getMessage()).contains(expectedMessage);
                 });
     }
 
@@ -109,5 +113,13 @@ class ApplicationSecretValidatorTest {
                         "app.sms.enabled=" + smsEnabled,
                         "app.sms.code-secret=" + smsCodeSecret
                 );
+    }
+
+    private Throwable rootCause(Throwable failure) {
+        Throwable rootCause = failure;
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+        return rootCause;
     }
 }

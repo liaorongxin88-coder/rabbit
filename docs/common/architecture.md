@@ -32,7 +32,22 @@ Rabbit 当前由三块主要应用组成：
 
 数据库结构由 Flyway 管理，迁移目录为
 `backend/src/main/resources/db/migration/`。`db/schema.sql` 只作为当前结构参考，
-不作为常规初始化入口。
+不作为常规初始化入口。应用启动代码不得执行 DDL 或静默修补表结构；历史数据库兼容也必须
+通过幂等 Flyway 迁移完成。
+
+模块内请求依赖方向为：
+
+```text
+controller -> service -> mapper
+```
+
+Controller 负责 HTTP 参数、认证上下文和响应适配，不得直接访问 Mapper。通用基础设施包
+（例如 `cache`）不得反向依赖具体业务模块；业务专用适配器放在对应模块的
+`infrastructure` 包中。`FarmingModuleArchitectureTest` 在测试阶段强制这些规则。
+
+批次模块对 Controller 保留稳定的 `BatchService` 命令门面，实际事务分别由生命周期、
+繁育、分娩、断奶、催情和出售服务承担。跨流程复用的批次校验、状态历史和自动完结规则
+集中在模块内部协作者中；查询由 `BatchQueryService` 等只读服务承担。
 
 ## 领域模型
 

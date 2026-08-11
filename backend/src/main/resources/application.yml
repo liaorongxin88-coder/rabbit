@@ -19,6 +19,17 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  cache:
+    provider: ${APP_CACHE_PROVIDER:none}
+    host: ${APP_CACHE_HOST:127.0.0.1}
+    port: ${APP_CACHE_PORT:6379}
+    username: ${APP_CACHE_USERNAME:}
+    password: ${APP_CACHE_PASSWORD:}
+    database: ${APP_CACHE_DATABASE:0}
+    ssl-enabled: ${APP_CACHE_SSL_ENABLED:false}
+    connect-timeout: ${APP_CACHE_CONNECT_TIMEOUT:2s}
+    command-timeout: ${APP_CACHE_COMMAND_TIMEOUT:1s}
+    key-prefix: ${APP_CACHE_KEY_PREFIX:rabbit:cache:v1}
   auth:
     phone-hash-secret: ${APP_PHONE_HASH_SECRET:}
   cors:
@@ -49,8 +60,6 @@ app:
       phone-hour-limit: ${APP_SMS_PHONE_HOUR_LIMIT:5}
       phone-day-limit: ${APP_SMS_PHONE_DAY_LIMIT:10}
       ip-hour-limit: ${APP_SMS_IP_HOUR_LIMIT:20}
-      retention-days: ${APP_SMS_RETENTION_DAYS:7}
-      cleanup-cron: ${APP_SMS_CLEANUP_CRON:0 20 3 * * ?}
     aliyun:
       endpoint: ${APP_SMS_ALIYUN_ENDPOINT:dysmsapi.aliyuncs.com}
       access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}

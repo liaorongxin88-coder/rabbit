@@ -6,6 +6,7 @@ import java.util.List;
 public enum PermissionCode {
     ACCOUNT_PROFILE_QUERY("account:profile:query", PermissionScope.BUSINESS, 1),
     ACCOUNT_PROFILE_EDIT("account:profile:edit", PermissionScope.BUSINESS, 1),
+    ACCOUNT_PHONE_EDIT("account:phone:edit", PermissionScope.BUSINESS, 1),
     ACCOUNT_PASSWORD_EDIT("account:password:edit", PermissionScope.BUSINESS, 1),
     WORKSPACES_LIST("workspaces:list", PermissionScope.BUSINESS, 1),
     RABBIT_HOUSES_LIST("rabbit:houses:list", PermissionScope.BUSINESS, 1),

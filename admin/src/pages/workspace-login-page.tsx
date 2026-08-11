@@ -1,11 +1,24 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { LogInIcon, ShieldCheckIcon } from 'lucide-react'
+import { KeyRoundIcon, LogInIcon, ShieldCheckIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { loginWorkspace } from '@/api/workspace'
+import {
+  loginWorkspace,
+  resetWorkspacePasswordBySms,
+  sendWorkspaceSmsCode,
+} from '@/api/workspace'
 import { BrandLogo } from '@/components/brand-logo'
+import { SmsCodeField } from '@/components/sms-code-field'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -17,6 +30,7 @@ export function WorkspaceLoginPage() {
   const [userName, setUserName] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
 
   if (getWorkspaceSession()) {
     return <Navigate to="/workspace/dashboard" replace />
@@ -85,6 +99,10 @@ export function WorkspaceLoginPage() {
                 {submitting ? <Spinner data-icon="inline-start" /> : <LogInIcon data-icon="inline-start" />}
                 登录
               </Button>
+              <Button type="button" variant="link" onClick={() => setResetOpen(true)}>
+                <KeyRoundIcon data-icon="inline-start" />
+                忘记密码
+              </Button>
             </form>
           </CardContent>
         </Card>
@@ -94,7 +112,117 @@ export function WorkspaceLoginPage() {
             平台管理员登录
           </Link>
         </Button>
+        <ResetPasswordDialog open={resetOpen} onOpenChange={setResetOpen} />
       </div>
     </main>
+  )
+}
+
+function ResetPasswordDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? <ResetPasswordForm onSuccess={() => onOpenChange(false)} /> : null}
+    </Dialog>
+  )
+}
+
+function ResetPasswordForm({ onSuccess }: { onSuccess: () => void }) {
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const validPhone = /^1[3-9]\d{9}$/.test(phone)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (newPassword !== confirmPassword) {
+      toast.error('两次输入的新密码不一致')
+      return
+    }
+    setSaving(true)
+    try {
+      await resetWorkspacePasswordBySms({ phone, code, newPassword })
+      setSaving(false)
+      toast.success('密码已重置，请使用新密码登录')
+      onSuccess()
+    } catch {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>重置密码</DialogTitle>
+        <DialogDescription>验证已绑定手机号后设置新密码。</DialogDescription>
+      </DialogHeader>
+      <form className="contents" onSubmit={handleSubmit}>
+        <FieldGroup className="overflow-y-auto py-1">
+          <Field>
+            <FieldLabel htmlFor="workspace-reset-phone">已绑定手机号</FieldLabel>
+            <Input
+              id="workspace-reset-phone"
+              value={phone}
+              inputMode="tel"
+              autoComplete="tel"
+              pattern="1[3-9][0-9]{9}"
+              maxLength={11}
+              required
+              onChange={(event) => setPhone(event.target.value.replace(/\D/g, ''))}
+            />
+          </Field>
+          <SmsCodeField
+            id="workspace-reset-code"
+            label="验证码"
+            value={code}
+            disabled={!validPhone}
+            onChange={setCode}
+            onSend={() => sendWorkspaceSmsCode(phone, 'RESET_PASSWORD')}
+          />
+          <Field>
+            <FieldLabel htmlFor="workspace-reset-password">新密码</FieldLabel>
+            <Input
+              id="workspace-reset-password"
+              type="password"
+              value={newPassword}
+              minLength={6}
+              maxLength={32}
+              autoComplete="new-password"
+              required
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="workspace-reset-confirm-password">确认新密码</FieldLabel>
+            <Input
+              id="workspace-reset-confirm-password"
+              type="password"
+              value={confirmPassword}
+              minLength={6}
+              maxLength={32}
+              autoComplete="new-password"
+              required
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={saving} onClick={onSuccess}>
+            取消
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? <Spinner data-icon="inline-start" /> : <KeyRoundIcon data-icon="inline-start" />}
+            重置密码
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
   )
 }

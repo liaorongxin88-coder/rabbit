@@ -338,8 +338,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 : const Text('登录'),
           ),
         ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _submitting ? null : _openResetPassword,
+          icon: const Icon(Icons.lock_reset_outlined),
+          label: const Text('忘记密码'),
+        ),
       ],
     );
+  }
+
+  Future<void> _openResetPassword() async {
+    final reset = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _ResetPasswordDialog(),
+    );
+    if (reset == true && mounted) {
+      _showMessage('密码已重置，请使用新密码登录');
+    }
   }
 
   String? _validatedPhone() {
@@ -520,6 +536,202 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() => _submitting = false);
       }
     }
+  }
+}
+
+class _ResetPasswordDialog extends ConsumerStatefulWidget {
+  const _ResetPasswordDialog();
+
+  @override
+  ConsumerState<_ResetPasswordDialog> createState() =>
+      _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends ConsumerState<_ResetPasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _phoneController = TextEditingController();
+  final _codeController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  Timer? _timer;
+  var _remainingSeconds = 0;
+  var _sending = false;
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _phoneController.dispose();
+    _codeController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重置密码'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 360,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(labelText: '已绑定手机号'),
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  maxLength: 11,
+                  validator: (value) =>
+                      RegExp(r'^1[3-9]\d{9}$').hasMatch(value ?? '')
+                          ? null
+                          : '请输入有效的11位手机号',
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _codeController,
+                        decoration: const InputDecoration(labelText: '验证码'),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        maxLength: 6,
+                        validator: (value) =>
+                            RegExp(r'^\d{6}$').hasMatch(value ?? '')
+                                ? null
+                                : '请输入6位验证码',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 112,
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: _sending || _remainingSeconds > 0
+                            ? null
+                            : _sendCode,
+                        child: _sending
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _remainingSeconds > 0
+                                      ? '${_remainingSeconds}s'
+                                      : '获取验证码',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(labelText: '新密码'),
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.newPassword],
+                  validator: (value) =>
+                      value == null || value.length < 6 || value.length > 32
+                          ? '密码长度需在6-32位'
+                          : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _confirmController,
+                  decoration: const InputDecoration(labelText: '确认新密码'),
+                  obscureText: true,
+                  validator: (value) =>
+                      value == _passwordController.text ? null : '两次输入的新密码不一致',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _saving ? null : _resetPassword,
+          icon: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.lock_reset_outlined),
+          label: const Text('重置密码'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _sendCode() async {
+    final phone = _phoneController.text;
+    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
+      _showMessage('请输入有效的11位手机号');
+      return;
+    }
+    setState(() => _sending = true);
+    try {
+      final delivery = await ref
+          .read(authRepositoryProvider)
+          .sendSmsCodeForPurpose(phone, 'RESET_PASSWORD');
+      if (!mounted) return;
+      _timer?.cancel();
+      setState(() => _remainingSeconds = delivery.retryAfterSeconds);
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted || _remainingSeconds <= 1) {
+          timer.cancel();
+          if (mounted) setState(() => _remainingSeconds = 0);
+          return;
+        }
+        setState(() => _remainingSeconds -= 1);
+      });
+      _showMessage('验证码已发送');
+    } catch (error) {
+      _showMessage(error is ApiException ? error.message : error.toString());
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(authRepositoryProvider).resetPasswordBySms(
+            phone: _phoneController.text,
+            code: _codeController.text,
+            newPassword: _passwordController.text,
+          );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      _showMessage(error is ApiException ? error.message : error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

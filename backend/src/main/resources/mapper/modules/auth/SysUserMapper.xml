@@ -102,6 +102,16 @@
         where user_id = #{userId}
     </update>
 
+    <update id="updatePhone">
+        update sys_user
+        set phone_country_code = #{phoneCountryCode},
+            phone_hash = #{phoneHash},
+            phone_masked = #{phoneMasked},
+            phone_bound_time = now(),
+            update_time = now()
+        where user_id = #{userId}
+    </update>
+
     <update id="updateStatus">
         update sys_user
         set status = #{status},
