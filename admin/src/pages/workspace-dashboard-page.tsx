@@ -85,8 +85,8 @@ export function WorkspaceDashboardPage() {
             <MetricCard title="种兔" value={summary.seedRabbits} icon={ActivityIcon} />
             <MetricCard title="公兔" value={summary.maleRabbits} icon={MarsIcon} />
             <MetricCard title="母兔" value={summary.femaleRabbits} icon={VenusIcon} />
-            <MetricCard title="已配种" value={summary.bredRabbits} icon={ActivityIcon} />
-            <MetricCard title="待配种" value={summary.readyForBreeding} icon={ActivityIcon} />
+            <MetricCard title="繁殖周期中" value={summary.bredRabbits} icon={ActivityIcon} />
+            <MetricCard title="未在周期中" value={summary.readyForBreeding} icon={ActivityIcon} />
             <MetricCard title="窝数" value={summary.litters} icon={BabyIcon} />
             <MetricCard title="哺乳仔兔" value={summary.nursingKits} icon={BabyIcon} />
           </section>

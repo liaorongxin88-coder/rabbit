@@ -1,19 +1,43 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClockIcon, PlusIcon, RefreshCwIcon, Rows3Icon, WarehouseIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  CalendarClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Rows3Icon,
+  SearchIcon,
+  WarehouseIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createBatch,
   listBatchRabbits,
   listBatches,
+  listBreedingCycles,
   listCages,
   listRabbits,
   submitBatchAction,
+  submitBulkMating,
+  submitRabbitDeparture,
   type BatchAction,
 } from '@/api/workspace'
 import { PageHeader } from '@/components/page-header'
 import { WorkspaceOutboundDialog } from '@/components/workspace-outbound-dialog'
 import { HousePermissionBadge } from '@/components/permission-badge'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
+import {
+  batchStatusLabel,
+  BATCH_MOTHER_PAGE_SIZE,
+  getOrCreateBatchActionRequest,
+  getOrCreateBulkMatingRequest,
+  getOrCreateRabbitDepartureRequest,
+  isBulkMatingEligible,
+  isCompletedBatchStatus,
+  MAX_BULK_MATING_MOTHERS,
+  normalizeParturitionPayload,
+  type PendingBatchActionRequest,
+} from '@/lib/batch-workflow'
 import { formatLocalDate } from '@/lib/date'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,35 +58,50 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import type { BatchRabbit, Cage, ProductionBatch, Rabbit } from '@/types/api'
+import type {
+  BatchRabbit,
+  BreedingCycle,
+  BulkMatingRequest,
+  Cage,
+  ProductionBatch,
+  Rabbit,
+  RabbitDepartureRequest,
+  RabbitDepartureType,
+} from '@/types/api'
 
-type BatchWorkflowAction = Exclude<BatchAction, 'sale'>
+type BatchWorkflowAction = Exclude<BatchAction, 'sale'> | 'mating/bulk' | 'departure'
 
 const actionLabels: Record<BatchWorkflowAction, string> = {
   'aphrodisiac/start': '开始催情',
   'aphrodisiac/finish': '完成催情',
   mating: '记录配种',
+  'mating/bulk': '批量配种',
   'pregnancy-check': '记录孕检',
   'prepartum/finish': '完成产前准备',
   parturition: '记录分娩',
   weaning: '记录断奶',
+  departure: '母兔离场',
   complete: '完成批次',
 }
 
 export function WorkspaceProductionPage() {
   const workspace = useWorkspace()
   const [batches, setBatches] = useState<ProductionBatch[]>([])
+  const [batchMotherCounts, setBatchMotherCounts] = useState<Record<number, number | null>>({})
   const [rabbits, setRabbits] = useState<Rabbit[]>([])
   const [cages, setCages] = useState<Cage[]>([])
   const [loading, setLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [actionBatch, setActionBatch] = useState<ProductionBatch | null>(null)
   const canEdit = hasPermission(workspace.permission, 'rabbit:batches:edit')
+  const canRabbitEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
+  const canOutboundEdit = hasPermission(workspace.permission, 'rabbit:outbound:edit')
   const canControl = hasPermission(workspace.permission, 'rabbit:rabbits:control')
 
   const load = useCallback(async () => {
     if (!workspace.selectedHouse) {
       setBatches([])
+      setBatchMotherCounts({})
       setRabbits([])
       setCages([])
       return
@@ -75,10 +114,24 @@ export function WorkspaceProductionPage() {
         listCages(workspace.selectedHouse.id),
       ])
       setBatches(nextBatches)
+      setBatchMotherCounts({})
       setRabbits(nextRabbits)
       setCages(nextCages)
+
+      const batchRabbitResults = await Promise.allSettled(
+        nextBatches.map((batch) => listBatchRabbits(workspace.selectedHouse!.id, batch.id)),
+      )
+      setBatchMotherCounts(Object.fromEntries(
+        batchRabbitResults.map((result, index) => [
+          nextBatches[index].id,
+          result.status === 'fulfilled'
+            ? result.value.filter((item) => item.batchRole === 'breeding').length
+            : null,
+        ]),
+      ))
     } catch {
       setBatches([])
+      setBatchMotherCounts({})
       setRabbits([])
       setCages([])
     } finally {
@@ -104,7 +157,7 @@ export function WorkspaceProductionPage() {
             </Button>
             <WorkspaceOutboundDialog
               houseId={workspace.selectedHouse?.id ?? null}
-              disabled={!canEdit}
+              disabled={!canOutboundEdit}
               canControl={canControl}
               onSaved={load}
             />
@@ -139,40 +192,94 @@ export function WorkspaceProductionPage() {
             <CardDescription>生产记录会沿用客户端的批次状态机。</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>批次</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>开始日期</TableHead>
-                  <TableHead>结束日期</TableHead>
-                  <TableHead>备注</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {batches.map((batch) => (
-                  <TableRow key={batch.id}>
-                    <TableCell>
-                      <div className="flex min-w-36 flex-col gap-1">
-                        <span className="font-medium">{batch.batchCode}</span>
-                        <span className="text-xs text-muted-foreground">ID {batch.id}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell><Badge variant={batch.status === 'COMPLETED' ? 'secondary' : 'default'}>{batchStatusLabel(batch.status)}</Badge></TableCell>
-                    <TableCell>{formatDate(batch.startDate)}</TableCell>
-                    <TableCell>{formatDate(batch.endDate)}</TableCell>
-                    <TableCell className="max-w-64 truncate">{batch.remark || '-'}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" disabled={!canEdit || batch.status === 'COMPLETED'} onClick={() => setActionBatch(batch)}>
+            <div className="divide-y md:hidden">
+              {batches.map((batch) => (
+                <article key={batch.id} className="py-4 first:pt-0 last:pb-0" aria-label={`批次 ${batch.batchCode}`}>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-all text-sm font-semibold leading-5">{batch.batchCode}</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">ID {batch.id}</p>
+                    </div>
+                    <Badge className="shrink-0" variant={isCompletedBatchStatus(batch.status) ? 'secondary' : 'default'}>
+                      {batchStatusLabel(batch.status)}
+                    </Badge>
+                  </div>
+
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">开始日期</dt>
+                      <dd className="mt-1 font-medium tabular-nums">{formatDate(batch.startDate)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">结束日期</dt>
+                      <dd className="mt-1 font-medium tabular-nums">{formatDate(batch.endDate)}</dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">母兔数</dt>
+                      <dd className="mt-1 font-medium tabular-nums">{formatMotherCount(batchMotherCounts[batch.id])}</dd>
+                    </div>
+                    <div className="col-span-2 min-w-0">
+                      <dt className="text-xs text-muted-foreground">备注</dt>
+                      <dd className="mt-1 break-words leading-5">{batch.remark || '-'}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-4">
+                    {isCompletedBatchStatus(batch.status) ? (
+                      <p className="text-right text-xs text-muted-foreground">已闭环</p>
+                    ) : (
+                      <Button className="w-full" variant="outline" disabled={!canEdit} onClick={() => setActionBatch(batch)}>
                         <CalendarClockIcon data-icon="inline-start" />
                         生产操作
                       </Button>
-                    </TableCell>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>批次</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>开始日期</TableHead>
+                    <TableHead>结束日期</TableHead>
+                    <TableHead>母兔数</TableHead>
+                    <TableHead>备注</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {batches.map((batch) => (
+                    <TableRow key={batch.id}>
+                      <TableCell>
+                        <div className="flex min-w-36 flex-col gap-1">
+                          <span className="font-medium">{batch.batchCode}</span>
+                          <span className="text-xs text-muted-foreground">ID {batch.id}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant={isCompletedBatchStatus(batch.status) ? 'secondary' : 'default'}>{batchStatusLabel(batch.status)}</Badge></TableCell>
+                      <TableCell>{formatDate(batch.startDate)}</TableCell>
+                      <TableCell>{formatDate(batch.endDate)}</TableCell>
+                      <TableCell className="tabular-nums">{formatMotherCount(batchMotherCounts[batch.id])}</TableCell>
+                      <TableCell className="max-w-64 truncate">{batch.remark || '-'}</TableCell>
+                      <TableCell className="text-right">
+                        {isCompletedBatchStatus(batch.status) ? (
+                          <span className="text-xs text-muted-foreground">已闭环</span>
+                        ) : (
+                          <Button variant="outline" size="sm" disabled={!canEdit} onClick={() => setActionBatch(batch)}>
+                            <CalendarClockIcon data-icon="inline-start" />
+                            生产操作
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -182,6 +289,7 @@ export function WorkspaceProductionPage() {
         houseId={workspace.selectedHouse?.id ?? null}
         rabbits={rabbits}
         cages={cages}
+        canRabbitEdit={canRabbitEdit}
         onOpenChange={(open) => !open && setActionBatch(null)}
         onSaved={load}
       />
@@ -210,20 +318,44 @@ function CreateBatchDialog({
   )
   const [code, setCode] = useState('')
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [rabbitSearch, setRabbitSearch] = useState('')
+  const [rabbitPage, setRabbitPage] = useState(1)
   const [remark, setRemark] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const filteredFemaleRabbits = useMemo(() => {
+    const keyword = rabbitSearch.trim().toLowerCase()
+    if (!keyword) return femaleRabbits
+    return femaleRabbits.filter((rabbit) => (
+      String(rabbit.id).includes(keyword)
+      || String(rabbit.cageId).includes(keyword)
+      || rabbit.breed?.toLowerCase().includes(keyword)
+    ))
+  }, [femaleRabbits, rabbitSearch])
+  const rabbitPageCount = Math.max(1, Math.ceil(filteredFemaleRabbits.length / BATCH_MOTHER_PAGE_SIZE))
+  const visibleFemaleRabbits = filteredFemaleRabbits.slice(
+    (rabbitPage - 1) * BATCH_MOTHER_PAGE_SIZE,
+    rabbitPage * BATCH_MOTHER_PAGE_SIZE,
+  )
 
   useEffect(() => {
     if (!open) return
     setCode(`PC-${formatLocalDate().replaceAll('-', '')}`)
     setSelectedIds([])
+    setRabbitSearch('')
+    setRabbitPage(1)
     setRemark('')
   }, [open])
 
   function toggleRabbit(id: number) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    )
+    setSelectedIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id)
+      if (current.length >= 5000) {
+        toast.error('单个批次最多选择 5000 只母兔')
+        return current
+      }
+      return [...current, id]
+    })
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -267,13 +399,45 @@ function CreateBatchDialog({
             </Field>
             <Field>
               <FieldLabel>种母兔</FieldLabel>
-              <div className="grid max-h-48 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">
-                {femaleRabbits.map((rabbit) => (
-                  <label key={rabbit.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={selectedIds.includes(rabbit.id)} onChange={() => toggleRabbit(rabbit.id)} />
-                    兔 #{rabbit.id} · 笼位 #{rabbit.cageId}
-                  </label>
-                ))}
+              <div className="flex flex-col gap-3 rounded-md border p-3">
+                <div className="relative">
+                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    className="pl-9"
+                    value={rabbitSearch}
+                    placeholder="搜索兔只 ID、笼位或品种"
+                    aria-label="搜索种母兔"
+                    onChange={(event) => {
+                      setRabbitSearch(event.target.value)
+                      setRabbitPage(1)
+                    }}
+                  />
+                </div>
+                <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {visibleFemaleRabbits.map((rabbit) => (
+                    <label key={rabbit.id} className="flex items-center gap-2 text-sm">
+                      <input className="size-5 shrink-0" type="checkbox" checked={selectedIds.includes(rabbit.id)} onChange={() => toggleRabbit(rabbit.id)} />
+                      兔 #{rabbit.id} · 笼位 #{rabbit.cageId}
+                    </label>
+                  ))}
+                </div>
+                {visibleFemaleRabbits.length === 0 ? <p className="text-sm text-muted-foreground">没有匹配的种母兔</p> : null}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                  <span className="text-xs text-muted-foreground">筛选 {filteredFemaleRabbits.length} 只 · 已选 {selectedIds.length}/5000 · 第 {rabbitPage}/{rabbitPageCount} 页</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" disabled={filteredFemaleRabbits.length === 0} onClick={() => {
+                      if (filteredFemaleRabbits.length > 5000) toast.error('单个批次最多选择 5000 只母兔')
+                      setSelectedIds(filteredFemaleRabbits.slice(0, 5000).map((rabbit) => rabbit.id))
+                    }}>选择筛选结果</Button>
+                    <Button type="button" variant="ghost" size="sm" disabled={selectedIds.length === 0} onClick={() => setSelectedIds([])}>清空已选</Button>
+                    <Button type="button" variant="outline" size="sm" disabled={rabbitPage <= 1} onClick={() => setRabbitPage((current) => Math.max(1, current - 1))}>
+                      <ChevronLeftIcon data-icon="inline-start" />上一页
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" disabled={rabbitPage >= rabbitPageCount} onClick={() => setRabbitPage((current) => Math.min(rabbitPageCount, current + 1))}>
+                      下一页<ChevronRightIcon data-icon="inline-end" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </Field>
             <Field>
@@ -296,6 +460,7 @@ function BatchActionDialog({
   houseId,
   rabbits,
   cages,
+  canRabbitEdit,
   onOpenChange,
   onSaved,
 }: {
@@ -303,50 +468,250 @@ function BatchActionDialog({
   houseId: number | null
   rabbits: Rabbit[]
   cages: Cage[]
+  canRabbitEdit: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => Promise<void>
 }) {
   const [action, setAction] = useState<BatchWorkflowAction>('mating')
   const [batchRabbits, setBatchRabbits] = useState<BatchRabbit[]>([])
+  const [breedingCycles, setBreedingCycles] = useState<BreedingCycle[]>([])
+  const [breedingCycleId, setBreedingCycleId] = useState('')
   const [rabbitId, setRabbitId] = useState('')
+  const [motherSearch, setMotherSearch] = useState('')
+  const [motherPage, setMotherPage] = useState(1)
   const [maleRabbitId, setMaleRabbitId] = useState('')
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<number[]>([])
+  const [bulkSearch, setBulkSearch] = useState('')
+  const [bulkStatus, setBulkStatus] = useState<'all' | '待配种' | '哺乳中'>('all')
+  const [bulkPage, setBulkPage] = useState(1)
   const [date, setDate] = useState(formatLocalDate())
   const [result, setResult] = useState('怀孕')
   const [totalKits, setTotalKits] = useState('0')
   const [liveKits, setLiveKits] = useState('0')
+  const [parturitionFailed, setParturitionFailed] = useState(false)
   const [weaningCount, setWeaningCount] = useState('0')
   const [maleCount, setMaleCount] = useState('0')
   const [femaleCount, setFemaleCount] = useState('0')
   const [targetCageId, setTargetCageId] = useState('')
   const [avgWeight, setAvgWeight] = useState('')
   const [force, setForce] = useState(false)
+  const [departureType, setDepartureType] = useState<RabbitDepartureType>('cull')
+  const [departureReason, setDepartureReason] = useState('')
+  const [departureConfirmed, setDepartureConfirmed] = useState(false)
   const [remark, setRemark] = useState('')
   const [saving, setSaving] = useState(false)
+  const pendingBulkRequest = useRef<BulkMatingRequest | null>(null)
+  const pendingDepartureRequest = useRef<RabbitDepartureRequest | null>(null)
+  const pendingBatchActionRequest = useRef<PendingBatchActionRequest | null>(null)
 
   useEffect(() => {
+    setAction('mating')
+    setBatchRabbits([])
+    setBreedingCycles([])
+    setBreedingCycleId('')
+    setRabbitId('')
+    setMotherSearch('')
+    setMotherPage(1)
+    setMaleRabbitId('')
+    setBulkSelectedIds([])
+    setBulkSearch('')
+    setBulkStatus('all')
+    setBulkPage(1)
+    setDate(formatLocalDate())
+    setResult('怀孕')
+    setTotalKits('0')
+    setLiveKits('0')
+    setParturitionFailed(false)
+    setWeaningCount('0')
+    setMaleCount('0')
+    setFemaleCount('0')
+    setTargetCageId('')
+    setAvgWeight('')
+    setForce(false)
+    setDepartureType('cull')
+    setDepartureReason('')
+    setDepartureConfirmed(false)
+    setRemark('')
+    pendingBulkRequest.current = null
+    pendingDepartureRequest.current = null
+    pendingBatchActionRequest.current = null
+
     if (!batch || !houseId) {
-      setBatchRabbits([])
       return
     }
-    setAction('mating')
-    setDate(formatLocalDate())
-    setRemark('')
-    void listBatchRabbits(houseId, batch.id)
-      .then((items) => {
-        setBatchRabbits(items)
-        setRabbitId(String(items.find((item) => item.isActive)?.rabbitId ?? ''))
+
+    let active = true
+    void Promise.allSettled([
+      listBatchRabbits(houseId, batch.id),
+      listBreedingCycles(houseId, batch.id),
+    ])
+      .then(([itemsResult, cyclesResult]) => {
+        if (!active) return
+        if (itemsResult.status === 'fulfilled') {
+          setBatchRabbits(itemsResult.value)
+          setRabbitId(String(itemsResult.value.find((item) => item.isActive && item.batchRole === 'breeding')?.rabbitId ?? ''))
+        }
+        if (cyclesResult.status === 'fulfilled') setBreedingCycles(cyclesResult.value)
       })
-      .catch(() => setBatchRabbits([]))
+    return () => {
+      active = false
+    }
   }, [batch, houseId])
 
-  const maleRabbits = rabbits.filter(
-    (rabbit) => rabbit.isActive && rabbit.type === '0' && rabbit.gender === '1',
+  const maleRabbits = useMemo(
+    () => rabbits.filter((rabbit) => rabbit.isActive && rabbit.type === '0' && rabbit.gender === '1'),
+    [rabbits],
   )
-  const activeBatchRabbits = batchRabbits.filter((item) => item.isActive)
+  const activeBatchRabbits = useMemo(
+    () => batchRabbits.filter((item) => item.isActive && item.batchRole === 'breeding'),
+    [batchRabbits],
+  )
+  const selectedMotherCycles = useMemo(
+    () => breedingCycles
+      .filter((cycle) => String(cycle.motherRabbitId) === rabbitId)
+      .sort((left, right) => right.cycleNo - left.cycleNo),
+    [breedingCycles, rabbitId],
+  )
+  const filteredActiveMothers = useMemo(() => {
+    const keyword = motherSearch.trim().toLowerCase()
+    if (!keyword) return activeBatchRabbits
+    return activeBatchRabbits.filter((item) => (
+      String(item.rabbitId).includes(keyword)
+      || String(item.cageId ?? '').includes(keyword)
+      || item.currentStatus?.toLowerCase().includes(keyword)
+    ))
+  }, [activeBatchRabbits, motherSearch])
+  const motherPageCount = Math.max(1, Math.ceil(filteredActiveMothers.length / BATCH_MOTHER_PAGE_SIZE))
+  const visibleActiveMothers = filteredActiveMothers.slice(
+    (motherPage - 1) * BATCH_MOTHER_PAGE_SIZE,
+    motherPage * BATCH_MOTHER_PAGE_SIZE,
+  )
+  const eligibleBulkMothers = useMemo(
+    () => activeBatchRabbits.filter(isBulkMatingEligible),
+    [activeBatchRabbits],
+  )
+  const filteredBulkMothers = useMemo(() => {
+    const keyword = bulkSearch.trim().toLowerCase()
+    return eligibleBulkMothers.filter((item) => {
+      if (bulkStatus !== 'all' && item.currentStatus?.trim() !== bulkStatus) return false
+      if (!keyword) return true
+      return String(item.rabbitId).includes(keyword)
+        || String(item.cageId ?? '').includes(keyword)
+        || item.currentStatus?.toLowerCase().includes(keyword)
+    })
+  }, [bulkSearch, bulkStatus, eligibleBulkMothers])
+  const bulkPageCount = Math.max(1, Math.ceil(filteredBulkMothers.length / BATCH_MOTHER_PAGE_SIZE))
+  const visibleBulkMothers = filteredBulkMothers.slice(
+    (bulkPage - 1) * BATCH_MOTHER_PAGE_SIZE,
+    bulkPage * BATCH_MOTHER_PAGE_SIZE,
+  )
+
+  function toggleBulkMother(rabbitId: number) {
+    setBulkSelectedIds((current) => {
+      if (current.includes(rabbitId)) return current.filter((id) => id !== rabbitId)
+      if (current.length >= MAX_BULK_MATING_MOTHERS) {
+        toast.error(`单次最多选择 ${MAX_BULK_MATING_MOTHERS} 只母兔`)
+        return current
+      }
+      return [...current, rabbitId]
+    })
+  }
+
+  function toggleVisibleBulkMothers() {
+    const visibleIds = visibleBulkMothers.map((item) => item.rabbitId)
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => bulkSelectedIds.includes(id))
+    if (allVisibleSelected) {
+      setBulkSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)))
+      return
+    }
+    setBulkSelectedIds((current) => {
+      const newIds = visibleIds.filter((id) => !current.includes(id))
+      const available = MAX_BULK_MATING_MOTHERS - current.length
+      if (newIds.length > available) {
+        toast.error(`已达到单次 ${MAX_BULK_MATING_MOTHERS} 只上限`)
+      }
+      return [...current, ...newIds.slice(0, available)]
+    })
+  }
+
+  function selectAllFilteredBulkMothers() {
+    setBulkSelectedIds((current) => {
+      const merged = [...new Set([...current, ...filteredBulkMothers.map((item) => item.rabbitId)])]
+      if (merged.length > MAX_BULK_MATING_MOTHERS) {
+        toast.error(`单次最多选择 ${MAX_BULK_MATING_MOTHERS} 只母兔`)
+      }
+      return merged.slice(0, MAX_BULK_MATING_MOTHERS)
+    })
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!batch || !houseId) return
+    if (!batch || !houseId || isCompletedBatchStatus(batch.status)) return
     const timestamp = new Date(`${date}T00:00:00`).getTime()
+    if (action === 'mating/bulk') {
+      if (bulkSelectedIds.length === 0 || !maleRabbitId) return
+      const request = getOrCreateBulkMatingRequest(
+        pendingBulkRequest.current,
+        {
+          femaleRabbitIds: bulkSelectedIds,
+          maleRabbitId: Number(maleRabbitId),
+          matingDate: timestamp,
+        },
+        () => crypto.randomUUID(),
+      )
+      pendingBulkRequest.current = request
+      setSaving(true)
+      try {
+        const result = await submitBulkMating(houseId, batch.id, request)
+        pendingBulkRequest.current = null
+        toast.success(`批量配种已保存，共 ${result.count} 只母兔`)
+        onOpenChange(false)
+        await onSaved()
+      } catch {
+        // Keep the requestId so an unchanged retry remains idempotent.
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    if (action === 'departure') {
+      if (!canRabbitEdit) return
+      const reason = departureReason.trim()
+      if (!reason) {
+        toast.error('请填写母兔离场原因')
+        return
+      }
+      if (!departureConfirmed) {
+        toast.error('请确认退出活跃批次及繁殖周期')
+        return
+      }
+      const request = getOrCreateRabbitDepartureRequest(
+        pendingDepartureRequest.current,
+        {
+          rabbitId: Number(rabbitId),
+          eventType: departureType,
+          actionDate: timestamp,
+          reason,
+          remark: remark.trim() || undefined,
+          forceExitBatch: true,
+        },
+        () => crypto.randomUUID(),
+      )
+      pendingDepartureRequest.current = request
+      setSaving(true)
+      try {
+        await submitRabbitDeparture(houseId, request)
+        pendingDepartureRequest.current = null
+        toast.success(`母兔 #${rabbitId} 已${departureType === 'cull' ? '淘汰' : '登记死亡'}`)
+        onOpenChange(false)
+        await onSaved()
+      } catch {
+        // Keep the requestId so an unchanged retry remains idempotent.
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     let data: Record<string, unknown>
     switch (action) {
       case 'aphrodisiac/start':
@@ -357,40 +722,60 @@ function BatchActionDialog({
         data = { femaleRabbitId: Number(rabbitId), maleRabbitId: Number(maleRabbitId), matingDate: timestamp }
         break
       case 'pregnancy-check':
-        data = { rabbitId: Number(rabbitId), checkDate: timestamp, result, remark: remark.trim() }
+        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, checkDate: timestamp, result, remark: remark.trim() }
         break
       case 'prepartum/finish':
-        data = { rabbitId: Number(rabbitId), actionDate: timestamp, remark: remark.trim() }
+        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, actionDate: timestamp, remark: remark.trim() }
         break
-      case 'parturition':
-        data = { rabbitId: Number(rabbitId), birthDate: timestamp, totalKits: Number(totalKits), liveKits: Number(liveKits), failed: false, remark: remark.trim() }
+      case 'parturition': {
+        const parturition = normalizeParturitionPayload(
+          parturitionFailed,
+          Number(totalKits),
+          Number(liveKits),
+        )
+        data = {
+          rabbitId: Number(rabbitId),
+          breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined,
+          birthDate: timestamp,
+          ...parturition,
+          remark: remark.trim(),
+        }
         break
+      }
       case 'weaning':
-        data = { rabbitId: Number(rabbitId), weaningDate: timestamp, weaningCount: Number(weaningCount), maleCount: Number(maleCount), femaleCount: Number(femaleCount), targetCageId: targetCageId ? Number(targetCageId) : undefined, avgWeight: avgWeight ? Number(avgWeight) : undefined, remark: remark.trim() }
+        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, weaningDate: timestamp, weaningCount: Number(weaningCount), maleCount: Number(maleCount), femaleCount: Number(femaleCount), targetCageId: targetCageId ? Number(targetCageId) : undefined, avgWeight: avgWeight ? Number(avgWeight) : undefined, remark: remark.trim() }
         break
       case 'complete':
         data = { endDate: timestamp, force, remark: remark.trim() }
         break
     }
+    const request = getOrCreateBatchActionRequest(
+      pendingBatchActionRequest.current,
+      { batchId: batch.id, action, payload: data },
+      () => crypto.randomUUID(),
+    )
+    pendingBatchActionRequest.current = request
     setSaving(true)
     try {
-      await submitBatchAction(houseId, batch.id, action, data)
+      await submitBatchAction(houseId, batch.id, action, request.payload, request.requestId)
+      pendingBatchActionRequest.current = null
       toast.success(`${actionLabels[action]}已保存`)
       onOpenChange(false)
       await onSaved()
     } catch {
-      // Shared request feedback is sufficient.
+      // Keep the requestId so an unchanged retry remains idempotent.
     } finally {
       setSaving(false)
     }
   }
 
-  const requiresRabbit = action !== 'complete'
+  const requiresRabbit = action !== 'complete' && action !== 'mating/bulk'
   const usesDate = !['aphrodisiac/start', 'aphrodisiac/finish'].includes(action)
+  const batchCompleted = isCompletedBatchStatus(batch?.status)
 
   return (
     <Dialog open={Boolean(batch)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>生产操作 · {batch?.batchCode ?? ''}</DialogTitle>
           <DialogDescription>生产记录归属当前兔场。</DialogDescription>
@@ -401,19 +786,158 @@ function BatchActionDialog({
               <FieldLabel htmlFor="batch-action">操作类型</FieldLabel>
               <Select value={action} onValueChange={(value) => setAction(value as BatchWorkflowAction)}>
                 <SelectTrigger id="batch-action"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup>{Object.entries(actionLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
+                <SelectContent><SelectGroup>{Object.entries(actionLabels).filter(([value]) => value !== 'departure' || canRabbitEdit).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </Field>
             {requiresRabbit ? (
               <Field>
-                <FieldLabel htmlFor="batch-rabbit">批次兔只</FieldLabel>
-                <Select value={rabbitId} onValueChange={setRabbitId}>
-                  <SelectTrigger id="batch-rabbit"><SelectValue placeholder="选择兔只" /></SelectTrigger>
-                  <SelectContent><SelectGroup>{activeBatchRabbits.map((item) => <SelectItem key={item.id} value={String(item.rabbitId)}>兔 #{item.rabbitId} · {item.currentStatus || '批次中'}</SelectItem>)}</SelectGroup></SelectContent>
-                </Select>
+                <FieldLabel htmlFor="batch-mother-search">活跃繁殖母兔</FieldLabel>
+                <div className="mt-2 overflow-hidden rounded-md border">
+                  <div className="border-b p-3">
+                    <div className="relative">
+                      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                      <Input
+                        id="batch-mother-search"
+                        className="pl-9"
+                        value={motherSearch}
+                        placeholder="搜索兔只 ID、笼位或状态"
+                        onChange={(event) => {
+                          setMotherSearch(event.target.value)
+                          setMotherPage(1)
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-52 divide-y overflow-y-auto">
+                    {visibleActiveMothers.map((item) => (
+                      <label key={item.id} className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-secondary/50">
+                        <input
+                          className="size-5 shrink-0"
+                          type="radio"
+                          name="batch-rabbit"
+                          checked={rabbitId === String(item.rabbitId)}
+                          onChange={() => {
+                            setRabbitId(String(item.rabbitId))
+                            setBreedingCycleId('')
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 truncate">兔 #{item.rabbitId} · 笼位 #{item.cageId ?? '-'}</span>
+                        <Badge variant="secondary">{item.currentStatus || '批次中'}</Badge>
+                        {(item.currentNursingKits ?? 0) > 0 ? <span className="hidden text-xs text-muted-foreground sm:inline">哺乳 {item.currentNursingKits} 只/{item.nursingLitterCount ?? 1} 窝</span> : null}
+                      </label>
+                    ))}
+                    {visibleActiveMothers.length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">没有匹配的活跃母兔</p> : null}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
+                    <span className="text-xs text-muted-foreground">已选 {rabbitId ? `兔 #${rabbitId}` : '0 只'} · 第 {motherPage}/{motherPageCount} 页</span>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={motherPage <= 1} onClick={() => setMotherPage((current) => Math.max(1, current - 1))}>
+                        <ChevronLeftIcon data-icon="inline-start" />上一页
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" disabled={motherPage >= motherPageCount} onClick={() => setMotherPage((current) => Math.min(motherPageCount, current + 1))}>
+                        下一页<ChevronRightIcon data-icon="inline-end" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </Field>
             ) : null}
-            {action === 'mating' ? (
+            {['pregnancy-check', 'prepartum/finish', 'parturition', 'weaning'].includes(action) && selectedMotherCycles.length > 0 ? (
+              <Field>
+                <FieldLabel htmlFor="breeding-cycle">繁殖周期</FieldLabel>
+                <Select value={breedingCycleId || 'auto'} onValueChange={(value) => setBreedingCycleId(value === 'auto' ? '' : value)}>
+                  <SelectTrigger id="breeding-cycle"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="auto">自动匹配当前业务周期</SelectItem>
+                      {selectedMotherCycles.map((cycle) => (
+                        <SelectItem key={cycle.id} value={String(cycle.id)}>
+                          第 {cycle.cycleNo} 周期 · {cycle.status} · 配种 {formatDate(cycle.matingDate)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">共 {selectedMotherCycles.length} 个周期；重叠哺乳与妊娠时可明确指定。</p>
+              </Field>
+            ) : null}
+            {action === 'mating/bulk' ? (
+              <Field>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-52 flex-1">
+                    <FieldLabel htmlFor="bulk-mating-search">搜索可配种母兔</FieldLabel>
+                    <div className="relative mt-2">
+                      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                      <Input
+                        id="bulk-mating-search"
+                        className="pl-9"
+                        value={bulkSearch}
+                        placeholder="兔只 ID、笼位或状态"
+                        onChange={(event) => {
+                          setBulkSearch(event.target.value)
+                          setBulkPage(1)
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-full sm:w-40">
+                    <FieldLabel htmlFor="bulk-mating-status">繁殖状态</FieldLabel>
+                    <Select
+                      value={bulkStatus}
+                      onValueChange={(value) => {
+                        setBulkStatus(value as typeof bulkStatus)
+                        setBulkPage(1)
+                      }}
+                    >
+                      <SelectTrigger id="bulk-mating-status" className="mt-2"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectGroup><SelectItem value="all">全部可配种</SelectItem><SelectItem value="待配种">待配种</SelectItem><SelectItem value="哺乳中">哺乳中</SelectItem></SelectGroup></SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="mt-3 overflow-hidden rounded-md border">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-secondary/50 px-3 py-2">
+                    <span className="text-sm text-muted-foreground">
+                      可选 {filteredBulkMothers.length} 只 · 已选 {bulkSelectedIds.length}/{MAX_BULK_MATING_MOTHERS}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={filteredBulkMothers.length === 0} onClick={selectAllFilteredBulkMothers}>选择筛选结果</Button>
+                      <Button type="button" variant="outline" size="sm" disabled={visibleBulkMothers.length === 0} onClick={toggleVisibleBulkMothers}>
+                        {visibleBulkMothers.length > 0 && visibleBulkMothers.every((item) => bulkSelectedIds.includes(item.rabbitId)) ? '取消本页' : '选择本页'}
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" disabled={bulkSelectedIds.length === 0} onClick={() => setBulkSelectedIds([])}>清空已选</Button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 divide-y overflow-y-auto">
+                    {visibleBulkMothers.map((item) => (
+                      <label key={item.id} className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-secondary/50">
+                        <input
+                          className="size-5 shrink-0"
+                          type="checkbox"
+                          checked={bulkSelectedIds.includes(item.rabbitId)}
+                          onChange={() => toggleBulkMother(item.rabbitId)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">兔 #{item.rabbitId} · 笼位 #{item.cageId ?? '-'}</span>
+                        <Badge variant="secondary">{item.currentStatus?.trim() || '批次中'}</Badge>
+                        {(item.currentNursingKits ?? 0) > 0 ? <span className="hidden text-xs text-muted-foreground sm:inline">哺乳 {item.currentNursingKits} 只</span> : null}
+                      </label>
+                    ))}
+                    {visibleBulkMothers.length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">没有匹配的可配种母兔</p> : null}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
+                    <span className="text-xs text-muted-foreground">第 {bulkPage}/{bulkPageCount} 页，每页最多 {BATCH_MOTHER_PAGE_SIZE} 只</span>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={bulkPage <= 1} onClick={() => setBulkPage((current) => Math.max(1, current - 1))}>
+                        <ChevronLeftIcon data-icon="inline-start" />上一页
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" disabled={bulkPage >= bulkPageCount} onClick={() => setBulkPage((current) => Math.min(bulkPageCount, current + 1))}>
+                        下一页<ChevronRightIcon data-icon="inline-end" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Field>
+            ) : null}
+            {action === 'mating' || action === 'mating/bulk' ? (
               <Field>
                 <FieldLabel htmlFor="male-rabbit">种公兔</FieldLabel>
                 <Select value={maleRabbitId} onValueChange={setMaleRabbitId}>
@@ -421,6 +945,33 @@ function BatchActionDialog({
                   <SelectContent><SelectGroup>{maleRabbits.map((rabbit) => <SelectItem key={rabbit.id} value={String(rabbit.id)}>兔 #{rabbit.id} · 笼位 #{rabbit.cageId}</SelectItem>)}</SelectGroup></SelectContent>
                 </Select>
               </Field>
+            ) : null}
+            {action === 'departure' ? (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="departure-type">离场类型</FieldLabel>
+                  <Select value={departureType} onValueChange={(value) => setDepartureType(value as RabbitDepartureType)}>
+                    <SelectTrigger id="departure-type"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup><SelectItem value="cull">淘汰</SelectItem><SelectItem value="death">死亡</SelectItem></SelectGroup></SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="departure-reason">离场原因</FieldLabel>
+                  <Input id="departure-reason" value={departureReason} required maxLength={255} placeholder="例如：繁殖效率下降" onChange={(event) => setDepartureReason(event.target.value)} />
+                </Field>
+                <Field>
+                  <label className="flex items-start gap-3 rounded-md border border-destructive/40 p-3 text-sm" htmlFor="departure-force-confirm">
+                    <input
+                      id="departure-force-confirm"
+                      className="mt-0.5 size-5 shrink-0"
+                      type="checkbox"
+                      checked={departureConfirmed}
+                      onChange={(event) => setDepartureConfirmed(event.target.checked)}
+                    />
+                    <span><span className="font-medium text-destructive">确认强制离场</span><br /><span className="text-muted-foreground">将同时退出该母兔的活跃 Batch 关系并关闭进行中的繁殖周期。</span></span>
+                  </label>
+                </Field>
+              </>
             ) : null}
             {action === 'pregnancy-check' ? (
               <Field>
@@ -432,10 +983,30 @@ function BatchActionDialog({
               </Field>
             ) : null}
             {action === 'parturition' ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <NumberInput id="total-kits" label="产仔数" value={totalKits} onChange={setTotalKits} />
-                <NumberInput id="live-kits" label="活仔数" value={liveKits} onChange={setLiveKits} />
-              </div>
+              <>
+                <Field>
+                  <label className="flex items-center gap-3 text-sm font-medium" htmlFor="parturition-failed">
+                    <input
+                      id="parturition-failed"
+                      type="checkbox"
+                      checked={parturitionFailed}
+                      onChange={(event) => {
+                        const failed = event.target.checked
+                        setParturitionFailed(failed)
+                        if (failed) {
+                          setTotalKits('0')
+                          setLiveKits('0')
+                        }
+                      }}
+                    />
+                    失败分娩（流产）
+                  </label>
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <NumberInput id="total-kits" label="产仔数" value={totalKits} onChange={setTotalKits} disabled={parturitionFailed} />
+                  <NumberInput id="live-kits" label="活仔数" value={liveKits} onChange={setLiveKits} disabled={parturitionFailed} />
+                </div>
+              </>
             ) : null}
             {action === 'weaning' ? (
               <>
@@ -473,7 +1044,7 @@ function BatchActionDialog({
                 <Input id="batch-action-date" type="date" value={date} required onChange={(event) => setDate(event.target.value)} />
               </Field>
             ) : null}
-            {!['mating', 'aphrodisiac/start', 'aphrodisiac/finish'].includes(action) ? (
+            {!['mating', 'mating/bulk', 'aphrodisiac/start', 'aphrodisiac/finish'].includes(action) ? (
               <Field>
                 <FieldLabel htmlFor="batch-action-remark">备注</FieldLabel>
                 <Textarea id="batch-action-remark" value={remark} onChange={(event) => setRemark(event.target.value)} />
@@ -486,12 +1057,15 @@ function BatchActionDialog({
               type="submit"
               disabled={
                 saving ||
+                batchCompleted ||
                 (requiresRabbit && !rabbitId) ||
-                (action === 'mating' && !maleRabbitId)
+                ((action === 'mating' || action === 'mating/bulk') && !maleRabbitId) ||
+                (action === 'mating/bulk' && bulkSelectedIds.length === 0) ||
+                (action === 'departure' && (!departureReason.trim() || !departureConfirmed))
               }
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              保存记录
+              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认母兔离场' : '保存记录'}
             </Button>
           </DialogFooter>
         </form>
@@ -500,11 +1074,23 @@ function BatchActionDialog({
   )
 }
 
-function NumberInput({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+function NumberInput({
+  id,
+  label,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} type="number" min={0} value={value} required onChange={(event) => onChange(event.target.value)} />
+      <Input id={id} type="number" min={0} value={value} required disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </Field>
   )
 }
@@ -515,11 +1101,7 @@ function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('zh-CN')
 }
 
-function batchStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    ACTIVE: '进行中',
-    COMPLETED: '已完成',
-    CANCELLED: '已取消',
-  }
-  return labels[status] ?? status
+function formatMotherCount(value?: number | null) {
+  if (value === undefined) return '待加载'
+  return value === null ? '暂不可用' : `${value.toLocaleString('zh-CN')} 只`
 }
