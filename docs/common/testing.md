@@ -112,7 +112,7 @@ RABBIT_ANDROID_E2E_DEVICE_API_URL=http://<真机可达的后端地址>:8080 \
 ./scripts/android_batch_lifecycle_e2e.sh
 ```
 
-脚本会先要求 Flyway V24 已成功执行，再注入隔离 fixture。创建、批量催情开始/完成、首次两母兔批量配种、摸胎（含空怀）、备产、分娩、哺乳期重叠批量二配、断奶、商品兔出库和最终母兔淘汰走客户端真实 UI。数据库只用于准备/查询隔离 fixture、登录辅助、最终断言，以及每 250 毫秒把该 fixture 的 `next_event_date` 压缩到可执行日期；这项时间压缩只跳过真实养殖周期中的等待天数，不替代任何生产业务动作。通过标准是本轮 artifact 同时存在 `flutter-drive.log`、18 张 PNG、`database_assertions.txt` 且 `actual=expected`。历史 artifact 只能作为历史证据，不能替代新版本真机运行。
+脚本会先要求 Flyway V25 已成功执行，再注入隔离 fixture。创建、批量催情开始/完成、首次两母兔批量配种、摸胎（含空怀）、备产、分娩、哺乳期重叠批量二配、断奶、商品兔出库和最终母兔淘汰走客户端真实 UI。数据库只用于准备/查询隔离 fixture、登录辅助、最终断言，以及每 250 毫秒把该 fixture 的 `next_event_date` 压缩到可执行日期；这项时间压缩只跳过真实养殖周期中的等待天数，不替代任何生产业务动作。通过标准是本轮 artifact 同时存在 `flutter-drive.log`、18 张 PNG、`database_assertions.txt` 且 `actual=expected`。历史 artifact 只能作为历史证据，不能替代新版本真机运行。
 
 2026-08-15 当前构建已在 A059（Android 15，1080x2392，density 420）完成上述闭环，run ID 为 `20260815123218794644`，耗时 1 分 37 秒。结果为 18/18 截图、Flutter `All tests passed`，数据库 expected/actual 完全一致：Batch 165、9 个成员全部退出、3 个繁殖周期、2 次断奶、1 个空怀周期、1 个重叠周期、7 只出生并全部出售，销售单 `SO-25`，Batch 自动完成。证据位于 `app/build/android-batch-lifecycle-e2e/20260815123218794644/`。脚本在运行前保存设备常亮设置、唤醒并保持屏幕可见，退出时恢复原设置，避免长流程因息屏被误判为业务中断。
 

@@ -164,6 +164,7 @@ export interface Cage {
   positionIndex?: number | null
   status?: string | null
   rabbitCount: number
+  breedingOccupantGender?: string | null
   isFed: boolean
   isEnabled: boolean
   remark?: string | null
@@ -180,6 +181,8 @@ export interface Rabbit {
   arrivalMethod?: string | null
   arrivalDate?: string | null
   weight?: number | null
+  growthStage?: string | null
+  reproductiveStage?: string | null
   stateVersion?: number | null
   isActive: boolean
   isQuarantined: boolean

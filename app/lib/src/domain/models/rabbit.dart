@@ -11,6 +11,8 @@ class Rabbit {
     required this.arrivalDate,
     required this.weight,
     required this.isActive,
+    this.growthStage,
+    this.reproductiveStage,
   });
 
   final int id;
@@ -24,6 +26,8 @@ class Rabbit {
   final DateTime? arrivalDate;
   final double? weight;
   final bool isActive;
+  final String? growthStage;
+  final String? reproductiveStage;
 
   String get typeLabel {
     switch (type) {
@@ -76,6 +80,8 @@ class Rabbit {
       arrivalDate: _dateTimeValue(json['arrivalDate']),
       weight: _doubleValue(json['weight']),
       isActive: _boolValue(json['isActive'], fallback: true),
+      growthStage: _optionalString(json['growthStage']),
+      reproductiveStage: _optionalString(json['reproductiveStage']),
     );
   }
 
@@ -140,5 +146,13 @@ class Rabbit {
       }
     }
     return fallback;
+  }
+
+  static String? _optionalString(Object? value) {
+    if (value is! String) {
+      return null;
+    }
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
   }
 }

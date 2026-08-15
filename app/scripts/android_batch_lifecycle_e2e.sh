@@ -89,9 +89,9 @@ fi
 
 migration_present=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
   mysql -N -B -u"$DB_USER" -D "$DB_NAME" \
-  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '24' AND success = 1;")
+  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '25' AND success = 1;")
 if [[ "$migration_present" != "1" ]]; then
-  echo "Expected successful Flyway V24 in $DB_NAME" >&2
+  echo "Expected successful Flyway V25 in $DB_NAME" >&2
   exit 65
 fi
 

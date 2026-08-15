@@ -193,8 +193,13 @@ CREATE TABLE IF NOT EXISTS rabbits (
   arrival_method VARCHAR(1),
   arrival_date DATETIME,
   weight DOUBLE,
+  growth_stage VARCHAR(20),
+  reproductive_stage VARCHAR(20),
   state_version BIGINT NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  active_breeding_cage_id BIGINT GENERATED ALWAYS AS (
+    CASE WHEN is_active = TRUE AND type IN ('0', '1') THEN cage_id ELSE NULL END
+  ) STORED,
   is_quarantined BOOLEAN NOT NULL DEFAULT FALSE,
   quarantine_time DATETIME,
   quarantine_reason VARCHAR(200),
@@ -207,12 +212,14 @@ CREATE TABLE IF NOT EXISTS rabbits (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_rabbits_house_id (house_id),
   KEY idx_rabbits_cage_id (cage_id),
+  KEY idx_rabbits_house_cage_active_type_id (house_id, cage_id, is_active, type, id),
   KEY idx_rabbits_father (father_id),
   KEY idx_rabbits_birth_cycle (birth_cycle_id),
   KEY idx_rabbits_house_birth_batch_id (house_id, birth_batch_id, id),
   KEY idx_rabbits_active (is_active),
   KEY idx_rabbits_quarantined (is_quarantined),
   UNIQUE KEY uk_rabbit_req (house_id, request_id),
+  UNIQUE KEY uk_rabbits_house_active_breeding_cage (house_id, active_breeding_cage_id),
   CONSTRAINT fk_rabbits_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_rabbits_cage FOREIGN KEY (cage_id) REFERENCES cages (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

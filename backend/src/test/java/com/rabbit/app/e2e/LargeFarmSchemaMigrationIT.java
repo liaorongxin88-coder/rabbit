@@ -65,6 +65,26 @@ class LargeFarmSchemaMigrationIT {
             )
         );
         assertEquals(
+            "varchar",
+            queryString(
+                "SELECT data_type FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'rabbits' " +
+                "AND column_name = 'growth_stage'"
+            )
+        );
+        assertEquals(
+            "varchar",
+            queryString(
+                "SELECT data_type FROM information_schema.columns " +
+                "WHERE table_schema = DATABASE() AND table_name = 'rabbits' " +
+                "AND column_name = 'reproductive_stage'"
+            )
+        );
+        assertEquals(
+            1L,
+            indexCount("rabbits", "uk_rabbits_house_active_breeding_cage")
+        );
+        assertEquals(
             64L,
             queryLong(
                 "SELECT character_maximum_length FROM information_schema.columns " +

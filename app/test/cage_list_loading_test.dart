@@ -30,8 +30,14 @@ void main() {
     expect(find.text('繁殖笼'), findsOneWidget);
     expect(find.text('后备笼'), findsOneWidget);
     expect(find.text('商品笼'), findsOneWidget);
-    expect(find.text('母兔笼'), findsNothing);
-    expect(find.text('公兔笼'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('cage-usage-doe-breeding-filter')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('cage-usage-buck-breeding-filter')),
+      findsNothing,
+    );
     expect(find.text('匹配 7 / 7 个笼位'), findsOneWidget);
 
     await tester.tap(
@@ -70,6 +76,43 @@ void main() {
 
     expect(find.text('匹配 7 / 7 个笼位'), findsOneWidget);
     expect(_cageGridChildCount(tester), 7);
+  });
+
+  testWidgets('breeding sex filters use only real active breeding occupants',
+      (tester) async {
+    await tester.pumpWidget(_testApp(_sexClassifiedBreedingCages));
+    await tester.pumpAndSettle();
+
+    final doeFilter = find.byKey(
+      const ValueKey('cage-usage-doe-breeding-filter'),
+    );
+    final buckFilter = find.byKey(
+      const ValueKey('cage-usage-buck-breeding-filter'),
+    );
+    expect(doeFilter, findsOneWidget);
+    expect(buckFilter, findsOneWidget);
+
+    await tester.ensureVisible(doeFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(doeFilter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 1 / 4 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 1);
+    expect(find.text('种母-实际在栏'), findsOneWidget);
+    expect(find.text('种公-实际在栏'), findsNothing);
+    expect(find.text('繁殖-未分类在栏'), findsNothing);
+
+    await tester.ensureVisible(buckFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(buckFilter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 1 / 4 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 1);
+    expect(find.text('种母-实际在栏'), findsNothing);
+    expect(find.text('种公-实际在栏'), findsOneWidget);
+    expect(find.text('繁殖-空笼'), findsNothing);
   });
 
   testWidgets('large cage list loads more near the page bottom',
@@ -313,6 +356,43 @@ const _filterCages = [
     houseId: 8,
     cageNumber: '未分类-空',
     status: '0',
+    rabbitCount: 0,
+    isEnabled: true,
+  ),
+];
+
+const _sexClassifiedBreedingCages = [
+  Cage(
+    id: 21,
+    houseId: 8,
+    cageNumber: '种母-实际在栏',
+    breedingOccupantGender: '0',
+    status: '1',
+    rabbitCount: 1,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 22,
+    houseId: 8,
+    cageNumber: '种公-实际在栏',
+    breedingOccupantGender: '1',
+    status: '1',
+    rabbitCount: 1,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 23,
+    houseId: 8,
+    cageNumber: '繁殖-未分类在栏',
+    status: '1',
+    rabbitCount: 1,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 24,
+    houseId: 8,
+    cageNumber: '繁殖-空笼',
+    status: '1',
     rabbitCount: 0,
     isEnabled: true,
   ),

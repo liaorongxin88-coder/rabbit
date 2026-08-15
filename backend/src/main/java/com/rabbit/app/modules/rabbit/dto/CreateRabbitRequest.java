@@ -24,6 +24,12 @@ public class CreateRabbitRequest {
     private Date arrivalDate;
     private Double weight;
 
+    @Size(max = 20, message = "生长阶段不合法")
+    private String growthStage;
+
+    @Size(max = 20, message = "繁殖阶段不合法")
+    private String reproductiveStage;
+
     @NotBlank(message = "requestId不能为空")
     private String requestId;
 
@@ -89,6 +95,22 @@ public class CreateRabbitRequest {
 
     public void setWeight(Double weight) {
         this.weight = weight;
+    }
+
+    public String getGrowthStage() {
+        return growthStage;
+    }
+
+    public void setGrowthStage(String growthStage) {
+        this.growthStage = growthStage;
+    }
+
+    public String getReproductiveStage() {
+        return reproductiveStage;
+    }
+
+    public void setReproductiveStage(String reproductiveStage) {
+        this.reproductiveStage = reproductiveStage;
     }
 
     public String getRequestId() {

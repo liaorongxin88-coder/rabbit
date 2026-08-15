@@ -9,6 +9,7 @@ class Cage {
     this.rowCode = 'LEGACY',
     this.layerIndex,
     this.positionIndex,
+    this.breedingOccupantGender,
     required this.status,
     required this.rabbitCount,
     required this.isEnabled,
@@ -20,6 +21,7 @@ class Cage {
   final String rowCode;
   final int? layerIndex;
   final int? positionIndex;
+  final String? breedingOccupantGender;
   final String status;
   final int rabbitCount;
   final bool isEnabled;
@@ -34,6 +36,12 @@ class Cage {
       case '0':
         return '空闲';
       case '1':
+        if (isDoeBreedingCage) {
+          return '种母兔';
+        }
+        if (isBuckBreedingCage) {
+          return '种公兔';
+        }
         return '种兔';
       case '2':
         return '后备兔';
@@ -94,6 +102,12 @@ class Cage {
 
   bool get isCommodityCage => status == '0' || status == '3';
 
+  /// Only the server's actual active breeding-rabbit lookup classifies a
+  /// breeding cage by sex. Do not infer this from cage status or occupancy.
+  bool get isDoeBreedingCage => breedingOccupantGender == '0';
+
+  bool get isBuckBreedingCage => breedingOccupantGender == '1';
+
   int get commodityRemainingCapacity {
     if (!isCommodityCage) {
       return 0;
@@ -149,6 +163,9 @@ class Cage {
       rowCode: json['rowCode'] as String? ?? 'LEGACY',
       layerIndex: _nullableIntValue(json['layerIndex']),
       positionIndex: _nullableIntValue(json['positionIndex']),
+      breedingOccupantGender: _optionalString(
+        json['breedingOccupantGender'],
+      ),
       status: json['status'] as String? ?? '',
       rabbitCount: _intValue(json['rabbitCount']),
       isEnabled: _boolValue(json['isEnabled'], fallback: true),
@@ -191,5 +208,13 @@ class Cage {
       }
     }
     return fallback;
+  }
+
+  static String? _optionalString(Object? value) {
+    if (value is! String) {
+      return null;
+    }
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
   }
 }

@@ -48,6 +48,43 @@ const cageStatusLabels: Record<string, string> = {
   '3': '商品兔',
 }
 
+const growthStageLabels: Record<string, string> = {
+  JUVENILE: '幼兔',
+  GROWING: '成长期',
+  FATTENING: '育肥期',
+  MATURE: '成熟',
+}
+
+const reproductiveStageLabels: Record<string, string> = {
+  RESERVE: '后备',
+  EMPTY: '空怀',
+  MATED: '已配种',
+  PREGNANT: '妊娠',
+  LACTATING: '哺乳',
+  RESTING: '休整',
+  READY: '可配',
+}
+
+const growthStageOptions = Object.entries(growthStageLabels)
+
+const doeReproductiveStageOptions = [
+  ['RESERVE', '后备'],
+  ['EMPTY', '空怀'],
+  ['MATED', '已配种'],
+  ['PREGNANT', '妊娠'],
+  ['LACTATING', '哺乳'],
+  ['RESTING', '休整'],
+] as const
+
+const buckReproductiveStageOptions = [
+  ['READY', '可配'],
+  ['RESTING', '休整'],
+] as const
+
+const replacementReproductiveStageOptions = [['RESERVE', '后备']] as const
+
+type BreedingCageFilter = 'all' | 'doe' | 'buck'
+
 export function WorkspaceLivestockPage() {
   const workspace = useWorkspace()
   const [cages, setCages] = useState<Cage[]>([])
@@ -55,6 +92,7 @@ export function WorkspaceLivestockPage() {
   const [loading, setLoading] = useState(false)
   const [queryInput, setQueryInput] = useState('')
   const [query, setQuery] = useState('')
+  const [breedingCageFilter, setBreedingCageFilter] = useState<BreedingCageFilter>('all')
   const [cageDialog, setCageDialog] = useState<{ open: boolean; cage: Cage | null }>({ open: false, cage: null })
   const [rabbitDialog, setRabbitDialog] = useState<{ open: boolean; rabbit: Rabbit | null }>({ open: false, rabbit: null })
   const [deleteTarget, setDeleteTarget] = useState<Cage | null>(null)
@@ -89,15 +127,20 @@ export function WorkspaceLivestockPage() {
 
   const filteredCages = useMemo(() => {
     const normalized = query.trim().toLowerCase()
-    if (!normalized) {
-      return cages
-    }
-    return cages.filter((cage) =>
-      [cage.cageNumber, cage.rowCode, cage.remark, cage.id.toString()].some((value) =>
+    return cages.filter((cage) => {
+      const matchesQuery = !normalized || [cage.cageNumber, cage.rowCode, cage.remark, cage.id.toString()].some((value) =>
         value?.toLowerCase().includes(normalized),
-      ),
-    )
-  }, [cages, query])
+      )
+      if (!matchesQuery) return false
+      if (breedingCageFilter === 'doe') {
+        return cage.status === '1' && cage.breedingOccupantGender === '0'
+      }
+      if (breedingCageFilter === 'buck') {
+        return cage.status === '1' && cage.breedingOccupantGender === '1'
+      }
+      return true
+    })
+  }, [breedingCageFilter, cages, query])
 
   const filteredRabbits = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -198,7 +241,10 @@ export function WorkspaceLivestockPage() {
                           <TableCell>{rabbit.breed || '-'}</TableCell>
                           <TableCell>{rabbit.weight ? `${rabbit.weight.toFixed(2)} kg` : '-'}</TableCell>
                           <TableCell>
-                            <Badge variant={rabbit.isActive ? 'default' : 'secondary'}>{rabbit.isActive ? '在栏' : '离场'}</Badge>
+                            <div className="flex min-w-28 flex-col items-start gap-1">
+                              <Badge variant={rabbit.isActive ? 'default' : 'secondary'}>{rabbit.isActive ? '在栏' : '离场'}</Badge>
+                              <span className="text-xs text-muted-foreground">{rabbitStageSummary(rabbit)}</span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button variant="outline" size="sm" disabled={!canEdit} onClick={() => setRabbitDialog({ open: true, rabbit })}>
@@ -228,6 +274,21 @@ export function WorkspaceLivestockPage() {
                 </Button>
               </CardHeader>
               <CardContent>
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">种兔笼按实际在栏种兔性别筛选。</p>
+                  <Select value={breedingCageFilter} onValueChange={(value) => setBreedingCageFilter(value as BreedingCageFilter)}>
+                    <SelectTrigger className="w-full sm:w-44" aria-label="筛选种兔笼">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="all">全部笼位</SelectItem>
+                        <SelectItem value="doe">种母兔笼</SelectItem>
+                        <SelectItem value="buck">种公兔笼</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {filteredCages.length === 0 ? (
                   <Empty>
                     <EmptyTitle>没有匹配的笼位</EmptyTitle>
@@ -255,7 +316,7 @@ export function WorkspaceLivestockPage() {
                             </div>
                           </TableCell>
                           <TableCell>{cage.rowCode || '-'} / {cage.positionIndex ?? '-'} / {cage.layerIndex ?? '-'}</TableCell>
-                          <TableCell>{cageStatusLabels[cage.status ?? ''] ?? cage.status ?? '-'}</TableCell>
+                          <TableCell>{cageUsageLabel(cage)}</TableCell>
                           <TableCell>{cage.rabbitCount} 只</TableCell>
                           <TableCell><Badge variant={cage.isEnabled ? 'default' : 'secondary'}>{cage.isEnabled ? '启用' : '停用'}</Badge></TableCell>
                           <TableCell>
@@ -293,6 +354,34 @@ function rabbitTypeLabel(rabbit: Rabbit) {
     return rabbit.gender === '0' ? '种母兔' : rabbit.gender === '1' ? '种公兔' : '种兔'
   }
   return rabbitTypeLabels[rabbit.type] ?? rabbit.type ?? '未分类'
+}
+
+function cageUsageLabel(cage: Cage) {
+  if (cage.status === '1' && cage.breedingOccupantGender === '0') return '种母兔笼'
+  if (cage.status === '1' && cage.breedingOccupantGender === '1') return '种公兔笼'
+  return cageStatusLabels[cage.status ?? ''] ?? cage.status ?? '-'
+}
+
+function reproductiveOptions(type: string, gender: string) {
+  if (type === '2') return []
+  if (type === '1') return replacementReproductiveStageOptions
+  return gender === '1' ? buckReproductiveStageOptions : doeReproductiveStageOptions
+}
+
+function defaultReproductiveStage(type: string, gender: string) {
+  return reproductiveOptions(type, gender)[0]?.[0] ?? ''
+}
+
+function stageLabel(value: string | null | undefined, labels: Record<string, string>) {
+  return value ? labels[value] ?? value : null
+}
+
+function rabbitStageSummary(rabbit: Rabbit) {
+  const labels = [
+    stageLabel(rabbit.growthStage, growthStageLabels),
+    stageLabel(rabbit.reproductiveStage, reproductiveStageLabels),
+  ].filter(Boolean)
+  return labels.length > 0 ? labels.join(' · ') : '阶段未填写'
 }
 
 function CageDialog({
@@ -421,18 +510,43 @@ function RabbitDialog({
   const [arrivalMethod, setArrivalMethod] = useState('0')
   const [arrivalDate, setArrivalDate] = useState('')
   const [weight, setWeight] = useState('')
+  const [growthStage, setGrowthStage] = useState('')
+  const [reproductiveStage, setReproductiveStage] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!state.open) return
     setCageId(String(state.rabbit?.cageId ?? cages.find((cage) => cage.isEnabled)?.id ?? ''))
-    setType(state.rabbit?.type ?? '0')
-    setGender(state.rabbit?.gender ?? '0')
+    const nextType = state.rabbit?.type ?? '0'
+    const nextGender = state.rabbit?.gender ?? '0'
+    setType(nextType)
+    setGender(nextGender)
     setBreed(state.rabbit?.breed ?? '')
     setArrivalMethod(state.rabbit?.arrivalMethod ?? '0')
     setArrivalDate(formatDateInput(state.rabbit?.arrivalDate))
     setWeight(state.rabbit?.weight?.toString() ?? '')
+    setGrowthStage(state.rabbit?.growthStage ?? '')
+    setReproductiveStage(
+      state.rabbit?.reproductiveStage ?? (state.rabbit ? '' : defaultReproductiveStage(nextType, nextGender)),
+    )
   }, [cages, state.open, state.rabbit])
+
+  const reproductiveStageOptions = reproductiveOptions(type, gender)
+
+  function resetReproductiveStage(nextType: string, nextGender: string) {
+    const options = reproductiveOptions(nextType, nextGender)
+    setReproductiveStage((current) => options.some(([value]) => value === current) ? current : options[0]?.[0] ?? '')
+  }
+
+  function handleTypeChange(nextType: string) {
+    setType(nextType)
+    resetReproductiveStage(nextType, gender)
+  }
+
+  function handleGenderChange(nextGender: string) {
+    setGender(nextGender)
+    resetReproductiveStage(type, nextGender)
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -446,6 +560,8 @@ function RabbitDialog({
       arrivalMethod,
       arrivalDate: arrivalDate ? new Date(`${arrivalDate}T00:00:00`).toISOString() : undefined,
       weight: weight ? Number(weight) : undefined,
+      growthStage: growthStage || undefined,
+      reproductiveStage: type === '2' ? undefined : reproductiveStage || undefined,
     }
     try {
       if (state.rabbit) {
@@ -489,18 +605,45 @@ function RabbitDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="rabbit-type">类型</FieldLabel>
-                <Select value={type} onValueChange={setType} disabled={Boolean(state.rabbit)}>
+                <Select value={type} onValueChange={handleTypeChange} disabled={Boolean(state.rabbit)}>
                   <SelectTrigger id="rabbit-type"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectGroup>{Object.entries(rabbitTypeLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
                 </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="rabbit-gender">性别</FieldLabel>
-                <Select value={gender} onValueChange={setGender} disabled={Boolean(state.rabbit)}>
+                <Select value={gender} onValueChange={handleGenderChange} disabled={Boolean(state.rabbit)}>
                   <SelectTrigger id="rabbit-gender"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectGroup><SelectItem value="0">母</SelectItem><SelectItem value="1">公</SelectItem></SelectGroup></SelectContent>
                 </Select>
               </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="rabbit-growth-stage">生长阶段</FieldLabel>
+                <Select value={growthStage} onValueChange={setGrowthStage}>
+                  <SelectTrigger id="rabbit-growth-stage"><SelectValue placeholder="未填写" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>{growthStageOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {type === '2' ? (
+                <Field>
+                  <FieldLabel>繁殖阶段</FieldLabel>
+                  <p className="min-h-9 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">商品兔不记录繁殖阶段</p>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="rabbit-reproductive-stage">繁殖阶段</FieldLabel>
+                  <Select value={reproductiveStage} onValueChange={setReproductiveStage}>
+                    <SelectTrigger id="rabbit-reproductive-stage"><SelectValue placeholder="未填写" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>{reproductiveStageOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
             </div>
             <Field>
               <FieldLabel htmlFor="rabbit-breed">品种</FieldLabel>

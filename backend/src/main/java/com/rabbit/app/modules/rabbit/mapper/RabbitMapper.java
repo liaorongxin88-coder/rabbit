@@ -67,6 +67,8 @@ public interface RabbitMapper {
                        @Param("arrivalMethod") String arrivalMethod,
                        @Param("arrivalDate") java.util.Date arrivalDate,
                        @Param("weight") Double weight,
+                       @Param("growthStage") String growthStage,
+                       @Param("reproductiveStage") String reproductiveStage,
                        @Param("updateBy") String updateBy);
 
     int countActiveByCage(@Param("houseId") Long houseId, @Param("cageId") Long cageId);

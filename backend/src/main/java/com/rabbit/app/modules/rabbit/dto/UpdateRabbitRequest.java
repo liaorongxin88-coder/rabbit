@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.rabbit.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.Date;
 
 public class UpdateRabbitRequest {
@@ -10,6 +11,12 @@ public class UpdateRabbitRequest {
     private String arrivalMethod;
     private Date arrivalDate;
     private Double weight;
+
+    @Size(max = 20, message = "生长阶段不合法")
+    private String growthStage;
+
+    @Size(max = 20, message = "繁殖阶段不合法")
+    private String reproductiveStage;
 
     @NotBlank
     private String requestId;
@@ -62,6 +69,22 @@ public class UpdateRabbitRequest {
         this.weight = weight;
     }
 
+    public String getGrowthStage() {
+        return growthStage;
+    }
+
+    public void setGrowthStage(String growthStage) {
+        this.growthStage = growthStage;
+    }
+
+    public String getReproductiveStage() {
+        return reproductiveStage;
+    }
+
+    public void setReproductiveStage(String reproductiveStage) {
+        this.reproductiveStage = reproductiveStage;
+    }
+
     public String getRequestId() {
         return requestId;
     }
@@ -70,4 +93,3 @@ public class UpdateRabbitRequest {
         this.requestId = requestId;
     }
 }
-

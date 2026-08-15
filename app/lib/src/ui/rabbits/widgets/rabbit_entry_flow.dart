@@ -10,6 +10,31 @@ import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
+const _growthStageOptions = <_StageOption>[
+  _StageOption('JUVENILE', '幼兔'),
+  _StageOption('GROWING', '成长期'),
+  _StageOption('FATTENING', '育肥期'),
+  _StageOption('MATURE', '成熟'),
+];
+
+const _doeReproductiveStageOptions = <_StageOption>[
+  _StageOption('RESERVE', '后备'),
+  _StageOption('EMPTY', '空怀'),
+  _StageOption('MATED', '已配种'),
+  _StageOption('PREGNANT', '妊娠'),
+  _StageOption('LACTATING', '哺乳'),
+  _StageOption('RESTING', '休整'),
+];
+
+const _buckReproductiveStageOptions = <_StageOption>[
+  _StageOption('READY', '可配'),
+  _StageOption('RESTING', '休整'),
+];
+
+const _replacementReproductiveStageOptions = <_StageOption>[
+  _StageOption('RESERVE', '后备'),
+];
+
 Future<void> showRabbitEntryTypeSheet({
   required BuildContext context,
   required int houseId,
@@ -214,6 +239,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   late int _selectedCageId;
   var _gender = '0';
   var _arrivalMethod = '0';
+  String? _growthStage;
+  String? _reproductiveStage;
   var _saving = false;
 
   bool get _isEdit => widget.rabbit != null;
@@ -229,6 +256,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (rabbit == null) {
       _type = widget.initialType;
       _selectedCageId = _createCage.id;
+      _growthStage = null;
+      _reproductiveStage = _type == '1' ? 'RESERVE' : null;
     } else {
       _type = rabbit.type;
       _gender = rabbit.gender;
@@ -240,6 +269,15 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       if (weight != null && weight > 0) {
         _weightController.text = weight.toStringAsFixed(2);
       }
+      _growthStage = _matchingStage(rabbit.growthStage, _growthStageOptions);
+      _reproductiveStage = switch (_type) {
+        '2' => null,
+        '1' => 'RESERVE',
+        _ => _matchingStage(
+            rabbit.reproductiveStage,
+            _reproductiveStageOptions,
+          ),
+      };
     }
     if (!_isEdit && _type == '0') {
       _gender = '0';
@@ -347,13 +385,13 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 value: '1',
                 groupValue: _gender,
                 label: '公',
-                onChanged: (value) => setState(() => _gender = value),
+                onChanged: _setGender,
               ),
               _RadioChoice(
                 value: '0',
                 groupValue: _gender,
                 label: '母',
-                onChanged: (value) => setState(() => _gender = value),
+                onChanged: _setGender,
               ),
             ],
           ),
@@ -364,6 +402,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           ),
           const SizedBox(height: 18),
         ],
+        _buildStageFields(context),
+        const SizedBox(height: 18),
         if (_isEdit) ...[
           const _RequiredLabel('笼位'),
           const SizedBox(height: 8),
@@ -386,13 +426,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           ),
           const SizedBox(height: 18),
         ],
-        if (!_isEdit) ...[
-          const SizedBox(height: 12),
-        ],
         _ResponsiveFieldRow(
           children: [
             TextFormField(
               controller: _breedController,
+              key: const ValueKey('rabbit-entry-breed'),
               decoration: const InputDecoration(
                 labelText: '品种',
                 hintText: '请输入品种',
@@ -450,6 +488,68 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     );
   }
 
+  Widget _buildStageFields(BuildContext context) {
+    final reproductiveOptions = _reproductiveStageOptions;
+    final hasReproductiveStage = _type != '2';
+    final fixedReproductiveStage = _type == '1';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('入栏阶段'),
+        const SizedBox(height: 6),
+        Text(
+          '记录入栏时状态；后续繁殖进度由 Batch 流程维护。',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('rabbit-growth-stage'),
+          value: _growthStage,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '成长阶段',
+            hintText: '请选择成长阶段',
+          ),
+          items: [
+            for (final option in _growthStageOptions)
+              DropdownMenuItem(value: option.value, child: Text(option.label)),
+          ],
+          onChanged:
+              _saving ? null : (value) => setState(() => _growthStage = value),
+        ),
+        if (hasReproductiveStage) ...[
+          const SizedBox(height: 12),
+          if (fixedReproductiveStage)
+            const _ReadOnlyInfoBox(
+              icon: Icons.account_tree_outlined,
+              text: '繁殖阶段：后备（后备兔固定记录为后备阶段）',
+            )
+          else
+            DropdownButtonFormField<String>(
+              key: const ValueKey('rabbit-reproductive-stage'),
+              value: _reproductiveStage,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '繁殖阶段',
+                hintText: '请选择繁殖阶段',
+              ),
+              items: [
+                for (final option in reproductiveOptions)
+                  DropdownMenuItem(
+                    value: option.value,
+                    child: Text(option.label),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _reproductiveStage = value),
+            ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildActionBar(BuildContext context) {
     final palette = AppPalette.of(context);
     return DecoratedBox(
@@ -470,6 +570,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
+                key: const ValueKey('rabbit-entry-submit'),
                 onPressed: _saving ? null : _save,
                 child: _saving
                     ? const SizedBox.square(
@@ -504,6 +605,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               arrivalMethod: _arrivalMethod,
               arrivalDate: _rabbit.arrivalDate,
               weight: double.tryParse(_weightController.text.trim()),
+              growthStage: _growthStage,
+              reproductiveStage: _reproductiveStage,
             );
       } else {
         await ref.read(rabbitRepositoryProvider).createRabbit(
@@ -514,6 +617,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               breed: _breedController.text,
               arrivalMethod: _arrivalMethod,
               weight: double.tryParse(_weightController.text.trim()),
+              growthStage: _growthStage,
+              reproductiveStage: _reproductiveStage,
             );
       }
       ref.invalidate(houseRabbitsProvider(widget.houseId));
@@ -564,6 +669,36 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     return cages;
   }
 
+  List<_StageOption> get _reproductiveStageOptions {
+    if (_type == '1') {
+      return _replacementReproductiveStageOptions;
+    }
+    if (_type != '0') {
+      return const <_StageOption>[];
+    }
+    return _gender == '1'
+        ? _buckReproductiveStageOptions
+        : _doeReproductiveStageOptions;
+  }
+
+  void _setGender(String value) {
+    setState(() {
+      _gender = value;
+      final allowedValues =
+          _reproductiveStageOptions.map((option) => option.value).toSet();
+      if (!allowedValues.contains(_reproductiveStage)) {
+        _reproductiveStage = null;
+      }
+    });
+  }
+
+  String? _matchingStage(String? value, List<_StageOption> options) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return options.any((option) => option.value == value) ? value : null;
+  }
+
   bool _cageFitsRabbit(Cage cage) {
     return cage.status == '0' || cage.status == _cageStatusForType(_type);
   }
@@ -599,6 +734,13 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         return type;
     }
   }
+}
+
+class _StageOption {
+  const _StageOption(this.value, this.label);
+
+  final String value;
+  final String label;
 }
 
 class _RabbitTypeChoice extends StatelessWidget {

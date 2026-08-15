@@ -12,6 +12,7 @@
         <result column="position_index" property="positionIndex"/>
         <result column="status" property="status"/>
         <result column="rabbit_count" property="rabbitCount"/>
+        <result column="breeding_occupant_gender" property="breedingOccupantGender"/>
         <result column="is_fed" property="isFed"/>
         <result column="is_enabled" property="isEnabled"/>
         <result column="remark" property="remark"/>
@@ -35,16 +36,38 @@
     </insert>
 
     <select id="selectByHouseId" resultMap="CageMap">
-        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
-        from cages
-        where house_id = #{houseId}
-        order by id asc
+        select c.id, c.house_id, c.cage_number, c.row_code, c.layer_index, c.position_index, c.status, c.rabbit_count,
+               c.is_fed, c.is_enabled, c.remark, c.create_by, c.create_time, c.update_by, c.update_time,
+               (
+                   select r.gender
+                   from rabbits r
+                   where r.house_id = c.house_id
+                     and r.cage_id = c.id
+                     and r.type = '0'
+                     and r.is_active = true
+                   order by r.id
+                   limit 1
+               ) as breeding_occupant_gender
+        from cages c
+        where c.house_id = #{houseId}
+        order by c.id asc
     </select>
 
     <select id="selectById" resultMap="CageMap">
-        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
-        from cages
-        where house_id = #{houseId} and id = #{id}
+        select c.id, c.house_id, c.cage_number, c.row_code, c.layer_index, c.position_index, c.status, c.rabbit_count,
+               c.is_fed, c.is_enabled, c.remark, c.create_by, c.create_time, c.update_by, c.update_time,
+               (
+                   select r.gender
+                   from rabbits r
+                   where r.house_id = c.house_id
+                     and r.cage_id = c.id
+                     and r.type = '0'
+                     and r.is_active = true
+                   order by r.id
+                   limit 1
+               ) as breeding_occupant_gender
+        from cages c
+        where c.house_id = #{houseId} and c.id = #{id}
     </select>
 
     <select id="selectByIdForUpdate" resultMap="CageMap">

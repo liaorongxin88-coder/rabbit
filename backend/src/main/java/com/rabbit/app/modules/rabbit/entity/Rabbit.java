@@ -16,6 +16,8 @@ public class Rabbit {
     private String arrivalMethod;
     private Date arrivalDate;
     private Double weight;
+    private String growthStage;
+    private String reproductiveStage;
     private Long stateVersion;
     private Boolean isActive;
     private Boolean isQuarantined;
@@ -131,6 +133,22 @@ public class Rabbit {
 
     public void setWeight(Double weight) {
         this.weight = weight;
+    }
+
+    public String getGrowthStage() {
+        return growthStage;
+    }
+
+    public void setGrowthStage(String growthStage) {
+        this.growthStage = growthStage;
+    }
+
+    public String getReproductiveStage() {
+        return reproductiveStage;
+    }
+
+    public void setReproductiveStage(String reproductiveStage) {
+        this.reproductiveStage = reproductiveStage;
     }
 
     public Long getStateVersion() {

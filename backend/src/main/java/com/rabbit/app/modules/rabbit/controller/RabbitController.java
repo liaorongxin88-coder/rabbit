@@ -52,6 +52,8 @@ public class RabbitController {
         r.setArrivalMethod(req.getArrivalMethod());
         r.setArrivalDate(req.getArrivalDate());
         r.setWeight(req.getWeight());
+        r.setGrowthStage(req.getGrowthStage());
+        r.setReproductiveStage(req.getReproductiveStage());
         return ApiResponse.ok(rabbitService.createRabbit(userId, houseId, r, req.getRequestId()));
     }
 
@@ -96,7 +98,20 @@ public class RabbitController {
     public ApiResponse<Rabbit> updateRabbit(@RequestHeader("X-House-Id") Long houseId, @PathVariable("id") Long id, @Valid @RequestBody UpdateRabbitRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        return ApiResponse.ok(rabbitService.updateBaseInfo(userId, houseId, id, req.getCageId(), req.getMotherId(), req.getBreed(), req.getArrivalMethod(), req.getArrivalDate(), req.getWeight(), req.getRequestId()));
+        return ApiResponse.ok(rabbitService.updateBaseInfo(
+                userId,
+                houseId,
+                id,
+                req.getCageId(),
+                req.getMotherId(),
+                req.getBreed(),
+                req.getArrivalMethod(),
+                req.getArrivalDate(),
+                req.getWeight(),
+                req.getGrowthStage(),
+                req.getReproductiveStage(),
+                req.getRequestId()
+        ));
     }
 
     private Long requireLogin() {

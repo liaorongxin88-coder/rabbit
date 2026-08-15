@@ -17,7 +17,14 @@ import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart'
 
 enum _CageOccupancyFilter { all, empty, occupied }
 
-enum _CageUsageFilter { all, breeding, replacement, commodity }
+enum _CageUsageFilter {
+  all,
+  breeding,
+  doeBreeding,
+  buckBreeding,
+  replacement,
+  commodity,
+}
 
 class CageManagementSection extends ConsumerStatefulWidget {
   const CageManagementSection({
@@ -143,6 +150,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     return switch (_usageFilter) {
       _CageUsageFilter.all => true,
       _CageUsageFilter.breeding => cage.status == '1',
+      _CageUsageFilter.doeBreeding => cage.isDoeBreedingCage,
+      _CageUsageFilter.buckBreeding => cage.isBuckBreedingCage,
       _CageUsageFilter.replacement => cage.status == '2',
       _CageUsageFilter.commodity => cage.status == '3',
     };
@@ -297,6 +306,10 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     }
 
     final occupied = cages.where((cage) => cage.rabbitCount > 0).length;
+    final showDoeBreeding = cages.any((cage) => cage.isDoeBreedingCage) ||
+        _usageFilter == _CageUsageFilter.doeBreeding;
+    final showBuckBreeding = cages.any((cage) => cage.isBuckBreedingCage) ||
+        _usageFilter == _CageUsageFilter.buckBreeding;
     final usesInfiniteScroll = filtered.length > _infiniteScrollThreshold;
     final visibleCageCount = usesInfiniteScroll
         ? _visibleCageCount.clamp(0, filtered.length)
@@ -322,6 +335,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
           usageFilter: _usageFilter,
           matchingCount: filtered.length,
           totalCount: cages.length,
+          showDoeBreeding: showDoeBreeding,
+          showBuckBreeding: showBuckBreeding,
           onOccupancyChanged: _setOccupancyFilter,
           onUsageChanged: _setUsageFilter,
           onReset: _hasActiveFilters ? _clearFilters : null,
@@ -415,6 +430,8 @@ class _CageFilters extends StatelessWidget {
     required this.usageFilter,
     required this.matchingCount,
     required this.totalCount,
+    required this.showDoeBreeding,
+    required this.showBuckBreeding,
     required this.onOccupancyChanged,
     required this.onUsageChanged,
     this.onReset,
@@ -424,6 +441,8 @@ class _CageFilters extends StatelessWidget {
   final _CageUsageFilter usageFilter;
   final int matchingCount;
   final int totalCount;
+  final bool showDoeBreeding;
+  final bool showBuckBreeding;
   final ValueChanged<_CageOccupancyFilter> onOccupancyChanged;
   final ValueChanged<_CageUsageFilter> onUsageChanged;
   final VoidCallback? onReset;
@@ -496,6 +515,21 @@ class _CageFilters extends StatelessWidget {
               selected: usageFilter == _CageUsageFilter.breeding,
               onSelected: (_) => onUsageChanged(_CageUsageFilter.breeding),
             ),
+            if (showDoeBreeding)
+              ChoiceChip(
+                key: const ValueKey('cage-usage-doe-breeding-filter'),
+                label: const Text('种母兔笼'),
+                selected: usageFilter == _CageUsageFilter.doeBreeding,
+                onSelected: (_) => onUsageChanged(_CageUsageFilter.doeBreeding),
+              ),
+            if (showBuckBreeding)
+              ChoiceChip(
+                key: const ValueKey('cage-usage-buck-breeding-filter'),
+                label: const Text('种公兔笼'),
+                selected: usageFilter == _CageUsageFilter.buckBreeding,
+                onSelected: (_) =>
+                    onUsageChanged(_CageUsageFilter.buckBreeding),
+              ),
             ChoiceChip(
               key: const ValueKey('cage-usage-replacement-filter'),
               label: const Text('后备笼'),
