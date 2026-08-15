@@ -21,6 +21,57 @@ void main() {
     expect(_cageGridChildCount(tester), 12);
   });
 
+  testWidgets('cage filters combine occupancy and known usage types',
+      (tester) async {
+    await tester.pumpWidget(_testApp(_filterCages));
+    await tester.pumpAndSettle();
+
+    expect(find.text('笼位筛选'), findsOneWidget);
+    expect(find.text('繁殖笼'), findsOneWidget);
+    expect(find.text('后备笼'), findsOneWidget);
+    expect(find.text('商品笼'), findsOneWidget);
+    expect(find.text('母兔笼'), findsNothing);
+    expect(find.text('公兔笼'), findsNothing);
+    expect(find.text('匹配 7 / 7 个笼位'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('cage-occupancy-empty-filter')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 4 / 7 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 4);
+
+    final breedingFilter =
+        find.byKey(const ValueKey('cage-usage-breeding-filter'));
+    await tester.ensureVisible(breedingFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(breedingFilter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 1 / 7 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 1);
+
+    final occupiedFilter =
+        find.byKey(const ValueKey('cage-occupancy-occupied-filter'));
+    await tester.ensureVisible(occupiedFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(occupiedFilter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 1 / 7 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 1);
+
+    final resetFilter = find.byKey(const ValueKey('cage-filter-reset'));
+    await tester.ensureVisible(resetFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(resetFilter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 7 / 7 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 7);
+  });
+
   testWidgets('large cage list loads more near the page bottom',
       (tester) async {
     await tester.pumpWidget(_testApp(_cages(45)));
@@ -44,6 +95,76 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_cageGridChildCount(tester), 45);
+  });
+
+  testWidgets('changing a cage filter resets large-list pagination',
+      (tester) async {
+    final cages = List.generate(
+      45,
+      (index) => Cage(
+        id: index + 1,
+        houseId: 8,
+        cageNumber: '商品区-${index + 1}',
+        status: '3',
+        rabbitCount: index < 35 ? 0 : 1,
+        isEnabled: true,
+      ),
+    );
+    await tester.pumpWidget(_testApp(cages));
+    await tester.pumpAndSettle();
+
+    expect(_cageGridChildCount(tester), 20);
+    await tester.drag(
+      find.byKey(const ValueKey('house-cage-list-scroll')),
+      const Offset(0, -4000),
+    );
+    await tester.pumpAndSettle();
+    expect(_cageGridChildCount(tester), 40);
+
+    await tester.drag(
+      find.byKey(const ValueKey('house-cage-list-scroll')),
+      const Offset(0, 4000),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('cage-occupancy-empty-filter')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('匹配 35 / 45 个笼位'), findsOneWidget);
+    expect(_cageGridChildCount(tester), 20);
+  });
+
+  testWidgets('house outbound stays named and reachable on narrow screens',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      _testApp(
+        const [
+          Cage(
+            id: 1,
+            houseId: 8,
+            cageNumber: '一号繁育区-R1-01-上层',
+            rowCode: 'R1',
+            status: '1',
+            rabbitCount: 1,
+            isEnabled: true,
+          ),
+        ],
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final outbound = find.byKey(const ValueKey('house-outbound-action'));
+    expect(outbound, findsOneWidget);
+    expect(find.text('整舍批量出库'), findsOneWidget);
+    expect(tester.getSize(outbound).height, greaterThanOrEqualTo(48));
+    expect(tester.takeException(), isNull);
   });
 
   for (final size in const [Size(360, 800), Size(412, 915)]) {
@@ -137,6 +258,65 @@ List<Cage> _cages(int count) {
     ),
   );
 }
+
+const _filterCages = [
+  Cage(
+    id: 1,
+    houseId: 8,
+    cageNumber: '繁殖-空',
+    status: '1',
+    rabbitCount: 0,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 2,
+    houseId: 8,
+    cageNumber: '繁殖-有兔',
+    status: '1',
+    rabbitCount: 1,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 3,
+    houseId: 8,
+    cageNumber: '后备-空',
+    status: '2',
+    rabbitCount: 0,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 4,
+    houseId: 8,
+    cageNumber: '后备-有兔',
+    status: '2',
+    rabbitCount: 1,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 5,
+    houseId: 8,
+    cageNumber: '商品-空',
+    status: '3',
+    rabbitCount: 0,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 6,
+    houseId: 8,
+    cageNumber: '商品-有兔',
+    status: '3',
+    rabbitCount: 2,
+    isEnabled: true,
+  ),
+  Cage(
+    id: 7,
+    houseId: 8,
+    cageNumber: '未分类-空',
+    status: '0',
+    rabbitCount: 0,
+    isEnabled: true,
+  ),
+];
 
 const _house = RabbitHouse(
   id: 8,

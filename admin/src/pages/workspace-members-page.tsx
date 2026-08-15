@@ -98,7 +98,7 @@ export function WorkspaceMembersPage() {
       ) : !canManageMembers ? (
         <Empty>
           <EmptyTitle>没有成员管理权限</EmptyTitle>
-          <EmptyDescription>兔场所有者或管理员可以维护成员。</EmptyDescription>
+          <EmptyDescription>仅兔场所有者可以维护成员。</EmptyDescription>
         </Empty>
       ) : (
         <Card>

@@ -37,7 +37,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders += [
-            appLabel: "智能兔管家",
+            appLabel: "鸿兔智管",
             usesCleartextTraffic: "true"
         ]
     }
@@ -60,7 +60,7 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             manifestPlaceholders += [
-                appLabel: "智能兔管家 Dev",
+                appLabel: "鸿兔智管 Dev",
                 usesCleartextTraffic: "true"
             ]
         }
@@ -69,14 +69,14 @@ android {
             applicationIdSuffix = ".test"
             versionNameSuffix = "-test"
             manifestPlaceholders += [
-                appLabel: "智能兔管家 Test",
+                appLabel: "鸿兔智管 Test",
                 usesCleartextTraffic: "true"
             ]
         }
         prod {
             dimension = "environment"
             manifestPlaceholders += [
-                appLabel: "智能兔管家",
+                appLabel: "鸿兔智管",
                 usesCleartextTraffic: "false"
             ]
         }

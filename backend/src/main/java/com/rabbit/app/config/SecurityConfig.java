@@ -50,7 +50,7 @@ public class SecurityConfig {
 
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource(
-            @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}") String allowedOrigins
+            @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top}") String allowedOrigins
     ) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(splitCsv(allowedOrigins));

@@ -33,7 +33,7 @@ app:
   auth:
     phone-hash-secret: ${APP_PHONE_HASH_SECRET:}
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top}
   jwt:
     secret: ${APP_JWT_SECRET:}
     expire-seconds: 604800

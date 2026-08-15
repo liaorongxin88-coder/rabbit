@@ -142,7 +142,7 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
     final settings = settingsState.valueOrNull;
     if (settingsState.isLoading && settings == null) {
       return MaterialApp(
-        title: '智能兔管家',
+        title: '鸿兔智管',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         builder: (context, child) => _SystemUiFrame(child: child),
@@ -154,7 +154,7 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: '智能兔管家',
+      title: '鸿兔智管',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(brightness: Brightness.dark),

@@ -116,4 +116,53 @@ void main() {
     expect(find.text('母兔 #101'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('home groups overview, filters, and production flow into frames',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '一号兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const []),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('鸿兔智管'), findsOneWidget);
+    for (final sectionKey in const [
+      ValueKey('home-production-overview-section'),
+      ValueKey('home-work-queue-filter-section'),
+      ValueKey('home-production-flow-section'),
+    ]) {
+      final section = find.byKey(sectionKey);
+      expect(section, findsOneWidget);
+      expect(
+        find.descendant(of: section, matching: find.byType(Card)),
+        findsOneWidget,
+      );
+    }
+    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('任务筛选'), findsOneWidget);
+    expect(find.text('生产流程'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

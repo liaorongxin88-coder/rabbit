@@ -118,7 +118,7 @@
 
 - 正式 `prod` flavor 的 Android package id 保持为 `com.rabbit.app.flutter`，避免覆盖现有原生 App。
 - `dev` / `staging` flavor 分别使用 `com.rabbit.app.flutter.dev` / `com.rabbit.app.flutter.test`，方便和正式包在同一设备并存。
-- 正式 Android app label 保持为 `智能兔管家`；`dev` / `staging` label 使用 `智能兔管家 Dev` / `智能兔管家 Test`。
+- 正式 Android app label 保持为 `鸿兔智管`；`dev` / `staging` label 使用 `鸿兔智管 Dev` / `鸿兔智管 Test`。
 - `pubspec.yaml` 的 `flutter.default-flavor` 保持为 `dev`，方便 Android Studio 和 Flutter 工具默认进入本地开发 flavor。
 - `prod` flavor 的 `usesCleartextTraffic` 必须保持关闭；本地 `dev` / `staging` 可以开启以支持 `10.0.2.2` 或局域网 HTTP 调试。
 - 共享 Android Studio Run/Debug Configurations 只提交 `.run/*.run.xml`，不要提交 `.idea/workspace.xml`、设备缓存或个人 IDE 状态。

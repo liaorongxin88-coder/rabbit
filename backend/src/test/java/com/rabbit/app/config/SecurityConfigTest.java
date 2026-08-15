@@ -14,7 +14,7 @@ class SecurityConfigTest {
     void corsConfigurationAllowsAdminPreflight() {
         SecurityConfig securityConfig = new SecurityConfig();
         CorsConfigurationSource source = securityConfig.corsConfigurationSource(
-                "http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top"
+                "http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top"
         );
 
         MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/admin/auth/login");
@@ -22,6 +22,7 @@ class SecurityConfigTest {
 
         assertThat(config).isNotNull();
         assertThat(config.checkOrigin("https://admin.dzht.top")).isEqualTo("https://admin.dzht.top");
+        assertThat(config.checkOrigin("https://rabbit.host.dzht.top")).isNull();
         assertThat(config.checkOrigin("https://merchant.dzht.top")).isNull();
         assertThat(config.checkHttpMethod(HttpMethod.POST)).contains(HttpMethod.POST);
         assertThat(config.checkHeaders(List.of("content-type", "authorization")))

@@ -92,6 +92,57 @@ void main() {
     expect(find.text('已全部加载'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'editable rabbit list keeps named actions usable on narrow screens',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith((_) async => const [_house]),
+          houseCagesProvider(8).overrideWith((_) async => const [_cage]),
+          houseRabbitsProvider(8).overrideWith((_) async => _rabbits(1)),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(
+              perms: 'control',
+              isAdmin: true,
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HouseRabbitsScreen(houseId: 8),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final houseOutbound = find.byKey(
+      const ValueKey('house-rabbits-outbound-action'),
+    );
+    final rabbitOutbound = find.byKey(
+      const ValueKey('rabbit-row-outbound-1'),
+    );
+    final rabbitMove = find.byKey(const ValueKey('rabbit-row-move-1'));
+    final rabbitEdit = find.byKey(const ValueKey('rabbit-row-edit-1'));
+
+    expect(houseOutbound, findsOneWidget);
+    expect(rabbitOutbound, findsOneWidget);
+    expect(rabbitMove, findsOneWidget);
+    expect(rabbitEdit, findsOneWidget);
+    expect(find.text('整舍批量出库'), findsOneWidget);
+    expect(find.text('单兔出库'), findsOneWidget);
+    expect(find.text('换笼'), findsOneWidget);
+    expect(find.text('编辑'), findsOneWidget);
+    expect(tester.getSize(houseOutbound).height, greaterThanOrEqualTo(48));
+    expect(tester.getSize(rabbitMove).height, greaterThanOrEqualTo(48));
+    expect(tester.takeException(), isNull);
+  });
 }
 
 const _house = RabbitHouse(
