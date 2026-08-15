@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OutboundTaskService {
+    private static final int TASK_ITEM_WRITE_CHUNK_SIZE = 1_000;
+
     private final OutboundTaskMapper taskMapper;
     private final OutboundTaskItemMapper itemMapper;
     private final OutboundEligibilityService eligibilityService;
@@ -70,9 +72,7 @@ public class OutboundTaskService {
                 defaults.add(toItem(task.getTaskId(), candidate, "NORMAL", null, evaluated.stateVersion()));
             }
         }
-        if (!defaults.isEmpty()) {
-            itemMapper.insertBatch(defaults);
-        }
+        insertTaskItems(defaults);
         return view(taskMapper.selectById(houseId, userId, task.getTaskId()), false);
     }
 
@@ -127,8 +127,7 @@ public class OutboundTaskService {
         if (updated == 0) {
             throw new BizException(409, "OUTBOUND_REVISION_CONFLICT");
         }
-        itemMapper.deleteByTask(taskId);
-        if (!items.isEmpty()) itemMapper.insertBatch(items);
+        replaceTaskItems(taskId, items);
         return view(taskMapper.selectById(houseId, userId, taskId), false);
     }
 
@@ -149,6 +148,21 @@ public class OutboundTaskService {
 
     public List<OutboundTaskItem> taskItems(String taskId) {
         return itemMapper.selectByTask(taskId);
+    }
+
+    private void replaceTaskItems(String taskId, List<OutboundTaskItem> items) {
+        int deleted;
+        do {
+            deleted = itemMapper.deleteByTaskLimited(taskId, TASK_ITEM_WRITE_CHUNK_SIZE);
+        } while (deleted == TASK_ITEM_WRITE_CHUNK_SIZE);
+        insertTaskItems(items);
+    }
+
+    private void insertTaskItems(List<OutboundTaskItem> items) {
+        for (int start = 0; start < items.size(); start += TASK_ITEM_WRITE_CHUNK_SIZE) {
+            int end = Math.min(start + TASK_ITEM_WRITE_CHUNK_SIZE, items.size());
+            itemMapper.insertBatch(items.subList(start, end));
+        }
     }
 
     private OutboundDtos.TaskView view(OutboundTask task, boolean resumed) {

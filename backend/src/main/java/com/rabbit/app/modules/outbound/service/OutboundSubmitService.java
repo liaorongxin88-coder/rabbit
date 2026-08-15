@@ -25,6 +25,7 @@ import com.rabbit.app.modules.sale.entity.SaleOrder;
 import com.rabbit.app.modules.sale.entity.SaleOrderItem;
 import com.rabbit.app.modules.sale.mapper.SaleOrderItemMapper;
 import com.rabbit.app.modules.sale.mapper.SaleOrderMapper;
+import com.rabbit.app.util.RequestIdUtil;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -48,6 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OutboundSubmitService {
+    private static final int SALE_ITEM_WRITE_CHUNK_SIZE = 1_000;
+
     private final OutboundTaskMapper taskMapper;
     private final OutboundTaskItemMapper taskItemMapper;
     private final OutboundEligibilityService eligibilityService;
@@ -173,7 +176,7 @@ public class OutboundSubmitService {
 
         SaleOrder order = createOrder(userId, houseId, input);
         List<SaleOrderItem> saleItems = createSaleItems(userId, order.getId(), frozenItems, candidateById, input.unitPrice());
-        saleOrderItemMapper.insertBatch(saleItems);
+        insertSaleItems(saleItems);
 
         String operator = String.valueOf(userId);
         Date now = input.saleTime();
@@ -295,6 +298,13 @@ public class OutboundSubmitService {
         return result;
     }
 
+    private void insertSaleItems(List<SaleOrderItem> items) {
+        for (int start = 0; start < items.size(); start += SALE_ITEM_WRITE_CHUNK_SIZE) {
+            int end = Math.min(start + SALE_ITEM_WRITE_CHUNK_SIZE, items.size());
+            saleOrderItemMapper.insertBatch(items.subList(start, end));
+        }
+    }
+
     private void insertDepartureAndHistory(Long houseId, Long rabbitId, OutboundTaskItem item, Long orderId,
                                            Date saleTime, String operator, String requestId) {
         RabbitDepartureRecord departure = new RabbitDepartureRecord();
@@ -304,7 +314,7 @@ public class OutboundSubmitService {
         departure.setDepartureDate(saleTime);
         departure.setReason("EARLY_SALE".equals(item.getSelectionType()) ? item.getEarlySaleReason() : "批量销售出栏");
         departure.setRemark("saleOrder#" + orderId);
-        departure.setRequestId(requestId + "-" + rabbitId);
+        departure.setRequestId(RequestIdUtil.deriveChild(requestId, rabbitId));
         departure.setCreateBy(operator);
         departure.setUpdateBy(operator);
         departureMapper.insert(departure);

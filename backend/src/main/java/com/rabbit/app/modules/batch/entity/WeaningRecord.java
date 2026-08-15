@@ -6,6 +6,7 @@ public class WeaningRecord {
     private Long id;
     private Long houseId;
     private Long batchId;
+    private Long breedingCycleId;
     private Long rabbitId;
     private Long targetCageId;
     private String targetCageNumber;
@@ -44,6 +45,14 @@ public class WeaningRecord {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public Long getBreedingCycleId() {
+        return breedingCycleId;
+    }
+
+    public void setBreedingCycleId(Long breedingCycleId) {
+        this.breedingCycleId = breedingCycleId;
     }
 
     public Long getRabbitId() {

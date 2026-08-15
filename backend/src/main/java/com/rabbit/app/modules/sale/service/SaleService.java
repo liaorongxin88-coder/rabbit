@@ -10,6 +10,7 @@ import com.rabbit.app.modules.sale.entity.SaleOrderItem;
 import com.rabbit.app.modules.sale.mapper.SaleOrderItemMapper;
 import com.rabbit.app.modules.sale.mapper.SaleOrderMapper;
 import com.rabbit.app.util.DateUtil;
+import com.rabbit.app.util.RequestIdUtil;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
@@ -94,7 +95,7 @@ public class SaleService {
             saleOrderItemMapper.insertBatch(items);
 
             for (SaleOrderItem it : items) {
-                String ridReq = requestId == null ? null : requestId + "-" + it.getRabbitId();
+                String ridReq = RequestIdUtil.deriveChild(requestId, it.getRabbitId());
                 rabbitService.rabbitEvent(userId, houseId, it.getRabbitId(), "sale", saleTime, "销售出栏", "saleOrder#" + order.getId(), true, ridReq);
             }
 

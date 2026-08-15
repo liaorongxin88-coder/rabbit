@@ -13,9 +13,18 @@ public interface BatchRabbitMapper {
 
     BatchRabbit selectActiveByBatchAndRabbit(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("rabbitId") Long rabbitId);
 
+    BatchRabbit selectActiveByBatchAndRabbitForUpdate(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("rabbitId") Long rabbitId);
+
+    List<BatchRabbit> selectActiveByBatchAndRabbitsForUpdate(@Param("houseId") Long houseId,
+                                                              @Param("batchId") Long batchId,
+                                                              @Param("rabbitIds") List<Long> rabbitIds);
+
     List<BatchRabbit> selectActiveByRabbit(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId);
 
     List<BatchRabbit> selectActiveByRabbitForUpdate(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId);
+
+    List<Long> selectActiveRabbitIdsForUpdate(@Param("houseId") Long houseId,
+                                              @Param("rabbitIds") List<Long> rabbitIds);
 
     int updateStatusAndEvent(@Param("houseId") Long houseId,
                              @Param("id") Long id,
@@ -36,11 +45,28 @@ public interface BatchRabbitMapper {
                                      @Param("maleRabbitId") Long maleRabbitId,
                                      @Param("updateBy") String updateBy);
 
+    int updateBreedingSummary(@Param("houseId") Long houseId,
+                              @Param("id") Long id,
+                              @Param("currentStatus") String currentStatus,
+                              @Param("lastEventDate") Date lastEventDate,
+                              @Param("nextEventDate") Date nextEventDate,
+                              @Param("nextEventType") String nextEventType,
+                              @Param("maleRabbitId") Long maleRabbitId,
+                              @Param("latestCycleId") Long latestCycleId,
+                              @Param("currentNursingKits") int currentNursingKits,
+                              @Param("nursingLitterCount") int nursingLitterCount,
+                              @Param("updateBy") String updateBy);
+
     int deactivate(@Param("houseId") Long houseId, @Param("id") Long id, @Param("exitDate") Date exitDate, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
     int deactivateIfActive(@Param("houseId") Long houseId, @Param("id") Long id, @Param("exitDate") Date exitDate, @Param("remark") String remark, @Param("updateBy") String updateBy);
 
-    int deactivateByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("exitDate") Date exitDate, @Param("remark") String remark, @Param("updateBy") String updateBy);
+    int deactivateByBatchLimited(@Param("houseId") Long houseId,
+                                 @Param("batchId") Long batchId,
+                                 @Param("exitDate") Date exitDate,
+                                 @Param("remark") String remark,
+                                 @Param("updateBy") String updateBy,
+                                 @Param("limit") int limit);
 
     int updateNextEvent(@Param("houseId") Long houseId,
                         @Param("id") Long id,
@@ -59,7 +85,10 @@ public interface BatchRabbitMapper {
 
     List<BatchRabbit> selectDueUnnotifiedEventsByHouse(@Param("houseId") Long houseId, @Param("today") Date today);
 
-    int markDueEventsAsNotified(@Param("houseId") Long houseId, @Param("today") Date today, @Param("updateBy") String updateBy);
+    int markDueEventsAsNotified(@Param("houseId") Long houseId,
+                                @Param("today") Date today,
+                                @Param("updateBy") String updateBy,
+                                @Param("limit") int limit);
 
     int countActiveByBatch(@Param("batchId") Long batchId);
 

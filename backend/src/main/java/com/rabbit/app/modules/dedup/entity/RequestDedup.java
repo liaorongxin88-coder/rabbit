@@ -8,6 +8,7 @@ public class RequestDedup {
     private Long userId;
     private String api;
     private String requestId;
+    private String payloadHash;
     private String status;
     private String errorMessage;
     private Date createTime;
@@ -53,6 +54,14 @@ public class RequestDedup {
         this.requestId = requestId;
     }
 
+    public String getPayloadHash() {
+        return payloadHash;
+    }
+
+    public void setPayloadHash(String payloadHash) {
+        this.payloadHash = payloadHash;
+    }
+
     public String getStatus() {
         return status;
     }
@@ -85,4 +94,3 @@ public class RequestDedup {
         this.updateTime = updateTime;
     }
 }
-

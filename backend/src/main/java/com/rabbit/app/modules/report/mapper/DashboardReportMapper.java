@@ -12,9 +12,11 @@ import org.apache.ibatis.annotations.Param;
 public interface DashboardReportMapper {
     RabbitDashboardStats selectRabbitStats(@Param("houseIds") List<Long> houseIds);
 
-    Integer countBatches(@Param("houseIds") List<Long> houseIds);
+    Integer countActiveBreedingMothers(@Param("houseIds") List<Long> houseIds);
 
     BreedingSummary selectBreedingSummary(@Param("houseIds") List<Long> houseIds);
+
+    Integer sumCurrentNursingKits(@Param("houseIds") List<Long> houseIds);
 
     List<MonthlyCount> selectMonthlyBirths(@Param("houseIds") List<Long> houseIds,
                                            @Param("from") Date from,

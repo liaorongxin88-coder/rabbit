@@ -2,6 +2,8 @@ package com.rabbit.app.modules.batch.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -11,7 +13,8 @@ public class CreateBatchRequest {
     private String batchCode;
 
     @NotEmpty(message = "母兔列表不能为空")
-    private List<Long> femaleRabbitIds;
+    @Size(max = 5000, message = "单个批次母兔数量不能超过5000只")
+    private List<@NotNull(message = "母兔ID不能为空") @Positive(message = "母兔ID不合法") Long> femaleRabbitIds;
 
     @NotBlank(message = "requestId不能为空")
     private String requestId;

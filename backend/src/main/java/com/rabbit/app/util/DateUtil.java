@@ -3,6 +3,7 @@ package com.rabbit.app.util;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
 public class DateUtil {
@@ -22,5 +23,15 @@ public class DateUtil {
 
     public static Date minusDays(Date date, int days) {
         return plusDays(date, -days);
+    }
+
+    public static int daysBetween(Date from, Date to) {
+        if (from == null || to == null) {
+            return 0;
+        }
+        return (int) ChronoUnit.DAYS.between(
+            Instant.ofEpochMilli(from.getTime()).atZone(ZONE_ID).toLocalDate(),
+            Instant.ofEpochMilli(to.getTime()).atZone(ZONE_ID).toLocalDate()
+        );
     }
 }

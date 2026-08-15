@@ -35,13 +35,10 @@ public class DashboardReportService {
 
         RabbitDashboardStats rabbits = mapper.selectRabbitStats(houseIds);
         BreedingSummary breeding = mapper.selectBreedingSummary(houseIds);
-        int batchCount = value(mapper.countBatches(houseIds));
-        int successfulBreedings = breeding == null ? 0 : value(breeding.getSuccessBreedingCount());
-        int bred = Math.max(successfulBreedings, batchCount);
+        int bred = value(mapper.countActiveBreedingMothers(houseIds));
         int femaleSeedRabbits = rabbits == null ? 0 : value(rabbits.getFemaleSeedRabbits());
         int totalKits = breeding == null ? 0 : value(breeding.getTotalKits());
         int liveKits = breeding == null ? 0 : value(breeding.getTotalLiveKits());
-        int totalWeaned = breeding == null ? 0 : value(breeding.getTotalWeaned());
 
         result.setTotalRabbits(rabbits == null ? 0 : value(rabbits.getTotalRabbits()));
         result.setSeedRabbits(rabbits == null ? 0 : value(rabbits.getSeedRabbits()));
@@ -50,7 +47,7 @@ public class DashboardReportService {
         result.setBredRabbits(bred);
         result.setReadyForBreeding(Math.max(femaleSeedRabbits - bred, 0));
         result.setLitters(breeding == null ? 0 : value(breeding.getTotalLitters()));
-        result.setNursingKits(Math.max(liveKits - totalWeaned, 0));
+        result.setNursingKits(value(mapper.sumCurrentNursingKits(houseIds)));
         result.setCommodityRabbits(rabbits == null ? 0 : value(rabbits.getCommodityRabbits()));
         result.setReplacementRabbits(rabbits == null ? 0 : value(rabbits.getReplacementRabbits()));
         result.setLiveRate(totalKits <= 0 ? 0D : (double) liveKits / totalKits);

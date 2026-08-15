@@ -4,6 +4,8 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.AphrodisiacRequest;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
+import com.rabbit.app.modules.batch.dto.BulkMatingRequest;
+import com.rabbit.app.modules.batch.dto.BulkMatingResult;
 import com.rabbit.app.modules.batch.dto.CompleteBatchRequest;
 import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
 import com.rabbit.app.modules.batch.dto.MatingRequest;
@@ -13,6 +15,7 @@ import com.rabbit.app.modules.batch.dto.PrepartumRequest;
 import com.rabbit.app.modules.batch.dto.WeaningRequest;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
+import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.service.BatchService;
 import com.rabbit.app.modules.event.dto.EventItem;
@@ -110,6 +113,19 @@ public class BatchController {
         return ApiResponse.ok(batchRabbitMapper.selectItemsByBatch(batchId, role, active));
     }
 
+    @GetMapping("/batches/{batchId}/breeding-cycles")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<List<BreedingCycle>> listBreedingCycles(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @RequestParam(value = "motherRabbitId", required = false) Long motherRabbitId,
+            @RequestParam(value = "activeOnly", required = false) Boolean activeOnly
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(batchService.listBreedingCycles(houseId, batchId, motherRabbitId, activeOnly));
+    }
+
     @PostMapping("/batches/{batchId}/mating")
     @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> mating(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody MatingRequest req) {
@@ -117,6 +133,26 @@ public class BatchController {
         houseService.assertHousePermission(userId, houseId, "edit");
         batchService.mating(userId, houseId, batchId, req.getFemaleRabbitId(), req.getMaleRabbitId(), req.getMatingDate(), req.getRequestId());
         return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/batches/{batchId}/mating/bulk")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<BulkMatingResult> bulkMating(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @Valid @RequestBody BulkMatingRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(batchService.matingBulk(
+                userId,
+                houseId,
+                batchId,
+                req.getFemaleRabbitIds(),
+                req.getMaleRabbitId(),
+                req.getMatingDate(),
+                req.getRequestId()
+        ));
     }
 
     @PostMapping("/batches/{batchId}/aphrodisiac/start")
@@ -150,7 +186,7 @@ public class BatchController {
     public ApiResponse<Void> pregnancyCheck(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PregnancyCheckRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.pregnancyCheck(userId, houseId, batchId, req.getRabbitId(), req.getCheckDate(), req.getResult(), req.getRemark(), req.getRequestId());
+        batchService.pregnancyCheck(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getCheckDate(), req.getResult(), req.getRemark(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
@@ -159,7 +195,7 @@ public class BatchController {
     public ApiResponse<Void> prepartumFinish(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PrepartumRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.prepartumFinish(userId, houseId, batchId, req.getRabbitId(), req.getActionDate(), req.getRemark(), req.getRequestId());
+        batchService.prepartumFinish(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getActionDate(), req.getRemark(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
@@ -169,7 +205,7 @@ public class BatchController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
         boolean failed = req.getFailed() != null && req.getFailed();
-        batchService.parturition(userId, houseId, batchId, req.getRabbitId(), req.getBirthDate(), req.getTotalKits(), req.getLiveKits(), failed, req.getRemark(), req.getRequestId());
+        batchService.parturition(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getBirthDate(), req.getTotalKits(), req.getLiveKits(), failed, req.getRemark(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
@@ -178,7 +214,7 @@ public class BatchController {
     public ApiResponse<Void> weaning(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody WeaningRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.weaning(userId, houseId, batchId, req.getRabbitId(), req.getWeaningDate(), req.getWeaningCount(), req.getMaleCount(), req.getFemaleCount(), req.getTargetCageId(), req.getAvgWeight(), req.getRemark(), req.getRequestId());
+        batchService.weaning(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getWeaningDate(), req.getWeaningCount(), req.getMaleCount(), req.getFemaleCount(), req.getTargetCageId(), req.getAvgWeight(), req.getRemark(), req.getRequestId());
         return ApiResponse.ok(null);
     }
 
@@ -209,10 +245,18 @@ public class BatchController {
 
         List<EventItem> items = new ArrayList<EventItem>();
         java.util.Set<Long> suppressedProd = eventService.getSuppressedIds(userId, houseId, "生产");
+        java.util.Set<Long> suppressedCycles = eventService.getSuppressedIds(userId, houseId, "生产周期");
         java.util.Set<Long> suppressedRep = eventService.getSuppressedIds(userId, houseId, "后备成熟");
         java.util.Set<Long> suppressedReview = eventService.getSuppressedIds(userId, houseId, "治疗复查");
 
         boolean x = onlyUnnotified != null && onlyUnnotified;
+        List<BreedingCycle> dueCycles = batchService.listDueBreedingCycleEvents(houseId, x);
+        for (BreedingCycle cycle : dueCycles) {
+            if (suppressedCycles.contains(cycle.getId())) {
+                continue;
+            }
+            items.add(new EventItem(cycle.getId(), "生产周期", cycle.getNextEventType(), cycle.getNextEventDate(), cycle.getBatchId(), cycle.getMotherRabbitId(), cycle.getStatus()));
+        }
         List<BatchRabbit> due = batchService.listDueBatchEvents(houseId, x);
         for (BatchRabbit br : due) {
             if (suppressedProd.contains(br.getId())) {

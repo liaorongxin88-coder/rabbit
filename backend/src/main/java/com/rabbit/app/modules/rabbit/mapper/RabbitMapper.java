@@ -11,9 +11,14 @@ import org.apache.ibatis.annotations.Param;
 public interface RabbitMapper {
     int insert(Rabbit rabbit);
 
+    int insertBatch(@Param("list") List<Rabbit> rabbits);
+
     Rabbit selectById(@Param("houseId") Long houseId, @Param("id") Long id);
 
     List<Rabbit> selectByIdsForUpdate(@Param("houseId") Long houseId, @Param("ids") List<Long> ids);
+
+    List<Rabbit> selectByHouseAndRequestIds(@Param("houseId") Long houseId,
+                                            @Param("requestIds") List<String> requestIds);
 
     Rabbit selectByHouseAndRequestId(@Param("houseId") Long houseId, @Param("requestId") String requestId);
 

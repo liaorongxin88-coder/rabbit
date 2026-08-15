@@ -7,6 +7,7 @@
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
         <result column="batch_id" property="batchId"/>
+        <result column="breeding_cycle_id" property="breedingCycleId"/>
         <result column="rabbit_id" property="rabbitId"/>
         <result column="action_date" property="actionDate"/>
         <result column="remark" property="remark"/>
@@ -17,8 +18,8 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into prepartum_records (house_id, batch_id, rabbit_id, action_date, remark, create_by, update_by)
-        values (#{houseId}, #{batchId}, #{rabbitId}, #{actionDate}, #{remark}, #{createBy}, #{updateBy})
+        insert into prepartum_records (house_id, batch_id, breeding_cycle_id, rabbit_id, action_date, remark, create_by, update_by)
+        values (#{houseId}, #{batchId}, #{breedingCycleId}, #{rabbitId}, #{actionDate}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByHouse" resultMap="PrepartumRecordMap">

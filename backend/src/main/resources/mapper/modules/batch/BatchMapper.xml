@@ -29,6 +29,13 @@
         where house_id = #{houseId} and id = #{id}
     </select>
 
+    <select id="selectByIdForUpdate" resultMap="BatchMap">
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        from batches
+        where house_id = #{houseId} and id = #{id}
+        for update
+    </select>
+
     <select id="selectByHouse" resultMap="BatchMap">
         select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
         from batches

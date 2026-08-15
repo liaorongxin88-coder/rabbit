@@ -13,7 +13,11 @@ public interface CageMapper {
 
     Cage selectById(@Param("houseId") Long houseId, @Param("id") Long id);
 
+    Cage selectByIdForUpdate(@Param("houseId") Long houseId, @Param("id") Long id);
+
     List<Cage> selectByHouseId(@Param("houseId") Long houseId);
+
+    List<Cage> selectCommodityCagesForUpdate(@Param("houseId") Long houseId);
 
     List<Cage> selectByHouseIdForUpdate(@Param("houseId") Long houseId);
 
@@ -33,6 +37,14 @@ public interface CageMapper {
     int updateRabbitCountAndStatus(@Param("houseId") Long houseId, @Param("id") Long id, @Param("rabbitCount") int rabbitCount, @Param("status") String status, @Param("updateBy") String updateBy);
 
     int incRabbitCount(@Param("houseId") Long houseId, @Param("id") Long id, @Param("delta") int delta, @Param("updateBy") String updateBy);
+
+    int incrementCommodityRabbitCountWithinCapacity(
+        @Param("houseId") Long houseId,
+        @Param("id") Long id,
+        @Param("delta") int delta,
+        @Param("capacity") int capacity,
+        @Param("updateBy") String updateBy
+    );
 
     int decrementRabbitCount(@Param("houseId") Long houseId, @Param("id") Long id,
                              @Param("delta") int delta, @Param("updateBy") String updateBy);

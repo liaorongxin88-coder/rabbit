@@ -72,6 +72,7 @@
         where house_id = #{houseId}
           and is_mature_notified = false
           and expected_mature_date &lt;= #{today}
+        limit #{limit}
     </update>
 
     <update id="markNotified">

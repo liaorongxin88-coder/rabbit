@@ -9,6 +9,7 @@
         <result column="user_id" property="userId"/>
         <result column="api" property="api"/>
         <result column="request_id" property="requestId"/>
+        <result column="payload_hash" property="payloadHash"/>
         <result column="status" property="status"/>
         <result column="error_message" property="errorMessage"/>
         <result column="create_time" property="createTime"/>
@@ -26,13 +27,13 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="item.id">
-        insert into request_dedup (house_id, user_id, api, request_id, status, error_message)
-        values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.status}, #{item.errorMessage})
+        insert into request_dedup (house_id, user_id, api, request_id, payload_hash, status, error_message)
+        values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.payloadHash}, #{item.status}, #{item.errorMessage})
     </insert>
 
     <insert id="insertIgnore">
-        insert ignore into request_dedup (house_id, user_id, api, request_id, status, error_message)
-        values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.status}, #{item.errorMessage})
+        insert ignore into request_dedup (house_id, user_id, api, request_id, payload_hash, status, error_message)
+        values (#{item.houseId}, #{item.userId}, #{item.api}, #{item.requestId}, #{item.payloadHash}, #{item.status}, #{item.errorMessage})
     </insert>
 
     <update id="updateStatus">

@@ -19,6 +19,8 @@ import java.util.UUID;
 @ActiveProfiles("e2e")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class E2eTestSupport {
+    private static final int REQUEST_ID_MAX_LENGTH = 64;
+
     @LocalServerPort
     private int port;
 
@@ -97,7 +99,13 @@ public abstract class E2eTestSupport {
     }
 
     protected String requestId(String prefix) {
-        return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        String safePrefix = prefix == null || prefix.isBlank() ? "request" : prefix;
+        int maxPrefixLength = REQUEST_ID_MAX_LENGTH - suffix.length() - 1;
+        if (safePrefix.length() > maxPrefixLength) {
+            safePrefix = safePrefix.substring(0, maxPrefixLength);
+        }
+        return safePrefix + "_" + suffix;
     }
 
     protected Map<String, Object> obj(Object... pairs) {

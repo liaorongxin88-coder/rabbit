@@ -46,6 +46,46 @@ class RequestDedupServiceTest {
         assertEquals(429, error.getCode());
     }
 
+    @Test
+    void bindsARequestIdToItsPayloadHash() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.selected = item(RequestDedupService.STATUS_DONE);
+        mapper.selected.setPayloadHash("first-hash");
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        BizException error = assertThrows(
+                BizException.class,
+                () -> service.begin(
+                        8L,
+                        3L,
+                        "batch.mating.bulk",
+                        "request-1",
+                        "different-hash"
+                )
+        );
+
+        assertEquals(409, error.getCode());
+        assertEquals("requestId已用于不同的批量配种请求", error.getMessage());
+    }
+
+    @Test
+    void returnsDoneWhenPayloadHashMatches() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.selected = item(RequestDedupService.STATUS_DONE);
+        mapper.selected.setPayloadHash("same-hash");
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        RequestDedupService.BeginResult result = service.begin(
+                8L,
+                3L,
+                "batch.mating.bulk",
+                "request-1",
+                "same-hash"
+        );
+
+        assertEquals(RequestDedupService.BeginResult.DONE, result);
+    }
+
     private static RequestDedup item(String status) {
         RequestDedup item = new RequestDedup();
         item.setHouseId(8L);

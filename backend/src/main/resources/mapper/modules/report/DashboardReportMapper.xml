@@ -22,10 +22,16 @@
           and is_active = true
     </select>
 
-    <select id="countBatches" resultType="int">
-        select count(1)
-        from batches
-        where house_id in <include refid="houseIds"/>
+    <select id="countActiveBreedingMothers" resultType="int">
+        select count(distinct bc.mother_rabbit_id)
+        from breeding_cycles bc
+        inner join rabbits r on r.id = bc.mother_rabbit_id
+            and r.house_id = bc.house_id
+        where bc.house_id in <include refid="houseIds"/>
+          and bc.closed_at is null
+          and r.is_active = true
+          and r.type = '0'
+          and r.gender = '0'
     </select>
 
     <select id="selectBreedingSummary" resultType="com.rabbit.app.modules.batch.dto.BreedingSummary">
@@ -37,6 +43,15 @@
                coalesce(sum(failed_breeding_count), 0) as failedBreedingCount
         from breeding_performance
         where house_id in <include refid="houseIds"/>
+    </select>
+
+    <select id="sumCurrentNursingKits" resultType="int">
+        select coalesce(sum(br.current_nursing_kits), 0)
+        from batch_rabbits br
+        join batches b on b.id = br.batch_id
+        where b.house_id in <include refid="houseIds"/>
+          and br.batch_role = 'breeding'
+          and br.is_active = true
     </select>
 
     <select id="selectMonthlyBirths" resultType="com.rabbit.app.modules.report.dto.MonthlyCount">
