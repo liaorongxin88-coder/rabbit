@@ -36,7 +36,7 @@ void main() {
     await tester.pumpWidget(const ProviderScopeWrapper());
     await tester.pumpAndSettle();
 
-    expect(find.text('智能兔管家'), findsOneWidget);
+    expect(find.text('鸿兔智管'), findsOneWidget);
     expect(find.byKey(const ValueKey('hongtu-logo')), findsOneWidget);
     final logo = tester.widget<Image>(
       find.byKey(const ValueKey('hongtu-logo')),

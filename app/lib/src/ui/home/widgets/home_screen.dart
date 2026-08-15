@@ -19,7 +19,7 @@ class HomeScreen extends ConsumerWidget {
     final events = ref.watch(homeEventsProvider);
 
     return AppPage(
-      title: '智能兔管家',
+      title: '鸿兔智管',
       actions: [
         IconButton(
           tooltip: '刷新',
@@ -286,84 +286,81 @@ class _AlertHeader extends StatelessWidget {
     final palette = AppPalette.of(context);
     final today = DateTime.now();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return SectionCard(
+      key: const ValueKey('home-production-overview-section'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionHeader(
+                      icon: Icons.today_outlined,
+                      title: '今日生产',
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '${today.month}月${today.day}日 · 全部兔舍',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              _WorkloadBadge(count: events.length),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(height: 1, color: palette.line),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 68),
+            child: IntrinsicHeight(
+              child: Row(
                 children: [
-                  Text(
-                    '今日生产',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                        ),
+                  Expanded(
+                    child: _StatusMetric(
+                      label: '逾期',
+                      count: overdue,
+                      color: palette.danger,
+                    ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${today.month}月${today.day}日 · 全部兔舍',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                  VerticalDivider(
+                    width: 1,
+                    color: palette.line,
+                    indent: 4,
+                    endIndent: 4,
+                  ),
+                  Expanded(
+                    child: _StatusMetric(
+                      label: '到期',
+                      count: due,
+                      color: palette.primary,
+                    ),
+                  ),
+                  VerticalDivider(
+                    width: 1,
+                    color: palette.line,
+                    indent: 4,
+                    endIndent: 4,
+                  ),
+                  Expanded(
+                    child: _StatusMetric(
+                      label: '未到期',
+                      count: upcoming,
+                      color: palette.success,
+                    ),
                   ),
                 ],
               ),
             ),
-            _WorkloadBadge(count: events.length),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Container(
-          constraints: const BoxConstraints(minHeight: 68),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: palette.line),
           ),
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _StatusMetric(
-                    label: '逾期',
-                    count: overdue,
-                    color: palette.danger,
-                  ),
-                ),
-                VerticalDivider(
-                  width: 1,
-                  color: palette.line,
-                  indent: 4,
-                  endIndent: 4,
-                ),
-                Expanded(
-                  child: _StatusMetric(
-                    label: '到期',
-                    count: due,
-                    color: palette.primary,
-                  ),
-                ),
-                VerticalDivider(
-                  width: 1,
-                  color: palette.line,
-                  indent: 4,
-                  endIndent: 4,
-                ),
-                Expanded(
-                  child: _StatusMetric(
-                    label: '未到期',
-                    count: upcoming,
-                    color: palette.success,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -431,117 +428,123 @@ class _WorkQueueFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppPalette.of(context);
     final houses = _houses.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          key: const ValueKey('production-work-search'),
-          controller: searchController,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            labelText: '搜索生产任务',
-            hintText: '母兔、Batch、兔舍或任务类型',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: query.isEmpty
-                ? null
-                : IconButton(
-                    key: const ValueKey('production-work-search-clear'),
-                    tooltip: '清除搜索',
-                    onPressed: () {
-                      searchController.clear();
-                      onQueryChanged('');
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
+    return SectionCard(
+      key: const ValueKey('home-work-queue-filter-section'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            icon: Icons.filter_alt_outlined,
+            title: '任务筛选',
           ),
-          onChanged: onQueryChanged,
-        ),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final fieldWidth = constraints.maxWidth >= 560
-                ? (constraints.maxWidth - 12) / 2
-                : constraints.maxWidth;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 10,
-              children: [
-                SizedBox(
-                  width: fieldWidth,
-                  child: DropdownButtonFormField<int>(
-                    key: const ValueKey('production-house-filter'),
-                    value: selectedHouseId ?? 0,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: '兔舍范围',
-                      prefixIcon: Icon(Icons.home_work_outlined),
+          const SizedBox(height: 14),
+          TextField(
+            key: const ValueKey('production-work-search'),
+            controller: searchController,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: '搜索生产任务',
+              hintText: '母兔、Batch、兔舍或任务类型',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      key: const ValueKey('production-work-search-clear'),
+                      tooltip: '清除搜索',
+                      onPressed: () {
+                        searchController.clear();
+                        onQueryChanged('');
+                      },
+                      icon: const Icon(Icons.close),
                     ),
-                    items: [
-                      const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
-                      for (final house in houses)
-                        DropdownMenuItem(
-                          value: house.key,
-                          child: Text(
-                            house.value,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) => onHouseChanged(value ?? 0),
-                  ),
-                ),
-                SizedBox(
-                  width: fieldWidth,
-                  child: DropdownButtonFormField<_DueFilter>(
-                    key: const ValueKey('production-due-filter'),
-                    value: dueFilter,
-                    decoration: const InputDecoration(
-                      labelText: '到期状态',
-                      prefixIcon: Icon(Icons.schedule_outlined),
-                    ),
-                    items: [
-                      for (final filter in _DueFilter.values)
-                        DropdownMenuItem(
-                          value: filter,
-                          child: Text(filter.label),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        onDueChanged(value);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '显示 $resultCount / ${events.length} 条任务',
-                key: const ValueKey('production-filter-summary'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
             ),
-            if (_hasActiveFilters)
-              TextButton.icon(
-                key: const ValueKey('production-filter-clear'),
-                onPressed: onClear,
-                icon: const Icon(Icons.filter_alt_off_outlined),
-                label: const Text('重置筛选'),
+            onChanged: onQueryChanged,
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final fieldWidth = constraints.maxWidth >= 560
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: fieldWidth,
+                    child: DropdownButtonFormField<int>(
+                      key: const ValueKey('production-house-filter'),
+                      value: selectedHouseId ?? 0,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: '兔舍范围',
+                        prefixIcon: Icon(Icons.home_work_outlined),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
+                        for (final house in houses)
+                          DropdownMenuItem(
+                            value: house.key,
+                            child: Text(
+                              house.value,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) => onHouseChanged(value ?? 0),
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: DropdownButtonFormField<_DueFilter>(
+                      key: const ValueKey('production-due-filter'),
+                      value: dueFilter,
+                      decoration: const InputDecoration(
+                        labelText: '到期状态',
+                        prefixIcon: Icon(Icons.schedule_outlined),
+                      ),
+                      items: [
+                        for (final filter in _DueFilter.values)
+                          DropdownMenuItem(
+                            value: filter,
+                            child: Text(filter.label),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          onDueChanged(value);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '显示 $resultCount / ${events.length} 条任务',
+                  key: const ValueKey('production-filter-summary'),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
-          ],
-        ),
-        Divider(height: 1, color: palette.line),
-      ],
+              if (_hasActiveFilters)
+                TextButton.icon(
+                  key: const ValueKey('production-filter-clear'),
+                  onPressed: onClear,
+                  icon: const Icon(Icons.filter_alt_off_outlined),
+                  label: const Text('重置筛选'),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -647,51 +650,94 @@ class _FlowTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.line)),
-      ),
-      child: TabBar(
-        controller: tabController,
-        isScrollable: true,
-        labelColor: palette.primary,
-        unselectedLabelColor: palette.muted,
-        indicatorColor: palette.primary,
-        indicatorWeight: 3,
-        tabAlignment: TabAlignment.start,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-        labelStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        tabs: [
-          for (final tab in tabs)
-            Tab(
-              height: 52,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    tab.stage.toString().padLeft(2, '0'),
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(tab.label),
-                  if (_HomeContentState._eventsFor(tab, events).isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    _TinyCount(
-                      count: _HomeContentState._eventsFor(tab, events).length,
-                    ),
-                  ],
-                ],
-              ),
+    return SectionCard(
+      key: const ValueKey('home-production-flow-section'),
+      padding: const EdgeInsets.fromLTRB(16, 14, 0, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 16),
+            child: _SectionHeader(
+              icon: Icons.account_tree_outlined,
+              title: '生产流程',
             ),
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: palette.line),
+          TabBar(
+            controller: tabController,
+            isScrollable: true,
+            labelColor: palette.primary,
+            unselectedLabelColor: palette.muted,
+            indicatorColor: palette.primary,
+            indicatorWeight: 3,
+            tabAlignment: TabAlignment.start,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+            labelStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            tabs: [
+              for (final tab in tabs)
+                Tab(
+                  height: 52,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tab.stage.toString().padLeft(2, '0'),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(tab.label),
+                      if (_HomeContentState._eventsFor(tab, events)
+                          .isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        _TinyCount(
+                          count:
+                              _HomeContentState._eventsFor(tab, events).length,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 19, color: palette.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }

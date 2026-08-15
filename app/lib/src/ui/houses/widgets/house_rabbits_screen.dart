@@ -21,20 +21,10 @@ class HouseRabbitsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final houses = ref.watch(housesProvider);
-    final canEdit =
-        ref.watch(housePermissionProvider(houseId)).valueOrNull?.canEdit ==
-            true;
 
     return AppPage(
       title: '兔只管理',
       actions: [
-        if (canEdit)
-          IconButton(
-            tooltip: '批量出库',
-            onPressed: () =>
-                context.push('/houses/$houseId/outbound?entryType=HOUSE'),
-            icon: const Icon(Icons.local_shipping_outlined),
-          ),
         IconButton(
           tooltip: '返回兔舍详情',
           onPressed: () => context.go('/houses/$houseId'),
@@ -226,6 +216,10 @@ class _LoadedRabbitList extends StatelessWidget {
             return _RabbitListHeader(
               statusLabel: '共 ${rabbits.length} 只 · 已全部加载',
               onRefresh: onRefresh,
+              canEdit: canEdit,
+              onOutbound: () => context.push(
+                '/houses/${house.id}/outbound?entryType=HOUSE',
+              ),
             );
         }
 
@@ -305,53 +299,77 @@ class _RabbitListHeader extends StatelessWidget {
   const _RabbitListHeader({
     required this.statusLabel,
     required this.onRefresh,
+    this.canEdit = false,
+    this.onOutbound,
   });
 
   final String statusLabel;
   final VoidCallback onRefresh;
+  final bool canEdit;
+  final VoidCallback? onOutbound;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     return SectionCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: palette.successSoft,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.cruelty_free, color: palette.success),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '兔只列表',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: palette.successSoft,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  statusLabel,
-                  key: const ValueKey('house-rabbit-load-status'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+                child: Icon(Icons.cruelty_free, color: palette.success),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '兔只列表',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      statusLabel,
+                      key: const ValueKey('house-rabbit-load-status'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              IconButton(
+                tooltip: '刷新兔只',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          if (canEdit && onOutbound != null) ...[
+            const SizedBox(height: 12),
+            Tooltip(
+              message: '整舍批量出库',
+              child: FilledButton.icon(
+                key: const ValueKey('house-rabbits-outbound-action'),
+                onPressed: onOutbound,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.local_shipping_outlined),
+                label: const Text('整舍批量出库'),
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: '刷新兔只',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh),
-          ),
+          ],
         ],
       ),
     );
@@ -422,66 +440,100 @@ class _RabbitListTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: palette.line),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: palette.successSoft,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.cruelty_free, color: palette.success),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '兔 #${rabbit.id} · ${rabbit.typeLabel} · ${rabbit.genderLabel}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: palette.successSoft,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '笼位 $cageDisplay · ${rabbit.breed.isEmpty ? '品种未填' : rabbit.breed} · ${rabbit.weightLabel}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: Icon(Icons.cruelty_free, color: palette.success),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '兔 #${rabbit.id} · ${rabbit.typeLabel} · ${rabbit.genderLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '笼位 $cageDisplay · ${rabbit.breed.isEmpty ? '品种未填' : rabbit.breed} · ${rabbit.weightLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           if (canEdit) ...[
-            IconButton(
-              tooltip: '单兔出库',
-              onPressed: rabbit.type == '2'
-                  ? () => context.push(
-                      '/houses/$houseId/outbound?entryType=RABBIT&rabbitId=${rabbit.id}')
-                  : null,
-              icon: const Icon(Icons.local_shipping_outlined),
-            ),
-            IconButton(
-              tooltip: '换笼位',
-              onPressed: () => showRabbitMoveCageSheet(
-                context: context,
-                houseId: houseId,
-                rabbit: rabbit,
-                cages: cages,
-              ),
-              icon: const Icon(Icons.move_down_outlined),
-            ),
-            IconButton(
-              tooltip: '编辑兔子',
-              onPressed: () => showRabbitEditSheet(
-                context: context,
-                houseId: houseId,
-                rabbit: rabbit,
-                cages: cages,
-              ),
-              icon: const Icon(Icons.edit_outlined),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                if (rabbit.type == '2')
+                  Tooltip(
+                    message: '单兔出库',
+                    child: TextButton.icon(
+                      key: ValueKey('rabbit-row-outbound-${rabbit.id}'),
+                      onPressed: () => context.push(
+                        '/houses/$houseId/outbound?entryType=RABBIT&rabbitId=${rabbit.id}',
+                      ),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
+                      icon: const Icon(Icons.local_shipping_outlined),
+                      label: const Text('单兔出库'),
+                    ),
+                  ),
+                Tooltip(
+                  message: '换笼位',
+                  child: TextButton.icon(
+                    key: ValueKey('rabbit-row-move-${rabbit.id}'),
+                    onPressed: () => showRabbitMoveCageSheet(
+                      context: context,
+                      houseId: houseId,
+                      rabbit: rabbit,
+                      cages: cages,
+                    ),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    icon: const Icon(Icons.move_down_outlined),
+                    label: const Text('换笼'),
+                  ),
+                ),
+                Tooltip(
+                  message: '编辑兔子',
+                  child: TextButton.icon(
+                    key: ValueKey('rabbit-row-edit-${rabbit.id}'),
+                    onPressed: () => showRabbitEditSheet(
+                      context: context,
+                      houseId: houseId,
+                      rabbit: rabbit,
+                      cages: cages,
+                    ),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('编辑'),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

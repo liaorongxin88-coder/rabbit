@@ -15,6 +15,10 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
+enum _CageOccupancyFilter { all, empty, occupied }
+
+enum _CageUsageFilter { all, breeding, replacement, commodity }
+
 class CageManagementSection extends ConsumerStatefulWidget {
   const CageManagementSection({
     super.key,
@@ -36,6 +40,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
 
   final _searchController = TextEditingController();
   var _keyword = '';
+  var _occupancyFilter = _CageOccupancyFilter.all;
+  var _usageFilter = _CageUsageFilter.all;
   var _visibleCageCount = _batchSize;
   var _availableCageCount = 0;
   var _loadingMore = false;
@@ -87,6 +93,67 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     _availableCageCount = 0;
     _loadingMore = false;
     _paginationGeneration += 1;
+  }
+
+  void _setOccupancyFilter(_CageOccupancyFilter value) {
+    if (_occupancyFilter == value) {
+      return;
+    }
+    _scrollToTop();
+    setState(() {
+      _occupancyFilter = value;
+      _resetPagination();
+    });
+  }
+
+  void _setUsageFilter(_CageUsageFilter value) {
+    if (_usageFilter == value) {
+      return;
+    }
+    _scrollToTop();
+    setState(() {
+      _usageFilter = value;
+      _resetPagination();
+    });
+  }
+
+  void _clearFilters() {
+    if (_occupancyFilter == _CageOccupancyFilter.all &&
+        _usageFilter == _CageUsageFilter.all) {
+      return;
+    }
+    _scrollToTop();
+    setState(() {
+      _occupancyFilter = _CageOccupancyFilter.all;
+      _usageFilter = _CageUsageFilter.all;
+      _resetPagination();
+    });
+  }
+
+  bool _matchesFilters(Cage cage) {
+    final matchesOccupancy = switch (_occupancyFilter) {
+      _CageOccupancyFilter.all => true,
+      _CageOccupancyFilter.empty => cage.rabbitCount == 0,
+      _CageOccupancyFilter.occupied => cage.rabbitCount > 0,
+    };
+    if (!matchesOccupancy) {
+      return false;
+    }
+
+    return switch (_usageFilter) {
+      _CageUsageFilter.all => true,
+      _CageUsageFilter.breeding => cage.status == '1',
+      _CageUsageFilter.replacement => cage.status == '2',
+      _CageUsageFilter.commodity => cage.status == '3',
+    };
+  }
+
+  void _scrollToTop() {
+    final controller = widget.scrollController;
+    if (controller.hasClients &&
+        controller.offset > controller.position.minScrollExtent) {
+      controller.jumpTo(controller.position.minScrollExtent);
+    }
   }
 
   void _handleScroll() {
@@ -208,11 +275,14 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     }
 
     final keyword = _keyword.toLowerCase();
-    final filtered = keyword.isEmpty
-        ? cages
-        : cages
-            .where((cage) => cage.cageNumber.toLowerCase().contains(keyword))
-            .toList();
+    final filtered = cages
+        .where(
+          (cage) =>
+              (keyword.isEmpty ||
+                  cage.cageNumber.toLowerCase().contains(keyword)) &&
+              _matchesFilters(cage),
+        )
+        .toList();
 
     if (cages.isEmpty) {
       _availableCageCount = 0;
@@ -223,14 +293,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             canControl ? '点击“新增笼位”，按整排编号、层数和每排位置批量生成。' : '当前兔舍还没有笼位，请联系管理员添加。',
         actionLabel: canControl ? '新增笼位' : null,
         onAction: canControl ? () => _showCreateCagesSheet(context) : null,
-      );
-    }
-
-    if (filtered.isEmpty) {
-      _availableCageCount = 0;
-      return const _CageEmptyState(
-        title: '没有匹配笼位',
-        message: '换一个位置编号试试，或清空搜索查看全部笼位。',
       );
     }
 
@@ -255,48 +317,68 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
           ],
         ),
         const SizedBox(height: 14),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
-            final columns = textScale >= 1.3
-                ? 2
-                : constraints.maxWidth >= 640
-                    ? 4
-                    : 3;
-            final tileExtent = textScale >= 1.8
-                ? 188.0
-                : textScale >= 1.3
-                    ? 152.0
-                    : 120.0;
-            return GridView.builder(
-              key: const ValueKey('house-cage-grid'),
-              itemCount: visibleCageCount,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: tileExtent,
-              ),
-              itemBuilder: (context, index) {
-                final cage = filtered[index];
-                return _CageTile(
-                  cage: cage,
-                  onTap: () => context.go(
-                    '/houses/${widget.house.id}/cages/${cage.id}',
-                  ),
-                  onRowOutbound: permission.valueOrNull?.canEdit == true &&
-                          cage.rowCode != 'LEGACY'
-                      ? () => context.push(
-                            '/houses/${widget.house.id}/outbound?entryType=ROW&rowCode=${Uri.encodeQueryComponent(cage.rowCode)}',
-                          )
-                      : null,
-                );
-              },
-            );
-          },
+        _CageFilters(
+          occupancyFilter: _occupancyFilter,
+          usageFilter: _usageFilter,
+          matchingCount: filtered.length,
+          totalCount: cages.length,
+          onOccupancyChanged: _setOccupancyFilter,
+          onUsageChanged: _setUsageFilter,
+          onReset: _hasActiveFilters ? _clearFilters : null,
         ),
+        const SizedBox(height: 14),
+        if (filtered.isEmpty)
+          _CageEmptyState(
+            title: '没有匹配笼位',
+            message: _hasActiveFilters
+                ? '调整笼位编号或筛选条件后再试。'
+                : '换一个位置编号试试，或清空搜索查看全部笼位。',
+            actionLabel: _hasActiveFilters ? '重置筛选' : null,
+            onAction: _hasActiveFilters ? _clearFilters : null,
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
+              final columns = textScale >= 1.3
+                  ? 2
+                  : constraints.maxWidth >= 640
+                      ? 4
+                      : 3;
+              final tileExtent = textScale >= 1.8
+                  ? 188.0
+                  : textScale >= 1.3
+                      ? 152.0
+                      : 120.0;
+              return GridView.builder(
+                key: const ValueKey('house-cage-grid'),
+                itemCount: visibleCageCount,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  mainAxisExtent: tileExtent,
+                ),
+                itemBuilder: (context, index) {
+                  final cage = filtered[index];
+                  return _CageTile(
+                    cage: cage,
+                    onTap: () => context.go(
+                      '/houses/${widget.house.id}/cages/${cage.id}',
+                    ),
+                    onRowOutbound: permission.valueOrNull?.canEdit == true &&
+                            cage.rowCode != 'LEGACY'
+                        ? () => context.push(
+                              '/houses/${widget.house.id}/outbound?entryType=ROW&rowCode=${Uri.encodeQueryComponent(cage.rowCode)}',
+                            )
+                        : null,
+                  );
+                },
+              );
+            },
+          ),
         if (hasMore)
           SizedBox(
             height: 42,
@@ -313,12 +395,141 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     );
   }
 
+  bool get _hasActiveFilters =>
+      _occupancyFilter != _CageOccupancyFilter.all ||
+      _usageFilter != _CageUsageFilter.all;
+
   Future<void> _showCreateCagesSheet(BuildContext context) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _CreateCagesSheet(houseId: widget.house.id),
+    );
+  }
+}
+
+class _CageFilters extends StatelessWidget {
+  const _CageFilters({
+    required this.occupancyFilter,
+    required this.usageFilter,
+    required this.matchingCount,
+    required this.totalCount,
+    required this.onOccupancyChanged,
+    required this.onUsageChanged,
+    this.onReset,
+  });
+
+  final _CageOccupancyFilter occupancyFilter;
+  final _CageUsageFilter usageFilter;
+  final int matchingCount;
+  final int totalCount;
+  final ValueChanged<_CageOccupancyFilter> onOccupancyChanged;
+  final ValueChanged<_CageUsageFilter> onUsageChanged;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
+    final summary = Text(
+      '匹配 $matchingCount / $totalCount 个笼位',
+      key: const ValueKey('cage-filter-summary'),
+      style: Theme.of(context).textTheme.bodyMedium,
+    );
+    final reset = onReset == null
+        ? null
+        : TextButton.icon(
+            key: const ValueKey('cage-filter-reset'),
+            onPressed: onReset,
+            icon: const Icon(Icons.filter_alt_off_outlined),
+            label: const Text('重置筛选'),
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('笼位筛选', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Text('在栏状态', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              key: const ValueKey('cage-occupancy-all-filter'),
+              label: const Text('全部状态'),
+              selected: occupancyFilter == _CageOccupancyFilter.all,
+              onSelected: (_) => onOccupancyChanged(_CageOccupancyFilter.all),
+            ),
+            ChoiceChip(
+              key: const ValueKey('cage-occupancy-empty-filter'),
+              label: const Text('空笼'),
+              selected: occupancyFilter == _CageOccupancyFilter.empty,
+              onSelected: (_) => onOccupancyChanged(_CageOccupancyFilter.empty),
+            ),
+            ChoiceChip(
+              key: const ValueKey('cage-occupancy-occupied-filter'),
+              label: const Text('有兔'),
+              selected: occupancyFilter == _CageOccupancyFilter.occupied,
+              onSelected: (_) =>
+                  onOccupancyChanged(_CageOccupancyFilter.occupied),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('笼位用途', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              key: const ValueKey('cage-usage-all-filter'),
+              label: const Text('全部用途'),
+              selected: usageFilter == _CageUsageFilter.all,
+              onSelected: (_) => onUsageChanged(_CageUsageFilter.all),
+            ),
+            ChoiceChip(
+              key: const ValueKey('cage-usage-breeding-filter'),
+              label: const Text('繁殖笼'),
+              selected: usageFilter == _CageUsageFilter.breeding,
+              onSelected: (_) => onUsageChanged(_CageUsageFilter.breeding),
+            ),
+            ChoiceChip(
+              key: const ValueKey('cage-usage-replacement-filter'),
+              label: const Text('后备笼'),
+              selected: usageFilter == _CageUsageFilter.replacement,
+              onSelected: (_) => onUsageChanged(_CageUsageFilter.replacement),
+            ),
+            ChoiceChip(
+              key: const ValueKey('cage-usage-commodity-filter'),
+              label: const Text('商品笼'),
+              selected: usageFilter == _CageUsageFilter.commodity,
+              onSelected: (_) => onUsageChanged(_CageUsageFilter.commodity),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (reset == null)
+          summary
+        else if (largeText)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              summary,
+              const SizedBox(height: 4),
+              Align(alignment: Alignment.centerRight, child: reset),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(child: summary),
+              reset,
+            ],
+          ),
+      ],
     );
   }
 }

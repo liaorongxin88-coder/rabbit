@@ -39,14 +39,6 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
     return AppPage(
       title: '笼位管理',
       actions: [
-        if (canEdit)
-          IconButton(
-            key: const ValueKey('house-outbound-action'),
-            tooltip: '整舍批量出库',
-            onPressed: () =>
-                context.push('/houses/$houseId/outbound?entryType=HOUSE'),
-            icon: const Icon(Icons.local_shipping_outlined),
-          ),
         IconButton(
           tooltip: '返回兔舍详情',
           onPressed: () => context.go('/houses/$houseId'),
@@ -78,7 +70,13 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
             controller: _scrollController,
             padding: AppSpacing.pagePadding,
             children: [
-              _PageHeader(house: house),
+              _PageHeader(
+                house: house,
+                canEdit: canEdit,
+                onOutbound: () => context.push(
+                  '/houses/$houseId/outbound?entryType=HOUSE',
+                ),
+              ),
               const SizedBox(height: 12),
               CageManagementSection(
                 house: house,
@@ -107,43 +105,69 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
 }
 
 class _PageHeader extends StatelessWidget {
-  const _PageHeader({required this.house});
+  const _PageHeader({
+    required this.house,
+    required this.canEdit,
+    required this.onOutbound,
+  });
 
   final RabbitHouse house;
+  final bool canEdit;
+  final VoidCallback onOutbound;
 
   @override
   Widget build(BuildContext context) {
     final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
     return SectionCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          IconButton(
-            tooltip: '返回',
-            onPressed: () => context.go('/houses/${house.id}'),
-            icon: const Icon(Icons.arrow_back),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconButton(
+                tooltip: '返回',
+                onPressed: () => context.go('/houses/${house.id}'),
+                icon: const Icon(Icons.arrow_back),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      house.name,
+                      maxLines: largeText ? 2 : 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '点击具体笼位进入管理 · ${house.layoutLabel}',
+                      maxLines: largeText ? 2 : 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  house.name,
-                  maxLines: largeText ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+          if (canEdit) ...[
+            const SizedBox(height: 12),
+            Tooltip(
+              message: '整舍批量出库',
+              child: FilledButton.icon(
+                key: const ValueKey('house-outbound-action'),
+                onPressed: onOutbound,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '点击具体笼位进入管理 · ${house.layoutLabel}',
-                  maxLines: largeText ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+                icon: const Icon(Icons.local_shipping_outlined),
+                label: const Text('整舍批量出库'),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

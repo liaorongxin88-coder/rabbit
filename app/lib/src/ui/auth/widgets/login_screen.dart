@@ -910,7 +910,7 @@ class _LoginHeader extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          '智能兔管家',
+          '鸿兔智管',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineMedium,
         ),

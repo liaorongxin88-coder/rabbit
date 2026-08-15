@@ -52,9 +52,9 @@ RABBIT_CARRIER_AUTH_ENABLED=false
 
 Android 工程提供三个环境 flavor：
 
-- `dev`：包名 `com.rabbit.app.flutter.dev`，应用名 `智能兔管家 Dev`。
-- `staging`：对应脚本层 `test` 环境，包名 `com.rabbit.app.flutter.test`，应用名 `智能兔管家 Test`。
-- `prod`：对应脚本层 `prod` 环境，包名 `com.rabbit.app.flutter`，应用名 `智能兔管家`。
+- `dev`：包名 `com.rabbit.app.flutter.dev`，应用名 `鸿兔智管 Dev`。
+- `staging`：对应脚本层 `test` 环境，包名 `com.rabbit.app.flutter.test`，应用名 `鸿兔智管 Test`。
+- `prod`：对应脚本层 `prod` 环境，包名 `com.rabbit.app.flutter`，应用名 `鸿兔智管`。
 
 这三个包可以同时安装在同一台设备上。Android Studio 的共享 Run/Debug Configurations 已经放在 `.run/`：
 
