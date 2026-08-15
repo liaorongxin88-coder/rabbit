@@ -13,7 +13,11 @@ void main() {
     expect(theme.appBarTheme.titleTextStyle?.fontWeight, FontWeight.w700);
     expect(
       AppTypography.ergonomicTextScaler(const TextScaler.linear(2)).scale(10),
-      15,
+      20,
+    );
+    expect(
+      AppTypography.ergonomicTextScaler(const TextScaler.linear(2.5)).scale(10),
+      20,
     );
   });
 }

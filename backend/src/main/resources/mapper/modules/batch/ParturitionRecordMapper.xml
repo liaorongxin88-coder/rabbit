@@ -7,6 +7,7 @@
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
         <result column="batch_id" property="batchId"/>
+        <result column="breeding_cycle_id" property="breedingCycleId"/>
         <result column="rabbit_id" property="rabbitId"/>
         <result column="birth_date" property="birthDate"/>
         <result column="total_kits" property="totalKits"/>
@@ -19,12 +20,12 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into parturition_records (house_id, batch_id, rabbit_id, birth_date, total_kits, live_kits, remark, create_by, update_by)
-        values (#{houseId}, #{batchId}, #{rabbitId}, #{birthDate}, #{totalKits}, #{liveKits}, #{remark}, #{createBy}, #{updateBy})
+        insert into parturition_records (house_id, batch_id, breeding_cycle_id, rabbit_id, birth_date, total_kits, live_kits, remark, create_by, update_by)
+        values (#{houseId}, #{batchId}, #{breedingCycleId}, #{rabbitId}, #{birthDate}, #{totalKits}, #{liveKits}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByBatch" resultMap="Map">
-        select p.id, p.house_id, p.batch_id, p.rabbit_id, p.birth_date, p.total_kits, p.live_kits, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
+        select p.id, p.house_id, p.batch_id, p.breeding_cycle_id, p.rabbit_id, p.birth_date, p.total_kits, p.live_kits, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
         from parturition_records p
         inner join batches b on b.id = p.batch_id
         where p.house_id = #{houseId} and b.house_id = #{houseId} and p.batch_id = #{batchId}
@@ -33,7 +34,7 @@
     </select>
 
     <select id="selectByRabbit" resultMap="Map">
-        select p.id, p.house_id, p.batch_id, p.rabbit_id, p.birth_date, p.total_kits, p.live_kits, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
+        select p.id, p.house_id, p.batch_id, p.breeding_cycle_id, p.rabbit_id, p.birth_date, p.total_kits, p.live_kits, p.remark, p.create_by, p.create_time, p.update_by, p.update_time
         from parturition_records p
         inner join rabbits r on r.id = p.rabbit_id
         where p.house_id = #{houseId} and r.house_id = #{houseId} and p.rabbit_id = #{rabbitId}

@@ -89,127 +89,271 @@ class _RabbitsContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final palette = AppPalette.of(context);
     final rabbits = ref.watch(houseRabbitsProvider(house.id));
     final cages = ref.watch(houseCagesProvider(house.id));
+    final permission = ref.watch(housePermissionProvider(house.id));
+    final cageItems = cages.valueOrNull;
+    final rabbitItems = rabbits.valueOrNull;
+    final currentPermission = permission.valueOrNull;
 
+    if (cageItems == null) {
+      return _RabbitListShell(
+        house: house,
+        statusLabel: cages.hasError ? '笼位加载失败' : '正在加载完整列表...',
+        onRefresh: () => ref.invalidate(houseCagesProvider(house.id)),
+        body: cages.hasError
+            ? _InlineError(
+                message: cages.error.toString(),
+                onRetry: () => ref.invalidate(houseCagesProvider(house.id)),
+              )
+            : const _SectionLoading(label: '加载笼位中...'),
+      );
+    }
+
+    if (rabbitItems == null) {
+      return _RabbitListShell(
+        house: house,
+        statusLabel: rabbits.hasError ? '完整列表加载失败' : '正在加载完整列表...',
+        onRefresh: () => ref.invalidate(houseRabbitsProvider(house.id)),
+        body: rabbits.hasError
+            ? _InlineError(
+                message: rabbits.error.toString(),
+                onRetry: () => ref.invalidate(houseRabbitsProvider(house.id)),
+              )
+            : const _SectionLoading(label: '加载全部兔只中...'),
+      );
+    }
+
+    if (currentPermission == null) {
+      return _RabbitListShell(
+        house: house,
+        statusLabel: permission.hasError ? '权限加载失败' : '正在加载权限...',
+        onRefresh: () => ref.invalidate(housePermissionProvider(house.id)),
+        body: permission.hasError
+            ? _InlineError(
+                message: permission.error.toString(),
+                onRetry: () =>
+                    ref.invalidate(housePermissionProvider(house.id)),
+              )
+            : const _SectionLoading(label: '加载权限中...'),
+      );
+    }
+
+    return _LoadedRabbitList(
+      house: house,
+      rabbits: rabbitItems,
+      cages: cageItems,
+      canEdit: currentPermission.canEdit,
+      onRefresh: () {
+        ref.invalidate(houseRabbitsProvider(house.id));
+        ref.invalidate(houseCagesProvider(house.id));
+      },
+    );
+  }
+}
+
+class _RabbitListShell extends StatelessWidget {
+  const _RabbitListShell({
+    required this.house,
+    required this.statusLabel,
+    required this.onRefresh,
+    required this.body,
+  });
+
+  final RabbitHouse house;
+  final String statusLabel;
+  final VoidCallback onRefresh;
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) {
     return ListView(
       padding: AppSpacing.pagePadding,
       children: [
-        SectionCard(
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: '返回',
-                onPressed: () => context.go('/houses/${house.id}'),
-                icon: const Icon(Icons.arrow_back),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      house.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '兔只档案查看与编辑',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        _HouseSummaryCard(house: house),
         const SizedBox(height: 12),
         _AddHint(houseId: house.id),
         const SizedBox(height: 12),
-        SectionCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: palette.successSoft,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.cruelty_free,
-                        color: palette.success,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '兔只列表',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '刷新兔只',
-                      onPressed: () {
-                        ref.invalidate(houseRabbitsProvider(house.id));
-                        ref.invalidate(houseCagesProvider(house.id));
-                      },
-                      icon: const Icon(Icons.refresh),
-                    ),
-                  ],
-                ),
-              ),
-              Divider(height: 1, color: palette.line),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: cages.when(
-                  data: (cageItems) => rabbits.when(
-                    data: (rabbitItems) {
-                      final permission =
-                          ref.watch(housePermissionProvider(house.id));
-                      return permission.when(
-                        data: (perm) => _RabbitListBody(
-                          houseId: house.id,
-                          rabbits: rabbitItems,
-                          cages: cageItems,
-                          canEdit: perm.canEdit,
-                        ),
-                        loading: () => const _SectionLoading(label: '加载权限中...'),
-                        error: (error, _) => _InlineError(
-                          message: error.toString(),
-                          onRetry: () => ref.invalidate(
-                            housePermissionProvider(house.id),
-                          ),
-                        ),
-                      );
-                    },
-                    loading: () => const _SectionLoading(label: '加载兔只中...'),
-                    error: (error, _) => _InlineError(
-                      message: error.toString(),
-                      onRetry: () =>
-                          ref.invalidate(houseRabbitsProvider(house.id)),
-                    ),
-                  ),
-                  loading: () => const _SectionLoading(label: '加载笼位中...'),
-                  error: (error, _) => _InlineError(
-                    message: error.toString(),
-                    onRetry: () => ref.invalidate(houseCagesProvider(house.id)),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        _RabbitListHeader(
+          statusLabel: statusLabel,
+          onRefresh: onRefresh,
         ),
+        const SizedBox(height: 8),
+        SectionCard(child: body),
       ],
+    );
+  }
+}
+
+class _LoadedRabbitList extends StatelessWidget {
+  const _LoadedRabbitList({
+    required this.house,
+    required this.rabbits,
+    required this.cages,
+    required this.canEdit,
+    required this.onRefresh,
+  });
+
+  final RabbitHouse house;
+  final List<Rabbit> rabbits;
+  final List<Cage> cages;
+  final bool canEdit;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final cageDisplayById = <int, String>{
+      for (final cage in cages)
+        cage.id: cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
+    };
+    final listItemCount = rabbits.isEmpty ? 1 : rabbits.length;
+
+    return ListView.builder(
+      key: const ValueKey('house-rabbit-list'),
+      padding: AppSpacing.pagePadding,
+      itemCount: 5 + listItemCount,
+      itemBuilder: (context, index) {
+        switch (index) {
+          case 0:
+            return _HouseSummaryCard(house: house);
+          case 1:
+            return const SizedBox(height: 12);
+          case 2:
+            return _AddHint(houseId: house.id);
+          case 3:
+            return const SizedBox(height: 12);
+          case 4:
+            return _RabbitListHeader(
+              statusLabel: '共 ${rabbits.length} 只 · 已全部加载',
+              onRefresh: onRefresh,
+            );
+        }
+
+        if (rabbits.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _CompactEmpty(
+              icon: Icons.cruelty_free,
+              title: '暂无兔只',
+              message: '请先进入笼位管理，点击具体笼位录入第一只兔子。',
+              actionLabel: '去笼位',
+              onAction: () => context.go('/houses/${house.id}/cages'),
+            ),
+          );
+        }
+
+        final rabbit = rabbits[index - 5];
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: _RabbitListTile(
+            key: ValueKey('house-rabbit-${rabbit.id}'),
+            houseId: house.id,
+            rabbit: rabbit,
+            cages: cages,
+            cageDisplay: cageDisplayById[rabbit.cageId] ?? '#${rabbit.cageId}',
+            canEdit: canEdit,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HouseSummaryCard extends StatelessWidget {
+  const _HouseSummaryCard({required this.house});
+
+  final RabbitHouse house;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '返回',
+            onPressed: () => context.go('/houses/${house.id}'),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  house.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '兔只档案查看与编辑',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RabbitListHeader extends StatelessWidget {
+  const _RabbitListHeader({
+    required this.statusLabel,
+    required this.onRefresh,
+  });
+
+  final String statusLabel;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return SectionCard(
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: palette.successSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.cruelty_free, color: palette.success),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '兔只列表',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  statusLabel,
+                  key: const ValueKey('house-rabbit-load-status'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '刷新兔只',
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -252,55 +396,9 @@ class _AddHint extends StatelessWidget {
   }
 }
 
-class _RabbitListBody extends StatelessWidget {
-  const _RabbitListBody({
-    required this.houseId,
-    required this.rabbits,
-    required this.cages,
-    required this.canEdit,
-  });
-
-  final int houseId;
-  final List<Rabbit> rabbits;
-  final List<Cage> cages;
-  final bool canEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    if (rabbits.isEmpty) {
-      return _CompactEmpty(
-        icon: Icons.cruelty_free,
-        title: '暂无兔只',
-        message: '请先进入笼位管理，点击具体笼位录入第一只兔子。',
-        actionLabel: '去笼位',
-        onAction: () => context.go('/houses/$houseId/cages'),
-      );
-    }
-
-    final cageDisplayById = <int, String>{
-      for (final cage in cages)
-        cage.id: cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
-    };
-
-    return Column(
-      children: [
-        for (final rabbit in rabbits) ...[
-          _RabbitListTile(
-            houseId: houseId,
-            rabbit: rabbit,
-            cages: cages,
-            cageDisplay: cageDisplayById[rabbit.cageId] ?? '#${rabbit.cageId}',
-            canEdit: canEdit,
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-}
-
 class _RabbitListTile extends StatelessWidget {
   const _RabbitListTile({
+    super.key,
     required this.houseId,
     required this.rabbit,
     required this.cages,

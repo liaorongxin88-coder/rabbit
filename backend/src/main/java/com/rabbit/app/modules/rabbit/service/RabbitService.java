@@ -5,6 +5,7 @@ import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
+import com.rabbit.app.modules.batch.mapper.BreedingCycleMapper;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
@@ -40,6 +41,7 @@ public class RabbitService {
     private final ReplacementRecordMapper replacementRecordMapper;
     private final BatchRabbitMapper batchRabbitMapper;
     private final BatchMapper batchMapper;
+    private final BreedingCycleMapper breedingCycleMapper;
     private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final RabbitDepartureRecordMapper rabbitDepartureRecordMapper;
     private final RequestDedupService requestDedupService;
@@ -53,6 +55,7 @@ public class RabbitService {
             ReplacementRecordMapper replacementRecordMapper,
             BatchRabbitMapper batchRabbitMapper,
             BatchMapper batchMapper,
+            BreedingCycleMapper breedingCycleMapper,
             RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
             RabbitDepartureRecordMapper rabbitDepartureRecordMapper,
             RequestDedupService requestDedupService,
@@ -65,6 +68,7 @@ public class RabbitService {
         this.replacementRecordMapper = replacementRecordMapper;
         this.batchRabbitMapper = batchRabbitMapper;
         this.batchMapper = batchMapper;
+        this.breedingCycleMapper = breedingCycleMapper;
         this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.rabbitDepartureRecordMapper = rabbitDepartureRecordMapper;
         this.requestDedupService = requestDedupService;
@@ -530,13 +534,44 @@ public class RabbitService {
                 throw new BizException(409, "兔子已离场");
             }
 
-            List<BatchRabbit> activeBatchLinks = batchRabbitMapper.selectActiveByRabbit(houseId, rabbitId);
+            LockedRabbitExit lockedExit = lockRabbitExitState(houseId, rabbitId);
+            r = lockedExit.rabbit();
+            if (r == null) {
+                throw new BizException(400, "兔子不存在");
+            }
+            if (!Boolean.TRUE.equals(r.getIsActive())) {
+                throw new BizException(409, "兔子已离场");
+            }
+            List<BatchRabbit> activeBatchLinks = lockedExit.batchLinks();
             if (!activeBatchLinks.isEmpty()) {
                 if (!forceExitBatch) {
                     throw new BizException(400, "兔子仍在活跃批次中");
                 }
                 for (BatchRabbit br : activeBatchLinks) {
+                    breedingCycleMapper.closeOpenByMother(
+                        houseId,
+                        br.getBatchId(),
+                        rabbitId,
+                        now,
+                        "兔离场:" + t,
+                        op
+                    );
                     batchRabbitMapper.deactivateIfActive(houseId, br.getId(), now, "兔离场:" + t, op);
+                    breedingCycleMapper.closeOpenByMother(
+                        houseId,
+                        br.getBatchId(),
+                        rabbitId,
+                        now,
+                        "兔离场:" + t,
+                        op
+                    );
+                    if (breedingCycleMapper.countOpenByMother(
+                        houseId,
+                        br.getBatchId(),
+                        rabbitId
+                    ) != 0) {
+                        throw new BizException(409, "兔离场后仍有进行中的繁殖周期");
+                    }
                     checkAndCompleteBatch(houseId, br.getBatchId(), userId, now);
                 }
             }
@@ -584,4 +619,37 @@ public class RabbitService {
             throw e;
         }
     }
+
+    private LockedRabbitExit lockRabbitExitState(Long houseId, Long rabbitId) {
+        List<BatchRabbit> observedLinks = batchRabbitMapper.selectActiveByRabbit(houseId, rabbitId);
+        List<Long> observedBatchIds = observedLinks.stream()
+            .map(BatchRabbit::getBatchId)
+            .distinct()
+            .sorted()
+            .toList();
+        for (Long batchId : observedBatchIds) {
+            if (batchMapper.selectByIdForUpdate(houseId, batchId) == null) {
+                throw new BizException(409, "批次状态已变化，请刷新后重试");
+            }
+        }
+
+        Rabbit rabbit = rabbitMapper.selectByIdsForUpdate(houseId, List.of(rabbitId))
+            .stream()
+            .findFirst()
+            .orElse(null);
+        List<BatchRabbit> lockedLinks = batchRabbitMapper.selectActiveByRabbitForUpdate(
+            houseId,
+            rabbitId
+        );
+        Set<Long> observed = new LinkedHashSet<Long>(observedBatchIds);
+        boolean unprotectedBatchAppeared = lockedLinks.stream()
+            .map(BatchRabbit::getBatchId)
+            .anyMatch(batchId -> !observed.contains(batchId));
+        if (unprotectedBatchAppeared) {
+            throw new BizException(409, "批次状态已变化，请刷新后重试");
+        }
+        return new LockedRabbitExit(rabbit, lockedLinks);
+    }
+
+    private record LockedRabbitExit(Rabbit rabbit, List<BatchRabbit> batchLinks) {}
 }

@@ -56,22 +56,39 @@
 
     <select id="selectProdAckSummary" resultType="com.rabbit.app.modules.event.dto.EventAckSummary">
         select '生产' as category,
-               sum(case when ea.action = 'ack' then 1 else 0 end) as ackCount,
-               sum(case when ea.action = 'ignore' then 1 else 0 end) as ignoreCount,
-               sum(case when ea.action = 'snooze' then 1 else 0 end) as snoozeCount,
-               avg(case when ea.action = 'ack' then timestampdiff(minute, br.next_event_date, ea.ack_time) / 60.0 end) as avgHandleHours
-        from event_acks ea
-        join batch_rabbits br on br.id = ea.record_id
-        join batches b on b.id = br.batch_id
-        where ea.house_id = #{houseId}
-          and ea.category = '生产'
-          and b.house_id = #{houseId}
-        <if test="from != null">
-            and ea.ack_time &gt;= #{from}
-        </if>
-        <if test="to != null">
-            and ea.ack_time &lt;= #{to}
-        </if>
+               coalesce(sum(case when production_ack.action = 'ack' then 1 else 0 end), 0) as ackCount,
+               coalesce(sum(case when production_ack.action = 'ignore' then 1 else 0 end), 0) as ignoreCount,
+               coalesce(sum(case when production_ack.action = 'snooze' then 1 else 0 end), 0) as snoozeCount,
+               avg(case when production_ack.action = 'ack'
+                   then timestampdiff(minute, production_ack.event_date, production_ack.ack_time) / 60.0 end) as avgHandleHours
+        from (
+            select ea.action, ea.ack_time, br.next_event_date as event_date
+            from event_acks ea
+            inner join batch_rabbits br on br.id = ea.record_id
+            inner join batches b on b.id = br.batch_id
+            where ea.house_id = #{houseId}
+              and ea.category = '生产'
+              and b.house_id = #{houseId}
+            <if test="from != null">
+                and ea.ack_time &gt;= #{from}
+            </if>
+            <if test="to != null">
+                and ea.ack_time &lt;= #{to}
+            </if>
+            union all
+            select ea.action, ea.ack_time, bc.next_event_date as event_date
+            from event_acks ea
+            inner join breeding_cycles bc on bc.id = ea.record_id
+                and bc.house_id = ea.house_id
+            where ea.house_id = #{houseId}
+              and ea.category = '生产周期'
+            <if test="from != null">
+                and ea.ack_time &gt;= #{from}
+            </if>
+            <if test="to != null">
+                and ea.ack_time &lt;= #{to}
+            </if>
+        ) production_ack
     </select>
 
     <select id="selectReplacementAckSummary" resultType="com.rabbit.app.modules.event.dto.EventAckSummary">

@@ -8,6 +8,8 @@ import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/batch_sheet_async_state.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/production_context_line.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
@@ -37,6 +39,7 @@ Future<void> showWeaningSheet({
       houseId: houseId,
       batchId: batchId,
       rabbitId: rabbitId,
+      breedingCycleId: event.category == '生产周期' ? event.recordId : null,
       houseLabel: event.houseLabel,
     ),
   );
@@ -47,12 +50,14 @@ class _WeaningSheet extends ConsumerStatefulWidget {
     required this.houseId,
     required this.batchId,
     required this.rabbitId,
+    this.breedingCycleId,
     required this.houseLabel,
   });
 
   final int houseId;
   final int batchId;
   final int rabbitId;
+  final int? breedingCycleId;
   final String houseLabel;
 
   @override
@@ -60,6 +65,7 @@ class _WeaningSheet extends ConsumerStatefulWidget {
 }
 
 class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
+  final _writeRequest = BatchWriteRequestController();
   final _countController = TextEditingController(text: '8');
   final _maleController = TextEditingController();
   final _femaleController = TextEditingController();
@@ -119,13 +125,20 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   }
 
   Future<void> _pickDate() async {
+    final firstDate = DateTime(2020);
+    final lastDate = DateTime.now().add(const Duration(days: 1));
+    final initialDate = _weaningDate.isBefore(firstDate)
+        ? firstDate
+        : _weaningDate.isAfter(lastDate)
+            ? lastDate
+            : _weaningDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _weaningDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() => _weaningDate = picked);
     }
   }
@@ -176,37 +189,65 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
 
     setState(() => _saving = true);
     try {
+      final avgWeight = _parseOptionalDouble(_weightController);
+      final remark = _remarkController.text.trim();
+      final requestId = _writeRequest.requestIdFor(
+        canonicalBatchWriteFingerprint({
+          'action': 'weaning',
+          'houseId': widget.houseId,
+          'batchId': widget.batchId,
+          'rabbitId': widget.rabbitId,
+          'breedingCycleId': widget.breedingCycleId,
+          'weaningDate': formatBatchWriteDate(_weaningDate),
+          'weaningCount': count,
+          'maleCount': male,
+          'femaleCount': female,
+          'targetCageId': targetCageId,
+          'avgWeight': avgWeight,
+          'remark': remark,
+        }),
+      );
       await ref.read(batchRepositoryProvider).submitWeaning(
             houseId: widget.houseId,
             batchId: widget.batchId,
             rabbitId: widget.rabbitId,
+            breedingCycleId: widget.breedingCycleId,
             weaningDate: _weaningDate,
             weaningCount: count,
             maleCount: male,
             femaleCount: female,
             targetCageId: targetCageId,
-            avgWeight: _parseOptionalDouble(_weightController),
-            remark: _remarkController.text,
+            avgWeight: avgWeight,
+            remark: remark,
+            requestId: requestId,
           );
+      if (!mounted) {
+        return;
+      }
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
       ref.invalidate(houseCagesProvider(widget.houseId));
       ref.invalidate(houseBatchesProvider(widget.houseId));
-      if (mounted) {
-        Navigator.of(context).pop();
-        final cageHint = count == 0
-            ? ''
-            : _autoAssignCage
-                ? '，仔兔已自动分配到商品兔笼'
-                : '，仔兔已放入笼位 #$targetCageId';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '母兔 #${widget.rabbitId} 断奶完成（$count 只$cageHint）',
-            ),
+      final detailRequest = BatchDetailRequest(
+        houseId: widget.houseId,
+        batchId: widget.batchId,
+      );
+      ref.invalidate(batchDetailProvider(detailRequest));
+      ref.invalidate(batchMembersProvider(detailRequest));
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      Navigator.of(context).pop();
+      final cageHint = count == 0
+          ? ''
+          : _autoAssignCage
+              ? '，仔兔已自动分配到商品兔笼'
+              : '，仔兔已放入笼位 #$targetCageId';
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            '母兔 #${widget.rabbitId} 断奶完成（$count 只$cageHint）',
           ),
-        );
-      }
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -229,7 +270,9 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   @override
   Widget build(BuildContext context) {
     final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
-    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = mediaQuery.size.height - keyboardInset;
     final dateLabel = DateFormat('yyyy-MM-dd').format(_weaningDate);
 
     return AnimatedPadding(
@@ -240,16 +283,21 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
         top: false,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.92,
+            maxHeight: availableHeight,
           ),
           child: cagesAsync.when(
-            loading: () => const SizedBox(
-              height: 240,
-              child: Center(child: CircularProgressIndicator()),
+            skipLoadingOnRefresh: false,
+            loading: () => BatchSheetLoadingState(
+              sheetTitle: '断奶并放入笼位',
+              message: '正在加载可用笼位',
+              onClose: () => Navigator.pop(context),
             ),
-            error: (error, _) => SizedBox(
-              height: 240,
-              child: Center(child: Text(error.toString())),
+            error: (error, _) => BatchSheetErrorState(
+              sheetTitle: '断奶并放入笼位',
+              error: error,
+              fallbackMessage: '无法加载笼位信息，请检查网络后重试。',
+              onRetry: () => ref.invalidate(houseCagesProvider(widget.houseId)),
+              onClose: () => Navigator.pop(context),
             ),
             data: (cages) {
               final commodityCages = _commodityCages(cages);
@@ -266,38 +314,46 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 12, 8),
-                    child: Row(
+                  Flexible(
+                    child: ListView(
+                      key: const ValueKey('weaning-form-list'),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 18, 0, 8),
+                          child: Row(
                             children: [
-                              Text(
-                                '断奶并放入笼位',
-                                style: Theme.of(context).textTheme.titleLarge,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '断奶并放入笼位',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ProductionContextLine(
+                                      houseLabel: widget.houseLabel,
+                                      rabbitId: widget.rabbitId,
+                                      batchId: widget.batchId,
+                                      cycleRecordId: widget.breedingCycleId,
+                                    ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${widget.houseLabel} · 母兔 #${widget.rabbitId}',
-                                style: Theme.of(context).textTheme.bodyMedium,
+                              IconButton(
+                                onPressed: _saving
+                                    ? null
+                                    : () => Navigator.pop(context),
+                                icon: const Icon(Icons.close),
                               ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          onPressed:
-                              _saving ? null : () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      children: [
                         const _InfoBox(
                           text: '断奶后将自动生成商品兔仔兔并写入兔笼。'
                               '数量填 0 表示全部损失，不生成仔兔。',
@@ -312,12 +368,14 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                         ),
                         const SizedBox(height: 8),
                         TextField(
+                          key: const ValueKey('weaning-count'),
                           controller: _countController,
                           enabled: !_saving,
                           keyboardType: TextInputType.number,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly
                           ],
+                          onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: '断奶数量',
                             hintText: '本次放入笼位的仔兔数量',
@@ -328,6 +386,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           children: [
                             Expanded(
                               child: TextField(
+                                key: const ValueKey('weaning-male-count'),
                                 controller: _maleController,
                                 enabled: !_saving,
                                 keyboardType: TextInputType.number,
@@ -342,6 +401,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextField(
+                                key: const ValueKey('weaning-female-count'),
                                 controller: _femaleController,
                                 enabled: !_saving,
                                 keyboardType: TextInputType.number,
@@ -357,6 +417,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                         ),
                         const SizedBox(height: 12),
                         TextField(
+                          key: const ValueKey('weaning-average-weight'),
                           controller: _weightController,
                           enabled: !_saving,
                           keyboardType: const TextInputType.numberWithOptions(
@@ -368,6 +429,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                         ),
                         const SizedBox(height: 12),
                         TextField(
+                          key: const ValueKey('weaning-remark'),
                           controller: _remarkController,
                           enabled: !_saving,
                           maxLines: 2,
@@ -436,6 +498,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
+                              key: const ValueKey('weaning-submit'),
                               onPressed: _saving ? null : () => _submit(cages),
                               child: _saving
                                   ? const SizedBox.square(

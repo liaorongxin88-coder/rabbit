@@ -4,8 +4,12 @@ import {
   workspacePostJson,
   workspacePutJson,
 } from '@/lib/request'
+import { batchActionPath, bulkMatingPath, rabbitEventPath } from '@/lib/batch-workflow'
 import type {
   BatchRabbit,
+  BreedingCycle,
+  BulkMatingRequest,
+  BulkMatingResult,
   Cage,
   DashboardSummary,
   HouseInvitationRequest,
@@ -16,6 +20,7 @@ import type {
   OutboundTask,
   ProductionBatch,
   Rabbit,
+  RabbitDepartureRequest,
   RabbitHouse,
   WorkspaceSession,
   WorkspaceUserProfile,
@@ -192,6 +197,27 @@ export function listBatchRabbits(houseId: number, batchId: number) {
   })
 }
 
+export function listBreedingCycles(houseId: number, batchId: number) {
+  return workspaceGetJson<BreedingCycle[]>(`/api/batches/${batchId}/breeding-cycles`, {
+    houseId,
+  })
+}
+
+export function submitBulkMating(
+  houseId: number,
+  batchId: number,
+  data: BulkMatingRequest,
+) {
+  return workspacePostJson<BulkMatingResult>(bulkMatingPath(batchId), data, { houseId })
+}
+
+export function submitRabbitDeparture(
+  houseId: number,
+  data: RabbitDepartureRequest,
+) {
+  return workspacePostJson<void>(rabbitEventPath(), data, { houseId })
+}
+
 export type BatchAction =
   | 'aphrodisiac/start'
   | 'aphrodisiac/finish'
@@ -208,10 +234,11 @@ export function submitBatchAction(
   batchId: number,
   action: BatchAction,
   data: Record<string, unknown>,
+  actionRequestId: string,
 ) {
   return workspacePostJson<void>(
-    `/api/batches/${batchId}/${action}`,
-    { ...data, requestId: requestId() },
+    batchActionPath(batchId, action),
+    { ...data, requestId: actionRequestId },
     { houseId },
   )
 }

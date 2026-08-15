@@ -6,7 +6,24 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 REPO_DIR="$(cd "$PROJECT_DIR/.." && pwd -P)"
 source "$SCRIPT_DIR/toolchain_env.sh"
 
-DB_CONTAINER="${RABBIT_ANDROID_E2E_DB_CONTAINER:-rabbit-mysql-1}"
+resolve_db_container() {
+  if [[ -n "${RABBIT_ANDROID_E2E_DB_CONTAINER:-}" ]]; then
+    printf '%s\n' "$RABBIT_ANDROID_E2E_DB_CONTAINER"
+    return
+  fi
+  # Compose project names differ between Docker Desktop and the legacy setup.
+  # Prefer the current underscore form, while retaining the historical name.
+  for candidate in rabbit_mysql_1 rabbit-mysql-1; do
+    if command -v docker >/dev/null 2>&1 &&
+       docker inspect "$candidate" >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  printf '%s\n' 'rabbit_mysql_1'
+}
+
+DB_CONTAINER="$(resolve_db_container)"
 DB_NAME="${RABBIT_ANDROID_E2E_DB_NAME:-rabbit_app}"
 DB_USER="${RABBIT_ANDROID_E2E_DB_USER:-root}"
 DB_PASSWORD="${RABBIT_ANDROID_E2E_DB_PASSWORD:-rabbit_root}"
@@ -34,7 +51,7 @@ if [[ -z "$TEST_PROFILE" ]]; then
   fi
 fi
 if [[ -z "$EXPECTED_EFFECTIVE_TEXT_SCALE" ]]; then
-  EXPECTED_EFFECTIVE_TEXT_SCALE="$(awk -v scale="$TEXT_SCALE" 'BEGIN { print (scale > 1.5 ? 1.5 : scale) }')"
+  EXPECTED_EFFECTIVE_TEXT_SCALE="$(awk -v scale="$TEXT_SCALE" 'BEGIN { print (scale > 2.0 ? 2.0 : scale) }')"
 fi
 usage() {
   cat <<'USAGE'

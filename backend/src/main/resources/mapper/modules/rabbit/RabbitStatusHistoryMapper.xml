@@ -8,6 +8,19 @@
         values (#{houseId}, #{rabbitId}, #{batchId}, #{fromStatus}, #{toStatus}, #{changeTime}, #{reason}, #{relatedRecordId}, #{relatedRecordTable}, #{createBy}, #{updateBy})
     </insert>
 
+    <insert id="insertBatch">
+        insert into rabbit_status_history (
+            house_id, rabbit_id, batch_id, from_status, to_status, change_time,
+            reason, related_record_id, related_record_table, create_by, update_by
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.houseId}, #{item.rabbitId}, #{item.batchId}, #{item.fromStatus},
+             #{item.toStatus}, #{item.changeTime}, #{item.reason},
+             #{item.relatedRecordId}, #{item.relatedRecordTable},
+             #{item.createBy}, #{item.updateBy})
+        </foreach>
+    </insert>
+
     <select id="selectByRabbit" resultType="com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory">
         select h.*
         from rabbit_status_history h

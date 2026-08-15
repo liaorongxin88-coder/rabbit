@@ -16,7 +16,9 @@
         <result column="batch_id_snapshot" property="batchIdSnapshot"/>
     </resultMap>
 
-    <delete id="deleteByTask">delete from outbound_task_items where task_id = #{taskId}</delete>
+    <delete id="deleteByTaskLimited">
+        delete from outbound_task_items where task_id = #{taskId} limit #{limit}
+    </delete>
 
     <insert id="insertBatch">
         insert into outbound_task_items (task_id, rabbit_id, state_version, selection_type, early_sale_reason,

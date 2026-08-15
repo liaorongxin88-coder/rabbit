@@ -224,6 +224,9 @@ export interface BatchRabbit {
   batchId: number
   rabbitId: number
   maleRabbitId?: number | null
+  latestCycleId?: number | null
+  currentNursingKits?: number | null
+  nursingLitterCount?: number | null
   batchRole?: string | null
   currentStatus?: string | null
   nextEventDate?: string | null
@@ -232,6 +235,50 @@ export interface BatchRabbit {
   rabbitType?: string | null
   rabbitGender?: string | null
   cageId?: number | null
+}
+
+export interface BulkMatingRequest {
+  femaleRabbitIds: number[]
+  maleRabbitId: number
+  matingDate: number
+  requestId: string
+}
+
+export interface BulkMatingResult {
+  requestId: string
+  count: number
+}
+
+export interface BreedingCycle {
+  id: number
+  houseId: number
+  batchId: number
+  motherRabbitId: number
+  maleRabbitId?: number | null
+  cycleNo: number
+  status: string
+  matingDate?: string | null
+  pregnancyCheckDate?: string | null
+  pregnancyResult?: string | null
+  birthDate?: string | null
+  currentNursingKits?: number | null
+  weanedKits?: number | null
+  nextEventDate?: string | null
+  nextEventType?: string | null
+  closedAt?: string | null
+  closeReason?: string | null
+}
+
+export type RabbitDepartureType = 'cull' | 'death'
+
+export interface RabbitDepartureRequest {
+  rabbitId: number
+  eventType: RabbitDepartureType
+  actionDate: number
+  reason: string
+  remark?: string
+  forceExitBatch: true
+  requestId: string
 }
 
 export type OutboundEligibility = 'NORMAL' | 'EARLY_SALE' | 'NEEDS_ACTION' | 'BLOCKED'

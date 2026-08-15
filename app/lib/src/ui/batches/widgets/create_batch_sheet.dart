@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/batch_sheet_async_state.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
@@ -41,10 +42,13 @@ class _CreateBatchSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
+  final _writeRequest = BatchWriteRequestController();
   final _codeController = TextEditingController();
   final _remarkController = TextEditingController();
+  final _searchController = TextEditingController();
   final _selectedFemaleIds = <int>{};
   var _saving = false;
+  var _keyword = '';
 
   @override
   void initState() {
@@ -56,12 +60,38 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   void dispose() {
     _codeController.dispose();
     _remarkController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   List<Rabbit> _femaleBreeders(List<Rabbit> rabbits) {
     return rabbits.where((r) => r.type == '0' && r.gender == '0').toList()
       ..sort((a, b) => a.id.compareTo(b.id));
+  }
+
+  List<Rabbit> _filteredFemales(List<Rabbit> females) {
+    final keyword = _keyword.trim().toLowerCase();
+    if (keyword.isEmpty) {
+      return females;
+    }
+    return females.where((rabbit) {
+      return rabbit.id.toString().contains(keyword) ||
+          rabbit.cageId.toString().contains(keyword) ||
+          rabbit.breed.toLowerCase().contains(keyword);
+    }).toList();
+  }
+
+  void _toggleFilteredSelection(List<Rabbit> filtered) {
+    final ids = filtered.map((rabbit) => rabbit.id);
+    final allSelected = filtered.isNotEmpty &&
+        filtered.every((rabbit) => _selectedFemaleIds.contains(rabbit.id));
+    setState(() {
+      if (allSelected) {
+        _selectedFemaleIds.removeAll(ids);
+      } else {
+        _selectedFemaleIds.addAll(ids);
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -75,23 +105,63 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       return;
     }
 
+    if (_selectedFemaleIds.length >= 100) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认创建大批次'),
+          content: Text(
+            '将 ${_selectedFemaleIds.length} 只种母兔加入批次 $code。'
+            '创建后会为每只母兔生成独立生产任务。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('返回核对'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('确认创建'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) {
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     try {
+      final remark = _remarkController.text.trim();
+      final requestId = _writeRequest.requestIdFor(
+        canonicalBatchWriteFingerprint({
+          'action': 'createBatch',
+          'houseId': widget.houseId,
+          'batchCode': code,
+          'femaleRabbitIds': _selectedFemaleIds,
+          'remark': remark,
+        }),
+      );
       await ref.read(batchRepositoryProvider).createBatch(
             houseId: widget.houseId,
             batchCode: code,
             femaleRabbitIds: _selectedFemaleIds.toList(),
-            remark: _remarkController.text,
+            remark: remark,
+            requestId: requestId,
           );
+      if (!mounted) {
+        return;
+      }
       ref.invalidate(houseBatchesProvider(widget.houseId));
       ref.invalidate(homeEventsProvider);
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）')),
-        );
-      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      Navigator.of(context).pop();
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text('批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）'),
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -115,7 +185,9 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   Widget build(BuildContext context) {
     final rabbitsAsync =
         ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
-    final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = mediaQuery.size.height - keyboardInset;
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -125,106 +197,205 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
         top: false,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.92,
+            maxHeight: availableHeight,
           ),
           child: rabbitsAsync.when(
-            loading: () => const SizedBox(
-              height: 240,
-              child: Center(child: CircularProgressIndicator()),
+            skipLoadingOnRefresh: false,
+            loading: () => BatchSheetLoadingState(
+              sheetTitle: '创建生产批次',
+              message: '正在加载种母兔信息',
+              onClose: () => Navigator.pop(context),
             ),
-            error: (error, _) => SizedBox(
-              height: 240,
-              child: Center(child: Text(error.toString())),
+            error: (error, _) => BatchSheetErrorState(
+              sheetTitle: '创建生产批次',
+              error: error,
+              fallbackMessage: '无法加载种母兔信息，请检查网络后重试。',
+              onRetry: () => ref.invalidate(
+                allActiveHouseRabbitsProvider(widget.houseId),
+              ),
+              onClose: () => Navigator.pop(context),
             ),
             data: (rabbits) {
               final females = _femaleBreeders(rabbits);
+              final filteredFemales = _filteredFemales(females);
+              final allFilteredSelected = filteredFemales.isNotEmpty &&
+                  filteredFemales.every(
+                    (rabbit) => _selectedFemaleIds.contains(rabbit.id),
+                  );
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 12, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '创建生产批次',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                widget.houseName,
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed:
-                              _saving ? null : () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
                   Flexible(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      children: [
-                        const _InfoBox(
-                          text: '批次用于驱动配种、摸胎、分娩、断奶等生产提醒。'
-                              '请先在笼位录入种母兔，再创建批次。',
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _codeController,
-                          enabled: !_saving,
-                          decoration: const InputDecoration(
-                            labelText: '批次编号',
+                    child: CustomScrollView(
+                      key: const ValueKey('batch-mother-list'),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate.fixed([
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 18, 0, 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '创建生产批次',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleLarge,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            widget.houseName,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: _saving
+                                          ? null
+                                          : () => Navigator.pop(context),
+                                      icon: const Icon(Icons.close),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const _InfoBox(
+                                text: '批次用于驱动配种、摸胎、分娩、断奶等生产提醒。'
+                                    '请先在笼位录入种母兔，再创建批次。',
+                              ),
+                              const SizedBox(height: 14),
+                              TextField(
+                                key: const ValueKey('batch-code-field'),
+                                controller: _codeController,
+                                enabled: !_saving,
+                                decoration: const InputDecoration(
+                                  labelText: '批次编号',
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                key: const ValueKey('batch-remark-field'),
+                                controller: _remarkController,
+                                enabled: !_saving,
+                                maxLines: 2,
+                                decoration: const InputDecoration(
+                                  labelText: '备注（可选）',
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                '选择种母兔（已选 ${_selectedFemaleIds.length} 只）',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                key: const ValueKey('batch-mother-search'),
+                                controller: _searchController,
+                                enabled: !_saving && females.isNotEmpty,
+                                onChanged: (value) {
+                                  setState(() => _keyword = value);
+                                },
+                                decoration: InputDecoration(
+                                  hintText: '搜索兔号、笼位或品种',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: _keyword.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          key: const ValueKey(
+                                            'batch-clear-search',
+                                          ),
+                                          tooltip: '清空搜索',
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() => _keyword = '');
+                                          },
+                                          icon: const Icon(Icons.close),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _BatchSelectionBar(
+                                total: females.length,
+                                filtered: filteredFemales.length,
+                                selected: _selectedFemaleIds.length,
+                                allFilteredSelected: allFilteredSelected,
+                                enabled: !_saving && filteredFemales.isNotEmpty,
+                                onToggleFiltered: () =>
+                                    _toggleFilteredSelection(filteredFemales),
+                                onClear: _selectedFemaleIds.isEmpty || _saving
+                                    ? null
+                                    : () => setState(_selectedFemaleIds.clear),
+                              ),
+                              const SizedBox(height: 6),
+                            ]),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _remarkController,
-                          enabled: !_saving,
-                          maxLines: 2,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          '选择种母兔（已选 ${_selectedFemaleIds.length} 只）',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
                         if (females.isEmpty)
-                          const Text('暂无种母兔，请先在笼位录入种母兔。')
+                          const SliverPadding(
+                            padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
+                            sliver: SliverToBoxAdapter(
+                              child: Text('暂无种母兔，请先在笼位录入种母兔。'),
+                            ),
+                          )
+                        else if (filteredFemales.isEmpty)
+                          const SliverPadding(
+                            padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
+                            sliver: SliverToBoxAdapter(
+                              child: Text('没有符合条件的种母兔，请更换搜索词。'),
+                            ),
+                          )
                         else
-                          ...females.map((rabbit) {
-                            final selected =
-                                _selectedFemaleIds.contains(rabbit.id);
-                            return CheckboxListTile(
-                              value: selected,
-                              onChanged: _saving
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          _selectedFemaleIds.add(rabbit.id);
-                                        } else {
-                                          _selectedFemaleIds.remove(rabbit.id);
-                                        }
-                                      });
-                                    },
-                              title: Text(
-                                  '兔 #${rabbit.id} · ${rabbit.breed.isEmpty ? '未填品种' : rabbit.breed}'),
-                              subtitle: Text('笼位 #${rabbit.cageId}'),
-                              contentPadding: EdgeInsets.zero,
-                            );
-                          }),
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final rabbit = filteredFemales[index];
+                                  final selected =
+                                      _selectedFemaleIds.contains(rabbit.id);
+                                  return CheckboxListTile(
+                                    key: ValueKey(
+                                      'batch-mother-option-${rabbit.id}',
+                                    ),
+                                    value: selected,
+                                    onChanged: _saving
+                                        ? null
+                                        : (value) {
+                                            setState(() {
+                                              if (value == true) {
+                                                _selectedFemaleIds
+                                                    .add(rabbit.id);
+                                              } else {
+                                                _selectedFemaleIds
+                                                    .remove(rabbit.id);
+                                              }
+                                            });
+                                          },
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    title: Text(
+                                      '兔 #${rabbit.id} · ${rabbit.breed.isEmpty ? '未填品种' : rabbit.breed}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text('笼位 #${rabbit.cageId}'),
+                                    contentPadding: EdgeInsets.zero,
+                                  );
+                                },
+                                childCount: filteredFemales.length,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -236,30 +407,48 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed:
-                                  _saving ? null : () => Navigator.pop(context),
-                              child: const Text('取消'),
-                            ),
+                          Text(
+                            _selectedFemaleIds.isEmpty
+                                ? '尚未选择种母兔'
+                                : '将 ${_selectedFemaleIds.length} 只种母兔加入该批次',
+                            key: const ValueKey('batch-selection-summary'),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed:
-                                  _saving || females.isEmpty ? null : _submit,
-                              child: _saving
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('创建批次'),
-                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _saving
+                                      ? null
+                                      : () => Navigator.pop(context),
+                                  child: const Text('取消'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  key: const ValueKey('create-batch-submit'),
+                                  onPressed: _saving || females.isEmpty
+                                      ? null
+                                      : _submit,
+                                  child: _saving
+                                      ? const SizedBox.square(
+                                          dimension: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text('创建批次'),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -270,6 +459,68 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BatchSelectionBar extends StatelessWidget {
+  const _BatchSelectionBar({
+    required this.total,
+    required this.filtered,
+    required this.selected,
+    required this.allFilteredSelected,
+    required this.enabled,
+    required this.onToggleFiltered,
+    required this.onClear,
+  });
+
+  final int total;
+  final int filtered;
+  final int selected;
+  final bool allFilteredSelected;
+  final bool enabled;
+  final VoidCallback onToggleFiltered;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: palette.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.line),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              filtered == total ? '共 $total 只' : '结果 $filtered / $total 只',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          TextButton.icon(
+            key: const ValueKey('batch-select-filtered'),
+            onPressed: enabled ? onToggleFiltered : null,
+            icon: Icon(
+              allFilteredSelected
+                  ? Icons.remove_done_rounded
+                  : Icons.done_all_rounded,
+              size: 19,
+            ),
+            label: Text(allFilteredSelected ? '取消结果' : '全选结果'),
+          ),
+          IconButton(
+            key: const ValueKey('batch-clear-selection'),
+            tooltip: selected == 0 ? '没有已选母兔' : '清空已选 $selected 只',
+            onPressed: onClear,
+            icon: const Icon(Icons.clear_all_rounded),
+          ),
+        ],
       ),
     );
   }

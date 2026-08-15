@@ -7,6 +7,9 @@ public class BatchRabbitItem {
     private Long batchId;
     private Long rabbitId;
     private Long maleRabbitId;
+    private Long latestCycleId;
+    private Integer currentNursingKits;
+    private Integer nursingLitterCount;
     private String joinReason;
     private String batchRole;
     private String currentStatus;
@@ -51,6 +54,30 @@ public class BatchRabbitItem {
 
     public void setMaleRabbitId(Long maleRabbitId) {
         this.maleRabbitId = maleRabbitId;
+    }
+
+    public Long getLatestCycleId() {
+        return latestCycleId;
+    }
+
+    public void setLatestCycleId(Long latestCycleId) {
+        this.latestCycleId = latestCycleId;
+    }
+
+    public Integer getCurrentNursingKits() {
+        return currentNursingKits;
+    }
+
+    public void setCurrentNursingKits(Integer currentNursingKits) {
+        this.currentNursingKits = currentNursingKits;
+    }
+
+    public Integer getNursingLitterCount() {
+        return nursingLitterCount;
+    }
+
+    public void setNursingLitterCount(Integer nursingLitterCount) {
+        this.nursingLitterCount = nursingLitterCount;
     }
 
     public String getJoinReason() {

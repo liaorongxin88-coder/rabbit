@@ -48,4 +48,97 @@ public class DashboardReportIT extends E2eTestSupport {
                 "无兔场权限"
         );
     }
+
+    @Test
+    void dashboardCountsDistinctMothersWithOpenOverlappingCycles() {
+        UserSession owner = register("dashboard_cycles");
+        long houseId = createHouse(owner, "dashboard_cycles_house", 1, 4, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        api.putOk("/api/settings", owner.token, null, obj(
+                "aphrodisiacDays", 0,
+                "palpationDays", 0,
+                "prepartumDays", 0,
+                "weaningDays", 30,
+                "postpartumDays", 0,
+                "saleDays", 30,
+                "replacementDays", 45,
+                "requestId", requestId("dashboard_cycle_settings")
+        ));
+        long activeMother = createRabbit(owner, houseId, cages.get(0), "0", "0", "active_cycle_mother");
+        long idleMother = createRabbit(owner, houseId, cages.get(1), "0", "0", "idle_cycle_mother");
+        long father = createRabbit(owner, houseId, cages.get(2), "0", "1", "cycle_father");
+        JsonNode batch = api.postOk("/api/batches", owner.token, houseId, obj(
+                "batchCode", "DASH-" + requestId("dashboard_cycle_batch").substring(0, 8),
+                "femaleRabbitIds", List.of(activeMother, idleMother),
+                "requestId", requestId("dashboard_cycle_create")
+        ));
+        long batchId = batch.get("id").asLong();
+
+        aphrodisiac(owner, houseId, batchId, activeMother, "dashboard_cycle_first");
+        mate(owner, houseId, batchId, activeMother, father, "dashboard_cycle_first_mating");
+        api.postOk("/api/batches/" + batchId + "/pregnancy-check", owner.token, houseId, obj(
+                "rabbitId", activeMother,
+                "checkDate", oneMinuteAgo(),
+                "result", "怀孕",
+                "requestId", requestId("dash_c1_preg")
+        ));
+        api.postOk("/api/batches/" + batchId + "/prepartum/finish", owner.token, houseId, obj(
+                "rabbitId", activeMother,
+                "actionDate", oneMinuteAgo(),
+                "requestId", requestId("dash_c1_prep")
+        ));
+        api.postOk("/api/batches/" + batchId + "/parturition", owner.token, houseId, obj(
+                "rabbitId", activeMother,
+                "birthDate", oneMinuteAgo(),
+                "totalKits", 6,
+                "liveKits", 6,
+                "failed", false,
+                "requestId", requestId("dash_c1_birth")
+        ));
+
+        aphrodisiac(owner, houseId, batchId, activeMother, "dashboard_cycle_second");
+        mate(owner, houseId, batchId, activeMother, father, "dashboard_cycle_second_mating");
+        api.postOk("/api/batches/" + batchId + "/pregnancy-check", owner.token, houseId, obj(
+                "rabbitId", activeMother,
+                "checkDate", oneMinuteAgo(),
+                "result", "怀孕",
+                "requestId", requestId("dash_c2_preg")
+        ));
+
+        JsonNode activeCycles = api.getOk(
+                "/api/batches/" + batchId + "/breeding-cycles?motherRabbitId=" + activeMother + "&activeOnly=true",
+                owner.token,
+                houseId
+        );
+        Assertions.assertEquals(2, activeCycles.size());
+
+        JsonNode summary = api.getOk(
+                "/api/reports/dashboard?houseId=" + houseId + "&year=" + LocalDate.now().getYear(),
+                owner.token,
+                null
+        );
+        Assertions.assertEquals(3, summary.get("seedRabbits").asInt());
+        Assertions.assertEquals(1, summary.get("bredRabbits").asInt());
+        Assertions.assertEquals(1, summary.get("readyForBreeding").asInt());
+    }
+
+    private void aphrodisiac(UserSession owner, long houseId, long batchId, long motherId, String prefix) {
+        api.postOk("/api/batches/" + batchId + "/aphrodisiac/start", owner.token, houseId, obj(
+                "rabbitIds", List.of(motherId),
+                "requestId", requestId(prefix + "_start")
+        ));
+        api.postOk("/api/batches/" + batchId + "/aphrodisiac/finish", owner.token, houseId, obj(
+                "rabbitIds", List.of(motherId),
+                "requestId", requestId(prefix + "_finish")
+        ));
+    }
+
+    private void mate(UserSession owner, long houseId, long batchId, long motherId, long fatherId, String prefix) {
+        api.postOk("/api/batches/" + batchId + "/mating", owner.token, houseId, obj(
+                "femaleRabbitId", motherId,
+                "maleRabbitId", fatherId,
+                "matingDate", oneMinuteAgo(),
+                "requestId", requestId(prefix)
+        ));
+    }
 }

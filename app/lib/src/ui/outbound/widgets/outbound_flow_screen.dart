@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/outbound.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/outbound/view_models/outbound_controller.dart';
 
 class OutboundFlowScreen extends ConsumerWidget {
@@ -16,8 +17,59 @@ class OutboundFlowScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final permission = ref.watch(housePermissionProvider(entry.houseId));
+    return permission.when(
+      skipLoadingOnRefresh: false,
+      skipLoadingOnReload: false,
+      data: (value) => value.canEdit
+          ? _AuthorizedOutboundFlow(entry: entry)
+          : _OutboundAccessScaffold(
+              entry: entry,
+              child: EmptyState(
+                key: const ValueKey('outbound-read-only-state'),
+                icon: Icons.lock_outline,
+                title: '当前账号仅可查看',
+                message: '批量出库会修改兔只和销售数据，请联系兔舍管理员授予编辑权限。',
+                actionLabel: '返回兔舍',
+                onAction: () => _leaveOutbound(context, entry),
+              ),
+            ),
+      loading: () => _OutboundAccessScaffold(
+        entry: entry,
+        child: const Center(
+          key: ValueKey('outbound-permission-loading'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 14),
+              Text('正在校验出库权限...'),
+            ],
+          ),
+        ),
+      ),
+      error: (error, _) => _OutboundAccessScaffold(
+        entry: entry,
+        child: ErrorState(
+          key: const ValueKey('outbound-permission-error'),
+          message: '无法确认出库权限：$error',
+          onRetry: () => ref.invalidate(housePermissionProvider(entry.houseId)),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthorizedOutboundFlow extends ConsumerWidget {
+  const _AuthorizedOutboundFlow({required this.entry});
+
+  final OutboundEntry entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(outboundControllerProvider(entry));
     final controller = ref.read(outboundControllerProvider(entry).notifier);
+    final bottomBar = _bottomBar(context, state, controller);
     final result = state.result;
     final isResult =
         state.submitStatus == OutboundSubmitStatus.success && result != null;
@@ -65,7 +117,17 @@ class OutboundFlowScreen extends ConsumerWidget {
           top: false,
           child: _body(context, ref, state, controller),
         ),
-        bottomNavigationBar: _bottomBar(context, state, controller),
+        bottomNavigationBar: bottomBar == null
+            ? null
+            : AnimatedPadding(
+                key: const ValueKey('outbound-keyboard-aware-bottom-bar'),
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: bottomBar,
+              ),
       ),
     );
   }
@@ -108,11 +170,7 @@ class OutboundFlowScreen extends ConsumerWidget {
       if (choice == 'discard') await controller.cancel();
     }
     if (!context.mounted) return;
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/houses/${entry.houseId}');
-    }
+    _leaveOutbound(context, entry);
   }
 
   Widget _body(BuildContext context, WidgetRef ref, OutboundState state,
@@ -190,6 +248,37 @@ class OutboundFlowScreen extends ConsumerWidget {
   }
 }
 
+class _OutboundAccessScaffold extends StatelessWidget {
+  const _OutboundAccessScaffold({required this.entry, required this.child});
+
+  final OutboundEntry entry;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          key: const ValueKey('outbound-access-back'),
+          tooltip: '返回兔舍',
+          onPressed: () => _leaveOutbound(context, entry),
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: const Text('批量出库'),
+      ),
+      body: SafeArea(top: false, child: child),
+    );
+  }
+}
+
+void _leaveOutbound(BuildContext context, OutboundEntry entry) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/houses/${entry.houseId}');
+  }
+}
+
 class _ResumeDraftView extends StatelessWidget {
   const _ResumeDraftView(
       {required this.task, required this.onContinue, required this.onDiscard});
@@ -248,107 +337,162 @@ class _SelectionView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(outboundControllerProvider(entry).notifier);
     final groups = _groupRabbits(state.visibleRabbits);
+    final listEntries = <_SelectionListEntry>[];
+    for (final row in groups.entries) {
+      listEntries.add(_SelectionRowEntry(row.key, row.value));
+      listEntries.addAll(row.value.map(_SelectionCageEntry.new));
+    }
     final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
     return RefreshIndicator(
       onRefresh: controller.refresh,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(16, 12, 16, largeText ? 148 : 104),
-        children: [
-          if (state.bannerMessage != null ||
-              state.syncStatus == OutboundSyncStatus.offline ||
-              state.syncStatus == OutboundSyncStatus.failed)
-            _StatusBanner(
-              message: state.bannerMessage ??
-                  (state.syncStatus == OutboundSyncStatus.offline
-                      ? '当前离线，可继续查看和编辑本地草稿，联网后需重新预检'
-                      : '草稿保存失败，请检查网络后重试'),
-              warning: true,
+      child: CustomScrollView(
+        key: const ValueKey('outbound-selection-scroll'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (state.bannerMessage != null ||
+                    state.syncStatus == OutboundSyncStatus.offline ||
+                    state.syncStatus == OutboundSyncStatus.failed)
+                  _StatusBanner(
+                    message: state.bannerMessage ??
+                        (state.syncStatus == OutboundSyncStatus.offline
+                            ? '当前离线，可继续查看和编辑本地草稿，联网后需重新预检'
+                            : '草稿保存失败，请检查网络后重试'),
+                    warning: true,
+                  ),
+                _EligibilitySummary(
+                    state: state, onFilter: controller.setFilter),
+                const SizedBox(height: 12),
+                SegmentedButton<OutboundSelectionMode>(
+                  segments: const [
+                    ButtonSegment(
+                        value: OutboundSelectionMode.cage,
+                        icon: Icon(Icons.grid_view_outlined),
+                        label: Text('按笼')),
+                    ButtonSegment(
+                        value: OutboundSelectionMode.row,
+                        icon: Icon(Icons.view_stream_outlined),
+                        label: Text('按排')),
+                    ButtonSegment(
+                        value: OutboundSelectionMode.house,
+                        icon: Icon(Icons.home_work_outlined),
+                        label: Text('整舍')),
+                  ],
+                  selected: {state.mode},
+                  onSelectionChanged: (value) =>
+                      controller.setMode(value.first),
+                ),
+                if (state.mode == OutboundSelectionMode.house) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: state.task!.summary.normal == 0
+                        ? null
+                        : controller.toggleHouse,
+                    icon: const Icon(Icons.select_all),
+                    label: Text('选择整舍可出库兔 ${state.task!.summary.normal} 只'),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                        label: const Text('全部'),
+                        selected: state.filter == null,
+                        onSelected: (_) => controller.setFilter(null)),
+                    ChoiceChip(
+                        label: Text('可出库 ${state.task!.summary.normal}'),
+                        selected: state.filter == OutboundEligibility.normal,
+                        onSelected: (_) =>
+                            controller.setFilter(OutboundEligibility.normal)),
+                    ChoiceChip(
+                        label: Text('提前出售 ${state.task!.summary.earlySale}'),
+                        selected: state.filter == OutboundEligibility.earlySale,
+                        onSelected: (_) => controller
+                            .setFilter(OutboundEligibility.earlySale)),
+                    ChoiceChip(
+                        label: Text(
+                            '需处理 ${state.task!.summary.needsAction + state.task!.summary.blocked}'),
+                        selected:
+                            state.filter == OutboundEligibility.needsAction ||
+                                state.filter == OutboundEligibility.blocked,
+                        onSelected: (_) => controller
+                            .setFilter(OutboundEligibility.needsAction)),
+                  ],
+                ),
+              ]),
             ),
-          _EligibilitySummary(state: state, onFilter: controller.setFilter),
-          const SizedBox(height: 12),
-          SegmentedButton<OutboundSelectionMode>(
-            segments: const [
-              ButtonSegment(
-                  value: OutboundSelectionMode.cage,
-                  icon: Icon(Icons.grid_view_outlined),
-                  label: Text('按笼')),
-              ButtonSegment(
-                  value: OutboundSelectionMode.row,
-                  icon: Icon(Icons.view_stream_outlined),
-                  label: Text('按排')),
-              ButtonSegment(
-                  value: OutboundSelectionMode.house,
-                  icon: Icon(Icons.home_work_outlined),
-                  label: Text('整舍')),
-            ],
-            selected: {state.mode},
-            onSelectionChanged: (value) => controller.setMode(value.first),
           ),
-          if (state.mode == OutboundSelectionMode.house) ...[
-            const SizedBox(height: 12),
-            FilledButton.tonalIcon(
-              onPressed: state.task!.summary.normal == 0
-                  ? null
-                  : controller.toggleHouse,
-              icon: const Icon(Icons.select_all),
-              label: Text('选择整舍可出库兔 ${state.task!.summary.normal} 只'),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                  label: const Text('全部'),
-                  selected: state.filter == null,
-                  onSelected: (_) => controller.setFilter(null)),
-              ChoiceChip(
-                  label: Text('可出库 ${state.task!.summary.normal}'),
-                  selected: state.filter == OutboundEligibility.normal,
-                  onSelected: (_) =>
-                      controller.setFilter(OutboundEligibility.normal)),
-              ChoiceChip(
-                  label: Text('提前出售 ${state.task!.summary.earlySale}'),
-                  selected: state.filter == OutboundEligibility.earlySale,
-                  onSelected: (_) =>
-                      controller.setFilter(OutboundEligibility.earlySale)),
-              ChoiceChip(
-                  label: Text(
-                      '需处理 ${state.task!.summary.needsAction + state.task!.summary.blocked}'),
-                  selected: state.filter == OutboundEligibility.needsAction ||
-                      state.filter == OutboundEligibility.blocked,
-                  onSelected: (_) =>
-                      controller.setFilter(OutboundEligibility.needsAction)),
-            ],
-          ),
-          if (groups.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: Text('当前筛选没有兔只')),
+          if (listEntries.isEmpty)
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Center(child: Text('当前筛选没有兔只')),
+                ),
+              ),
             )
           else
-            for (final rowEntry in groups.entries) ...[
-              const SizedBox(height: 12),
-              _RowHeader(
-                  entry: entry,
-                  rowCode: rowEntry.key,
-                  rabbits: rowEntry.value.expand((item) => item.value).toList(),
-                  selected: state.selectedRabbitIds),
-              const SizedBox(height: 8),
-              for (final cageEntry in rowEntry.value) ...[
-                _CageCard(
-                    entry: entry,
-                    cageId: cageEntry.key,
-                    rabbits: cageEntry.value,
-                    selected: state.selectedRabbitIds),
-                const SizedBox(height: 8),
-              ],
-            ],
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = listEntries[index];
+                    if (item is _SelectionRowEntry) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 8),
+                        child: _RowHeader(
+                          entry: entry,
+                          rowCode: item.rowCode,
+                          rabbits:
+                              item.cages.expand((cage) => cage.value).toList(),
+                          selected: state.selectedRabbitIds,
+                        ),
+                      );
+                    }
+                    final cage = (item as _SelectionCageEntry).cage;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _CageCard(
+                        entry: entry,
+                        cageId: cage.key,
+                        rabbits: cage.value,
+                        selected: state.selectedRabbitIds,
+                      ),
+                    );
+                  },
+                  childCount: listEntries.length,
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(child: SizedBox(height: largeText ? 148 : 104)),
         ],
       ),
     );
   }
+}
+
+sealed class _SelectionListEntry {
+  const _SelectionListEntry();
+}
+
+class _SelectionRowEntry extends _SelectionListEntry {
+  const _SelectionRowEntry(this.rowCode, this.cages);
+
+  final String rowCode;
+  final List<MapEntry<int, List<OutboundRabbit>>> cages;
+}
+
+class _SelectionCageEntry extends _SelectionListEntry {
+  const _SelectionCageEntry(this.cage);
+
+  final MapEntry<int, List<OutboundRabbit>> cage;
 }
 
 class _EligibilitySummary extends StatelessWidget {
@@ -640,6 +784,7 @@ class _ConfirmViewState extends ConsumerState<_ConfirmView> {
         .where((rabbit) => state.selectedRabbitIds.contains(rabbit.rabbitId))
         .toList();
     final groups = _groupRabbits(selected);
+    final rows = groups.entries.toList();
     final revealProblem = state.submitStatus != _lastSubmitStatus &&
         (state.submitStatus == OutboundSubmitStatus.conflict ||
             state.submitStatus == OutboundSubmitStatus.failed ||
@@ -655,131 +800,236 @@ class _ConfirmViewState extends ConsumerState<_ConfirmView> {
         );
       });
     }
-    return ListView(
+    return CustomScrollView(
+      key: const ValueKey('outbound-confirm-scroll'),
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-      children: [
-        if (state.submitStatus == OutboundSubmitStatus.requesting ||
-            state.submitStatus == OutboundSubmitStatus.validating)
-          const _StatusBanner(message: '正在确认提交结果，请勿重复操作'),
-        if (state.submitStatus == OutboundSubmitStatus.unknown)
-          _ProblemCard(
-              icon: Icons.cloud_off_outlined,
-              title: '提交结果尚未确认',
-              message: state.errorMessage ?? '请保持当前 requestId 并查询结果，不要创建新的提交。',
-              actionLabel: '查询提交结果',
-              onAction: controller.pollStatus),
-        if (state.submitStatus == OutboundSubmitStatus.conflict)
-          _ConflictPanel(conflicts: state.conflicts),
-        if (state.submitStatus == OutboundSubmitStatus.failed &&
-            state.errorMessage != null)
-          _ProblemCard(
-              icon: Icons.error_outline,
-              title: '无法提交',
-              message: state.errorMessage!,
-              actionLabel: '继续修改',
-              onAction: () {}),
-        _ConfirmSummary(state: state),
-        const SizedBox(height: 12),
-        Text('销售信息', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: [
-              ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.calendar_today_outlined),
-                  title: const Text('出库日期'),
-                  subtitle: Text(DateFormat('yyyy-MM-dd')
-                      .format(state.saleTime ?? DateTime.now())),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: editable
-                      ? () async {
-                          final date = await showDatePicker(
-                              context: context,
-                              initialDate: state.saleTime ?? DateTime.now(),
-                              firstDate: DateTime.now()
-                                  .subtract(const Duration(days: 30)),
-                              lastDate: DateTime.now());
-                          if (date != null) {
-                            controller.updateForm(saleTime: date);
-                          }
-                        }
-                      : null),
-              TextFormField(
-                  key: const ValueKey('outbound-total-weight'),
-                  initialValue: state.totalWeight,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  enabled: editable,
-                  decoration: const InputDecoration(
-                      labelText: '总重量（kg）*',
-                      prefixIcon: Icon(Icons.scale_outlined)),
-                  onChanged: (value) =>
-                      controller.updateForm(totalWeight: value)),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (state.submitStatus == OutboundSubmitStatus.requesting ||
+                  state.submitStatus == OutboundSubmitStatus.validating)
+                const _StatusBanner(message: '正在确认提交结果，请勿重复操作'),
+              if (state.submitStatus == OutboundSubmitStatus.unknown)
+                _ProblemCard(
+                    icon: Icons.cloud_off_outlined,
+                    title: '提交结果尚未确认',
+                    message:
+                        state.errorMessage ?? '请保持当前 requestId 并查询结果，不要创建新的提交。',
+                    actionLabel: '查询提交结果',
+                    onAction: controller.pollStatus),
+              if (state.submitStatus == OutboundSubmitStatus.conflict)
+                _ConflictPanel(conflicts: state.conflicts),
+              if (state.submitStatus == OutboundSubmitStatus.failed &&
+                  state.errorMessage != null)
+                _ProblemCard(
+                    icon: Icons.error_outline,
+                    title: '无法提交',
+                    message: state.errorMessage!,
+                    actionLabel: '继续修改',
+                    onAction: controller.backToSelection),
+              _ConfirmSummary(state: state),
               const SizedBox(height: 12),
-              TextFormField(
-                  key: const ValueKey('outbound-unit-price'),
-                  initialValue: state.unitPrice,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  enabled: editable,
-                  decoration: const InputDecoration(
-                      labelText: '单价（元/kg）',
-                      prefixIcon: Icon(Icons.payments_outlined)),
-                  onChanged: (value) =>
-                      controller.updateForm(unitPrice: value)),
-              if (state.estimatedAmount != null)
-                Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                            '预计总金额 ¥${state.estimatedAmount!.toStringAsFixed(2)}'))),
-              const SizedBox(height: 12),
-              TextFormField(
-                  key: const ValueKey('outbound-customer'),
-                  initialValue: state.customer,
-                  enabled: editable,
-                  maxLength: 100,
-                  decoration: const InputDecoration(
-                      labelText: '客户（可选）',
-                      prefixIcon: Icon(Icons.person_outline)),
-                  onChanged: (value) => controller.updateForm(customer: value)),
-              TextFormField(
-                  key: const ValueKey('outbound-remark'),
-                  initialValue: state.remark,
-                  enabled: editable,
-                  maxLength: 2000,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: '备注（可选）',
-                      prefixIcon: Icon(Icons.notes_outlined)),
-                  onChanged: (value) => controller.updateForm(remark: value)),
+              Text('销售信息', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(children: [
+                    ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.calendar_today_outlined),
+                        title: const Text('出库日期'),
+                        subtitle: Text(DateFormat('yyyy-MM-dd')
+                            .format(state.saleTime ?? DateTime.now())),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: editable
+                            ? () async {
+                                final date = await showDatePicker(
+                                    context: context,
+                                    initialDate:
+                                        state.saleTime ?? DateTime.now(),
+                                    firstDate: DateTime.now()
+                                        .subtract(const Duration(days: 30)),
+                                    lastDate: DateTime.now());
+                                if (date != null) {
+                                  controller.updateForm(saleTime: date);
+                                }
+                              }
+                            : null),
+                    TextFormField(
+                        key: const ValueKey('outbound-total-weight'),
+                        initialValue: state.totalWeight,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        enabled: editable,
+                        decoration: const InputDecoration(
+                            labelText: '总重量（kg）*',
+                            prefixIcon: Icon(Icons.scale_outlined)),
+                        onChanged: (value) =>
+                            controller.updateForm(totalWeight: value)),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                        key: const ValueKey('outbound-unit-price'),
+                        initialValue: state.unitPrice,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        enabled: editable,
+                        decoration: const InputDecoration(
+                            labelText: '单价（元/kg）',
+                            prefixIcon: Icon(Icons.payments_outlined)),
+                        onChanged: (value) =>
+                            controller.updateForm(unitPrice: value)),
+                    if (state.estimatedAmount != null)
+                      Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                  '预计总金额 ¥${state.estimatedAmount!.toStringAsFixed(2)}'))),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                        key: const ValueKey('outbound-customer'),
+                        initialValue: state.customer,
+                        enabled: editable,
+                        maxLength: 100,
+                        decoration: const InputDecoration(
+                            labelText: '客户（可选）',
+                            prefixIcon: Icon(Icons.person_outline)),
+                        onChanged: (value) =>
+                            controller.updateForm(customer: value)),
+                    TextFormField(
+                        key: const ValueKey('outbound-remark'),
+                        initialValue: state.remark,
+                        enabled: editable,
+                        maxLength: 2000,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                            labelText: '备注（可选）',
+                            prefixIcon: Icon(Icons.notes_outlined)),
+                        onChanged: (value) =>
+                            controller.updateForm(remark: value)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('出库清单', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
             ]),
           ),
         ),
-        const SizedBox(height: 16),
-        Text('出库清单', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        for (final row in groups.entries)
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Text('${row.key} 排'),
-            subtitle:
-                Text('${row.value.expand((cage) => cage.value).length} 只'),
-            children: [
-              for (final cage in row.value)
-                ListTile(
-                    title: Text(cage.value.first.cageNumber),
-                    subtitle: Text(cage.value
-                        .map((rabbit) =>
-                            '#${rabbit.rabbitId}${state.earlySaleReasons.containsKey(rabbit.rabbitId) ? ' 提前出售' : ''}')
-                        .join(' · ')))
-            ],
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final row = rows[index];
+                return _ConfirmRowTile(
+                  key: ValueKey('outbound-confirm-row-${row.key}'),
+                  rowCode: row.key,
+                  cages: row.value,
+                  earlySaleReasons: state.earlySaleReasons,
+                );
+              },
+              childCount: rows.length,
+            ),
           ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 120)),
       ],
+    );
+  }
+}
+
+class _ConfirmRowTile extends StatefulWidget {
+  const _ConfirmRowTile({
+    super.key,
+    required this.rowCode,
+    required this.cages,
+    required this.earlySaleReasons,
+  });
+
+  final String rowCode;
+  final List<MapEntry<int, List<OutboundRabbit>>> cages;
+  final Map<int, String> earlySaleReasons;
+
+  @override
+  State<_ConfirmRowTile> createState() => _ConfirmRowTileState();
+}
+
+class _ConfirmRowTileState extends State<_ConfirmRowTile> {
+  static const _pageSize = 20;
+  var _expanded = false;
+  var _visibleCages = _pageSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final rabbitCount =
+        widget.cages.fold<int>(0, (total, cage) => total + cage.value.length);
+    final visibleCount = _visibleCages.clamp(0, widget.cages.length);
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text('${widget.rowCode} 排'),
+      subtitle: Text('$rabbitCount 只 · ${widget.cages.length} 笼'),
+      onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+      children: _expanded
+          ? [
+              for (var index = 0; index < visibleCount; index++)
+                _ConfirmCageTile(
+                  cage: widget.cages[index],
+                  earlySaleReasons: widget.earlySaleReasons,
+                ),
+              if (visibleCount < widget.cages.length)
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: TextButton.icon(
+                    key: ValueKey('outbound-confirm-more-${widget.rowCode}'),
+                    onPressed: () => setState(() {
+                      _visibleCages = (_visibleCages + _pageSize)
+                          .clamp(0, widget.cages.length);
+                    }),
+                    icon: const Icon(Icons.expand_more),
+                    label: Text(
+                        '再显示 ${widget.cages.length - visibleCount > _pageSize ? _pageSize : widget.cages.length - visibleCount} 笼'),
+                  ),
+                ),
+            ]
+          : const [],
+    );
+  }
+}
+
+class _ConfirmCageTile extends StatelessWidget {
+  const _ConfirmCageTile({
+    required this.cage,
+    required this.earlySaleReasons,
+  });
+
+  final MapEntry<int, List<OutboundRabbit>> cage;
+  final Map<int, String> earlySaleReasons;
+
+  @override
+  Widget build(BuildContext context) {
+    final rabbits = cage.value;
+    final earlyCount = rabbits
+        .where((rabbit) => earlySaleReasons.containsKey(rabbit.rabbitId))
+        .length;
+    final sampleCount = rabbits.length > 4 ? 4 : rabbits.length;
+    final sample = rabbits
+        .take(sampleCount)
+        .map((rabbit) => '#${rabbit.rabbitId}')
+        .join(' · ');
+    final remaining = rabbits.length - sampleCount;
+    final summary = [
+      '$sample${remaining > 0 ? ' · 另 $remaining 只' : ''}',
+      if (earlyCount > 0) '提前出售 $earlyCount 只',
+    ].join('\n');
+    return ListTile(
+      key: ValueKey('outbound-confirm-cage-${cage.key}'),
+      title: Text(rabbits.first.cageNumber),
+      subtitle: Text(summary, maxLines: 2, overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -1068,24 +1318,27 @@ Future<void> _showRabbitDrawer(BuildContext context, WidgetRef ref,
                 ])),
             const Divider(height: 1),
             Expanded(
-                child: ListView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                  for (final original in rabbits)
-                    if (current[original.rabbitId] case final rabbit?)
-                      _RabbitTile(
-                          entry: entry,
-                          rabbit: rabbit,
-                          selected:
-                              state.selectedRabbitIds.contains(rabbit.rabbitId),
-                          earlyReason: state.earlySaleReasons[rabbit.rabbitId],
-                          onToggle: () => controller.toggleRabbit(rabbit),
-                          onEarly: () =>
-                              _earlySale(context, controller, rabbit),
-                          onBreeding: () =>
-                              _markBreeding(context, ref, entry, rabbit))
-                ])),
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.all(12),
+                itemCount: rabbits.length,
+                itemBuilder: (context, index) {
+                  final original = rabbits[index];
+                  final rabbit = current[original.rabbitId];
+                  if (rabbit == null) return const SizedBox.shrink();
+                  return _RabbitTile(
+                    entry: entry,
+                    rabbit: rabbit,
+                    selected: state.selectedRabbitIds.contains(rabbit.rabbitId),
+                    earlyReason: state.earlySaleReasons[rabbit.rabbitId],
+                    onToggle: () => controller.toggleRabbit(rabbit),
+                    onEarly: () => _earlySale(context, controller, rabbit),
+                    onBreeding: () =>
+                        _markBreeding(context, ref, entry, rabbit),
+                  );
+                },
+              ),
+            ),
           ]);
         },
       ),

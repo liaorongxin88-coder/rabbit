@@ -29,7 +29,7 @@ final houseRabbitsProvider =
   ref.onDispose(cancelToken.cancel);
   return ref
       .watch(rabbitRepositoryProvider)
-      .listRabbits(houseId, cancelToken: cancelToken);
+      .listAllActiveRabbits(houseId, cancelToken: cancelToken);
 });
 
 final allActiveHouseRabbitsProvider =

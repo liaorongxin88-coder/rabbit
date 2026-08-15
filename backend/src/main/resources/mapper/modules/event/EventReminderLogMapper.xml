@@ -24,6 +24,26 @@
           and br.next_event_date is not null
           and br.next_event_date &lt;= #{today}
           and br.is_event_notified = false
+          and not exists (
+              select 1 from breeding_cycles bc
+              where bc.house_id = b.house_id
+                and bc.batch_id = br.batch_id
+                and bc.mother_rabbit_id = br.rabbit_id
+                and bc.closed_at is null
+                and bc.next_event_date = br.next_event_date
+                and bc.next_event_type = br.next_event_type
+          )
+    </insert>
+
+    <insert id="insertDueBreedingCycleEventLogs">
+        insert ignore into event_reminder_logs (house_id, category, record_id, event_date, notify_date, notify_time)
+        select house_id, '生产周期', id, next_event_date, curdate(), now()
+        from breeding_cycles
+        where house_id = #{houseId}
+          and closed_at is null
+          and next_event_date is not null
+          and next_event_date &lt;= #{today}
+          and is_event_notified = false
     </insert>
 
     <insert id="insertDueReplacementLogs">

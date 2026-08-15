@@ -23,9 +23,30 @@ class EventItem {
   final int? sourceHouseId;
   final String sourceHouseName;
 
-  bool get isProduction => category == '生产';
+  bool get isProduction => category == '生产' || category == '生产周期';
+  bool get isBreedingCycle => category == '生产周期';
   bool get isReplacement => category == '后备成熟';
   bool get isTreatment => category == '治疗复查';
+
+  String get operationalTargetLabel {
+    final id = rabbitId;
+    if (id == null || id <= 0) {
+      return '对象待确认';
+    }
+    if (isProduction &&
+        !eventType.contains('出售') &&
+        !eventType.contains('后备')) {
+      return '母兔 #$id';
+    }
+    return '兔 #$id';
+  }
+
+  String? get batchLabel {
+    final id = batchId;
+    return id == null || id <= 0 ? null : 'Batch #$id';
+  }
+
+  String? get cycleRecordLabel => isBreedingCycle ? '周期记录 #$recordId' : null;
 
   bool get isOverdue {
     if (status.toLowerCase() == 'overdue') {

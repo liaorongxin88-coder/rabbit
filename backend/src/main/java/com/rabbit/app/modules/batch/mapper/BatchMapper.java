@@ -11,6 +11,8 @@ public interface BatchMapper {
 
     Batch selectById(@Param("houseId") Long houseId, @Param("id") Long id);
 
+    Batch selectByIdForUpdate(@Param("houseId") Long houseId, @Param("id") Long id);
+
     List<Batch> selectByHouse(@Param("houseId") Long houseId);
 
     List<Batch> selectPageByHouse(@Param("houseId") Long houseId,

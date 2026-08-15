@@ -6,6 +6,7 @@ public class PrepartumRecord {
     private Long id;
     private Long houseId;
     private Long batchId;
+    private Long breedingCycleId;
     private Long rabbitId;
     private Date actionDate;
     private String remark;
@@ -36,6 +37,14 @@ public class PrepartumRecord {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public Long getBreedingCycleId() {
+        return breedingCycleId;
+    }
+
+    public void setBreedingCycleId(Long breedingCycleId) {
+        this.breedingCycleId = breedingCycleId;
     }
 
     public Long getRabbitId() {

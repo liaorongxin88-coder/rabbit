@@ -21,7 +21,10 @@ public interface ReplacementRecordMapper {
                                           @Param("offset") Integer offset,
                                           @Param("limit") Integer limit);
 
-    int markDueAsNotified(@Param("houseId") Long houseId, @Param("today") Date today, @Param("updateBy") String updateBy);
+    int markDueAsNotified(@Param("houseId") Long houseId,
+                          @Param("today") Date today,
+                          @Param("updateBy") String updateBy,
+                          @Param("limit") int limit);
 
     int markNotified(@Param("houseId") Long houseId, @Param("id") Long id, @Param("notifyDate") Date notifyDate, @Param("updateBy") String updateBy);
 }

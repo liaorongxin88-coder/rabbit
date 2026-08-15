@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.batch.mapper.BreedingCycleMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.batch.entity.BreedingCycle">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="mother_rabbit_id" property="motherRabbitId"/>
+        <result column="male_rabbit_id" property="maleRabbitId"/>
+        <result column="cycle_no" property="cycleNo"/>
+        <result column="status" property="status"/>
+        <result column="mating_date" property="matingDate"/>
+        <result column="pregnancy_check_date" property="pregnancyCheckDate"/>
+        <result column="pregnancy_result" property="pregnancyResult"/>
+        <result column="expected_birth_date" property="expectedBirthDate"/>
+        <result column="birth_date" property="birthDate"/>
+        <result column="total_kits" property="totalKits"/>
+        <result column="live_kits" property="liveKits"/>
+        <result column="foster_in_kits" property="fosterInKits"/>
+        <result column="foster_out_kits" property="fosterOutKits"/>
+        <result column="current_nursing_kits" property="currentNursingKits"/>
+        <result column="weaned_kits" property="weanedKits"/>
+        <result column="preweaning_loss_kits" property="preweaningLossKits"/>
+        <result column="weaning_date" property="weaningDate"/>
+        <result column="avg_weaning_weight" property="avgWeaningWeight"/>
+        <result column="postpartum_remating_days" property="postpartumRematingDays"/>
+        <result column="lactation_days" property="lactationDays"/>
+        <result column="overlap_litter_cycle_no" property="overlapLitterCycleNo"/>
+        <result column="overlap_start_date" property="overlapStartDate"/>
+        <result column="overlap_end_date" property="overlapEndDate"/>
+        <result column="overlap_days" property="overlapDays"/>
+        <result column="next_event_date" property="nextEventDate"/>
+        <result column="next_event_type" property="nextEventType"/>
+        <result column="is_event_notified" property="isEventNotified"/>
+        <result column="event_notify_date" property="eventNotifyDate"/>
+        <result column="closed_at" property="closedAt"/>
+        <result column="close_reason" property="closeReason"/>
+        <result column="request_id" property="requestId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into breeding_cycles (
+            house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no, status,
+            mating_date, pregnancy_check_date, pregnancy_result, expected_birth_date, birth_date,
+            total_kits, live_kits, foster_in_kits, foster_out_kits, current_nursing_kits,
+            weaned_kits, preweaning_loss_kits, weaning_date, avg_weaning_weight,
+            postpartum_remating_days, lactation_days, overlap_litter_cycle_no,
+            overlap_start_date, overlap_end_date, overlap_days,
+            next_event_date, next_event_type, is_event_notified, event_notify_date,
+            closed_at, close_reason, request_id, remark, create_by, update_by
+        ) values (
+            #{houseId}, #{batchId}, #{motherRabbitId}, #{maleRabbitId}, #{cycleNo}, #{status},
+            #{matingDate}, #{pregnancyCheckDate}, #{pregnancyResult}, #{expectedBirthDate}, #{birthDate},
+            coalesce(#{totalKits}, 0), coalesce(#{liveKits}, 0), coalesce(#{fosterInKits}, 0),
+            coalesce(#{fosterOutKits}, 0), coalesce(#{currentNursingKits}, 0),
+            coalesce(#{weanedKits}, 0), coalesce(#{preweaningLossKits}, 0),
+            #{weaningDate}, #{avgWeaningWeight}, #{postpartumRematingDays}, #{lactationDays},
+            #{overlapLitterCycleNo}, #{overlapStartDate}, #{overlapEndDate}, coalesce(#{overlapDays}, 0),
+            #{nextEventDate}, #{nextEventType}, coalesce(#{isEventNotified}, false), #{eventNotifyDate},
+            #{closedAt}, #{closeReason}, #{requestId}, #{remark}, #{createBy}, #{updateBy}
+        )
+    </insert>
+
+    <update id="update">
+        update breeding_cycles
+        set status = #{cycle.status},
+            pregnancy_check_date = #{cycle.pregnancyCheckDate},
+            pregnancy_result = #{cycle.pregnancyResult},
+            expected_birth_date = #{cycle.expectedBirthDate},
+            birth_date = #{cycle.birthDate},
+            total_kits = coalesce(#{cycle.totalKits}, 0),
+            live_kits = coalesce(#{cycle.liveKits}, 0),
+            foster_in_kits = coalesce(#{cycle.fosterInKits}, 0),
+            foster_out_kits = coalesce(#{cycle.fosterOutKits}, 0),
+            current_nursing_kits = coalesce(#{cycle.currentNursingKits}, 0),
+            weaned_kits = coalesce(#{cycle.weanedKits}, 0),
+            preweaning_loss_kits = coalesce(#{cycle.preweaningLossKits}, 0),
+            weaning_date = #{cycle.weaningDate},
+            avg_weaning_weight = #{cycle.avgWeaningWeight},
+            postpartum_remating_days = #{cycle.postpartumRematingDays},
+            lactation_days = #{cycle.lactationDays},
+            overlap_litter_cycle_no = #{cycle.overlapLitterCycleNo},
+            overlap_start_date = #{cycle.overlapStartDate},
+            overlap_end_date = #{cycle.overlapEndDate},
+            overlap_days = coalesce(#{cycle.overlapDays}, 0),
+            next_event_date = #{cycle.nextEventDate},
+            next_event_type = #{cycle.nextEventType},
+            is_event_notified = false,
+            event_notify_date = null,
+            closed_at = #{cycle.closedAt},
+            close_reason = #{cycle.closeReason},
+            remark = #{cycle.remark},
+            update_by = #{cycle.updateBy},
+            update_time = now()
+        where house_id = #{cycle.houseId}
+          and id = #{cycle.id}
+          and status = #{expectedStatus}
+    </update>
+
+    <sql id="scope">
+        house_id = #{houseId}
+        and batch_id = #{batchId}
+        and mother_rabbit_id = #{motherRabbitId}
+    </sql>
+
+    <select id="selectById" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/> and id = #{id}
+        limit 1
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/> and id = #{id}
+        limit 1 for update
+    </select>
+
+    <select id="selectByBatch" resultMap="Map">
+        select * from breeding_cycles
+        where house_id = #{houseId} and batch_id = #{batchId}
+        <if test="motherRabbitId != null">
+            and mother_rabbit_id = #{motherRabbitId}
+        </if>
+        <if test="activeOnly != null and activeOnly">
+            and closed_at is null
+        </if>
+        order by mother_rabbit_id, cycle_no desc
+    </select>
+
+    <select id="selectLatestByStatusesForUpdate" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/>
+          and status in
+          <foreach collection="statuses" item="status" open="(" separator="," close=")">
+              #{status}
+          </foreach>
+        order by cycle_no desc, id desc
+        limit 1 for update
+    </select>
+
+    <select id="selectOldestByStatusesForUpdate" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/>
+          and status in
+          <foreach collection="statuses" item="status" open="(" separator="," close=")">
+              #{status}
+          </foreach>
+        order by cycle_no asc, id asc
+        limit 1 for update
+    </select>
+
+    <select id="selectDisplayOpen" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/> and closed_at is null
+        order by case when status = '哺乳中' then 1 else 0 end,
+                 cycle_no desc, id desc
+        limit 1
+    </select>
+
+    <select id="selectLatest" resultMap="Map">
+        select * from breeding_cycles
+        where <include refid="scope"/>
+        order by cycle_no desc, id desc
+        limit 1
+    </select>
+
+    <select id="countOpenGestations" resultType="int">
+        select count(1) from breeding_cycles
+        where <include refid="scope"/>
+          and closed_at is null
+          and status in ('已配种', '不确定', '怀孕确认')
+    </select>
+
+    <select id="sumCurrentNursingKits" resultType="int">
+        select coalesce(sum(current_nursing_kits), 0) from breeding_cycles
+        where <include refid="scope"/> and status = '哺乳中' and closed_at is null
+    </select>
+
+    <select id="countNursingLitters" resultType="int">
+        select count(1) from breeding_cycles
+        where <include refid="scope"/> and status = '哺乳中' and closed_at is null
+    </select>
+
+    <update id="closeOverlaps">
+        update breeding_cycles
+        set overlap_end_date = #{overlapEndDate},
+            overlap_days = greatest(0, timestampdiff(day, overlap_start_date, #{overlapEndDate})),
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and overlap_litter_cycle_no = #{litterCycleNo}
+          and overlap_start_date is not null
+          and overlap_end_date is null
+    </update>
+
+    <update id="closeOpenByBatch">
+        update breeding_cycles
+        set status = '已终止',
+            current_nursing_kits = 0,
+            next_event_date = null,
+            next_event_type = null,
+            is_event_notified = true,
+            closed_at = #{closedAt},
+            close_reason = #{reason},
+            overlap_end_date = case
+                when overlap_start_date is not null and overlap_end_date is null then #{closedAt}
+                else overlap_end_date
+            end,
+            overlap_days = case
+                when overlap_start_date is not null and overlap_end_date is null
+                    then greatest(0, timestampdiff(day, overlap_start_date, #{closedAt}))
+                else overlap_days
+            end,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and closed_at is null
+        order by id
+        limit #{limit}
+    </update>
+
+    <select id="countOpenByBatch" resultType="int">
+        select count(1)
+        from breeding_cycles
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and closed_at is null
+    </select>
+
+    <select id="countOpenByMother" resultType="int">
+        select count(1)
+        from breeding_cycles
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and closed_at is null
+    </select>
+
+    <update id="closeOpenByMother">
+        update breeding_cycles
+        set status = '已终止',
+            current_nursing_kits = 0,
+            next_event_date = null,
+            next_event_type = null,
+            is_event_notified = true,
+            closed_at = #{closedAt},
+            close_reason = #{reason},
+            overlap_end_date = case
+                when overlap_start_date is not null and overlap_end_date is null then #{closedAt}
+                else overlap_end_date
+            end,
+            overlap_days = case
+                when overlap_start_date is not null and overlap_end_date is null
+                    then greatest(0, timestampdiff(day, overlap_start_date, #{closedAt}))
+                else overlap_days
+            end,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and closed_at is null
+    </update>
+
+    <select id="selectDueEventsByHouse" resultMap="Map">
+        select * from breeding_cycles
+        where house_id = #{houseId}
+          and closed_at is null
+          and next_event_date is not null
+          and next_event_date &lt;= #{today}
+        <if test="onlyUnnotified">
+            and is_event_notified = false
+        </if>
+        order by next_event_date, id
+    </select>
+
+    <update id="markDueEventsAsNotified">
+        update breeding_cycles
+        set is_event_notified = true,
+            event_notify_date = now(),
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and closed_at is null
+          and next_event_date is not null
+          and next_event_date &lt;= #{today}
+          and is_event_notified = false
+        limit #{limit}
+    </update>
+</mapper>

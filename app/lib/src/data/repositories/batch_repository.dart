@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,11 +17,40 @@ class BatchRepository {
   final ApiClient _api;
   static const _uuid = Uuid();
 
-  Future<List<Batch>> listBatches(int houseId) {
+  Future<List<Batch>> listBatches(
+    int houseId, {
+    CancelToken? cancelToken,
+  }) async {
+    const pageSize = 200;
+    final batches = <Batch>[];
+    var page = 1;
+
+    while (true) {
+      final items = await listBatchesPage(
+        houseId: houseId,
+        page: page,
+        pageSize: pageSize,
+        cancelToken: cancelToken,
+      );
+      batches.addAll(items);
+      if (items.length < pageSize) {
+        return batches;
+      }
+      page += 1;
+    }
+  }
+
+  Future<List<Batch>> listBatchesPage({
+    required int houseId,
+    required int page,
+    required int pageSize,
+    CancelToken? cancelToken,
+  }) {
     return _api.get<List<Batch>>(
       '/api/batches',
       houseId: houseId,
-      query: const {'page': 1, 'pageSize': 20},
+      query: {'page': page, 'pageSize': pageSize},
+      cancelToken: cancelToken,
       decode: (data) {
         if (data is! List) {
           throw const ApiException('批次列表格式不正确');
@@ -38,15 +68,16 @@ class BatchRepository {
     required String batchCode,
     required List<int> femaleRabbitIds,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<Batch>(
       '/api/batches',
       houseId: houseId,
       body: {
         'batchCode': batchCode.trim(),
-        'femaleRabbitIds': femaleRabbitIds,
+        'femaleRabbitIds': _sortedUniqueIds(femaleRabbitIds),
         'remark': remark.trim(),
-        'requestId': _uuid.v4(),
+        'requestId': requestId ?? _uuid.v4(),
       },
       decode: (data) {
         if (data is! Map) {
@@ -57,17 +88,39 @@ class BatchRepository {
     );
   }
 
+  Future<Batch> getBatch({
+    required int houseId,
+    required int batchId,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<Batch>(
+      '/api/batches/$batchId',
+      houseId: houseId,
+      cancelToken: cancelToken,
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('批次详情格式不正确');
+        }
+        return Batch.fromJson(Map<String, dynamic>.from(data));
+      },
+    );
+  }
+
   Future<List<BatchRabbitItem>> listBatchRabbits({
     required int houseId,
     required int batchId,
+    String? role,
     bool? active,
+    CancelToken? cancelToken,
   }) {
     return _api.get<List<BatchRabbitItem>>(
       '/api/batches/$batchId/batch-rabbits',
       houseId: houseId,
       query: {
+        if (role != null && role.trim().isNotEmpty) 'role': role.trim(),
         if (active != null) 'active': active,
       },
+      cancelToken: cancelToken,
       decode: (data) {
         if (data is! List) {
           throw const ApiException('批次兔子列表格式不正确');
@@ -88,6 +141,7 @@ class BatchRepository {
     required int houseId,
     required int batchId,
     required int rabbitId,
+    int? breedingCycleId,
     required DateTime weaningDate,
     required int weaningCount,
     int? maleCount,
@@ -95,14 +149,16 @@ class BatchRepository {
     int? targetCageId,
     double? avgWeight,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/weaning',
       houseId: houseId,
       body: {
         'rabbitId': rabbitId,
-        'requestId': _uuid.v4(),
-        'weaningDate': _formatDate(weaningDate),
+        if (breedingCycleId != null) 'breedingCycleId': breedingCycleId,
+        'requestId': requestId ?? _uuid.v4(),
+        'weaningDate': formatBatchWriteDate(weaningDate),
         'weaningCount': weaningCount,
         if (maleCount != null) 'maleCount': maleCount,
         if (femaleCount != null) 'femaleCount': femaleCount,
@@ -121,6 +177,7 @@ class BatchRepository {
     required int femaleRabbitId,
     required int maleRabbitId,
     required DateTime matingDate,
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/mating',
@@ -128,8 +185,89 @@ class BatchRepository {
       body: {
         'femaleRabbitId': femaleRabbitId,
         'maleRabbitId': maleRabbitId,
-        'matingDate': _formatDate(matingDate),
-        'requestId': _uuid.v4(),
+        'matingDate': formatBatchWriteDate(matingDate),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  /// Submits one shared mating operation for up to 1,000 mothers.
+  ///
+  /// The server validates the whole set before writing it, so a retry with the
+  /// same request id remains idempotent and cannot leave a partially mated
+  /// selection behind.
+  Future<void> submitMatingBulk({
+    required int houseId,
+    required int batchId,
+    required List<int> rabbitIds,
+    required int maleRabbitId,
+    required DateTime matingDate,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/mating/bulk',
+      houseId: houseId,
+      body: {
+        'femaleRabbitIds': _sortedUniqueIds(rabbitIds),
+        'maleRabbitId': maleRabbitId,
+        'matingDate': formatBatchWriteDate(matingDate),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  Future<void> startAphrodisiac({
+    required int houseId,
+    required int batchId,
+    required List<int> rabbitIds,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/aphrodisiac/start',
+      houseId: houseId,
+      body: {
+        'rabbitIds': _sortedUniqueIds(rabbitIds),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  Future<void> finishAphrodisiac({
+    required int houseId,
+    required int batchId,
+    required List<int> rabbitIds,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/aphrodisiac/finish',
+      houseId: houseId,
+      body: {
+        'rabbitIds': _sortedUniqueIds(rabbitIds),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  Future<void> completeBatch({
+    required int houseId,
+    required int batchId,
+    required DateTime endDate,
+    required bool force,
+    String remark = '',
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/complete',
+      houseId: houseId,
+      body: {
+        'endDate': formatBatchWriteDate(endDate),
+        'force': force,
+        if (remark.trim().isNotEmpty) 'remark': remark.trim(),
+        'requestId': requestId ?? _uuid.v4(),
       },
       decode: (_) {},
     );
@@ -139,18 +277,21 @@ class BatchRepository {
     required int houseId,
     required int batchId,
     required int rabbitId,
+    int? breedingCycleId,
     required DateTime checkDate,
     required String result,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/pregnancy-check',
       houseId: houseId,
       body: {
         'rabbitId': rabbitId,
-        'checkDate': _formatDate(checkDate),
-        'result': result,
-        'requestId': _uuid.v4(),
+        if (breedingCycleId != null) 'breedingCycleId': breedingCycleId,
+        'checkDate': formatBatchWriteDate(checkDate),
+        'result': result.trim(),
+        'requestId': requestId ?? _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
       decode: (_) {},
@@ -161,16 +302,19 @@ class BatchRepository {
     required int houseId,
     required int batchId,
     required int rabbitId,
+    int? breedingCycleId,
     required DateTime actionDate,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/prepartum/finish',
       houseId: houseId,
       body: {
         'rabbitId': rabbitId,
-        'actionDate': _formatDate(actionDate),
-        'requestId': _uuid.v4(),
+        if (breedingCycleId != null) 'breedingCycleId': breedingCycleId,
+        'actionDate': formatBatchWriteDate(actionDate),
+        'requestId': requestId ?? _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
       decode: (_) {},
@@ -181,22 +325,25 @@ class BatchRepository {
     required int houseId,
     required int batchId,
     required int rabbitId,
+    int? breedingCycleId,
     required DateTime birthDate,
     required int totalKits,
     required int liveKits,
     bool failed = false,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/parturition',
       houseId: houseId,
       body: {
         'rabbitId': rabbitId,
-        'birthDate': _formatDate(birthDate),
+        if (breedingCycleId != null) 'breedingCycleId': breedingCycleId,
+        'birthDate': formatBatchWriteDate(birthDate),
         'totalKits': totalKits,
         'liveKits': liveKits,
         'failed': failed,
-        'requestId': _uuid.v4(),
+        'requestId': requestId ?? _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
       decode: (_) {},
@@ -209,24 +356,29 @@ class BatchRepository {
     required List<int> rabbitIds,
     required DateTime saleDate,
     String remark = '',
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/batches/$batchId/sale',
       houseId: houseId,
       body: {
-        'rabbitIds': rabbitIds,
-        'saleDate': _formatDate(saleDate),
-        'requestId': _uuid.v4(),
+        'rabbitIds': _sortedUniqueIds(rabbitIds),
+        'saleDate': formatBatchWriteDate(saleDate),
+        'requestId': requestId ?? _uuid.v4(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
       },
       decode: (_) {},
     );
   }
+}
 
-  static String _formatDate(DateTime date) {
-    final y = date.year.toString().padLeft(4, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
+String formatBatchWriteDate(DateTime date) {
+  final y = date.year.toString().padLeft(4, '0');
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
+
+List<int> _sortedUniqueIds(Iterable<int> ids) {
+  return ids.toSet().toList()..sort();
 }

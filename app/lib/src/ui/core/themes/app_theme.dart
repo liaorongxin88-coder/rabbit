@@ -17,7 +17,7 @@ class AppColors {
 }
 
 class AppTypography {
-  static const maxTextScaleFactor = 1.5;
+  static const maxTextScaleFactor = 2.0;
 
   static TextScaler ergonomicTextScaler(TextScaler systemTextScaler) {
     return systemTextScaler.clamp(maxScaleFactor: maxTextScaleFactor);

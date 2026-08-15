@@ -9,6 +9,8 @@ public class WeaningRequest {
     @NotNull(message = "rabbitId不能为空")
     private Long rabbitId;
 
+    private Long breedingCycleId;
+
     @NotBlank(message = "requestId不能为空")
     private String requestId;
 
@@ -36,6 +38,14 @@ public class WeaningRequest {
 
     public void setRabbitId(Long rabbitId) {
         this.rabbitId = rabbitId;
+    }
+
+    public Long getBreedingCycleId() {
+        return breedingCycleId;
+    }
+
+    public void setBreedingCycleId(Long breedingCycleId) {
+        this.breedingCycleId = breedingCycleId;
     }
 
     public String getRequestId() {

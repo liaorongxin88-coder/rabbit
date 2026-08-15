@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/house_batches_screen.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/house_batch_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/cage_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_shell.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/widgets/dashboard_screen.dart';
@@ -200,6 +202,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
                 child: HouseRabbitsScreen(houseId: houseId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/batches',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: HouseBatchesScreen(houseId: houseId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/batches/:batchId',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final batchId =
+                  int.tryParse(state.pathParameters['batchId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: HouseBatchDetailScreen(
+                  houseId: houseId,
+                  batchId: batchId,
+                ),
               );
             },
           ),

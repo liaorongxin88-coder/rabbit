@@ -37,12 +37,7 @@ class RabbitRepository {
   }
 
   Future<List<Rabbit>> listRabbits(int houseId, {CancelToken? cancelToken}) {
-    return listRabbitsPage(
-      houseId: houseId,
-      page: 1,
-      pageSize: 50,
-      cancelToken: cancelToken,
-    );
+    return listAllActiveRabbits(houseId, cancelToken: cancelToken);
   }
 
   Future<List<Rabbit>> listAllActiveRabbits(
@@ -263,18 +258,55 @@ class RabbitRepository {
     required List<int> rabbitIds,
     int? targetCageId,
     bool forceExitBatch = true,
+    String? requestId,
   }) {
     return _api.post<void>(
       '/api/rabbits/replacement',
       houseId: houseId,
       body: {
-        'rabbitIds': rabbitIds,
+        'rabbitIds': _sortedUniqueIds(rabbitIds),
         'forceExitBatch': forceExitBatch,
-        'requestId': _uuid.v4(),
+        'requestId': requestId ?? _uuid.v4(),
         if (targetCageId != null && targetCageId > 0)
           'targetCageId': targetCageId,
       },
       decode: (_) {},
     );
   }
+
+  /// Records a terminal rabbit event and, when requested, exits every active
+  /// Batch relationship for the rabbit in the same server-side transaction.
+  ///
+  /// The API accepts a JSON date value. Epoch milliseconds are used here to
+  /// preserve the selected local date without relying on a server timezone or
+  /// a particular Jackson textual date format.
+  Future<void> submitRabbitEvent({
+    required int houseId,
+    required int rabbitId,
+    required String eventType,
+    required DateTime actionDate,
+    required String reason,
+    String remark = '',
+    bool forceExitBatch = true,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/rabbits/events',
+      houseId: houseId,
+      body: {
+        'rabbitId': rabbitId,
+        'eventType': eventType.trim().toLowerCase(),
+        'actionDate': actionDate.millisecondsSinceEpoch,
+        'reason': reason.trim(),
+        'remark': remark.trim(),
+        'forceExitBatch': forceExitBatch,
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+}
+
+List<int> _sortedUniqueIds(Iterable<int> ids) {
+  return ids.toSet().toList()..sort();
 }

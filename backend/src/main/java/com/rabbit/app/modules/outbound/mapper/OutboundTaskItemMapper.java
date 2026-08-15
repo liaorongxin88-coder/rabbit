@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface OutboundTaskItemMapper {
-    int deleteByTask(@Param("taskId") String taskId);
+    int deleteByTaskLimited(@Param("taskId") String taskId, @Param("limit") int limit);
     int insertBatch(@Param("list") List<OutboundTaskItem> items);
     List<OutboundTaskItem> selectByTask(@Param("taskId") String taskId);
 }

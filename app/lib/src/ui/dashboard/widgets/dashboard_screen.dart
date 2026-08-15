@@ -219,8 +219,8 @@ class _DashboardPanelData {
       _MetricItem('种兔数量', s.seedRabbits, Icons.cruelty_free_outlined),
       _MetricItem('公兔数量', s.males, Icons.male_rounded),
       _MetricItem('母兔数量', s.females, Icons.female_rounded),
-      _MetricItem('已配种数量', s.bred, Icons.timeline_rounded),
-      _MetricItem('待配种数量', s.readyForBreeding, Icons.event_available_outlined),
+      _MetricItem('繁殖周期中', s.bred, Icons.timeline_rounded),
+      _MetricItem('未在周期中', s.readyForBreeding, Icons.event_available_outlined),
       _MetricItem('已分娩窝数', s.litters, Icons.child_care_outlined),
       _MetricItem('哺乳期数量', s.nursingKits, Icons.local_drink_outlined),
       _MetricItem('商品兔数量', s.commodityRabbits, Icons.inventory_2_outlined),
@@ -513,8 +513,16 @@ class _MetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth < 360 ? 2 : 3;
+        final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
+        final columns = textScale >= 1.3 || constraints.maxWidth < 360 ? 2 : 3;
+        final tileExtent = _metricTileExtent(
+          context,
+          availableWidth: constraints.maxWidth,
+          columns: columns,
+          metrics: metrics,
+        );
         return GridView.builder(
+          key: const ValueKey('dashboard-metric-grid'),
           itemCount: metrics.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -522,12 +530,82 @@ class _MetricGrid extends StatelessWidget {
             crossAxisCount: columns,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: columns == 3 ? 0.92 : 1.18,
+            mainAxisExtent: tileExtent,
           ),
-          itemBuilder: (context, index) => _MetricCard(item: metrics[index]),
+          itemBuilder: (context, index) {
+            final item = metrics[index];
+            return _MetricCard(
+              key: ValueKey('dashboard-metric-card-${item.label}'),
+              item: item,
+            );
+          },
         );
       },
     );
+  }
+
+  double _metricTileExtent(
+    BuildContext context, {
+    required double availableWidth,
+    required int columns,
+    required List<_MetricItem> metrics,
+  }) {
+    const gridGap = 12.0;
+    const cardChromeWidth = 30.0;
+    const cardChromeHeight = 30.0;
+    const iconHeight = 22.0;
+    const iconToLabelGap = 12.0;
+    const labelToValueGap = 6.0;
+
+    final tileWidth = (availableWidth - gridGap * (columns - 1)) / columns;
+    final contentWidth = math.max(1.0, tileWidth - cardChromeWidth);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
+    final labelStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
+          fontSize: 13,
+        );
+    final valueStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+        );
+
+    double textHeight(
+      String text,
+      TextStyle? style, {
+      required int maxLines,
+    }) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        maxLines: maxLines,
+        ellipsis: '...',
+        textDirection: textDirection,
+        textScaler: textScaler,
+      )..layout(maxWidth: contentWidth);
+      return painter.height;
+    }
+
+    final labelHeight = metrics.fold<double>(
+      0,
+      (height, item) => math.max(
+        height,
+        textHeight(item.label, labelStyle, maxLines: 2),
+      ),
+    );
+    final valueHeight = metrics.fold<double>(
+      0,
+      (height, item) => math.max(
+        height,
+        textHeight('${item.value}', valueStyle, maxLines: 1),
+      ),
+    );
+    final contentHeight = cardChromeHeight +
+        iconHeight +
+        iconToLabelGap +
+        labelHeight +
+        labelToValueGap +
+        valueHeight;
+
+    return math.max(140.0, contentHeight.ceilToDouble());
   }
 }
 
@@ -540,7 +618,7 @@ class _MetricItem {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.item});
+  const _MetricCard({super.key, required this.item});
 
   final _MetricItem item;
 
@@ -576,13 +654,19 @@ class _MetricCard extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 6),
-          Text(
-            '${item.value}',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: palette.primary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${item.value}',
+              maxLines: 1,
+              softWrap: false,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: palette.primary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
           ),
         ],
       ),
@@ -603,45 +687,57 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final years = [DateTime.now().year - 1, DateTime.now().year];
     final palette = AppPalette.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
+    final title = Text(
+      '$year年每月出生兔子数量',
+      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            color: palette.primary,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
+    );
+    final yearPicker = Container(
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.line),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: year,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          items: [
+            for (final item in years)
+              DropdownMenuItem(value: item, child: Text('$item年')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              onYearChanged(value);
+            }
+          },
+        ),
+      ),
+    );
+
+    if (largeText) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          title,
+          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerRight, child: yearPicker),
+        ],
+      );
+    }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(
-          child: Text(
-            '$year年每月出生兔子数量',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: palette.primary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-        ),
+        Expanded(child: title),
         const SizedBox(width: 10),
-        Container(
-          height: 42,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: palette.line),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: year,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
-              items: [
-                for (final item in years)
-                  DropdownMenuItem(value: item, child: Text('$item年')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  onYearChanged(value);
-                }
-              },
-            ),
-          ),
-        ),
+        yearPicker,
       ],
     );
   }
@@ -698,6 +794,9 @@ class _MonthlyChartCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: palette.muted,
                 ),

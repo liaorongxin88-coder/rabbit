@@ -7,6 +7,9 @@ public class Rabbit {
     private Long houseId;
     private Long cageId;
     private Long motherId;
+    private Long fatherId;
+    private Long birthBatchId;
+    private Long birthCycleId;
     private String type;
     private String gender;
     private String breed;
@@ -56,6 +59,30 @@ public class Rabbit {
 
     public void setMotherId(Long motherId) {
         this.motherId = motherId;
+    }
+
+    public Long getFatherId() {
+        return fatherId;
+    }
+
+    public void setFatherId(Long fatherId) {
+        this.fatherId = fatherId;
+    }
+
+    public Long getBirthBatchId() {
+        return birthBatchId;
+    }
+
+    public void setBirthBatchId(Long birthBatchId) {
+        this.birthBatchId = birthBatchId;
+    }
+
+    public Long getBirthCycleId() {
+        return birthCycleId;
+    }
+
+    public void setBirthCycleId(Long birthCycleId) {
+        this.birthCycleId = birthCycleId;
     }
 
     public String getType() {

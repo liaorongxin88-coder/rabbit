@@ -21,6 +21,8 @@ import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
+import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
+import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
@@ -83,45 +85,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('legal consent icon and text stay on one line', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    FlutterSecureStorage.setMockInitialValues({});
-    await tester.binding.setSurfaceSize(const Size(360, 800));
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    addTearDown(
-      tester.platformDispatcher.clearTextScaleFactorTestValue,
-    );
+  for (final size in const [Size(360, 800), Size(412, 915)]) {
+    testWidgets(
+      'legal consent wraps with 48dp links at true 200 percent on '
+      '${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        FlutterSecureStorage.setMockInitialValues({});
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const ProviderScopeWrapper());
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('legal-consent-row')),
-    );
+        await tester.pumpWidget(_rawScaleLoginApp());
+        await tester.pumpAndSettle();
+        final consent = find.byKey(const ValueKey('legal-consent-row'));
+        await tester.ensureVisible(consent);
+        await tester.pumpAndSettle();
 
-    final consentRect = tester.getRect(
-      find.byKey(const ValueKey('legal-consent-row')),
+        final consentContext = tester.element(consent);
+        expect(MediaQuery.textScalerOf(consentContext).scale(10), 20);
+        expect(
+          find.descendant(of: consent, matching: find.byType(FittedBox)),
+          findsNothing,
+        );
+        expect(tester.getSize(consent).height, greaterThan(48));
+
+        for (final key in const [
+          ValueKey('privacy-policy-link'),
+          ValueKey('user-agreement-link'),
+        ]) {
+          final link = find.byKey(key);
+          final linkSize = tester.getSize(link);
+          expect(linkSize.width, greaterThanOrEqualTo(48), reason: '$key');
+          expect(linkSize.height, greaterThanOrEqualTo(48), reason: '$key');
+        }
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byKey(const ValueKey('privacy-policy-link')));
+        await tester.pumpAndSettle();
+        expect(find.text('隐私政策'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
-    final checkboxRect = tester.getRect(
-      find.byKey(const ValueKey('legal-consent-checkbox')),
-    );
-    final textFinders = [
-      find.text('请阅读并同意'),
-      find.text('《隐私政策》'),
-      find.text('与'),
-      find.text('《用户协议》'),
-    ];
-    for (final finder in textFinders) {
-      final textRect = tester.getRect(finder);
-      expect(
-        textRect.center.dy,
-        closeTo(checkboxRect.center.dy, 0.1),
-        reason: tester.widget<Text>(finder).data,
-      );
-      expect(textRect.right, lessThanOrEqualTo(consentRect.right));
-    }
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   testWidgets('login flow remains usable with 200 percent text',
       (tester) async {
@@ -140,7 +145,7 @@ void main() {
     final loginContext = tester.element(
       find.byKey(const ValueKey('login-mode-selector')),
     );
-    expect(MediaQuery.textScalerOf(loginContext).scale(10), 15);
+    expect(MediaQuery.textScalerOf(loginContext).scale(10), 20);
     expect(find.byTooltip('检测手机号'), findsOneWidget);
     expect(find.text('6位验证码'), findsOneWidget);
     expect(find.text('获取验证码'), findsOneWidget);
@@ -185,7 +190,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('今日预警!'), findsNothing);
+    expect(find.text('今日生产'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsWidgets);
     expect(houseRepository.calls, 0);
 
@@ -331,7 +336,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('今日预警!'), findsOneWidget);
+    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('配种任务已清'), findsOneWidget);
+    expect(find.text('系统使用步骤'), findsNothing);
     expect(authRepository.validationCalls, 1);
   });
 
@@ -359,13 +366,73 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日预警!'), findsNothing);
+    expect(find.text('今日生产'), findsNothing);
     expect(houseRepository.calls, 0);
     expect(authRepository.validationCalls, 1);
     expect(
       await const FlutterSecureStorage().read(key: 'token'),
       isNull,
     );
+  });
+
+  testWidgets('home event shows mother, Batch and breeding cycle context',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'production_operator',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+    final today = DateTime.now();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: _FakeAuthRepository(),
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 3,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith(
+            (_) async => [
+              EventItem(
+                recordId: 71,
+                category: '生产周期',
+                eventType: '配种',
+                eventDate: today,
+                batchId: 9,
+                rabbitId: 18,
+                status: 'due',
+                sourceHouseId: 1,
+                sourceHouseName: '一号繁育兔舍长名称布局验证',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('母兔 #18'), findsOneWidget);
+    expect(find.text('Batch #9'), findsOneWidget);
+    expect(find.text('周期记录 #71'), findsOneWidget);
+    expect(find.text('记录配种'), findsOneWidget);
+    expect(find.text('分娩'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('disabled restored account is cleared and returns to login',
@@ -395,7 +462,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日预警!'), findsNothing);
+    expect(find.text('今日生产'), findsNothing);
     expect(houseRepository.calls, 0);
     expect(authRepository.validationCalls, 1);
     expect(
@@ -435,13 +502,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('今日预警!'), findsOneWidget);
+    expect(find.text('今日生产'), findsOneWidget);
 
     authRepository.emitUnauthorized();
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日预警!'), findsNothing);
+    expect(find.text('今日生产'), findsNothing);
     expect(
       await const FlutterSecureStorage().read(key: 'token'),
       isNull,
@@ -733,6 +800,24 @@ class ProviderScopeWrapper extends StatelessWidget {
       child: const RabbitManagerApp(),
     );
   }
+}
+
+Widget _rawScaleLoginApp() {
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+    ],
+    child: MaterialApp(
+      theme: buildAppTheme(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: const LoginScreen(),
+    ),
+  );
 }
 
 class _FakeAuthRepository extends AuthRepository {

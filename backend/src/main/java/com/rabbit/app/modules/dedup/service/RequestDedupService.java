@@ -3,6 +3,7 @@ package com.rabbit.app.modules.dedup.service;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.dedup.entity.RequestDedup;
 import com.rabbit.app.modules.dedup.mapper.RequestDedupMapper;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,6 +28,11 @@ public class RequestDedupService {
     }
 
     public BeginResult begin(Long houseId, Long userId, String api, String requestId) {
+        return begin(houseId, userId, api, requestId, null);
+    }
+
+    public BeginResult begin(Long houseId, Long userId, String api, String requestId,
+                             String payloadHash) {
         if (requestId == null || requestId.trim().isEmpty()) {
             return BeginResult.STARTED;
         }
@@ -35,6 +41,7 @@ public class RequestDedupService {
         item.setUserId(userId);
         item.setApi(api);
         item.setRequestId(requestId);
+        item.setPayloadHash(payloadHash);
         item.setStatus(STATUS_PROCESSING);
         if (requestDedupMapper.insertIgnore(item) > 0) {
             return BeginResult.STARTED;
@@ -43,6 +50,9 @@ public class RequestDedupService {
         RequestDedup old = requestDedupMapper.selectByKey(houseId, userId, api, requestId);
         if (old == null) {
             throw new BizException(409, "请求幂等状态异常，请稍后重试");
+        }
+        if (!Objects.equals(payloadHash, old.getPayloadHash())) {
+            throw new BizException(409, "requestId已用于不同的批量配种请求");
         }
         if (STATUS_DONE.equals(old.getStatus())) {
             return BeginResult.DONE;

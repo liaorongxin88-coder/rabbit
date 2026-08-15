@@ -8,6 +8,9 @@
         <result column="batch_id" property="batchId"/>
         <result column="rabbit_id" property="rabbitId"/>
         <result column="male_rabbit_id" property="maleRabbitId"/>
+        <result column="latest_cycle_id" property="latestCycleId"/>
+        <result column="current_nursing_kits" property="currentNursingKits"/>
+        <result column="nursing_litter_count" property="nursingLitterCount"/>
         <result column="join_reason" property="joinReason"/>
         <result column="batch_role" property="batchRole"/>
         <result column="current_status" property="currentStatus"/>
@@ -27,12 +30,12 @@
     </resultMap>
 
     <insert id="insertBatch">
-        insert into batch_rabbits (batch_id, rabbit_id, male_rabbit_id, join_reason, batch_role, current_status,
+        insert into batch_rabbits (batch_id, rabbit_id, male_rabbit_id, latest_cycle_id, current_nursing_kits, nursing_litter_count, join_reason, batch_role, current_status,
                                   last_event_date, next_event_date, next_event_type, is_active, join_date, exit_date, remark,
                                   create_by, update_by)
         values
         <foreach collection="list" item="item" separator=",">
-            (#{item.batchId}, #{item.rabbitId}, #{item.maleRabbitId}, #{item.joinReason}, #{item.batchRole}, #{item.currentStatus},
+            (#{item.batchId}, #{item.rabbitId}, #{item.maleRabbitId}, #{item.latestCycleId}, coalesce(#{item.currentNursingKits}, 0), coalesce(#{item.nursingLitterCount}, 0), #{item.joinReason}, #{item.batchRole}, #{item.currentStatus},
              #{item.lastEventDate}, #{item.nextEventDate}, #{item.nextEventType}, #{item.isActive}, #{item.joinDate}, #{item.exitDate}, #{item.remark},
              #{item.createBy}, #{item.updateBy})
         </foreach>
@@ -46,6 +49,31 @@
           and b.house_id = #{houseId}
         order by br.id desc
         limit 1
+    </select>
+
+    <select id="selectActiveByBatchAndRabbitForUpdate" resultMap="BatchRabbitMap">
+        select br.*
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        where br.batch_id = #{batchId} and br.rabbit_id = #{rabbitId} and br.is_active = true
+          and b.house_id = #{houseId}
+        order by br.id desc
+        limit 1 for update
+    </select>
+
+    <select id="selectActiveByBatchAndRabbitsForUpdate" resultMap="BatchRabbitMap">
+        select br.*
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        where br.batch_id = #{batchId}
+          and br.is_active = true
+          and b.house_id = #{houseId}
+          and br.rabbit_id in
+          <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
+              #{rabbitId}
+          </foreach>
+        order by br.rabbit_id, br.id
+        for update
     </select>
 
     <select id="selectActiveByRabbit" resultMap="BatchRabbitMap">
@@ -63,7 +91,21 @@
         inner join batches b on b.id = br.batch_id
         where br.rabbit_id = #{rabbitId} and br.is_active = true
           and b.house_id = #{houseId}
-        order by br.id
+        order by br.batch_id, br.id
+        for update
+    </select>
+
+    <select id="selectActiveRabbitIdsForUpdate" resultType="long">
+        select br.rabbit_id
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        where b.house_id = #{houseId}
+          and br.is_active = true
+          and br.rabbit_id in
+          <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
+              #{rabbitId}
+          </foreach>
+        order by br.rabbit_id, br.id
         for update
     </select>
 
@@ -107,6 +149,30 @@
           and br.is_active = true
           and br.current_status = #{fromStatus}
           and b.house_id = #{houseId}
+    </update>
+
+    <update id="updateBreedingSummary">
+        update batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
+        set br.current_status = #{currentStatus},
+            br.last_event_date = #{lastEventDate},
+            br.next_event_date = #{nextEventDate},
+            br.next_event_type = #{nextEventType},
+            br.is_event_notified = false,
+            br.event_notify_date = null,
+            br.male_rabbit_id = #{maleRabbitId},
+            br.latest_cycle_id = #{latestCycleId},
+            br.current_nursing_kits = #{currentNursingKits},
+            br.nursing_litter_count = #{nursingLitterCount},
+            br.update_by = #{updateBy},
+            br.update_time = now(),
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
+        where br.id = #{id}
+          and b.house_id = #{houseId}
+          and br.is_active = true
     </update>
 
     <update id="updateNextEvent">
@@ -178,10 +244,22 @@
           and b.house_id = #{houseId}
     </update>
 
-    <update id="deactivateByBatch">
+    <update id="deactivateByBatchLimited">
         update batch_rabbits br
-        inner join batches b on b.id = br.batch_id
-        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
+        inner join rabbits r on r.id = br.rabbit_id
+        inner join (
+            select selected_ids.id
+            from (
+                select scoped_br.id
+                from batch_rabbits scoped_br
+                inner join batches scoped_b on scoped_b.id = scoped_br.batch_id
+                where scoped_b.house_id = #{houseId}
+                  and scoped_br.batch_id = #{batchId}
+                  and scoped_br.is_active = true
+                order by scoped_br.id
+                limit #{limit}
+            ) selected_ids
+        ) selected on selected.id = br.id
         set br.is_active = false,
             br.exit_date = #{exitDate},
             br.remark = #{remark},
@@ -190,9 +268,9 @@
             r.state_version = r.state_version + 1,
             r.update_by = #{updateBy},
             r.update_time = now()
-        where br.batch_id = #{batchId}
+        where r.house_id = #{houseId}
+          and br.batch_id = #{batchId}
           and br.is_active = true
-          and b.house_id = #{houseId}
     </update>
 
     <select id="selectDueEventsByHouse" resultMap="BatchRabbitMap">
@@ -203,6 +281,15 @@
           and br.is_active = true
           and br.next_event_date is not null
           and br.next_event_date &lt;= #{today}
+          and not exists (
+              select 1 from breeding_cycles bc
+              where bc.house_id = b.house_id
+                and bc.batch_id = br.batch_id
+                and bc.mother_rabbit_id = br.rabbit_id
+                and bc.closed_at is null
+                and bc.next_event_date = br.next_event_date
+                and bc.next_event_type = br.next_event_type
+          )
         order by br.next_event_date asc, br.id asc
     </select>
 
@@ -215,21 +302,48 @@
           and br.next_event_date is not null
           and br.next_event_date &lt;= #{today}
           and br.is_event_notified = false
+          and not exists (
+              select 1 from breeding_cycles bc
+              where bc.house_id = b.house_id
+                and bc.batch_id = br.batch_id
+                and bc.mother_rabbit_id = br.rabbit_id
+                and bc.closed_at is null
+                and bc.next_event_date = br.next_event_date
+                and bc.next_event_type = br.next_event_type
+          )
         order by br.next_event_date asc, br.id asc
     </select>
 
     <update id="markDueEventsAsNotified">
-        update batch_rabbits br
-        inner join batches b on b.id = br.batch_id
-        set br.is_event_notified = true,
-            br.event_notify_date = now(),
-            br.update_by = #{updateBy},
-            br.update_time = now()
-        where b.house_id = #{houseId}
-          and br.is_active = true
-          and br.next_event_date is not null
-          and br.next_event_date &lt;= #{today}
-          and br.is_event_notified = false
+        update batch_rabbits
+        set is_event_notified = true,
+            event_notify_date = now(),
+            update_by = #{updateBy},
+            update_time = now()
+        where id in (
+            select id
+            from (
+                select br.id
+                from batch_rabbits br
+                inner join batches b on b.id = br.batch_id
+                where b.house_id = #{houseId}
+                  and br.is_active = true
+                  and br.next_event_date is not null
+                  and br.next_event_date &lt;= #{today}
+                  and br.is_event_notified = false
+                  and not exists (
+                      select 1 from breeding_cycles bc
+                      where bc.house_id = b.house_id
+                        and bc.batch_id = br.batch_id
+                        and bc.mother_rabbit_id = br.rabbit_id
+                        and bc.closed_at is null
+                        and bc.next_event_date = br.next_event_date
+                        and bc.next_event_type = br.next_event_type
+                  )
+                order by br.id
+                limit #{limit}
+            ) due_batch_events
+        )
     </update>
 
     <select id="countActiveByBatch" resultType="int">
@@ -239,7 +353,8 @@
     </select>
 
     <select id="selectItemsByBatch" resultType="com.rabbit.app.modules.batch.dto.BatchRabbitItem">
-        select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.join_reason, br.batch_role, br.current_status,
+        select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.latest_cycle_id,
+               br.current_nursing_kits, br.nursing_litter_count, br.join_reason, br.batch_role, br.current_status,
                br.last_event_date, br.next_event_date, br.next_event_type, br.is_active, br.join_date, br.exit_date,
                r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id
         from batch_rabbits br

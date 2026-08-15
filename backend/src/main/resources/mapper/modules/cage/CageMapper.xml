@@ -47,6 +47,23 @@
         where house_id = #{houseId} and id = #{id}
     </select>
 
+    <select id="selectByIdForUpdate" resultMap="CageMap">
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
+        from cages
+        where house_id = #{houseId} and id = #{id}
+        for update
+    </select>
+
+    <select id="selectCommodityCagesForUpdate" resultMap="CageMap">
+        select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed, is_enabled, remark, create_by, create_time, update_by, update_time
+        from cages
+        where house_id = #{houseId}
+          and is_enabled = true
+          and status in ('0', '3')
+        order by id
+        for update
+    </select>
+
     <select id="selectByHouseIdForUpdate" resultMap="CageMap">
         select id, house_id, cage_number, row_code, layer_index, position_index, status, rabbit_count, is_fed,
             is_enabled, remark, create_by, create_time, update_by, update_time
@@ -121,6 +138,20 @@
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="incrementCommodityRabbitCountWithinCapacity">
+        update cages
+        set rabbit_count = rabbit_count + #{delta},
+            status = case when status = '0' then '3' else status end,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and id = #{id}
+          and is_enabled = true
+          and status in ('0', '3')
+          and #{delta} &gt; 0
+          and rabbit_count + #{delta} &lt;= #{capacity}
     </update>
 
     <update id="decrementRabbitCount">

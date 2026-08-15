@@ -30,6 +30,7 @@ class DashboardReportServiceTest {
         assertEquals(4, result.getSeedRabbits());
         assertEquals(3, result.getBredRabbits());
         assertEquals(0, result.getReadyForBreeding());
+        assertEquals(6, result.getNursingKits());
         assertEquals(0.8D, result.getLiveRate());
         assertEquals(7, result.getMonthlyBirths().get(1));
         assertEquals(5, result.getMonthlyWeaned().get(2));
@@ -93,7 +94,7 @@ class DashboardReportServiceTest {
         }
 
         @Override
-        public Integer countBatches(List<Long> houseIds) {
+        public Integer countActiveBreedingMothers(List<Long> houseIds) {
             return 3;
         }
 
@@ -107,6 +108,11 @@ class DashboardReportServiceTest {
             summary.setSuccessBreedingCount(2);
             summary.setFailedBreedingCount(0);
             return summary;
+        }
+
+        @Override
+        public Integer sumCurrentNursingKits(List<Long> houseIds) {
+            return 6;
         }
 
         @Override

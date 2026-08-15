@@ -10,6 +10,8 @@ import org.apache.ibatis.annotations.Param;
 public interface EventReminderLogMapper {
     int insertDueBatchEventLogs(@Param("houseId") Long houseId, @Param("today") Date today);
 
+    int insertDueBreedingCycleEventLogs(@Param("houseId") Long houseId, @Param("today") Date today);
+
     int insertDueReplacementLogs(@Param("houseId") Long houseId, @Param("today") Date today);
 
     List<EventReminderLog> selectByHouseAndDateRange(@Param("houseId") Long houseId, @Param("from") Date from, @Param("to") Date to, @Param("limit") Integer limit);
