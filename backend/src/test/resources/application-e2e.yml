@@ -28,7 +28,7 @@ app:
   auth:
     phone-hash-secret: e2e-only-phone-hash-secret-0123456789abcdef
   cors:
-    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top
   jwt:
     secret: e2e-only-app-jwt-secret-0123456789abcdef
     expire-seconds: 604800

@@ -98,7 +98,7 @@ services:
       APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_SECRET: ${APP_PHONE_ONE_TAP_ALIYUN_ACCESS_KEY_SECRET:-}
       APP_NFC_TAG_ACTIVE_KEY_ID: ${APP_NFC_TAG_ACTIVE_KEY_ID:-1}
       APP_NFC_TAG_SIGNING_KEYS: ${APP_NFC_TAG_SIGNING_KEYS:?APP_NFC_TAG_SIGNING_KEYS must be configured}
-      APP_CORS_ALLOWED_ORIGINS: "${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top,https://rabbit.host.dzht.top}"
+      APP_CORS_ALLOWED_ORIGINS: "${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://admin.dzht.top}"
       JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
       TZ: Asia/Shanghai
     ports:
