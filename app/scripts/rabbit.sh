@@ -26,7 +26,7 @@ Development and verification:
 Build and delivery:
   apk <env> [args...]       Build an APK through scripts/build_apk.sh.
   release <aab|apk|size>    Build a production delivery artifact.
-  e2e                       Run the Android end-to-end workflow.
+  e2e [scenario]            Run Android E2E: outbound (default) or batch-lifecycle.
 
 Examples:
   ./rabbit bootstrap
@@ -34,6 +34,7 @@ Examples:
   ./rabbit test
   ./rabbit apk test --release
   ./rabbit release aab
+  ./rabbit e2e batch-lifecycle
 USAGE
 }
 
@@ -125,8 +126,24 @@ EOF
     "$SCRIPT_DIR/build_release.sh" "$@"
     ;;
   e2e)
-    require_no_args "$command_name" "$@"
-    "$SCRIPT_DIR/android_e2e.sh"
+    e2e_scenario="${1:-outbound}"
+    if [[ $# -gt 0 ]]; then
+      shift
+    fi
+    require_no_args "$command_name $e2e_scenario" "$@"
+    case "$e2e_scenario" in
+      outbound)
+        "$SCRIPT_DIR/android_e2e.sh"
+        ;;
+      batch-lifecycle)
+        "$SCRIPT_DIR/android_batch_lifecycle_e2e.sh"
+        ;;
+      *)
+        echo "Unknown Android E2E scenario: $e2e_scenario" >&2
+        usage >&2
+        exit 64
+        ;;
+    esac
     ;;
   *)
     echo "Unknown Rabbit command: $command_name" >&2

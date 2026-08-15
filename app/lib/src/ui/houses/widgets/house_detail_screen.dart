@@ -6,7 +6,6 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
-import 'package:rabbit_flutter/src/ui/batches/widgets/create_batch_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -165,23 +164,20 @@ class _HouseDetailContent extends ConsumerWidget {
             onTap: () => context.go('/houses/${house.id}/rabbits'),
           ),
           const SizedBox(height: 10),
-          if (perm.canEdit) ...[
+          _DetailEntryCard(
+            key: const ValueKey('house-batches-entry'),
+            icon: Icons.playlist_add_check_outlined,
+            iconColor: palette.warning,
+            iconBackground: palette.warningSoft,
+            title: '生产批次',
+            message: perm.canEdit
+                ? '查看全部 Batch，按状态筛选或创建新的生产批次。'
+                : '查看当前兔舍全部 Batch 及其生产周期状态。',
+            actionLabel: '查看批次',
+            onTap: () => context.go('/houses/${house.id}/batches'),
+          ),
+          if (perm.canControl) ...[
             const SizedBox(height: 10),
-            _DetailEntryCard(
-              icon: Icons.playlist_add_check_outlined,
-              iconColor: palette.warning,
-              iconBackground: palette.warningSoft,
-              title: '创建生产批次',
-              message: '选择种母兔创建批次，系统将自动生成配种、摸胎、分娩等提醒。',
-              actionLabel: '创建',
-              onTap: () => showCreateBatchSheet(
-                context: context,
-                houseId: house.id,
-                houseName: house.name,
-              ),
-            ),
-          ],
-          if (perm.canControl)
             _DetailEntryCard(
               icon: Icons.calendar_month_outlined,
               iconColor: palette.warning,
@@ -193,6 +189,7 @@ class _HouseDetailContent extends ConsumerWidget {
                 '/houses/${house.id}/settings/production?name=${Uri.encodeComponent(house.name)}',
               ),
             ),
+          ],
           if (perm.canManageMembers) ...[
             const SizedBox(height: 10),
             _DetailEntryCard(
@@ -342,6 +339,7 @@ class _OverviewMetrics extends StatelessWidget {
             child: _MetricBlock(
               label: '笼位',
               value: cageCount == null ? '--' : '$cageCount',
+              status: _loadStatus(cages),
             ),
           ),
           const SizedBox(width: 10),
@@ -349,19 +347,32 @@ class _OverviewMetrics extends StatelessWidget {
             child: _MetricBlock(
               label: '兔只',
               value: rabbitCount == null ? '--' : '$rabbitCount',
+              status: _loadStatus(rabbits),
             ),
           ),
         ],
       ),
     );
   }
+
+  String _loadStatus(AsyncValue<List<dynamic>> value) {
+    if (value.valueOrNull != null) {
+      return value.isLoading ? '正在更新' : '已全部加载';
+    }
+    return value.hasError ? '加载失败' : '正在加载';
+  }
 }
 
 class _MetricBlock extends StatelessWidget {
-  const _MetricBlock({required this.label, required this.value});
+  const _MetricBlock({
+    required this.label,
+    required this.value,
+    required this.status,
+  });
 
   final String label;
   final String value;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +389,19 @@ class _MetricBlock extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            status,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
     );
@@ -387,6 +410,7 @@ class _MetricBlock extends StatelessWidget {
 
 class _DetailEntryCard extends StatelessWidget {
   const _DetailEntryCard({
+    super.key,
     required this.icon,
     required this.iconColor,
     required this.iconBackground,

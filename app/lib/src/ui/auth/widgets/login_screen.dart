@@ -573,8 +573,8 @@ class _ResetPasswordDialogState extends ConsumerState<_ResetPasswordDialog> {
     return AlertDialog(
       title: const Text('重置密码'),
       content: SingleChildScrollView(
-        child: SizedBox(
-          width: 360,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
           child: Form(
             key: _formKey,
             child: Column(
@@ -784,7 +784,7 @@ class _LegalConsentRow extends StatelessWidget {
 
     return Row(
       key: const ValueKey('legal-consent-row'),
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox.square(
           dimension: 48,
@@ -794,29 +794,79 @@ class _LegalConsentRow extends StatelessWidget {
             onChanged: enabled ? (value) => onChanged(value ?? false) : null,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         Expanded(
-          child: FittedBox(
-            alignment: Alignment.centerLeft,
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('请阅读并同意', style: baseStyle),
-                GestureDetector(
-                  onTap: onOpenPrivacyPolicy,
-                  child: Text('《隐私政策》', style: linkStyle),
-                ),
-                Text('与', style: baseStyle),
-                GestureDetector(
-                  onTap: onOpenUserAgreement,
-                  child: Text('《用户协议》', style: linkStyle),
-                ),
-              ],
-            ),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _LegalTextFragment(text: '请阅读并同意', style: baseStyle),
+              _LegalLinkButton(
+                key: const ValueKey('privacy-policy-link'),
+                label: '《隐私政策》',
+                style: linkStyle,
+                onPressed: onOpenPrivacyPolicy,
+              ),
+              _LegalTextFragment(text: '与', style: baseStyle),
+              _LegalLinkButton(
+                key: const ValueKey('user-agreement-link'),
+                label: '《用户协议》',
+                style: linkStyle,
+                onPressed: onOpenUserAgreement,
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LegalTextFragment extends StatelessWidget {
+  const _LegalTextFragment({required this.text, required this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        widthFactor: 1,
+        heightFactor: 1,
+        child: Text(text, style: style),
+      ),
+    );
+  }
+}
+
+class _LegalLinkButton extends StatelessWidget {
+  const _LegalLinkButton({
+    super.key,
+    required this.label,
+    required this.style,
+    required this.onPressed,
+  });
+
+  final String label;
+  final TextStyle? style;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      link: true,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: EdgeInsets.zero,
+          tapTargetSize: MaterialTapTargetSize.padded,
+          alignment: Alignment.centerLeft,
+        ),
+        child: Text(label, style: style),
+      ),
     );
   }
 }

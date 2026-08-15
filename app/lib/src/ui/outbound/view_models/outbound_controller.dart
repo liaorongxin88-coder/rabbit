@@ -478,6 +478,12 @@ class OutboundController extends StateNotifier<OutboundState> {
   Future<void> backToSelection() async {
     _refreshSequence++;
     _saveTimer?.cancel();
+    _emit(state.copyWith(
+        submitStatus: OutboundSubmitStatus.idle,
+        conflicts: const [],
+        clearResult: true,
+        clearRequestId: true,
+        clearError: true));
     await _save('SELECTING');
   }
 

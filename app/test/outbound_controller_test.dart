@@ -108,6 +108,35 @@ void main() {
     expect(gateway.requestIds.toSet().length, 2);
   });
 
+  test('failed submit returns to editable selection state', () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..submitError = const ApiException('提交被拒绝', statusCode: 400);
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 101, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    controller.updateForm(totalWeight: '6.5');
+    await controller.continueToConfirm();
+    await controller.submit();
+
+    expect(controller.state.submitStatus, OutboundSubmitStatus.failed);
+    expect(controller.state.errorMessage, '提交被拒绝');
+
+    await controller.backToSelection();
+
+    expect(controller.state.submitStatus, OutboundSubmitStatus.idle);
+    expect(controller.state.isConfirming, isFalse);
+    expect(controller.state.errorMessage, isNull);
+    expect(controller.state.task?.status, 'SELECTING');
+    expect(gateway.lastSaveStatus, 'SELECTING');
+  });
+
   test('discarding a resumed draft cancels it before creating a new task',
       () async {
     SharedPreferences.setMockInitialValues({});

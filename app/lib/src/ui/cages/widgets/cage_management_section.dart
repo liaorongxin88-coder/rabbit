@@ -263,6 +263,11 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 : constraints.maxWidth >= 640
                     ? 4
                     : 3;
+            final tileExtent = textScale >= 1.8
+                ? 188.0
+                : textScale >= 1.3
+                    ? 152.0
+                    : 120.0;
             return GridView.builder(
               key: const ValueKey('house-cage-grid'),
               itemCount: visibleCageCount,
@@ -272,11 +277,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 crossAxisCount: columns,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: columns >= 4
-                    ? 1.3
-                    : columns == 2
-                        ? 1.15
-                        : 0.9,
+                mainAxisExtent: tileExtent,
               ),
               itemBuilder: (context, index) {
                 final cage = filtered[index];
@@ -368,7 +369,28 @@ class _NfcStatusBand extends ConsumerWidget {
         );
       },
       loading: () => const LinearProgressIndicator(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => Container(
+        key: const ValueKey('nfc-status-error'),
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: palette.warningSoft,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_outlined, color: palette.warning),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('NFC 状态加载失败，请重试')),
+            IconButton(
+              key: const ValueKey('nfc-status-retry'),
+              tooltip: '重试 NFC 状态',
+              onPressed: () =>
+                  ref.invalidate(nfcCageWriteQueueProvider(houseId)),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -528,8 +550,12 @@ class _CageTile extends StatelessWidget {
                   ),
                   if (onRowOutbound != null)
                     IconButton(
+                      key: ValueKey('cage-row-outbound-${cage.id}'),
                       tooltip: '${cage.rowCode} 排批量出库',
-                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                       onPressed: onRowOutbound,
                       icon: const Icon(Icons.local_shipping_outlined),
                     ),
@@ -734,10 +760,19 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
       if (!mounted) {
         return;
       }
+      if (created > 0) {
+        // The API creates cages one by one. Reflect a partial success immediately
+        // so the operator does not retry against a stale cage list.
+        ref.invalidate(houseCagesProvider(widget.houseId));
+        ref.invalidate(houseRabbitsProvider(widget.houseId));
+        ref.invalidate(nfcCageWriteQueueProvider(widget.houseId));
+      }
       final message = error is ApiException ? error.message : error.toString();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(created > 0 ? '已新增 $created 个，$message' : message)),
+            content: Text(created > 0
+                ? '已新增 $created 个，后续创建失败：$message。请修改编号后重试。'
+                : message)),
       );
     } finally {
       if (mounted) {

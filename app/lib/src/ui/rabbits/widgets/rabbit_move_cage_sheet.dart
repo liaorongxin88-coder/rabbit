@@ -117,6 +117,10 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = (mediaQuery.size.height - keyboardInset).clamp(
+      0.0,
+      mediaQuery.size.height,
+    );
     final targets = _targetCages;
     final current = _currentCage;
 
@@ -127,90 +131,117 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
       child: SafeArea(
         top: false,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.88),
+          constraints: BoxConstraints(maxHeight: availableHeight * 0.92),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '换笼位',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '兔 #${_rabbit.id} · ${_rabbit.typeLabel} · ${_rabbit.genderLabel}',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
+              Flexible(
+                child: CustomScrollView(
+                  key: const ValueKey('rabbit-move-cage-scroll'),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '换笼位',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        Theme.of(context).textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '兔 #${_rabbit.id} · ${_rabbit.typeLabel} · ${_rabbit.genderLabel}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: '关闭',
+                              onPressed:
+                                  _saving ? null : () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    IconButton(
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _InfoBox(
+                          text: current == null
+                              ? '当前笼位 #${_rabbit.cageId}'
+                              : '当前笼位：${_cageLabel(current)}',
+                        ),
+                      ),
                     ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                        child: TextField(
+                          key: const ValueKey('rabbit-move-cage-search'),
+                          controller: _searchController,
+                          decoration: const InputDecoration(
+                            hintText: '搜索目标笼位编号',
+                            prefixIcon: Icon(Icons.search),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (targets.isEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                          child: Text(
+                            '没有可用的目标笼位。种兔/后备兔笼需为空笼，商品兔需匹配商品兔笼。',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                        sliver: SliverList.builder(
+                          itemCount: targets.length,
+                          itemBuilder: (context, index) {
+                            final cage = targets[index];
+                            final selected = cage.id == _selectedCageId;
+                            return RadioListTile<int>(
+                              key: ValueKey(
+                                  'rabbit-move-cage-target-${cage.id}'),
+                              value: cage.id,
+                              groupValue: _selectedCageId,
+                              onChanged: _saving
+                                  ? null
+                                  : (value) => setState(
+                                        () => _selectedCageId =
+                                            value ?? _selectedCageId,
+                                      ),
+                              title: Text(_cageLabel(cage)),
+                              subtitle: Text(cage.usageLabel),
+                              selected: selected,
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _InfoBox(
-                  text: current == null
-                      ? '当前笼位 #${_rabbit.cageId}'
-                      : '当前笼位：${_cageLabel(current)}',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: '搜索目标笼位编号',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: targets.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text(
-                          '没有可用的目标笼位。种兔/后备兔笼需为空笼，商品兔需匹配商品兔笼。',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                        itemCount: targets.length,
-                        itemBuilder: (context, index) {
-                          final cage = targets[index];
-                          final selected = cage.id == _selectedCageId;
-                          return RadioListTile<int>(
-                            value: cage.id,
-                            groupValue: _selectedCageId,
-                            onChanged: _saving
-                                ? null
-                                : (value) => setState(
-                                      () => _selectedCageId =
-                                          value ?? _selectedCageId,
-                                    ),
-                            title: Text(_cageLabel(cage)),
-                            subtitle: Text(cage.usageLabel),
-                            selected: selected,
-                          );
-                        },
-                      ),
-              ),
               DecoratedBox(
+                key: const ValueKey('rabbit-move-cage-actions'),
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(color: AppPalette.of(context).line),
@@ -230,6 +261,7 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
+                          key: const ValueKey('rabbit-move-cage-submit'),
                           onPressed:
                               _saving || _selectedCageId == _rabbit.cageId
                                   ? null

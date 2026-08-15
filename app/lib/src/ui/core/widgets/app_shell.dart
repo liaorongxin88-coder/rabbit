@@ -24,6 +24,7 @@ class AppShell extends StatelessWidget {
           onDestinationSelected: (index) => context.go(_routes[index]),
           destinations: const [
             NavigationDestination(
+              key: ValueKey('nav-home'),
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home),
               label: '首页',

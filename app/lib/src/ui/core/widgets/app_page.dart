@@ -19,7 +19,12 @@ class AppPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         leading: leading,
-        title: Text(title),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+        ),
         actions: actions,
       ),
       body: SafeArea(
