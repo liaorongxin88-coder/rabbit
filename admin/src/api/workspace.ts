@@ -157,6 +157,8 @@ export interface RabbitWriteInput {
   arrivalMethod?: string
   arrivalDate?: string
   weight?: number
+  growthStage?: string
+  reproductiveStage?: string
 }
 
 export function createRabbit(houseId: number, data: RabbitWriteInput) {

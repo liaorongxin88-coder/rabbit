@@ -11,6 +11,7 @@ public class Cage {
     private Integer positionIndex;
     private String status;
     private Integer rabbitCount;
+    private String breedingOccupantGender;
     private Boolean isFed;
     private Boolean isEnabled;
     private String remark;
@@ -81,6 +82,14 @@ public class Cage {
 
     public void setRabbitCount(Integer rabbitCount) {
         this.rabbitCount = rabbitCount;
+    }
+
+    public String getBreedingOccupantGender() {
+        return breedingOccupantGender;
+    }
+
+    public void setBreedingOccupantGender(String breedingOccupantGender) {
+        this.breedingOccupantGender = breedingOccupantGender;
     }
 
     public Boolean getIsFed() {

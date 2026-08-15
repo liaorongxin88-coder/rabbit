@@ -35,6 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RabbitService {
+    private static final Set<String> GROWTH_STAGES = Set.of(
+            "JUVENILE", "GROWING", "FATTENING", "MATURE"
+    );
+    private static final Set<String> REPRODUCTIVE_STAGES = Set.of(
+            "RESERVE", "EMPTY", "MATED", "PREGNANT", "LACTATING", "RESTING", "READY"
+    );
     private final RabbitMapper rabbitMapper;
     private final CageMapper cageMapper;
     private final SettingService settingService;
@@ -99,7 +105,11 @@ public class RabbitService {
                 return done;
             }
 
-            Cage cage = cageMapper.selectById(houseId, rabbit.getCageId());
+            normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
+
+            // A locking read is current under MySQL REPEATABLE READ. Every manual entry
+            // serializes on its destination cage before it observes capacity/count state.
+            Cage cage = cageMapper.selectByIdForUpdate(houseId, rabbit.getCageId());
             if (cage == null || !houseId.equals(cage.getHouseId())) {
                 throw new BizException(400, "笼位不存在");
             }
@@ -130,12 +140,14 @@ public class RabbitService {
                     requestDedupService.markDone(houseId, userId, api, requestId);
                     return dup;
                 }
-                throw e;
+                throw new BizException(409, "该繁殖笼已有在栏种兔，请刷新后重试");
             }
 
-            int newCount = cage.getRabbitCount() == null ? 1 : cage.getRabbitCount() + 1;
+            int newCount = cageRabbitCount(cage) + 1;
             String newStatus = "0".equals(cage.getStatus()) ? targetCageStatus : cage.getStatus();
-            cageMapper.updateRabbitCountAndStatus(houseId, cage.getId(), newCount, newStatus, String.valueOf(userId));
+            if (cageMapper.updateRabbitCountAndStatus(houseId, cage.getId(), newCount, newStatus, String.valueOf(userId)) != 1) {
+                throw new BizException(409, "笼位状态已变化，请刷新后重试");
+            }
 
             RabbitStatusHistory h = new RabbitStatusHistory();
             h.setHouseId(houseId);
@@ -143,7 +155,7 @@ public class RabbitService {
             h.setFromStatus(null);
             h.setToStatus("入栏");
             h.setChangeTime(DateUtil.now());
-            h.setReason("录入兔子");
+            h.setReason("录入兔子" + stageAuditSuffix(rabbit.getGrowthStage(), rabbit.getReproductiveStage()));
             h.setCreateBy(String.valueOf(userId));
             h.setUpdateBy(String.valueOf(userId));
             rabbitStatusHistoryMapper.insert(h);
@@ -183,7 +195,20 @@ public class RabbitService {
     }
 
     @Transactional
-    public Rabbit updateBaseInfo(Long userId, Long houseId, Long rabbitId, Long cageId, Long motherId, String breed, String arrivalMethod, Date arrivalDate, Double weight, String requestId) {
+    public Rabbit updateBaseInfo(
+            Long userId,
+            Long houseId,
+            Long rabbitId,
+            Long cageId,
+            Long motherId,
+            String breed,
+            String arrivalMethod,
+            Date arrivalDate,
+            Double weight,
+            String growthStage,
+            String reproductiveStage,
+            String requestId
+    ) {
         String api = "rabbit.updateBaseInfo";
         if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
             Rabbit done = rabbitMapper.selectById(houseId, rabbitId);
@@ -194,7 +219,9 @@ public class RabbitService {
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
-            Rabbit r = rabbitMapper.selectById(houseId, rabbitId);
+            Rabbit r = rabbitMapper.selectByIdsForUpdate(houseId, List.of(rabbitId)).stream()
+                    .findFirst()
+                    .orElse(null);
             if (r == null) {
                 throw new BizException(400, "兔子不存在");
             }
@@ -202,7 +229,18 @@ public class RabbitService {
                 throw new BizException(400, "兔子已离场");
             }
             Long newCageId = cageId == null || cageId <= 0 ? r.getCageId() : cageId;
-            Cage newCage = cageMapper.selectById(houseId, newCageId);
+            Set<Long> cageIds = new LinkedHashSet<>();
+            cageIds.add(r.getCageId());
+            cageIds.add(newCageId);
+            Map<Long, Cage> lockedCages = new HashMap<>();
+            for (Cage cage : cageMapper.selectByIdsForUpdate(houseId, cageIds.stream().sorted().toList())) {
+                lockedCages.put(cage.getId(), cage);
+            }
+            Cage oldCage = lockedCages.get(r.getCageId());
+            Cage newCage = lockedCages.get(newCageId);
+            if (oldCage == null || !houseId.equals(oldCage.getHouseId())) {
+                throw new BizException(409, "原笼位不存在，请刷新后重试");
+            }
             if (newCage == null || !houseId.equals(newCage.getHouseId())) {
                 throw new BizException(400, "笼位不存在");
             }
@@ -214,22 +252,68 @@ public class RabbitService {
                 throw new BizException(400, "笼位用途不匹配");
             }
 
-            Cage oldCage = cageMapper.selectById(houseId, r.getCageId());
             if (oldCage != null && !oldCage.getId().equals(newCageId)) {
                 assertCageHasCapacityForNewRabbit(newCage, r.getType());
-                int newCount = (oldCage.getRabbitCount() == null ? 0 : oldCage.getRabbitCount()) - 1;
+                int newCount = cageRabbitCount(oldCage) - 1;
                 if (newCount < 0) {
-                    newCount = 0;
+                    throw new BizException(409, "原笼位在栏数量已变化，请刷新后重试");
                 }
                 String status = newCount == 0 ? "0" : oldCage.getStatus();
-                cageMapper.updateRabbitCountAndStatus(houseId, oldCage.getId(), newCount, status, String.valueOf(userId));
+                if (cageMapper.updateRabbitCountAndStatus(houseId, oldCage.getId(), newCount, status, String.valueOf(userId)) != 1) {
+                    throw new BizException(409, "原笼位状态已变化，请刷新后重试");
+                }
 
-                int addCount = (newCage.getRabbitCount() == null ? 0 : newCage.getRabbitCount()) + 1;
+                int addCount = cageRabbitCount(newCage) + 1;
                 String newStatus = "0".equals(newCage.getStatus()) ? targetCageStatus : newCage.getStatus();
-                cageMapper.updateRabbitCountAndStatus(houseId, newCageId, addCount, newStatus, String.valueOf(userId));
+                if (cageMapper.updateRabbitCountAndStatus(houseId, newCageId, addCount, newStatus, String.valueOf(userId)) != 1) {
+                    throw new BizException(409, "目标笼位状态已变化，请刷新后重试");
+                }
             }
 
-            rabbitMapper.updateBaseInfo(houseId, rabbitId, newCageId, motherId, breed, arrivalMethod, arrivalDate, weight, String.valueOf(userId));
+            String nextGrowthStage = normalizeStage(growthStage);
+            String nextReproductiveStage = normalizeStage(reproductiveStage);
+            if (nextGrowthStage == null) {
+                nextGrowthStage = r.getGrowthStage();
+            }
+            if (nextReproductiveStage == null) {
+                nextReproductiveStage = r.getReproductiveStage();
+            }
+            Rabbit stages = new Rabbit();
+            stages.setGrowthStage(nextGrowthStage);
+            stages.setReproductiveStage(nextReproductiveStage);
+            normalizeAndValidateStages(r.getType(), r.getGender(), stages);
+
+            try {
+                if (rabbitMapper.updateBaseInfo(
+                        houseId,
+                        rabbitId,
+                        newCageId,
+                        motherId,
+                        breed,
+                        arrivalMethod,
+                        arrivalDate,
+                        weight,
+                        stages.getGrowthStage(),
+                        stages.getReproductiveStage(),
+                        String.valueOf(userId)
+                ) != 1) {
+                    throw new BizException(409, "兔只状态已变化，请刷新后重试");
+                }
+            } catch (DuplicateKeyException e) {
+                throw new BizException(409, "该繁殖笼已有在栏种兔，请刷新后重试");
+            }
+            if (!sameStage(r.getGrowthStage(), stages.getGrowthStage())
+                    || !sameStage(r.getReproductiveStage(), stages.getReproductiveStage())) {
+                insertStageHistory(
+                        houseId,
+                        rabbitId,
+                        r.getGrowthStage(),
+                        r.getReproductiveStage(),
+                        stages.getGrowthStage(),
+                        stages.getReproductiveStage(),
+                        String.valueOf(userId)
+                );
+            }
             Rabbit done = rabbitMapper.selectById(houseId, rabbitId);
             requestDedupService.markDone(houseId, userId, api, requestId);
             return done;
@@ -444,14 +528,14 @@ public class RabbitService {
     private void assertCageHasCapacityForNewRabbit(Cage cage, String rabbitType) {
         if ("1".equals(cage.getStatus()) || "2".equals(cage.getStatus())) {
             if (cageRabbitCount(cage) >= 1) {
-                throw new BizException(400, "该笼位已有兔子，不能再存放");
+                throw new BizException(409, "该笼位已有兔子，请刷新后重试");
             }
             return;
         }
         if ("2".equals(rabbitType)
                 && ("3".equals(cage.getStatus()) || "0".equals(cage.getStatus()))
                 && cageRabbitCount(cage) >= commodityCageCapacity) {
-            throw new BizException(400, "商品兔笼已满");
+            throw new BizException(409, "商品兔笼已满，请刷新后重试");
         }
     }
 
@@ -467,6 +551,89 @@ public class RabbitService {
             return "2";
         }
         return "3";
+    }
+
+    private void normalizeAndValidateStages(String type, String gender, Rabbit rabbit) {
+        String growthStage = normalizeStage(rabbit.getGrowthStage());
+        String reproductiveStage = normalizeStage(rabbit.getReproductiveStage());
+        if (growthStage != null && !GROWTH_STAGES.contains(growthStage)) {
+            throw new BizException(400, "growthStage不支持");
+        }
+        if (reproductiveStage != null && !REPRODUCTIVE_STAGES.contains(reproductiveStage)) {
+            throw new BizException(400, "reproductiveStage不支持");
+        }
+        if (reproductiveStage != null) {
+            if ("2".equals(type)) {
+                throw new BizException(400, "商品兔不能录入繁殖阶段");
+            }
+            if ("1".equals(type) && !"RESERVE".equals(reproductiveStage)) {
+                throw new BizException(400, "后备兔繁殖阶段仅支持RESERVE");
+            }
+            if ("0".equals(type) && "0".equals(gender) && "READY".equals(reproductiveStage)) {
+                throw new BizException(400, "种母兔不能使用READY繁殖阶段");
+            }
+            if ("0".equals(type) && "1".equals(gender)
+                    && !"READY".equals(reproductiveStage) && !"RESTING".equals(reproductiveStage)) {
+                throw new BizException(400, "种公兔繁殖阶段仅支持READY或RESTING");
+            }
+            if (!"0".equals(type) && !"1".equals(type)) {
+                throw new BizException(400, "兔子类型不支持繁殖阶段");
+            }
+        }
+        rabbit.setGrowthStage(growthStage);
+        rabbit.setReproductiveStage(reproductiveStage);
+    }
+
+    private String normalizeStage(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private boolean sameStage(String left, String right) {
+        return java.util.Objects.equals(left, right);
+    }
+
+    private String stageAuditSuffix(String growthStage, String reproductiveStage) {
+        String detail = stageSummary(growthStage, reproductiveStage);
+        return "未录入阶段".equals(detail) ? "" : "；" + detail;
+    }
+
+    private void insertStageHistory(
+            Long houseId,
+            Long rabbitId,
+            String oldGrowthStage,
+            String oldReproductiveStage,
+            String newGrowthStage,
+            String newReproductiveStage,
+            String operator
+    ) {
+        RabbitStatusHistory history = new RabbitStatusHistory();
+        history.setHouseId(houseId);
+        history.setRabbitId(rabbitId);
+        history.setFromStatus(stageSummary(oldGrowthStage, oldReproductiveStage));
+        history.setToStatus(stageSummary(newGrowthStage, newReproductiveStage));
+        history.setChangeTime(DateUtil.now());
+        history.setReason("更新生长/繁殖阶段");
+        history.setRelatedRecordTable("rabbits");
+        history.setCreateBy(operator);
+        history.setUpdateBy(operator);
+        rabbitStatusHistoryMapper.insert(history);
+    }
+
+    private String stageSummary(String growthStage, String reproductiveStage) {
+        if (growthStage == null && reproductiveStage == null) {
+            return "未录入阶段";
+        }
+        if (growthStage == null) {
+            return "繁殖阶段:" + reproductiveStage;
+        }
+        if (reproductiveStage == null) {
+            return "生长阶段:" + growthStage;
+        }
+        return "生长阶段:" + growthStage + "；繁殖阶段:" + reproductiveStage;
     }
 
     @Transactional

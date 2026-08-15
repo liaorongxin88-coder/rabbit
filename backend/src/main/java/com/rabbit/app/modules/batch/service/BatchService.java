@@ -1636,6 +1636,7 @@ public class BatchService {
                     kid.setArrivalMethod("1");
                     kid.setArrivalDate(weaningDate);
                     kid.setWeight(avgWeight);
+                    kid.setGrowthStage("GROWING");
                     kid.setIsActive(Boolean.TRUE);
                     kid.setIsQuarantined(Boolean.FALSE);
                     kid.setRequestId(deriveBoundedRequestId(requestId, "kit-" + idx));

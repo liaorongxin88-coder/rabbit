@@ -96,6 +96,25 @@ class SchemaSqlV24Test {
         );
     }
 
+    @Test
+    void schemaContainsRabbitStagesAndSingleBreedingCageGuard() {
+        String rabbits = table("rabbits");
+
+        assertAll(
+            () -> assertContains(rabbits, "growth_stage varchar(20)"),
+            () -> assertContains(rabbits, "reproductive_stage varchar(20)"),
+            () -> assertContains(rabbits, "active_breeding_cage_id bigint generated always as"),
+            () -> assertContains(
+                rabbits,
+                "unique key uk_rabbits_house_active_breeding_cage (house_id, active_breeding_cage_id)"
+            ),
+            () -> assertContains(
+                rabbits,
+                "key idx_rabbits_house_cage_active_type_id (house_id, cage_id, is_active, type, id)"
+            )
+        );
+    }
+
     private static void assertCycleReference(String tableName, String indexName) {
         String definition = table(tableName);
         assertContains(definition, "breeding_cycle_id bigint");

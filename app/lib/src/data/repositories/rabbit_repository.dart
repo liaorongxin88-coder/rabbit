@@ -164,6 +164,8 @@ class RabbitRepository {
     required String breed,
     required String arrivalMethod,
     required double? weight,
+    String? growthStage,
+    String? reproductiveStage,
   }) {
     final body = <String, dynamic>{
       'cageId': cageId,
@@ -179,6 +181,15 @@ class RabbitRepository {
     }
     if (weight != null && weight > 0) {
       body['weight'] = weight;
+    }
+    final trimmedGrowthStage = growthStage?.trim();
+    if (trimmedGrowthStage != null && trimmedGrowthStage.isNotEmpty) {
+      body['growthStage'] = trimmedGrowthStage;
+    }
+    final trimmedReproductiveStage = reproductiveStage?.trim();
+    if (trimmedReproductiveStage != null &&
+        trimmedReproductiveStage.isNotEmpty) {
+      body['reproductiveStage'] = trimmedReproductiveStage;
     }
 
     return _api.post<Rabbit>(
@@ -208,6 +219,8 @@ class RabbitRepository {
       arrivalMethod: rabbit.arrivalMethod,
       arrivalDate: rabbit.arrivalDate,
       weight: rabbit.weight,
+      growthStage: rabbit.growthStage,
+      reproductiveStage: rabbit.reproductiveStage,
     );
   }
 
@@ -220,6 +233,8 @@ class RabbitRepository {
     required String arrivalMethod,
     required DateTime? arrivalDate,
     required double? weight,
+    String? growthStage,
+    String? reproductiveStage,
   }) {
     final body = <String, dynamic>{
       'cageId': cageId,
@@ -238,6 +253,15 @@ class RabbitRepository {
     }
     if (weight != null && weight > 0) {
       body['weight'] = weight;
+    }
+    final trimmedGrowthStage = growthStage?.trim();
+    if (trimmedGrowthStage != null && trimmedGrowthStage.isNotEmpty) {
+      body['growthStage'] = trimmedGrowthStage;
+    }
+    final trimmedReproductiveStage = reproductiveStage?.trim();
+    if (trimmedReproductiveStage != null &&
+        trimmedReproductiveStage.isNotEmpty) {
+      body['reproductiveStage'] = trimmedReproductiveStage;
     }
 
     return _api.put<Rabbit>(
