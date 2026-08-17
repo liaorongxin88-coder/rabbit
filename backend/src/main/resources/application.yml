@@ -19,6 +19,15 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  # 母兔生产流程 V2（doe-breeding-v2）。
+  # P2/P3 期间默认关闭，因为新旧写路径操作同一批业务行，
+  # 两边同时对外开放等于把并发一致性交给运气。
+  # P4 已删除旧的八个繁殖写端点，旧路径不再存在，冲突前提随之消失；
+  # 此时再默认关闭就意味着产品根本没有繁殖写入路径，故翻为 true。
+  # 保留开关只为应急陛落（APP_REPRO_V2_ENABLED=false 可整体关停新接口）。
+  repro:
+    v2:
+      enabled: ${APP_REPRO_V2_ENABLED:true}
   cache:
     provider: ${APP_CACHE_PROVIDER:none}
     host: ${APP_CACHE_HOST:127.0.0.1}

@@ -17,7 +17,20 @@ public class Rabbit {
     private Date arrivalDate;
     private Double weight;
     private String growthStage;
+    /** 旧繁育阶段列；V26 起由 {@link #currentStage} 取代，V28 删除。 */
     private String reproductiveStage;
+    /**
+     * V26 新增：统一词汇的当前阶段投影。
+     *
+     * <p>写者只有状态机服务一个，且与周期变更同事务写入。旧模型里同一事实有三个写点
+     * （rabbits.reproductive_stage / batch_rabbits.current_status / breeding_cycles.status），
+     * 靠手工调 syncBreedingSummary() 对齐，漏调即漂移——飞书 recvsrp9E2dqvB 的根因。
+     */
+    private String currentStage;
+    private Long currentCycleId;
+    private Date stageEnteredAt;
+    /** 种公兔专用（录入需求）。 */
+    private Date lastMatingDate;
     private Long stateVersion;
     private Boolean isActive;
     private Boolean isQuarantined;
@@ -37,6 +50,38 @@ public class Rabbit {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getCurrentStage() {
+        return currentStage;
+    }
+
+    public void setCurrentStage(String currentStage) {
+        this.currentStage = currentStage;
+    }
+
+    public Long getCurrentCycleId() {
+        return currentCycleId;
+    }
+
+    public void setCurrentCycleId(Long currentCycleId) {
+        this.currentCycleId = currentCycleId;
+    }
+
+    public Date getStageEnteredAt() {
+        return stageEnteredAt;
+    }
+
+    public void setStageEnteredAt(Date stageEnteredAt) {
+        this.stageEnteredAt = stageEnteredAt;
+    }
+
+    public Date getLastMatingDate() {
+        return lastMatingDate;
+    }
+
+    public void setLastMatingDate(Date lastMatingDate) {
+        this.lastMatingDate = lastMatingDate;
     }
 
     public Long getHouseId() {

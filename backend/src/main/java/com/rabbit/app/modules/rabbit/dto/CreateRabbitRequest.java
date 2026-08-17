@@ -30,6 +30,24 @@ public class CreateRabbitRequest {
     @Size(max = 20, message = "繁殖阶段不合法")
     private String reproductiveStage;
 
+    /**
+     * 种母兔录入时直接指定的生产阶段（待催情/待配种/待摸胎……）。
+     *
+     * <p>存栏母兔很少刚好处于“什么都没发生”的起点，不能要求用户先录入再从头跑一轮。
+     * 指定后后端会在同一事务里开周期并生成首个待办，取代旧的 reproductiveStage 手写。
+     */
+    private String reproStage;
+
+    /** 进入该阶段的日期，缺省为录入时间；它决定首个待办何时到期。 */
+    private Date stageEnteredAt;
+
+    /** 指定待摸胎/待备产/待分娩等阶段时需要的历史事实。 */
+    private Date matingDate;
+
+    private Date birthDate;
+
+    private Integer liveKits;
+
     @NotBlank(message = "requestId不能为空")
     private String requestId;
 
@@ -120,4 +138,24 @@ public class CreateRabbitRequest {
     public void setRequestId(String requestId) {
         this.requestId = requestId;
     }
+
+    public String getReproStage() { return reproStage; }
+
+    public void setReproStage(String reproStage) { this.reproStage = reproStage; }
+
+    public Date getStageEnteredAt() { return stageEnteredAt; }
+
+    public void setStageEnteredAt(Date stageEnteredAt) { this.stageEnteredAt = stageEnteredAt; }
+
+    public Date getMatingDate() { return matingDate; }
+
+    public void setMatingDate(Date matingDate) { this.matingDate = matingDate; }
+
+    public Date getBirthDate() { return birthDate; }
+
+    public void setBirthDate(Date birthDate) { this.birthDate = birthDate; }
+
+    public Integer getLiveKits() { return liveKits; }
+
+    public void setLiveKits(Integer liveKits) { this.liveKits = liveKits; }
 }

@@ -6,3 +6,4 @@ target/
 /.pnpm-store/
 rabbit-master/
 **/.idea/workspace.xml
+/.pi-web/

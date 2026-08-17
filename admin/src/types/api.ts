@@ -252,6 +252,67 @@ export interface BulkMatingResult {
   count: number
 }
 
+/** 一次生产动作的结果。 */
+export interface ReproActionResult {
+  cycleId: number
+  eventId?: number | null
+  litterId?: number | null
+  nextTaskId?: number | null
+  stage?: string | null
+  lifecycle?: string | null
+  nextDueTime?: string | number | null
+  /** 关周期并自动接续时，新开出来的周期。 */
+  followUpCycleId?: number | null
+  /** 命中幂等回放：本次没有产生新的状态变更。 */
+  replayed?: boolean
+}
+
+export interface ReproBulkItem {
+  ok: boolean
+  taskId?: number | null
+  cycleId?: number | null
+  rabbitId?: number | null
+  code?: number | null
+  message?: string | null
+  replayed?: boolean
+}
+
+export interface ReproBulkResult {
+  total: number
+  succeeded: number
+  failed: number
+  items: ReproBulkItem[]
+}
+
+/** 一条生产待办。 */
+export interface ReproTask {
+  id: number
+  taskType: string
+  /** 服务端给的中文标签，客户端不再自己拼。 */
+  taskLabel: string
+  /** 该待办对应的自然动作；为空表示不能直接推进生产流程。 */
+  action?: string | null
+  subjectType?: string | null
+  subjectId?: number | null
+  cycleId?: number | null
+  rabbitId?: number | null
+  batchId?: number | null
+  cageId?: number | null
+  dueDate?: string | number | null
+  dueTime?: string | number | null
+  status?: string | null
+  /** 是否逾期。由服务端判定，避免前后端时区不一致。 */
+  overdue?: boolean
+  snoozeCount?: number
+}
+
+export interface ReproTaskPage {
+  total: number
+  page: number
+  size: number
+  items: ReproTask[]
+}
+
 export interface BreedingCycle {
   id: number
   houseId: number
@@ -260,6 +321,10 @@ export interface BreedingCycle {
   maleRabbitId?: number | null
   cycleNo: number
   status: string
+  /** doe-breeding-v2 的权威阶段；status 是待删除的旧中文快照。 */
+  stage?: string | null
+  lifecycle?: string | null
+  result?: string | null
   matingDate?: string | null
   pregnancyCheckDate?: string | null
   pregnancyResult?: string | null

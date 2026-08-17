@@ -54,7 +54,16 @@ public class RabbitController {
         r.setWeight(req.getWeight());
         r.setGrowthStage(req.getGrowthStage());
         r.setReproductiveStage(req.getReproductiveStage());
-        return ApiResponse.ok(rabbitService.createRabbit(userId, houseId, r, req.getRequestId()));
+        RabbitService.ReproEntry reproEntry = new RabbitService.ReproEntry(
+            req.getReproStage(),
+            req.getStageEnteredAt(),
+            req.getMatingDate(),
+            req.getBirthDate(),
+            req.getLiveKits()
+        );
+        return ApiResponse.ok(
+            rabbitService.createRabbit(userId, houseId, r, reproEntry, req.getRequestId())
+        );
     }
 
     @GetMapping("/rabbits")

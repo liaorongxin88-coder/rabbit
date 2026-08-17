@@ -24,6 +24,32 @@ public class BatchRabbitItem {
     private String rabbitGender;
     private Long cageId;
 
+    /**
+     * 母兔当前所处的生产阶段（ReproStage 名，如 AWAIT_PALPATION），取自 rabbits 的投影列。
+     * 与 currentStatus 的区别是：currentStatus 是旧写路径留下的中文快照，旧写路径删除后不再更新；
+     * 这一列由生产状态机在推进周期的同一事务里维护，是权威现状。为空表示该母兔尚未入轨。
+     */
+    private String currentStage;
+
+    /** 母兔当前进行中的周期 id。客户端提交生产动作时需要它。 */
+    private Long currentCycleId;
+
+    public String getCurrentStage() {
+        return currentStage;
+    }
+
+    public void setCurrentStage(String currentStage) {
+        this.currentStage = currentStage;
+    }
+
+    public Long getCurrentCycleId() {
+        return currentCycleId;
+    }
+
+    public void setCurrentCycleId(Long currentCycleId) {
+        this.currentCycleId = currentCycleId;
+    }
+
     public Long getId() {
         return id;
     }

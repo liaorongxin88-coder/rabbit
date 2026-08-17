@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/abortion_sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_departure_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
@@ -16,7 +19,12 @@ import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 
-enum _AphrodisiacAction { start, finish }
+/// 批量选择模式。
+///
+/// 旧模型把催情分成「开始」与「完成」两个动作，中间多出一个「催情中」状态；
+/// doe-breeding-v2 取消了这个中间态，待催情一步直接推到待配种，
+/// 所以这里只剩一个催情动作（批量配种走单独的 _matingSelection 开关）。
+enum _BulkMode { estrus }
 
 class HouseBatchDetailScreen extends ConsumerStatefulWidget {
   const HouseBatchDetailScreen({
@@ -49,7 +57,7 @@ class _HouseBatchDetailScreenState
   String _role = _all;
   String _status = _all;
   String _activity = _active;
-  _AphrodisiacAction? _selectionAction;
+  _BulkMode? _selectionAction;
   var _matingSelection = false;
   bool _saving = false;
 
@@ -160,8 +168,8 @@ class _HouseBatchDetailScreenState
             _selectedRabbitIds.contains(item.rabbitId) &&
             (_matingSelection
                 ? _isMatingSelectable(item)
-                : _selectionAction != null &&
-                    _aphrodisiacAction(item) == _selectionAction))
+                : _selectionAction == _BulkMode.estrus &&
+                      _isEstrusSelectable(item)))
         .toList();
     if (selected.length != _selectedRabbitIds.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -242,16 +250,14 @@ class _HouseBatchDetailScreenState
                       selectionAction: _selectionAction,
                       matingSelection: _matingSelection,
                       saving: _saving,
-                      onSelect: (action) => _selectVisible(filtered, action),
+                      onSelect: () => _selectVisible(filtered),
                       onSelectMating: () => _selectMatingVisible(filtered),
-                      onClear:
-                          _selectedRabbitIds.isEmpty ? null : _clearSelection,
+                      onClear: _selectedRabbitIds.isEmpty
+                          ? null
+                          : _clearSelection,
                       onSubmit: selected.isEmpty || _selectionAction == null
                           ? null
-                          : () => _submitAphrodisiac(
-                                _selectionAction!,
-                                selected,
-                              ),
+                          : () => _submitAphrodisiac(selected),
                       onSubmitMating: selected.isEmpty || !_matingSelection
                           ? null
                           : () => _submitMating(selected),
@@ -278,7 +284,9 @@ class _HouseBatchDetailScreenState
           final item = filtered[index - 7];
           // A selection mode owns the row checkboxes. Do not expose an
           // aphrodisiac checkbox while the user is preparing a mating batch.
-          final action = _matingSelection ? null : _aphrodisiacAction(item);
+          final action = !_matingSelection && _isEstrusSelectable(item)
+              ? _BulkMode.estrus
+              : null;
           final matingSelectable =
               _matingSelection && _isMatingSelectable(item);
           return Padding(
@@ -301,6 +309,9 @@ class _HouseBatchDetailScreenState
                   : null,
               onDeparture: canEdit && _memberIsDepartureActionable(item)
                   ? () => _handleMemberDeparture(item)
+                  : null,
+              onAbortion: canEdit && _memberCanAbort(item)
+                  ? () => _handleMemberAbortion(item)
                   : null,
             ),
           );
@@ -383,17 +394,14 @@ class _HouseBatchDetailScreenState
     });
   }
 
-  void _selectVisible(
-    List<BatchRabbitItem> visible,
-    _AphrodisiacAction action,
-  ) {
+  void _selectVisible(List<BatchRabbitItem> visible) {
     final ids = visible
-        .where((item) => _aphrodisiacAction(item) == action)
+        .where(_isEstrusSelectable)
         .map((item) => item.rabbitId)
         .toSet();
     setState(() {
       _matingSelection = false;
-      _selectionAction = ids.isEmpty ? null : action;
+      _selectionAction = ids.isEmpty ? null : _BulkMode.estrus;
       _selectedRabbitIds
         ..clear()
         ..addAll(ids);
@@ -426,7 +434,7 @@ class _HouseBatchDetailScreenState
 
   void _toggleSelection(
     BatchRabbitItem item,
-    _AphrodisiacAction action,
+    _BulkMode action,
     bool selected,
   ) {
     setState(() {
@@ -462,11 +470,25 @@ class _HouseBatchDetailScreenState
 
   Future<void> _submitMating(List<BatchRabbitItem> selected) async {
     if (!_matingSelection || selected.isEmpty || _saving) return;
+    // 按实时阶段拆成两类：待配种的直接推进待办，哺乳中的需要先开新周期（血配）。
+    final nursing = selected
+        .where(
+          (item) =>
+              ReproStage.tryParse(item.currentStage) ==
+              ReproStage.awaitWeaning,
+        )
+        .map((item) => item.rabbitId)
+        .toList();
+    final matable = selected
+        .map((item) => item.rabbitId)
+        .where((id) => !nursing.contains(id))
+        .toList();
     final completed = await showBatchMatingSheet(
       context: context,
       houseId: widget.houseId,
       batchId: widget.batchId,
-      rabbitIds: selected.map((item) => item.rabbitId).toList(),
+      rabbitIds: matable,
+      nursingRabbitIds: nursing,
       writeRequest: _matingRequest,
     );
     if (completed && mounted) {
@@ -475,14 +497,11 @@ class _HouseBatchDetailScreenState
     }
   }
 
-  Future<void> _submitAphrodisiac(
-    _AphrodisiacAction action,
-    List<BatchRabbitItem> selected,
-  ) async {
+  Future<void> _submitAphrodisiac(List<BatchRabbitItem> selected) async {
     if (selected.isEmpty || _saving) {
       return;
     }
-    final label = action == _AphrodisiacAction.start ? '开始催情' : '完成催情';
+    const label = '催情';
     final confirmed = selected.length == 1 ||
         await showDialog<bool>(
               context: context,
@@ -510,41 +529,44 @@ class _HouseBatchDetailScreenState
     setState(() => _saving = true);
     try {
       final ids = selected.map((item) => item.rabbitId).toList();
-      final repository = ref.read(batchRepositoryProvider);
       final requestId = _batchActionRequest.requestIdFor(
         canonicalBatchWriteFingerprint({
-          'action': action == _AphrodisiacAction.start
-              ? 'startAphrodisiac'
-              : 'finishAphrodisiac',
+          'action': 'estrus',
           'houseId': widget.houseId,
           'batchId': widget.batchId,
           'rabbitIds': ids,
         }),
       );
-      if (action == _AphrodisiacAction.start) {
-        await repository.startAphrodisiac(
-          houseId: widget.houseId,
-          batchId: widget.batchId,
-          rabbitIds: ids,
-          requestId: requestId,
-        );
-      } else {
-        await repository.finishAphrodisiac(
-          houseId: widget.houseId,
-          batchId: widget.batchId,
-          rabbitIds: ids,
-          requestId: requestId,
-        );
-      }
+      final result = await ref
+          .read(reproRepositoryProvider)
+          .bulkApplyForRabbits(
+            houseId: widget.houseId,
+            batchId: widget.batchId,
+            taskType: 'ESTRUS',
+            action: ReproAction.estrus,
+            rabbitIds: ids,
+            occurredAt: DateTime.now(),
+            requestId: requestId,
+          );
       if (!mounted) {
         return;
       }
       _clearSelection();
       _refresh();
       ref.invalidate(homeEventsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$label已提交，共 ${ids.length} 只母兔')),
-      );
+      // 部分成功是常态，不是异常：一百只里有一只被别人先推进了，
+      // 不应该让另外九十九只白做，所以分开报告而不是抛错。
+      final message = switch (result) {
+        _ when result.total == 0 => '所选母兔当前没有待$label任务，可能已被处理',
+        _ when result.failed == 0 =>
+          '$label已提交，共 ${result.succeeded} 只母兔',
+        _ =>
+          '$label完成 ${result.succeeded} 只，${result.failed} 只未成功：'
+              '${result.failures.first.message ?? '原因未知'}',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -559,13 +581,12 @@ class _HouseBatchDetailScreenState
   }
 
   Future<void> _handleMemberAction(BatchRabbitItem item) async {
-    final aphrodisiac = _aphrodisiacAction(item);
-    if (aphrodisiac != null) {
-      _selectionAction = aphrodisiac;
+    if (_isEstrusSelectable(item)) {
+      _selectionAction = _BulkMode.estrus;
       _selectedRabbitIds
         ..clear()
         ..add(item.rabbitId);
-      await _submitAphrodisiac(aphrodisiac, [item]);
+      await _submitAphrodisiac([item]);
       return;
     }
 
@@ -735,7 +756,7 @@ class _HouseBatchDetailScreenState
     if (!item.isActive) {
       return false;
     }
-    if (_aphrodisiacAction(item) != null) {
+    if (_isEstrusSelectable(item)) {
       return true;
     }
     if (item.nextEventType.contains('出售')) {
@@ -748,37 +769,70 @@ class _HouseBatchDetailScreenState
     return item.isActive && item.batchRole == 'breeding';
   }
 
-  bool _isMatingSelectable(BatchRabbitItem item) {
-    if (!item.isActive || item.batchRole != 'breeding') return false;
-    return switch (item.currentStatus.trim()) {
-      '待配种' || '哺乳中' => true,
-      _ => false,
-    };
+  /// 能不能对这头母兔记流产。
+  ///
+  /// 判据来自服务端的阶段字典，而不是在这里写死「待摸胎/待备产/待分娩」：
+  /// 那份规则属于转换表，拄写到客户端日后必定漂移，用户会看到一个
+  /// 点下去就 409 的按钮。字典还没拉到时宁可不显示，不猜。
+  bool _memberCanAbort(BatchRabbitItem item) {
+    if (!item.isActive ||
+        item.batchRole != 'breeding' ||
+        item.currentCycleId == null) {
+      return false;
+    }
+    final dictionary = ref.watch(reproStageActionsProvider(widget.houseId)).valueOrNull;
+    if (dictionary == null) {
+      return false;
+    }
+    final stage = item.currentStage?.trim() ?? '';
+    return dictionary[stage]?.contains('ABORTION') ?? false;
   }
 
-  _AphrodisiacAction? _aphrodisiacAction(BatchRabbitItem item) {
+  Future<void> _handleMemberAbortion(BatchRabbitItem item) async {
+    if (!_memberCanAbort(item) || _saving) {
+      return;
+    }
+    final recorded = await showAbortionSheet(
+      context: context,
+      houseId: widget.houseId,
+      cycleId: item.currentCycleId!,
+      rabbitId: item.rabbitId,
+      batchId: widget.batchId,
+      rabbitLabel: '母兔 #${item.rabbitId}',
+      stageLabel: ReproStage.tryParse(item.currentStage)?.label,
+    );
+    if (recorded && mounted) {
+      _refresh();
+      ref.invalidate(homeEventsProvider);
+    }
+  }
+
+  /// 可配种包含两类：已到待配种的，以及还在哺乳、准备血配的。
+  /// 后者没有配种待办（哺乳周期不占流水线），提交时会先为她另开一个新周期。
+  static bool _isMatingSelectable(BatchRabbitItem item) {
+    if (!item.isActive || item.batchRole != 'breeding') return false;
+    final stage = ReproStage.tryParse(item.currentStage);
+    return stage == ReproStage.awaitMating || stage == ReproStage.awaitWeaning;
+  }
+
+  /// 能不能对这只母兔执行催情。
+  ///
+  /// 判据是服务端维护的实时阶段，而不是旧的中文状态快照——
+  /// 旧写路径删除后那个快照不再更新，拿它判断等于用建批时的旧值做决定。
+  static bool _isEstrusSelectable(BatchRabbitItem item) {
     if (!item.isActive || item.batchRole != 'breeding') {
-      return null;
+      return false;
     }
-    // API status values are display data; tolerate harmless surrounding
-    // whitespace so a filtered member remains actionable.
-    switch (item.currentStatus.trim()) {
-      case '待催情':
-      case '休整期':
-      case '哺乳中':
-        return _AphrodisiacAction.start;
-      case '催情中':
-        return _AphrodisiacAction.finish;
-      default:
-        return null;
-    }
+    return ReproStage.tryParse(item.currentStage) == ReproStage.awaitEstrus;
   }
 
   EventItem _eventFor(BatchRabbitItem item) {
     final date = item.nextEventDate;
+    // 周期 id 优先取实时投影列；latestCycleId 是旧写路径的快照，已停止维护。
+    final cycleId = item.currentCycleId ?? item.latestCycleId;
     return EventItem(
-      recordId: item.latestCycleId ?? item.id,
-      category: item.latestCycleId == null ? '生产' : '生产周期',
+      recordId: cycleId ?? item.id,
+      category: cycleId == null ? '生产' : '生产周期',
       eventType: item.nextEventType,
       eventDate: date,
       batchId: widget.batchId,
@@ -1117,10 +1171,10 @@ class _BatchSelectionBar extends StatelessWidget {
 
   final List<BatchRabbitItem> visible;
   final List<BatchRabbitItem> selected;
-  final _AphrodisiacAction? selectionAction;
+  final _BulkMode? selectionAction;
   final bool matingSelection;
   final bool saving;
-  final ValueChanged<_AphrodisiacAction> onSelect;
+  final VoidCallback onSelect;
   final VoidCallback onSelectMating;
   final VoidCallback? onClear;
   final VoidCallback? onSubmit;
@@ -1128,15 +1182,9 @@ class _BatchSelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final startCount = visible
-        .where((item) => _actionForStatus(item) == _AphrodisiacAction.start)
-        .length;
-    final finishCount = visible
-        .where((item) => _actionForStatus(item) == _AphrodisiacAction.finish)
-        .length;
+    final estrusCount = visible.where(_estrusSelectable).length;
     final matingCount = visible.where(_matingSelectable).length;
-    final label =
-        selectionAction == _AphrodisiacAction.finish ? '完成催情' : '开始催情';
+    const label = '催情';
 
     return SectionCard(
       child: Column(
@@ -1146,20 +1194,9 @@ class _BatchSelectionBar extends StatelessWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const ValueKey('batch-select-start-visible'),
-            onPressed: saving || startCount == 0
-                ? null
-                : () => onSelect(_AphrodisiacAction.start),
+            onPressed: saving || estrusCount == 0 ? null : onSelect,
             icon: const Icon(Icons.play_arrow),
-            label: Text('选择当前待开始（$startCount）'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            key: const ValueKey('batch-select-finish-visible'),
-            onPressed: saving || finishCount == 0
-                ? null
-                : () => onSelect(_AphrodisiacAction.finish),
-            icon: const Icon(Icons.check),
-            label: Text('选择当前催情中（$finishCount）'),
+            label: Text('选择当前待催情（$estrusCount）'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -1197,16 +1234,12 @@ class _BatchSelectionBar extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(
-                      matingSelection
-                          ? Icons.favorite
-                          : selectionAction == _AphrodisiacAction.finish
-                              ? Icons.check
-                              : Icons.play_arrow,
+                      matingSelection ? Icons.favorite : Icons.play_arrow,
                     ),
               label: Text(
                 matingSelection
                     ? '批量配种 ${selected.length} 只'
-                    : '$label ${selected.length} 只',
+                    : '批量$label ${selected.length} 只',
               ),
             ),
           ],
@@ -1215,24 +1248,15 @@ class _BatchSelectionBar extends StatelessWidget {
     );
   }
 
-  static _AphrodisiacAction? _actionForStatus(BatchRabbitItem item) {
-    if (!item.isActive || item.batchRole != 'breeding') return null;
-    switch (item.currentStatus.trim()) {
-      case '待催情':
-      case '休整期':
-      case '哺乳中':
-        return _AphrodisiacAction.start;
-      case '催情中':
-        return _AphrodisiacAction.finish;
-      default:
-        return null;
-    }
+  static bool _estrusSelectable(BatchRabbitItem item) {
+    if (!item.isActive || item.batchRole != 'breeding') return false;
+    return ReproStage.tryParse(item.currentStage) == ReproStage.awaitEstrus;
   }
 
   static bool _matingSelectable(BatchRabbitItem item) {
     if (!item.isActive || item.batchRole != 'breeding') return false;
-    return item.currentStatus.trim() == '待配种' ||
-        item.currentStatus.trim() == '哺乳中';
+    final stage = ReproStage.tryParse(item.currentStage);
+    return stage == ReproStage.awaitMating || stage == ReproStage.awaitWeaning;
   }
 }
 
@@ -1265,17 +1289,21 @@ class _BatchMemberCard extends StatelessWidget {
     required this.onSelectionChanged,
     required this.onAction,
     required this.onDeparture,
+    required this.onAbortion,
   });
 
   final BatchRabbitItem item;
   final bool canEdit;
-  final _AphrodisiacAction? selectableAction;
+  final _BulkMode? selectableAction;
   final bool matingSelectable;
   final bool selected;
   final bool saving;
   final ValueChanged<bool>? onSelectionChanged;
   final VoidCallback? onAction;
   final VoidCallback? onDeparture;
+
+  /// 为空即该母兔当前阶段不允许流产（服务端字典判定）。
+  final VoidCallback? onAbortion;
 
   @override
   Widget build(BuildContext context) {
@@ -1312,6 +1340,13 @@ class _BatchMemberCard extends StatelessWidget {
                   tooltip: actionLabel,
                   onPressed: saving ? null : onAction,
                   icon: Icon(_memberActionIcon(item, selectableAction)),
+                ),
+              if (onAbortion != null)
+                IconButton(
+                  key: ValueKey('batch-member-abortion-${item.rabbitId}'),
+                  tooltip: '记录流产',
+                  onPressed: saving ? null : onAbortion,
+                  icon: const Icon(Icons.report_problem_outlined),
                 ),
               if (onDeparture != null)
                 IconButton(
@@ -1357,22 +1392,14 @@ class _BatchMemberCard extends StatelessWidget {
     );
   }
 
-  static String _memberActionLabel(
-    BatchRabbitItem item,
-    _AphrodisiacAction? action,
-  ) {
-    if (action == _AphrodisiacAction.start) return '开始催情';
-    if (action == _AphrodisiacAction.finish) return '完成催情';
+  static String _memberActionLabel(BatchRabbitItem item, _BulkMode? action) {
+    if (action == _BulkMode.estrus) return '催情';
     if (item.nextEventType.contains('出售')) return '进入出库';
     return item.nextEventType.isEmpty ? '处理生产任务' : '处理${item.nextEventType}';
   }
 
-  static IconData _memberActionIcon(
-    BatchRabbitItem item,
-    _AphrodisiacAction? action,
-  ) {
-    if (action == _AphrodisiacAction.start) return Icons.play_arrow;
-    if (action == _AphrodisiacAction.finish) return Icons.check;
+  static IconData _memberActionIcon(BatchRabbitItem item, _BulkMode? action) {
+    if (action == _BulkMode.estrus) return Icons.play_arrow;
     if (item.nextEventType.contains('出售')) return Icons.local_shipping_outlined;
     return Icons.chevron_right;
   }

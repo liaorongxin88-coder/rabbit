@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -102,8 +103,16 @@ class BatchServiceTest {
         verify(historyMapper, never()).insertBatch(anyList());
     }
 
+    /**
+     * 批次结束现在是「守门」而不是「强关」。
+     *
+     * <p>旧实现会 UPDATE 把批次下所有周期置为「已终止」，而那条 SQL 不认识
+     * lifecycle/stage，会造成旧视角已终止、新视角仍 OPEN 的分裂状态。
+     * 现在改为以 lifecycle 为准检查，有未结束周期就拒绝；去活前后各查一次，
+     * 因为去活期间可能有新周期被开出来。
+     */
     @Test
-    void forceCompletionLocksBatchAndRechecksOpenCyclesAfterDeactivation() {
+    void forceCompletionLocksBatchAndRefusesWhileCyclesRemainOpen() {
         BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
         BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
         RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
@@ -119,7 +128,7 @@ class BatchServiceTest {
         when(batchRabbitMapper.deactivateByBatchLimited(
             eq(1L), eq(9L), any(Date.class), any(), eq("7"), anyInt()
         )).thenReturn(1, 0);
-        when(cycleMapper.countOpenByBatch(1L, 9L)).thenReturn(0);
+        when(cycleMapper.countOpenLifecycleByBatch(1L, 9L)).thenReturn(0);
 
         Date endDate = new Date();
         service(
@@ -132,15 +141,10 @@ class BatchServiceTest {
         ).completeBatch(7L, 1L, 9L, endDate, true, "done", "complete-1");
 
         verify(batchMapper).selectByIdForUpdate(1L, 9L);
-        verify(cycleMapper, org.mockito.Mockito.times(2)).closeOpenByBatch(
-            1L,
-            9L,
-            endDate,
-            "批次强制结束",
-            "7",
-            500
-        );
-        verify(cycleMapper).countOpenByBatch(1L, 9L);
+        // 旧的 closeOpenByBatch 已随 V28 一并删除（它绕过 lifecycle/stage/待办/投影），
+        // 现在只剩下面这道守门：还有未结束的周期就拒绝结束批次。
+        // 去活前后各守一次。
+        verify(cycleMapper, org.mockito.Mockito.times(2)).countOpenLifecycleByBatch(1L, 9L);
         verify(batchMapper).updateStatusAndDates(
             1L,
             9L,
@@ -195,6 +199,14 @@ class BatchServiceTest {
             null,
             dedup,
             null,
+            // 建批次会把母兔送进生产流水线，所以这三个依赖必须可用；
+            // 默认 mock 的 selectOpenPipelineForUpdate 返回 null，即「尚未入轨」。
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.mapper.ReproCycleMapper.class),
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.service.ReproStateMachineService.class),
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.service.OperatorNameResolver.class),
             10
         );
     }

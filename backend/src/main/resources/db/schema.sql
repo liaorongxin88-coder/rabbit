@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS global_setting (
   user_id BIGINT,
   aphrodisiac_days INT NOT NULL,
   palpation_days INT NOT NULL,
+  gestation_days INT NOT NULL DEFAULT 30,
   prepartum_days INT NOT NULL,
   weaning_days INT NOT NULL,
   postpartum_days INT NOT NULL,
@@ -195,6 +196,10 @@ CREATE TABLE IF NOT EXISTS rabbits (
   weight DOUBLE,
   growth_stage VARCHAR(20),
   reproductive_stage VARCHAR(20),
+  current_stage VARCHAR(20),
+  current_cycle_id BIGINT,
+  stage_entered_at DATETIME,
+  last_mating_date DATETIME,
   state_version BIGINT NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   active_breeding_cage_id BIGINT GENERATED ALWAYS AS (
@@ -216,6 +221,7 @@ CREATE TABLE IF NOT EXISTS rabbits (
   KEY idx_rabbits_father (father_id),
   KEY idx_rabbits_birth_cycle (birth_cycle_id),
   KEY idx_rabbits_house_birth_batch_id (house_id, birth_batch_id, id),
+  KEY idx_rabbits_house_current_stage (house_id, current_stage, id),
   KEY idx_rabbits_active (is_active),
   KEY idx_rabbits_quarantined (is_quarantined),
   UNIQUE KEY uk_rabbit_req (house_id, request_id),
@@ -251,6 +257,7 @@ CREATE TABLE IF NOT EXISTS batches (
   status VARCHAR(20) NOT NULL DEFAULT '计划中',
   start_date DATETIME,
   end_date DATETIME,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
   request_id VARCHAR(64),
   remark TEXT,
   create_by VARCHAR(64),
@@ -265,12 +272,30 @@ CREATE TABLE IF NOT EXISTS batches (
 
 CREATE TABLE IF NOT EXISTS breeding_cycles (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  tenant_id BIGINT,
   house_id BIGINT NOT NULL,
-  batch_id BIGINT NOT NULL,
+  -- V26 起可空：散养母兔不归属任何批次（业务裁定 2026-08-16）。
+  batch_id BIGINT,
   mother_rabbit_id BIGINT NOT NULL,
   male_rabbit_id BIGINT,
   cycle_no INT NOT NULL,
-  status VARCHAR(30) NOT NULL,
+  -- 中文 status 镜像列已随 V28 删除：一个 stage 可能对应多个旧状态值
+  -- （待备产与待分娩都写「怀孕确认」），它从来不是可靠判据。
+  -- 权威状态是 stage + lifecycle + result。
+  stage VARCHAR(20) NOT NULL,
+  stage_entered_at DATETIME NOT NULL,
+  lifecycle VARCHAR(10) NOT NULL DEFAULT 'OPEN',
+  result VARCHAR(10),
+  mating_method VARCHAR(10),
+  state_version BIGINT NOT NULL DEFAULT 0,
+  pipeline_guard BIGINT GENERATED ALWAYS AS (
+    CASE WHEN lifecycle = 'OPEN'
+          AND stage IN ('AWAIT_ESTRUS', 'AWAIT_MATING', 'AWAIT_PALPATION',
+                        'AWAIT_PREPARTUM', 'AWAIT_DELIVERY')
+         THEN mother_rabbit_id END
+  ) STORED,
+  -- batch_member_guard 已随 V28 删除：V27 最终没有创建 uk_bc_batch_member
+  -- （它会连哺乳周期一起算，反而挡掉 pipeline_guard 特意允许的血配）。
   mating_date DATETIME,
   pregnancy_check_date DATETIME,
   pregnancy_result VARCHAR(10),
@@ -285,16 +310,9 @@ CREATE TABLE IF NOT EXISTS breeding_cycles (
   preweaning_loss_kits INT NOT NULL DEFAULT 0,
   weaning_date DATETIME,
   avg_weaning_weight DOUBLE,
-  postpartum_remating_days INT,
   lactation_days INT,
-  overlap_litter_cycle_no INT,
-  overlap_start_date DATETIME,
-  overlap_end_date DATETIME,
-  overlap_days INT NOT NULL DEFAULT 0,
-  next_event_date DATETIME,
-  next_event_type VARCHAR(30),
-  is_event_notified BOOLEAN NOT NULL DEFAULT FALSE,
-  event_notify_date DATETIME,
+  -- V28 删除：overlap_* 是只写不读的死数据（血配改用「两条并存的开放周期」表达）；
+  -- next_event_* / is_event_notified / event_notify_date 的职责已整体迁到 work_tasks。
   closed_at DATETIME,
   close_reason VARCHAR(100),
   request_id VARCHAR(64),
@@ -305,7 +323,14 @@ CREATE TABLE IF NOT EXISTS breeding_cycles (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_bc_batch_mother_cycle (house_id, batch_id, mother_rabbit_id, cycle_no),
   UNIQUE KEY uk_bc_request (house_id, request_id),
+  -- 一只母兔同时只能有一个在途管线周期（V27 起生效）。
+  -- 对旧写路径行为中性：旧代码不写 stage → pipeline_guard 为 NULL → 唯一键不约束。
+  -- 注意没有配套的 uk_bc_batch_member：它会连同批次内的血配一起挡死，
+  -- 且 pipeline_guard 的保证范围本就更严。理由详见 V27 迁移文件。
+  UNIQUE KEY uk_bc_pipeline (house_id, pipeline_guard),
   KEY idx_bc_status (house_id, status, closed_at),
+  KEY idx_bc_stage (house_id, lifecycle, stage, id),
+  KEY idx_bc_mother_lifecycle (house_id, mother_rabbit_id, lifecycle, id),
   KEY idx_bc_next_event (house_id, next_event_date, is_event_notified),
   CONSTRAINT fk_bc_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_bc_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
@@ -416,7 +441,8 @@ CREATE TABLE IF NOT EXISTS prepartum_records (
 CREATE TABLE IF NOT EXISTS weaning_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT,
-  batch_id BIGINT NOT NULL,
+  -- V29 放开非空：散养母兔没有批次，分笼记录归属的是窝与周期
+  batch_id BIGINT,
   breeding_cycle_id BIGINT,
   rabbit_id BIGINT NOT NULL,
   target_cage_id BIGINT,
@@ -874,4 +900,108 @@ CREATE TABLE IF NOT EXISTS event_reminder_logs (
   UNIQUE KEY uk_erl_house_cat_record_date (house_id, category, record_id, notify_date),
   KEY idx_erl_house_date_id (house_id, notify_date, id),
   CONSTRAINT fk_erl_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 母兔生产流程 V2（V26 起）：事件流 / 窝 / 统一任务中心 / 通用附件
+CREATE TABLE IF NOT EXISTS repro_events (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  tenant_id BIGINT,
+  house_id BIGINT NOT NULL,
+  cycle_id BIGINT,
+  litter_id BIGINT,
+  mother_rabbit_id BIGINT NOT NULL,
+  batch_id BIGINT,
+  event_type VARCHAR(32) NOT NULL,
+  from_stage VARCHAR(20),
+  to_stage VARCHAR(20),
+  occurred_at DATETIME NOT NULL,
+  payload JSON,
+  operator_id BIGINT,
+  operator_name VARCHAR(64) NOT NULL,
+  request_id VARCHAR(64) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_re_request (house_id, request_id),
+  KEY idx_re_cycle (house_id, cycle_id, id),
+  KEY idx_re_mother_time (house_id, mother_rabbit_id, occurred_at),
+  KEY idx_re_house_time (house_id, occurred_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS litters (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  tenant_id BIGINT,
+  house_id BIGINT NOT NULL,
+  cycle_id BIGINT NOT NULL,
+  mother_rabbit_id BIGINT NOT NULL,
+  sire_rabbit_id BIGINT,
+  batch_id BIGINT,
+  birth_date DATETIME NOT NULL,
+  total_kits INT NOT NULL,
+  live_kits INT NOT NULL,
+  kept_kits INT NOT NULL,
+  foster_in INT NOT NULL DEFAULT 0,
+  foster_out INT NOT NULL DEFAULT 0,
+  loss_count INT NOT NULL DEFAULT 0,
+  current_nursing INT NOT NULL DEFAULT 0,
+  status VARCHAR(10) NOT NULL,
+  weaning_date DATETIME,
+  weaned_count INT,
+  avg_weaning_weight DOUBLE,
+  nursing_cage_id BIGINT,
+  request_id VARCHAR(64),
+  remark TEXT,
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by VARCHAR(64),
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_lt_cycle (house_id, cycle_id),
+  KEY idx_lt_status (house_id, status, birth_date),
+  KEY idx_lt_mother (house_id, mother_rabbit_id, birth_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS work_tasks (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  tenant_id BIGINT,
+  house_id BIGINT NOT NULL,
+  task_type VARCHAR(32) NOT NULL,
+  subject_type VARCHAR(16) NOT NULL,
+  subject_id BIGINT NOT NULL,
+  cycle_id BIGINT,
+  rabbit_id BIGINT,
+  batch_id BIGINT,
+  cage_id BIGINT,
+  due_date DATE NOT NULL,
+  due_time DATETIME NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'PENDING',
+  snooze_count INT NOT NULL DEFAULT 0,
+  completed_event_id BIGINT,
+  dedup_key VARCHAR(96) NOT NULL,
+  remark TEXT,
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by VARCHAR(64),
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_wt_dedup (house_id, dedup_key),
+  KEY idx_wt_due (house_id, status, due_date, task_type),
+  KEY idx_wt_subject (house_id, subject_type, subject_id, status),
+  KEY idx_wt_cage (house_id, cage_id, status),
+  KEY idx_wt_batch (house_id, batch_id, status, task_type),
+  KEY idx_wt_rabbit (house_id, rabbit_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS biz_attachments (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  tenant_id BIGINT,
+  house_id BIGINT NOT NULL,
+  biz_type VARCHAR(32) NOT NULL,
+  biz_id BIGINT NOT NULL,
+  file_id VARCHAR(128) NOT NULL,
+  file_name VARCHAR(255),
+  content_type VARCHAR(100),
+  file_size BIGINT,
+  sort_no INT NOT NULL DEFAULT 0,
+  request_id VARCHAR(64),
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_ba_biz_file (house_id, biz_type, biz_id, file_id),
+  KEY idx_ba_biz (house_id, biz_type, biz_id, sort_no, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

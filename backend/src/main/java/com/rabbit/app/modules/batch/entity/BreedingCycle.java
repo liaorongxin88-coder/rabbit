@@ -4,12 +4,27 @@ import java.util.Date;
 
 public class BreedingCycle {
     private Long id;
+    /** V26 预留列，租户模型落地后回填。 */
+    private Long tenantId;
     private Long houseId;
     private Long batchId;
     private Long motherRabbitId;
     private Long maleRabbitId;
     private Integer cycleNo;
+    /** 旧中文状态列；V27 回填后由 {@link #stage} 取代，V28 删除。 */
     private String status;
+    /** V26 新增：统一词汇的繁育阶段（DoeStage）。 */
+    private String stage;
+    /** 进入当前阶段的时间，支持「录入时已在该阶段 N 天」。 */
+    private Date stageEnteredAt;
+    /** OPEN / CLOSED；并发守卫生成列只认这一列。 */
+    private String lifecycle;
+    /** 周期关闭结果，仅 lifecycle=CLOSED 时非空。 */
+    private String result;
+    /** NATURAL 体配 / AI 人工授精。 */
+    private String matingMethod;
+    /** 乐观锁。 */
+    private Long stateVersion;
     private Date matingDate;
     private Date pregnancyCheckDate;
     private String pregnancyResult;
@@ -49,6 +64,62 @@ public class BreedingCycle {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(Long tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getStage() {
+        return stage;
+    }
+
+    public void setStage(String stage) {
+        this.stage = stage;
+    }
+
+    public Date getStageEnteredAt() {
+        return stageEnteredAt;
+    }
+
+    public void setStageEnteredAt(Date stageEnteredAt) {
+        this.stageEnteredAt = stageEnteredAt;
+    }
+
+    public String getLifecycle() {
+        return lifecycle;
+    }
+
+    public void setLifecycle(String lifecycle) {
+        this.lifecycle = lifecycle;
+    }
+
+    public String getResult() {
+        return result;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
+    }
+
+    public String getMatingMethod() {
+        return matingMethod;
+    }
+
+    public void setMatingMethod(String matingMethod) {
+        this.matingMethod = matingMethod;
+    }
+
+    public Long getStateVersion() {
+        return stateVersion;
+    }
+
+    public void setStateVersion(Long stateVersion) {
+        this.stateVersion = stateVersion;
     }
 
     public Long getHouseId() {

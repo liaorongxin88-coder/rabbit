@@ -89,10 +89,6 @@ export function getOrCreateBulkMatingRequest(
   return { ...normalized, requestId: createRequestId() }
 }
 
-export function bulkMatingPath(batchId: number) {
-  return `/api/batches/${batchId}/mating/bulk`
-}
-
 type RabbitDeparturePayload = Omit<RabbitDepartureRequest, 'requestId'>
 
 export function getOrCreateRabbitDepartureRequest(

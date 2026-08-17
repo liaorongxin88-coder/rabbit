@@ -18,6 +18,23 @@ mvn -DskipTests package
 ```bash
 mysql -uroot -e "create database if not exists rabbit_app_e2e default character set utf8mb4 collate utf8mb4_general_ci;"
 mysql -uroot -e "create database if not exists rabbit_app_e2e_migration default character set utf8mb4 collate utf8mb4_general_ci;"
+mysql -uroot -e "create database if not exists rabbit_app_e2e_large_loop default character set utf8mb4 collate utf8mb4_general_ci;"
+```
+
+> **数据库时区必须是 `Asia/Shanghai`。** 应用通过 `serverTimezone=Asia/Shanghai`
+> 写入时间，而部分断言用 SQL 的 `now()` 比较到期日（如
+> `next_event_date <= now()`、`work_tasks.due_date`）。若 MySQL 跑在 UTC，两者相差 8
+> 小时，会出现「行存在但查不到」的假失败（典型现象：
+> `BreedingCycleTerminationIT` 报 `expected: <1> but was: <0>`）。
+> `docker-compose.yml` 已设 `TZ: Asia/Shanghai`；自建临时容器时切勿遗漏。
+
+临时容器一键启动（与 CI 等价）：
+
+```bash
+docker run -d --name rabbit-e2e \
+  -e MYSQL_ROOT_PASSWORD=rabbit_root -e TZ=Asia/Shanghai \
+  -p 13307:3306 mysql:8.0 \
+  --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 ```
 
 运行：
@@ -36,8 +53,17 @@ E2E_DATASOURCE_PASSWORD=rabbit_root \
 mvn -Pe2e verify
 ```
 
-迁移兼容测试默认使用独立的 `rabbit_app_e2e_migration`，可通过
-`E2E_MIGRATION_DATASOURCE_URL` 覆盖。两个测试库都只允许用于本地或 CI 测试。
+**一共三个独立测试库，各自有环境变量，漏配任一个都会让对应用例以
+`Failed to load ApplicationContext` 失败，而不是提示连不上库：**
+
+| 环境变量 | 默认库 | 使用方 |
+| --- | --- | --- |
+| `E2E_DATASOURCE_URL` | `rabbit_app_e2e` | 绝大多数 IT |
+| `E2E_MIGRATION_DATASOURCE_URL` | `rabbit_app_e2e_migration` | `BreedingCycleMigrationIT`、`LargeFarmSchemaMigrationIT` |
+| `E2E_LARGE_LOOP_DATASOURCE_URL` | `rabbit_app_e2e_large_loop` | `LargeWholeHouseBatchLifecycleIT` |
+
+三个默认值都指向 `localhost:3306`；改端口时三个要一起改。三个测试库都
+只允许用于本地或 CI 测试。
 
 注意：E2E 会清空 `rabbit_app_e2e`，不要指向开发库或生产库。
 
@@ -94,7 +120,15 @@ cd app
 千母兔闭环的后端规模用例是
 `backend/src/test/java/com/rabbit/app/e2e/LargeWholeHouseBatchLifecycleIT.java`，覆盖单兔舍单 Batch 的 1000 只母兔、20 只公兔、空怀/失败分娩、100 个重叠二配周期、880 窝断奶、6160 只生产来源商品兔整舍出库和 Batch 结束。该用例通过直接 API 驱动业务并用 SQL 对账，属于后端规模证明，不等同于 1000 只在 Flutter 画面上逐项操作。
 
-客户端和后端现已使用统一的批量配种契约：`POST /api/batches/{batchId}/mating/bulk`。一次请求最多选择 1000 只处于“待配种”或“哺乳中”的母兔，并统一公兔和配种日期；服务端先锁定 Batch，再按稳定顺序锁定母兔和成员，整批预校验后才写入。请求 ID 与 Batch、母兔集合、公兔和日期的 payload hash 绑定：完全相同的失败草稿安全重试时复用原 ID，修改公兔、日期或母兔集合后必须生成新 ID；不同 payload 复用同一请求 ID 必须返回冲突。
+批量配种契约已随 doe-breeding-v2 改为待办驱动：`POST /api/repro/tasks/bulk-actions`（旧的
+`POST /api/batches/{batchId}/mating/bulk` 已删除）。客户端先用 `GET /api/tasks` 把选中母兔
+解析成待配种任务 id，再按 id 批量推进；单次上限 500 项。哺乳中的母兔没有配种待办（哺乳
+周期不占流水线），对她配种即血配，由客户端先开一条新的待配种周期再配种，于是她同时
+持有哺乳周期与新怀孕周期。
+
+批量结果是**逐项**的：部分成功是常态，整体仍返回 HTTP 200，失败项在 `items` 里带原因。
+一百头里有一头被别人先推进了，不应该让另外九十九头白做。幂等按标准的 requestId 语义：
+相同 requestId 重试返回首次结果并标记 `replayed`。
 
 7000 只商品兔最终销售提交由
 `backend/src/test/java/com/rabbit/app/e2e/LargeHouseOutboundSubmitScaleIT.java` 覆盖；销售明细按 1000 条分块写入同一事务，避免单次写入触发 `max-affected-rows=2000`。
@@ -106,13 +140,54 @@ cd app
 Batch 客户端生命周期脚本为：
 
 ```bash
+# 先起完整 compose 集群（mysql + valkey + backend）
+docker compose --profile valkey up -d --build
+
 cd app
 RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
-RABBIT_ANDROID_E2E_DEVICE_API_URL=http://<真机可达的后端地址>:8080 \
 ./scripts/android_batch_lifecycle_e2e.sh
 ```
 
-脚本会先要求 Flyway V25 已成功执行，再注入隔离 fixture。创建、批量催情开始/完成、首次两母兔批量配种、摸胎（含空怀）、备产、分娩、哺乳期重叠批量二配、断奶、商品兔出库和最终母兔淘汰走客户端真实 UI。数据库只用于准备/查询隔离 fixture、登录辅助、最终断言，以及每 250 毫秒把该 fixture 的 `next_event_date` 压缩到可执行日期；这项时间压缩只跳过真实养殖周期中的等待天数，不替代任何生产业务动作。通过标准是本轮 artifact 同时存在 `flutter-drive.log`、18 张 PNG、`database_assertions.txt` 且 `actual=expected`。历史 artifact 只能作为历史证据，不能替代新版本真机运行。
+**运行形态（故意如此）：**
+
+- **完整 compose 集群**。脚本会确认 `rabbit_mysql_1`、`rabbit_valkey_1`、`rabbit_backend_1`
+  三个容器均存在，否则直接退出。本地 `mvn spring-boot:run` 也能让用例通过，但那就
+  测不到容器网络、镜像构建与缓存接线这三件只在真实部署里才会出错的事。
+- **缓存走 valkey**。脚本校验后端容器的 `APP_CACHE_PROVIDER=valkey` 且 `valkey-cli ping`
+  响应。缓存的真实业务消费方是短信验证码存储（`LettuceSmsVerificationStore`），
+  发一次验证码即可在 valkey 里看到 `rabbit:cache:v1:sms:*` 键。
+- **真机走局域网直连**，不用 `adb reverse`。脚本自动取主机 `en0/en1` 的局域网 IP
+  并从设备侧实探一次（期望 401/200）；失败则提前报错。`adb reverse` 会把流量隧道回
+  USB，掩盖掉真实网络下的延迟与断连行为。前提是 `.env` 里 `BACKEND_BIND_ADDRESS=0.0.0.0`。
+
+脚本要求 Flyway **V27** 已成功执行（doe-breeding-v2 回填与 `uk_bc_pipeline`），再注入隔离 fixture。
+建批、批量催情、两母兔批量配种、摸胎（含空怀）、备产、接产、哺乳期血配、分笼、
+商品兔出库和两头母兔离场全部走客户端真实 UI。数据库只用于准备/查询隔离 fixture、
+登录辅助、最终断言，以及每 250 毫秒把该 fixture 的 `work_tasks.due_date` 压缩到可执行日期；
+这项时间压缩只跳过真实养殖周期中的等待天数，不替代任何生产业务动作。
+
+**每步操作后的全员状态校验。** 每一个生产动作之后，用例都会拉取批次下**所有**母兔的
+`(current_stage, 未完成待办类型)` 并逐头比对期望（`_assertBatchState`）。关键在于“所有”：
+新模型里一个动作会连带写周期、待办与母兔投影三处，“误伤旁人”是真实发生过的故障
+（给 A 分笼把 B 的阶段覆盖掉），只断言当事母兔永远发现不了。未被列入期望的母兔
+同样会失败，防止新增成员后校验静默变窄。
+
+通过标准是本轮 artifact 同时存在 `flutter-drive.log`、19 张 PNG、`database_assertions.txt`
+且 `actual=expected`。历史 artifact 只能作为历史证据，不能替代新版本真机运行。
+
+2026-08-17 流产（非计划事件）已纳入本用例，run ID `20260817181356093836`，
+19/19 截图与 19 项数据库断言全部一致。流产不对应任何待办，所以走母兔行上的独立
+入口，而不是今日清单；用例选在母兔 A 处于待催情、母兔 B 处于待摸胎的时点提交，
+同一屏上同时断言「B 有入口」与「A 没有入口」——只验证能点会放过「到处都能点」，
+而后者才是真实风险。断言列新增 `aborted_cycles`：单看周期总数变化不能证明流产真的
+落库。母兔 B 的周期链因此变为 `#1 EMPTY → #2 ABORTED → #3 自动接续后 REMOVED`。
+
+2026-08-17 doe-breeding-v2 完整闭环已在 A059（Android 15，1080x2392，density 420）通过，
+run ID `20260817160028468330`，耗时 1 分 32 秒。运行形态为**完整 compose 集群 + valkey 缓存 +
+真机局域网直连**（`http://192.168.31.169:8080`，无 adb reverse），数据库由已有 V24 存量数据
+真实升级至 V28。结果为 18/18 截图、Flutter `All tests passed`、18 项数据库断言 expected/actual
+完全一致，含每步操作后的批次全员状态校验。该校验做过反向验证：故意写错一个期望后，用例在
+对应步骤失败并打印 `期望=/实际=` 差异，确认它不是恒真断言。
 
 2026-08-15 当前构建已在 A059（Android 15，1080x2392，density 420）完成上述闭环，run ID 为 `20260815123218794644`，耗时 1 分 37 秒。结果为 18/18 截图、Flutter `All tests passed`，数据库 expected/actual 完全一致：Batch 165、9 个成员全部退出、3 个繁殖周期、2 次断奶、1 个空怀周期、1 个重叠周期、7 只出生并全部出售，销售单 `SO-25`，Batch 自动完成。证据位于 `app/build/android-batch-lifecycle-e2e/20260815123218794644/`。脚本在运行前保存设备常亮设置、唤醒并保持屏幕可见，退出时恢复原设置，避免长流程因息屏被误判为业务中断。
 

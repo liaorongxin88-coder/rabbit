@@ -1,3 +1,5 @@
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
+
 class BatchRabbitItem {
   const BatchRabbitItem({
     required this.id,
@@ -19,6 +21,8 @@ class BatchRabbitItem {
     this.rabbitType = '',
     this.rabbitGender = '',
     this.cageId,
+    this.currentStage,
+    this.currentCycleId,
   });
 
   final int id;
@@ -40,6 +44,22 @@ class BatchRabbitItem {
   final String rabbitType;
   final String rabbitGender;
   final int? cageId;
+
+  /// 当前生产阶段（服务端枚举名）。权威现状，来自 rabbits 投影列；
+  /// [currentStatus] 是旧写路径的中文快照，已不再更新，仅作降级显示。
+  final String? currentStage;
+
+  /// 当前进行中的周期 id，提交生产动作时需要。
+  final int? currentCycleId;
+
+  /// 界面上该显示的状态文字：优先用实时阶段，没有才回退到旧快照。
+  String get displayStatus {
+    final stage = ReproStage.tryParse(currentStage);
+    if (stage != null) {
+      return stage.label;
+    }
+    return currentStatus.isEmpty ? '未入轨' : currentStatus;
+  }
 
   bool get isNursing => currentNursingKits > 0;
 
@@ -64,6 +84,8 @@ class BatchRabbitItem {
       rabbitType: json['rabbitType'] as String? ?? '',
       rabbitGender: json['rabbitGender'] as String? ?? '',
       cageId: _nullableInt(json['cageId']),
+      currentStage: json['currentStage'] as String?,
+      currentCycleId: _nullableInt(json['currentCycleId']),
     );
   }
 
