@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:intl/intl.dart';
+
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
@@ -15,15 +19,6 @@ const _growthStageOptions = <_StageOption>[
   _StageOption('GROWING', '成长期'),
   _StageOption('FATTENING', '育肥期'),
   _StageOption('MATURE', '成熟'),
-];
-
-const _doeReproductiveStageOptions = <_StageOption>[
-  _StageOption('RESERVE', '后备'),
-  _StageOption('EMPTY', '空怀'),
-  _StageOption('MATED', '已配种'),
-  _StageOption('PREGNANT', '妊娠'),
-  _StageOption('LACTATING', '哺乳'),
-  _StageOption('RESTING', '休整'),
 ];
 
 const _buckReproductiveStageOptions = <_StageOption>[
@@ -235,12 +230,18 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   final _formKey = GlobalKey<FormState>();
   final _breedController = TextEditingController();
   final _weightController = TextEditingController();
+  final _liveKitsController = TextEditingController();
   late String _type;
   late int _selectedCageId;
   var _gender = '0';
   var _arrivalMethod = '0';
   String? _growthStage;
   String? _reproductiveStage;
+  /// 录入时直接入轨的生产阶段（飞书 recvsrnEJ8bKrk）。null 表示暂不入轨。
+  String? _reproStage;
+  DateTime? _stageEnteredAt;
+  DateTime? _matingDate;
+  DateTime? _birthDate;
   var _saving = false;
 
   bool get _isEdit => widget.rabbit != null;
@@ -288,6 +289,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   void dispose() {
     _breedController.dispose();
     _weightController.dispose();
+    _liveKitsController.dispose();
     super.dispose();
   }
 
@@ -490,8 +492,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
 
   Widget _buildStageFields(BuildContext context) {
     final reproductiveOptions = _reproductiveStageOptions;
-    final hasReproductiveStage = _type != '2';
     final fixedReproductiveStage = _type == '1';
+    // 种母兔的选项为空（阶段由生产流程维护），不能再渲染一个空下拉给用户点。
+    final hasReproductiveStage =
+        _type != '2' && (fixedReproductiveStage || reproductiveOptions.isNotEmpty);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,8 +549,165 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   ? null
                   : (value) => setState(() => _reproductiveStage = value),
             ),
+        ] else if (_type == '0') ...[
+          const SizedBox(height: 12),
+          const _ReadOnlyInfoBox(
+            icon: Icons.account_tree_outlined,
+            text: '种母兔的繁殖阶段由生产流程维护，请在下方选择入轨的生产阶段。',
+          ),
+        ],
+        if (_canOpenReproEntry) ...[
+          const SizedBox(height: 18),
+          _buildReproEntryFields(context),
         ],
       ],
+    );
+  }
+
+  /// 生产阶段入轨区域。
+  ///
+  /// 存栏母兔很少处于「什么都没发生」的起点，所以需要能从任意阶段入轨；
+  /// 而「从这个阶段入轨要补录什么」由服务端字典决定，客户端不拄第二份。
+  Widget _buildReproEntryFields(BuildContext context) {
+    final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
+    return entriesAsync.when(
+      loading: () => const _ReadOnlyInfoBox(
+        icon: Icons.hourglass_empty,
+        text: '正在读取可入轨的生产阶段…',
+      ),
+      error: (_, __) => const _ReadOnlyInfoBox(
+        icon: Icons.info_outline,
+        text: '暂时读不到生产阶段字典，可先录入，稍后在生产流程里入轨。',
+      ),
+      data: (entries) {
+        if (entries.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final selected = _selectedEntryPoint(entries);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionLabel('生产阶段入轨'),
+            const SizedBox(height: 6),
+            Text(
+              '已在生产中的母兔可直接从当前阶段入轨，录入后立即进入待办。',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('rabbit-repro-stage'),
+              value: _reproStage,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '生产阶段'),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('暂不入轨'),
+                ),
+                for (final entry in entries)
+                  DropdownMenuItem<String?>(
+                    value: entry.stage,
+                    child: Text(entry.stageLabel),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                        _reproStage = value;
+                        _stageEnteredAt ??= _dateOnly(DateTime.now());
+                      }),
+            ),
+            if (selected != null) ...[
+              const SizedBox(height: 12),
+              _buildDateField(
+                key: const ValueKey('rabbit-stage-entered-at'),
+                label: '进入该阶段日期',
+                value: _stageEnteredAt,
+                onPicked: (value) => setState(() => _stageEnteredAt = value),
+              ),
+              if (selected.needsMatingDate) ...[
+                const SizedBox(height: 12),
+                _buildDateField(
+                  key: const ValueKey('rabbit-mating-date'),
+                  label: '配种日期',
+                  value: _matingDate,
+                  onPicked: (value) => setState(() => _matingDate = value),
+                ),
+              ],
+              if (selected.requires('BIRTH_DATE')) ...[
+                const SizedBox(height: 12),
+                _buildDateField(
+                  key: const ValueKey('rabbit-birth-date'),
+                  label: '分娩日期',
+                  value: _birthDate,
+                  onPicked: (value) => setState(() => _birthDate = value),
+                ),
+              ],
+              if (selected.requires('LIVE_KITS')) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('rabbit-live-kits'),
+                  controller: _liveKitsController,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(labelText: '活仔数'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+              ],
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  ReproEntryPoint? _selectedEntryPoint(List<ReproEntryPoint> entries) {
+    final stage = _reproStage;
+    if (stage == null) {
+      return null;
+    }
+    for (final entry in entries) {
+      if (entry.stage == stage) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildDateField({
+    required Key key,
+    required String label,
+    required DateTime? value,
+    required ValueChanged<DateTime> onPicked,
+  }) {
+    final text = value == null ? '未选择' : DateFormat('yyyy-MM-dd').format(value);
+    return InputDecorator(
+      key: key,
+      decoration: InputDecoration(labelText: label),
+      child: InkWell(
+        onTap: _saving
+            ? null
+            : () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: value ?? _dateOnly(DateTime.now()),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 1)),
+                  helpText: label,
+                  cancelText: '取消',
+                  confirmText: '确定',
+                );
+                if (picked != null) {
+                  onPicked(_dateOnly(picked));
+                }
+              },
+        child: Row(
+          children: [
+            Expanded(child: Text(text)),
+            const Icon(Icons.calendar_today_outlined, size: 18),
+          ],
+        ),
+      ),
     );
   }
 
@@ -593,6 +754,13 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final missingFact = _missingEntryFact();
+    if (missingFact != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(missingFact)),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       if (_isEdit) {
@@ -619,6 +787,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
               reproductiveStage: _reproductiveStage,
+              reproStage: _canOpenReproEntry ? _reproStage : null,
+              stageEnteredAt: _stageEnteredAt,
+              matingDate: _matingDate,
+              birthDate: _birthDate,
+              liveKits: int.tryParse(_liveKitsController.text.trim()),
             );
       }
       ref.invalidate(houseRabbitsProvider(widget.houseId));
@@ -669,6 +842,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     return cages;
   }
 
+  /// 可手工录入的旧繁殖阶段。
+  ///
+  /// 种母兔刻意为空：它的阶段由生产流程状态机单写，后端已直接拒收手录的
+  /// reproductiveStage；再给一份下拉只会让用户填完才吃 400（飞书 recvsrpMlvu2SC）。
+  /// 她们改用下面的「生产阶段入轨」区域。
   List<_StageOption> get _reproductiveStageOptions {
     if (_type == '1') {
       return _replacementReproductiveStageOptions;
@@ -678,8 +856,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     }
     return _gender == '1'
         ? _buckReproductiveStageOptions
-        : _doeReproductiveStageOptions;
+        : const <_StageOption>[];
   }
+
+  /// 只有新录入的种母兔能在这里入轨；已存在的母兔要改阶段得走生产动作。
+  bool get _canOpenReproEntry => !_isEdit && _type == '0' && _gender == '0';
 
   void _setGender(String value) {
     setState(() {
@@ -690,6 +871,32 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _reproductiveStage = null;
       }
     });
+  }
+
+  /// 入轨必填项的本地校验。服务端同样会拦，这里只是不让用户白跑一趟网络。
+  String? _missingEntryFact() {
+    if (!_canOpenReproEntry || _reproStage == null) {
+      return null;
+    }
+    final entries =
+        ref.read(reproEntryPointsProvider(widget.houseId)).valueOrNull;
+    final selected = entries == null ? null : _selectedEntryPoint(entries);
+    if (selected == null) {
+      return null;
+    }
+    for (final fact in selected.requiredFacts) {
+      final filled = switch (fact.fact) {
+        'STAGE_ENTERED_AT' => _stageEnteredAt != null,
+        'MATING_DATE' || 'GESTATION_ANCHOR' => _matingDate != null,
+        'BIRTH_DATE' => _birthDate != null,
+        'LIVE_KITS' => _liveKitsController.text.trim().isNotEmpty,
+        _ => true,
+      };
+      if (!filled) {
+        return '从【${selected.stageLabel}】入轨需要补录${fact.label}';
+      }
+    }
+    return null;
   }
 
   String? _matchingStage(String? value, List<_StageOption> options) {
@@ -735,6 +942,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     }
   }
 }
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
 
 class _StageOption {
   const _StageOption(this.value, this.label);

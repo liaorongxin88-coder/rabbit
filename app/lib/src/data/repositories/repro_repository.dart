@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
 import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 
 final reproRepositoryProvider = Provider<ReproRepository>((ref) {
@@ -15,6 +16,14 @@ final reproRepositoryProvider = Provider<ReproRepository>((ref) {
 final reproStageActionsProvider =
     FutureProvider.family<Map<String, List<String>>, int>((ref, houseId) async {
   return ref.watch(reproRepositoryProvider).stageActions(houseId: houseId);
+});
+
+/// 入轨阶段字典，全局取一次。
+///
+/// 录入母兔的表单用它决定「可选哪些阶段 + 该阶段要填哪几个日期」。
+final reproEntryPointsProvider =
+    FutureProvider.family<List<ReproEntryPoint>, int>((ref, houseId) async {
+  return ref.watch(reproRepositoryProvider).entryPoints(houseId: houseId);
 });
 
 /// 生产流程（doe-breeding-v2）的客户端入口。
@@ -83,6 +92,18 @@ class ReproRepository {
         }
         return result;
       },
+    );
+  }
+
+  /// 入轨阶段字典。
+  Future<List<ReproEntryPoint>> entryPoints({required int houseId}) {
+    return _api.get<List<ReproEntryPoint>>(
+      '/api/repro/entry-points',
+      houseId: houseId,
+      decode: (data) => [
+        for (final raw in (data as List? ?? const []))
+          ReproEntryPoint.fromJson(Map<String, dynamic>.from(raw as Map)),
+      ],
     );
   }
 

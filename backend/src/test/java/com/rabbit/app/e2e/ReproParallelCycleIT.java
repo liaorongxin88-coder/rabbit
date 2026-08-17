@@ -310,6 +310,46 @@ public class ReproParallelCycleIT extends E2eTestSupport {
     }
 
     /**
+     * 入轨阶段字典：录入表单靠它决定「选了这个阶段要多填哪几个日期」。
+     *
+     * <p>客户端拄一份就会漂移，用户会遇到「填完才 400」（飞书 recvsrnEJ8bKrk）。
+     */
+    @Test
+    void entryPointDictionaryTellsClientsWhichFactsAreRequired() {
+        UserSession owner = register("par_entry");
+        long houseId = createHouse(owner, "par_entry_house", 1, 2, 1);
+        com.fasterxml.jackson.databind.JsonNode rows =
+            api.getOk("/api/repro/entry-points", owner.token, houseId);
+
+        java.util.Map<String, java.util.List<String>> factsByStage =
+            new java.util.LinkedHashMap<>();
+        for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+            Assertions.assertFalse(row.get("stageLabel").asText().isBlank(), "阶段中文名不得为空");
+            java.util.List<String> facts = new java.util.ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode fact : row.get("requiredFacts")) {
+                Assertions.assertFalse(fact.get("label").asText().isBlank(), "必填项中文名不得为空");
+                facts.add(fact.get("fact").asText());
+            }
+            factsByStage.put(row.get("stage").asText(), facts);
+        }
+
+        // 只列可入轨的阶段；准备/暂停/离场不是入轨点。
+        Assertions.assertEquals(
+            List.of(
+                "AWAIT_ESTRUS", "AWAIT_MATING", "AWAIT_PALPATION",
+                "AWAIT_PREPARTUM", "AWAIT_DELIVERY", "AWAIT_WEANING"
+            ),
+            List.copyOf(factsByStage.keySet())
+        );
+        Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_ESTRUS"));
+        Assertions.assertEquals(List.of("MATING_DATE"), factsByStage.get("AWAIT_PALPATION"));
+        Assertions.assertEquals(List.of("GESTATION_ANCHOR"), factsByStage.get("AWAIT_DELIVERY"));
+        Assertions.assertEquals(
+            List.of("BIRTH_DATE", "LIVE_KITS"), factsByStage.get("AWAIT_WEANING")
+        );
+    }
+
+    /**
      * 字典说不允许的阶段，服务端必须真的拒绝。
      *
      * <p>否则字典只是个建议，绕过界面直接调接口就能写出非法状态。

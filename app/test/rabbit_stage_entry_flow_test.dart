@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
 
@@ -30,26 +32,36 @@ void main() {
       final reproductiveStage = find.byKey(
         const ValueKey('rabbit-reproductive-stage'),
       );
+      final reproEntryStage = find.byKey(const ValueKey('rabbit-repro-stage'));
       expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsOneWidget);
-      expect(reproductiveStage, findsOneWidget);
+      // 种母兔不再提供旧的繁殖阶段下拉：后端已拒收手录值，
+      // 她们走服务端下发的生产阶段入轨。
+      expect(reproductiveStage, findsNothing);
+      expect(reproEntryStage, findsOneWidget);
 
-      await tester.ensureVisible(reproductiveStage);
+      // 从【待分笼】入轨需要分娩日与活仔数，字段随服务端字典出现。
+      await tester.ensureVisible(reproEntryStage);
       await tester.pumpAndSettle();
-      await tester.tap(reproductiveStage);
+      await tester.tap(reproEntryStage);
       await tester.pumpAndSettle();
-      expect(find.text('空怀'), findsOneWidget);
-      expect(find.text('妊娠'), findsOneWidget);
-      expect(find.text('可配'), findsNothing);
-      final pregnant = find.text('妊娠');
-      await tester.ensureVisible(pregnant);
-      await tester.tap(pregnant);
+      await tester.tap(find.text('待分笼').last);
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('rabbit-stage-entered-at')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('rabbit-birth-date')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rabbit-live-kits')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rabbit-mating-date')), findsNothing);
 
       final male = find.text('公');
       await tester.ensureVisible(male);
       await tester.pumpAndSettle();
       await tester.tap(male);
       await tester.pumpAndSettle();
+      // 种公兔仍然是旧的两选一，它不进生产周期。
+      expect(reproEntryStage, findsNothing);
+      expect(reproductiveStage, findsOneWidget);
       await tester.ensureVisible(reproductiveStage);
       await tester.pumpAndSettle();
       await tester.tap(reproductiveStage);
@@ -182,6 +194,35 @@ Widget _commodityEntryTestApp() {
 
 Widget _testApp({required Widget child}) {
   return ProviderScope(
+    overrides: [
+      // 入轨字典来自服务端；组件测试里用一份与后端 EntryPoint 表一致的子集。
+      reproEntryPointsProvider.overrideWith(
+        (ref, houseId) async => const [
+          ReproEntryPoint(
+            stage: 'AWAIT_ESTRUS',
+            stageLabel: '待催情',
+            requiredFacts: [
+              ReproRequiredFact(fact: 'STAGE_ENTERED_AT', label: '进入该阶段的日期'),
+            ],
+          ),
+          ReproEntryPoint(
+            stage: 'AWAIT_PALPATION',
+            stageLabel: '待摸胎',
+            requiredFacts: [
+              ReproRequiredFact(fact: 'MATING_DATE', label: '配种日期'),
+            ],
+          ),
+          ReproEntryPoint(
+            stage: 'AWAIT_WEANING',
+            stageLabel: '待分笼',
+            requiredFacts: [
+              ReproRequiredFact(fact: 'BIRTH_DATE', label: '分娩日期'),
+              ReproRequiredFact(fact: 'LIVE_KITS', label: '活仔数'),
+            ],
+          ),
+        ],
+      ),
+    ],
     child: MaterialApp(
       theme: buildAppTheme(),
       builder: (context, page) => MediaQuery(
