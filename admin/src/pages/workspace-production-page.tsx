@@ -1100,7 +1100,7 @@ function BatchActionDialog({
                       checked={departureConfirmed}
                       onChange={(event) => setDepartureConfirmed(event.target.checked)}
                     />
-                    <span><span className="font-medium text-destructive">确认强制离场</span><br /><span className="text-muted-foreground">将同时退出该母兔的活跃 Batch 关系并关闭进行中的繁殖周期。</span></span>
+                    <span><span className="font-medium text-destructive">确认强制离场</span><br /><span className="text-muted-foreground">将同时退出该母兔的活跃批次关系并关闭进行中的繁殖周期。</span></span>
                   </label>
                 </Field>
               </>

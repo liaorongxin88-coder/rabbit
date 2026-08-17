@@ -393,7 +393,9 @@ Future<void> _createBatch(WidgetTester tester) async {
   await tester.tap(find.textContaining('兔 #$_motherAId'));
   await tester.tap(find.textContaining('兔 #$_motherBId'));
   await _waitFor(tester, find.text('选择种母兔（已选 2 只）'));
-  final submit = find.widgetWithText(ElevatedButton, '创建批次');
+  // 按 key 而不是按文案：列表空态的 CTA 与表单提交都叫「创建批次」，
+  // 表单开着时两个按钮同时在树上，按文案找会匹配到两个。
+  final submit = find.byKey(const ValueKey('create-batch-submit'));
   await tester.ensureVisible(submit);
   await tester.tap(submit);
   await _waitFor(tester, find.textContaining('批次 $_batchCode 已创建'));
@@ -556,11 +558,11 @@ Future<void> _completeBatchThroughUi(WidgetTester tester, int batchId) async {
   final completeButton = find.byKey(const ValueKey('batch-complete-button'));
   await _scrollBatchDetailUntilVisible(tester, completeButton);
   await tester.tap(completeButton);
-  await _waitFor(tester, find.text('结束这个 Batch？'));
+  await _waitFor(tester, find.text('结束这个批次？'));
   // 没有活跃成员时弹窗不会出现强制勾，确认键直接可点。
   expect(find.byKey(const ValueKey('batch-complete-force')), findsNothing);
   await tester.tap(find.byKey(const ValueKey('batch-complete-confirm')));
-  await _waitFor(tester, find.text('Batch 已结束'));
+  await _waitFor(tester, find.text('批次已结束'));
   await tester.pumpAndSettle();
 }
 

@@ -497,7 +497,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         const _SectionLabel('入栏阶段'),
         const SizedBox(height: 6),
         Text(
-          '记录入栏时状态；后续繁殖进度由 Batch 流程维护。',
+          '记录入栏时状态；后续繁殖进度由批次流程维护。',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),

@@ -36,7 +36,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('共 1001 个 Batch · 已全部加载'), findsOneWidget);
+    expect(find.text('共 1001 个批次 · 已全部加载'), findsOneWidget);
     final list = tester.widget<ListView>(
       find.byKey(const ValueKey('batch-list')),
     );
@@ -61,7 +61,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 1 / 1001 个 Batch'), findsOneWidget);
+    expect(find.text('显示 1 / 1001 个批次'), findsOneWidget);
     expect(find.byKey(const ValueKey('batch-list-item-1001')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('batch-search-clear')));
@@ -71,7 +71,7 @@ void main() {
     await tester.tap(find.text('已完成').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 333 / 1001 个 Batch'), findsOneWidget);
+    expect(find.text('显示 333 / 1001 个批次'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     tester.view.physicalSize = const Size(412, 915);
@@ -91,7 +91,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('正在加载全部 Batch...'), findsOneWidget);
+    expect(find.text('正在加载全部批次...'), findsOneWidget);
 
     pending.complete(const <Batch>[]);
     await tester.pumpAndSettle();
@@ -169,7 +169,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('batch-list-item-16')), findsOneWidget);
-    expect(find.text('显示 1 / 1 个 Batch'), findsOneWidget);
+    expect(find.text('显示 1 / 1 个批次'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -226,7 +226,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(HouseBatchesScreen), findsOneWidget);
-    expect(find.text('Batch 列表'), findsOneWidget);
+    expect(find.text('批次列表'), findsOneWidget);
   });
 
   testWidgets('Batch list card opens the matching Batch detail route',

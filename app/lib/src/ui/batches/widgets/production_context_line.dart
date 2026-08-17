@@ -45,7 +45,7 @@ class ProductionContextLine extends StatelessWidget {
             if (batchId != null && batchId! > 0)
               _ContextItem(
                 icon: Icons.inventory_2_outlined,
-                label: 'Batch #$batchId',
+                label: '批次 #$batchId',
               ),
             if (cycleRecordId != null && cycleRecordId! > 0)
               _ContextItem(

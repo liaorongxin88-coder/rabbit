@@ -110,15 +110,15 @@ class _HouseBatchDetailScreenState
     final permission = ref.watch(housePermissionProvider(widget.houseId));
 
     return AppPage(
-      title: 'Batch 详情',
+      title: '批次详情',
       leading: IconButton(
-        tooltip: '返回 Batch 列表',
+        tooltip: '返回批次列表',
         onPressed: () => context.go('/houses/${widget.houseId}/batches'),
         icon: const Icon(Icons.arrow_back),
       ),
       actions: [
         IconButton(
-          tooltip: '刷新 Batch',
+          tooltip: '刷新批次',
           onPressed: _saving ? null : _refresh,
           icon: const Icon(Icons.refresh),
         ),
@@ -271,7 +271,7 @@ class _HouseBatchDetailScreenState
               child: SectionCard(
                 child: EmptyState(
                   icon: Icons.filter_alt_off_outlined,
-                  title: allMembers.isEmpty ? 'Batch 暂无成员' : '没有符合条件的成员',
+                  title: allMembers.isEmpty ? '批次暂无成员' : '没有符合条件的成员',
                   message:
                       allMembers.isEmpty ? '成员加入后会显示在这里。' : '调整兔号、角色、状态或在场筛选。',
                   actionLabel: allMembers.isEmpty ? null : '重置筛选',
@@ -670,7 +670,7 @@ class _HouseBatchDetailScreenState
       ref.invalidate(homeEventsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Batch 已结束')),
+          const SnackBar(content: Text('批次已结束')),
         );
       }
     } catch (error) {
@@ -693,7 +693,7 @@ class _HouseBatchDetailScreenState
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('结束这个 Batch？'),
+          title: const Text('结束这个批次？'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -702,7 +702,7 @@ class _HouseBatchDetailScreenState
                 Text(
                   activeCount == 0
                       ? '当前没有活跃成员，可以正常结束。'
-                      : '当前仍有 $activeCount 个活跃成员。强制结束会关闭开放繁殖周期并移出 Batch。',
+                      : '当前仍有 $activeCount 个活跃成员。强制结束会关闭开放繁殖周期并移出批次。',
                 ),
                 if (activeCount > 0) ...[
                   const SizedBox(height: 12),
@@ -742,7 +742,7 @@ class _HouseBatchDetailScreenState
                           remark: remark.text.trim(),
                         ),
                       ),
-              child: const Text('结束 Batch'),
+              child: const Text('结束批次'),
             ),
           ],
         ),
@@ -924,7 +924,7 @@ class _BatchHeader extends StatelessWidget {
               key: const ValueKey('batch-complete-button'),
               onPressed: saving ? null : onComplete,
               icon: const Icon(Icons.task_alt),
-              label: const Text('结束 Batch'),
+              label: const Text('结束批次'),
             ),
           ],
         ],

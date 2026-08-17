@@ -224,7 +224,7 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
                           Text(
                             widget.batchId == null
                                 ? widget.rabbitLabel
-                                : '${widget.rabbitLabel} · Batch #${widget.batchId}',
+                                : '${widget.rabbitLabel} · 批次 #${widget.batchId}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium,
@@ -341,7 +341,7 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                '提交后将立即退出该兔的所有活跃 Batch 关系，并关闭未完成的繁殖周期；离场记录不可撤销。',
+                                '提交后将立即退出该兔的所有活跃批次关系，并关闭未完成的繁殖周期；离场记录不可撤销。',
                                 style: TextStyle(color: palette.text),
                               ),
                             ),

@@ -319,6 +319,9 @@ Rules:
 
 - Prefer precise verbs over promotional copy.
 - Labels name the object being edited, not the backend concept.
+- Never leak English domain nouns into the UI. The production container is 批次, never `Batch`;
+  `Batch` stays in code, types and API payloads only. Same rule for any other backend concept:
+  an operator reads Chinese, a developer reads the identifier.
 - A control should say exactly what happens: `新增兔场`, `添加成员`, `查询`, `编辑`, `停用兔场`, `启用兔场`.
 - Toast vocabulary should match the action vocabulary.
 - Empty copy should explain what makes data appear and provide an action only when the operator can perform it here.

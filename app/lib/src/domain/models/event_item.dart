@@ -43,7 +43,7 @@ class EventItem {
 
   String? get batchLabel {
     final id = batchId;
-    return id == null || id <= 0 ? null : 'Batch #$id';
+    return id == null || id <= 0 ? null : '批次 #$id';
   }
 
   String? get cycleRecordLabel => isBreedingCycle ? '周期记录 #$recordId' : null;

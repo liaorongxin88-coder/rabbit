@@ -29,7 +29,7 @@ class HouseBatchesScreen extends ConsumerWidget {
         if (canEdit && house != null)
           IconButton(
             key: const ValueKey('batch-create-action'),
-            tooltip: '创建 Batch',
+            tooltip: '创建批次',
             onPressed: () => _showCreateBatch(context, house),
             icon: const Icon(Icons.add),
           ),
@@ -39,7 +39,7 @@ class HouseBatchesScreen extends ConsumerWidget {
           icon: const Icon(Icons.storefront_outlined),
         ),
         IconButton(
-          tooltip: '刷新 Batch',
+          tooltip: '刷新批次',
           onPressed: () => ref.invalidate(houseBatchesProvider(houseId)),
           icon: const Icon(Icons.refresh),
         ),
@@ -143,7 +143,7 @@ class _BatchLoadingState extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            '正在加载全部 Batch...',
+            '正在加载全部批次...',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
@@ -294,16 +294,16 @@ class _BatchListContentState extends State<_BatchListContent> {
                 icon: hasBatches
                     ? Icons.filter_alt_off_outlined
                     : Icons.playlist_add_check_outlined,
-                title: hasBatches ? '没有符合条件的 Batch' : '暂无生产批次',
+                title: hasBatches ? '没有符合条件的批次' : '暂无生产批次',
                 message: hasBatches
                     ? '请调整批次编号或状态筛选。'
                     : widget.canEdit
-                        ? '创建首个 Batch 后，可在这里统一查看生产周期。'
+                        ? '创建首个批次后，可在这里统一查看生产周期。'
                         : '当前兔舍还没有生产批次。',
                 actionLabel: hasBatches
                     ? '重置筛选'
                     : widget.canEdit
-                        ? '创建 Batch'
+                        ? '创建批次'
                         : null,
                 onAction: hasBatches ? _resetFilters : widget.onCreate,
               ),
@@ -355,7 +355,7 @@ class _HouseSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '兔舍级 Batch 查看与筛选',
+                  '兔舍级批次查看与筛选',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -407,14 +407,14 @@ class _BatchOverviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Batch 列表',
+                      '批次列表',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '共 $total 个 Batch · 已全部加载',
+                      '共 $total 个批次 · 已全部加载',
                       key: const ValueKey('batch-list-load-status'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -424,7 +424,7 @@ class _BatchOverviewCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: '刷新 Batch',
+                tooltip: '刷新批次',
                 onPressed: onRefresh,
                 icon: const Icon(Icons.refresh),
               ),
@@ -436,7 +436,7 @@ class _BatchOverviewCard extends StatelessWidget {
               key: const ValueKey('batch-create-button'),
               onPressed: onCreate,
               icon: const Icon(Icons.add),
-              label: const Text('创建 Batch'),
+              label: const Text('创建批次'),
             ),
           ],
         ],
@@ -482,7 +482,7 @@ class _BatchFilters extends StatelessWidget {
             textInputAction: TextInputAction.search,
             onChanged: onQueryChanged,
             decoration: InputDecoration(
-              labelText: '搜索 Batch',
+              labelText: '搜索批次',
               hintText: '批次编号、ID 或备注',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: query.isEmpty
@@ -533,7 +533,7 @@ class _BatchFilters extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '显示 $resultCount / $totalCount 个 Batch',
+                  '显示 $resultCount / $totalCount 个批次',
                   key: const ValueKey('batch-filter-summary'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
