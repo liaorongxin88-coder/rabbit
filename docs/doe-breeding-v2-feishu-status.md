@@ -16,19 +16,39 @@
 | recvsrrTP2Rp0l 流产操作 | 已完成 | 转换表 T8 + `GET /api/repro/stage-actions` 阶段字典 + 两端入口；真机 `aborted_cycles=1`，事件载荷含死胎数，周期链 `EMPTY → ABORTED → 自动接续` |
 | recvsrmZKv1cqp 首页提醒兔舍选择 | 已完成 | 首页、笼位 NFC、兔卡共用 `GET /api/tasks` 单端点，支持 `houseId/cageId/batchId/type/dueBefore` 过滤，口径不可能再互相打架 |
 
+## 一之二、后一轮（同日）补齐的单号
+
+上一轮列在「客户端待补」「待确认」「不属于本次范围」里的五条，本轮已交付到**待验收**。
+口径不变：能指到测试的才写，只有真机/浏览器验收还没做，所以是「验收中」而不是「已完成」。
+
+| 单号 | 结论 | 证据 |
+| --- | --- | --- |
+| recvrpTL16SBwu 死亡记录 | 验收中 | 根因不在后端：`POST /api/rabbits/events` 一直只要 `rabbitId`，是两端表单自己把 `batchId` 写成必填，于是入口只挂在批次详情的「母兔离场」上，笼内商品兔无处可登记。现两端改为笼位详情逐只可登记；Flutter 191 全绿（含离场弹窗用例） |
+| recvqh5TC8wd3y 换笼位 | 验收中 | 新增 `POST /api/rabbits/{id}/cage-transfer`，三种模式 MOVE / APPEND / SWAP，目标笼用途从**在栏兔实际类型**推导而非 `cages.status` 冷数据。`RabbitCageTransferIT` 6 条覆盖入笼/并笼/拒绝并笼/对调/拒绝对调/幂等重放。SWAP 绕开 `uk_rabbits_house_active_breeding_cage`（生成列唯一键，直接 CASE 互换必报 1062）：同事务内先把一只 `is_active=0` 让生成列归 NULL，移另一只，再落位复活，四条语句 |
+| recvsrEA6TRuK6 笼内兔只管理 | 验收中 | `RabbitMapper.xml` 提取 `RabbitColumns` 片段，把 `current_stage` / `current_cycle_id` / `stage_entered_at` / `last_mating_date` 补进 resultMap 与全部 select——上一轮说的「能力具备、调用方未接」正是这里。两端笼内列表显示生产阶段并支持逐只编辑/换笼/离场 |
+| recvsrnEJ8bKrk 录入时指定阶段+进入日期 | 验收中 | 新增 `GET /api/repro/entry-points` 下发「可入轨阶段 + 该阶段必须补录的事实」，客户端不抄第二份规则表（抄了就会漂移成「填完才 400」）。`ReproParallelCycleIT.entryPointDictionaryTellsClientsWhichFactsAreRequired` 钉住六个入轨点与各自必填项 |
+| recvsrpMlvu2SC 母兔状态可选项缺少 | 验收中 | 两端「新增兔子」不再给种母兔渲染旧的怀孕/空怀/哺乳下拉（后端本就拒收，填了必定 400），改读上面的入轨字典 |
+
+本轮顺带修掉一处未被任何单号记录的客户端故障：旧的换笼借 `PUT /api/rabbits/{id}` 把整行资料重发，
+其中包含后端已拒收的种母兔 `reproductiveStage`——**种母兔换笼在客户端其实是坏的**，新端点一并解决。
+
+验证：后端单测 116 全绿、e2e 141 全绿（新增 7 条）、admin lint+build 通过、Flutter analyze 干净 + 191 全绿。
+
 ## 二、**不能**判定完成（证据不足或明确未做）
 
 | 单号 | 缺口 | 说明 |
 | --- | --- | --- |
 | recvsroMN5SslS / recvsrtXYAKnX1 种兔/后备兔阶段字段错误 | **已补齐** | 更正：校验一直存在于 `RabbitService.normalizeAndValidateStages`（创建与更新均调用），拦住商品兔录繁殖阶段、后备兔非 RESERVE、种公兔非 READY/RESTING。本轮补上设计里唯一缺的一条：**种母兔不得手工录入繁殖阶段**，改为录入时选生产阶段并自动入轨 |
 | recvqh3EJXzmO1 批次新口径 | **只做了一半** | batches 已变纯标签（无 status/start/end 语义依赖）、成员关系改由 `breeding_cycles.batch_id` 派生。但建批次仍强制传母兔列表（`BatchService.java:231` 抛「母兔列表不能为空」），且「成员全退自动完成批次」仍在（`checkAndCompleteBatch`）——这两点正是原单里点名要改的 |
-| recvsrnEJ8bKrk / recvqh6N0wWVjR 录入时指定阶段+进入日期 | **后端已接入录入表单，客户端待补** | 本轮把入轨接进了兔只录入：`POST /api/rabbits` 新增 `reproStage` / `stageEnteredAt` / `matingDate` / `birthDate` / `liveKits`，与建兔同事务开周期并生成首个待办。仍缺 Flutter 与 admin 的录入界面 |
-| recvsrpMlvu2SC 母兔状态可选项缺少 | **后端已收口，客户端待补** | 种母兔录入不再接受旧的 `reproductive_stage`（怀孕/空怀/哺乳……），改用统一的 `ReproStage` 九值，中文名由 `GET /api/repro/stage-actions` 下发。录入表单的阶段下拉需改用该字典 |
-| recvsrEA6TRuK6 笼内兔子列表管理 | **待确认** | `rabbits` 投影列已建（含 `idx_rabbits_house_current_stage`），但笼位/兔只列表的 mapper 里没查到读取 `current_stage`，即能力具备而调用方未接 |
+| recvsrnEJ8bKrk / recvqh6N0wWVjR 录入时指定阶段+进入日期 | ~~客户端待补~~ → 见上节 | 后端：`POST /api/rabbits` 新增 `reproStage` / `stageEnteredAt` / `matingDate` / `birthDate` / `liveKits`，与建兔同事务开周期并生成首个待办。客户端已于后一轮补齐 |
+| recvsrpMlvu2SC 母兔状态可选项缺少 | ~~客户端待补~~ → 见上节 | 种母兔录入不再接受旧的 `reproductive_stage`（怀孕/空怀/哺乳……），中文名由服务端字典下发。客户端已于后一轮补齐 |
+| recvsrEA6TRuK6 笼内兔子列表管理 | ~~待确认~~ → 见上节 | 当时的怀疑已坐实：投影列已建但 mapper 确实没读，后一轮已补进 resultMap 与全部 select |
 
 ## 三、不属于本次范围
 
-recvrpTL16SBwu 死亡记录、recvrqnhXOyd5N 后备转种兔 —— 与母兔生产流程无关，本轮未触及，不应改状态。
+recvrqnhXOyd5N 后备转种兔 —— 与母兔生产流程无关，本轮未触及，不应改状态。
+
+recvrpTL16SBwu 死亡记录 —— 当时判定与生产流程无关而排除，后一轮已作为独立 P0 交付，见一之二。
 
 ## 四、写回飞书的前置条件
 
