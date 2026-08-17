@@ -175,7 +175,37 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
 通过标准是本轮 artifact 同时存在 `flutter-drive.log`、19 张 PNG、`database_assertions.txt`
 且 `actual=expected`。历史 artifact 只能作为历史证据，不能替代新版本真机运行。
 
-2026-08-17 流产（非计划事件）已纳入本用例，run ID `20260817181356093836`，
+### 笼内兔只操作真机脚本（死亡记录 / 换笼位 / 录入入轨）
+
+```bash
+cd app
+RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
+./scripts/android_cage_ops_e2e.sh
+```
+
+跡象写到 `app/build/android-e2e/cage-ops-<run_id>/`，通过标准是 13 张 PNG 齐全且
+`database_assertions.txt` 里 `actual=expected`。这个脚本与 Batch 生命周期脚本同样
+走局域网直连、不用 `adb reverse`，并额外做一件事：跑之前先探一下
+`/api/repro/entry-points` 与 `/api/rabbits/{id}/cage-transfer` 是否真的在路由上。
+因为 `docker compose up -d --build backend` 在 podman 下只重建镜像、**不重建容器**，
+旧容器会静静少接口，用例就退化成「界面看着没坏」——那不是验收。
+遇到该报错时跑 `docker compose up -d --build --force-recreate backend`。
+
+2026-08-17 首轮通过，run ID `20260817233240414116`，13/13 截图与 14 项数据库断言一致。
+覆盖：两只商品兔同笼时挑一只登记死亡（不需批次）、种母兔与后备兔对调笼位、
+商品兔并入未满的商品兔笼、以及录入种母兔时从【待摸胎】入轨并补录配种日期。
+数据库断言不只看提示语：对调后两只兔的 `cage_id` 互换、两笼用途与计数互换、
+两只都仍在栏（证明 SWAP 的 `is_active` 寄存已恢复），新母兔带着 `current_stage`
+与一条开放周期、一条待办。
+
+NFC 碰标签选目标笼不在本脚本内（需人拿着实体标签贴上去），仍留人工验收。
+
+本轮靠真机抳出一个单测看不见的缺陷：录入流程的类型页 pop 后用 post-frame 回调
+另开表单且不 await，于是调用方的列表刷新在兔子创建之前就跑完了——录入完看不到
+新兔，得退出重进页面。已改成两步都在 `showRabbitEntryTypeSheet` 里 await，
+并补上回归用例 `entry flow future completes only after the form closes`。
+
+2026-08-17 流产（非计划事件）已纳入 Batch 生命周期用例，run ID `20260817181356093836`，
 19/19 截图与 19 项数据库断言全部一致。流产不对应任何待办，所以走母兔行上的独立
 入口，而不是今日清单；用例选在母兔 A 处于待催情、母兔 B 处于待摸胎的时点提交，
 同一屏上同时断言「B 有入口」与「A 没有入口」——只验证能点会放过「到处都能点」，

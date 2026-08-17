@@ -30,20 +30,35 @@ const _replacementReproductiveStageOptions = <_StageOption>[
   _StageOption('RESERVE', '后备'),
 ];
 
+/// 录入兔只的两步流程：先选类型，再填详情。
+///
+/// 两步都在这里 await，因为调用方（笼位详情页）要靠这个 Future 决定何时刷列表。
+/// 早先的写法是类型页 pop 后在 post-frame 回调里另开表单而不等，于是调用方的
+/// 刷新回调在兔子创建之前就跑完了，新录入的兔子要退出重进页面才看得见。
 Future<void> showRabbitEntryTypeSheet({
   required BuildContext context,
   required int houseId,
   required Cage cage,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  final type = await showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     useSafeArea: true,
-    builder: (sheetContext) => _RabbitTypeSheet(
-      hostContext: context,
+    builder: (sheetContext) => _RabbitTypeSheet(cage: cage),
+  );
+  if (type == null || !context.mounted) {
+    return;
+  }
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    useSafeArea: true,
+    builder: (sheetContext) => _CreateRabbitSheet(
       houseId: houseId,
       cage: cage,
+      initialType: type,
     ),
   );
 }
@@ -68,14 +83,8 @@ Future<void> showRabbitEditSheet({
 }
 
 class _RabbitTypeSheet extends ConsumerStatefulWidget {
-  const _RabbitTypeSheet({
-    required this.hostContext,
-    required this.houseId,
-    required this.cage,
-  });
+  const _RabbitTypeSheet({required this.cage});
 
-  final BuildContext hostContext;
-  final int houseId;
   final Cage cage;
 
   @override
@@ -181,23 +190,8 @@ class _RabbitTypeSheetState extends ConsumerState<_RabbitTypeSheet> {
       );
       return;
     }
-    Navigator.of(context).pop();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!widget.hostContext.mounted) {
-        return;
-      }
-      showModalBottomSheet<void>(
-        context: widget.hostContext,
-        isScrollControlled: true,
-        useRootNavigator: true,
-        useSafeArea: true,
-        builder: (context) => _CreateRabbitSheet(
-          houseId: widget.houseId,
-          cage: widget.cage,
-          initialType: _type,
-        ),
-      );
-    });
+    // 只把选定的类型交回给发起方，录入表单由它 await。
+    Navigator.of(context).pop(_type);
   }
 }
 
@@ -754,6 +748,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    // 阶段中文名要在表单关闭前取，提示里要告知「已入轨」：
+    // 否则人不知道还要不要再去生产流程里手工开一轮。
+    final enteredStageLabel = _selectedEntryStageLabel();
     final missingFact = _missingEntryFact();
     if (missingFact != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -800,11 +797,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEdit ? '已更新兔 #${_rabbit.id}' : '已录入到 ${_createCageName()}',
-            ),
-          ),
+          SnackBar(content: Text(_successMessage(enteredStageLabel))),
         );
       }
     } catch (error) {
@@ -871,6 +864,28 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _reproductiveStage = null;
       }
     });
+  }
+
+  String _successMessage(String? enteredStageLabel) {
+    if (_isEdit) {
+      return '已更新兔 #${_rabbit.id}';
+    }
+    if (enteredStageLabel == null) {
+      return '已录入到 ${_createCageName()}';
+    }
+    return '已录入到 ${_createCageName()}，并从【$enteredStageLabel】入轨';
+  }
+
+  String? _selectedEntryStageLabel() {
+    if (!_canOpenReproEntry || _reproStage == null) {
+      return null;
+    }
+    final entries =
+        ref.read(reproEntryPointsProvider(widget.houseId)).valueOrNull;
+    if (entries == null) {
+      return null;
+    }
+    return _selectedEntryPoint(entries)?.stageLabel;
   }
 
   /// 入轨必填项的本地校验。服务端同样会拦，这里只是不让用户白跑一趟网络。

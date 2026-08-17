@@ -114,6 +114,26 @@ void main() {
     },
   );
 
+  // 调用方（笼位详情页）靠这个 Future 决定何时刷笼内列表。早先的写法在类型页
+  // pop 后用 post-frame 回调另开表单且不等，于是刷新在兔子创建前就跑完了——
+  // 真机上表现为录入完看不到新兔，得退出重进页面。
+  testWidgets('entry flow future completes only after the form closes',
+      (tester) async {
+    var finished = false;
+    await tester.pumpWidget(_entryTestApp(onFlowFinished: () => finished = true));
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('rabbit-entry-submit')), findsOneWidget);
+    expect(finished, isFalse, reason: '表单还开着时不得当作流程结束');
+
+    await tester.tap(find.text('取消').last);
+    await tester.pumpAndSettle();
+    expect(finished, isTrue, reason: '表单关闭后调用方才能刷列表');
+  });
+
   testWidgets('replacement locks to reserve and commodity omits reproduction',
       (tester) async {
     await tester.pumpWidget(_replacementEditTestApp());
@@ -143,16 +163,19 @@ void main() {
   });
 }
 
-Widget _entryTestApp() {
+Widget _entryTestApp({VoidCallback? onFlowFinished}) {
   return _testApp(
     child: Builder(
       builder: (context) => FilledButton(
         key: const ValueKey('open-rabbit-entry-sheet'),
-        onPressed: () => showRabbitEntryTypeSheet(
-          context: context,
-          houseId: 8,
-          cage: _breedingCage,
-        ),
+        onPressed: () async {
+          await showRabbitEntryTypeSheet(
+            context: context,
+            houseId: 8,
+            cage: _breedingCage,
+          );
+          onFlowFinished?.call();
+        },
         child: const Text('录入'),
       ),
     ),
