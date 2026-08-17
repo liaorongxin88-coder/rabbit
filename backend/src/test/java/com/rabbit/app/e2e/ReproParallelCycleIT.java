@@ -13,6 +13,7 @@ import com.rabbit.app.modules.repro.service.ReproStateMachineService;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -327,6 +328,36 @@ public class ReproParallelCycleIT extends E2eTestSupport {
                 "stillbirthCount", 1, "requestId", requestId("ha_reject")),
             409, "不允许执行"
         );
+    }
+
+    /**
+     * 历史记录查询必须能看到刚发生的事实。
+     *
+     * <p>删除旧写入路径后，pregnancy_check_records / parturition_records 两张表无人再写，
+     * 而查询接口照旧返回——线上表现是“摸胎、分娩都做了，记录里什么都没有”。
+     * 本用例直接走接口确认事件库回放正确，不查旧表，以免它又惄惄停更而无人发现。
+     */
+    @Test
+    void palpationAndDeliveryHistoryStayQueryableAfterTheRewrite() {
+        Fixture f = fixture("par_hist");
+        ReproResult cycle = openAtEstrus(f, "hist_open");
+        advanceToDelivery(f, cycle.cycleId(), "hist");
+
+        JsonNode palpations = api.getOk(
+            "/api/pregnancy-check-records?rabbitId=" + f.doeId, f.owner.token, f.houseId);
+        Assertions.assertEquals(1, palpations.size(), "摸胎历史应能查到");
+        Assertions.assertEquals("怀孕确认", palpations.get(0).get("result").asText());
+        Assertions.assertEquals(f.doeId, palpations.get(0).get("rabbitId").asLong());
+        Assertions.assertEquals(
+            cycle.cycleId(), palpations.get(0).get("breedingCycleId").asLong());
+
+        JsonNode births = api.getOk(
+            "/api/parturition-records?rabbitId=" + f.doeId, f.owner.token, f.houseId);
+        Assertions.assertEquals(1, births.size(), "分娩历史应能查到");
+        Assertions.assertEquals(8, births.get(0).get("totalKits").asInt());
+        Assertions.assertEquals(7, births.get(0).get("liveKits").asInt());
+        Assertions.assertFalse(
+            births.get(0).get("createBy").asText().isBlank(), "应保留操作人");
     }
 
     // ---------- 脚手架 ----------

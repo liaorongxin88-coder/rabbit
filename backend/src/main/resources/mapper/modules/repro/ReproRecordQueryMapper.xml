@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.ReproRecordQueryMapper">
+
+    <!--
+      分娩记录：由 DELIVERY_DONE / DELIVERY_FAILED 事件还原。
+      分娩失败没有仔兔数，载荷里就没有这两个字段，因此兜底为 0 而不是 null——
+      旧表这两列是 NOT NULL DEFAULT 0，保持一致的读出形状。
+    -->
+    <sql id="parturitionColumns">
+        e.id                                                      as id,
+        e.house_id                                                as house_id,
+        e.batch_id                                                as batch_id,
+        e.cycle_id                                                as breeding_cycle_id,
+        e.mother_rabbit_id                                        as rabbit_id,
+        e.occurred_at                                             as birth_date,
+        cast(coalesce(e.payload->>'$.totalKits', '0') as signed)  as total_kits,
+        cast(coalesce(e.payload->>'$.liveKits', '0') as signed)   as live_kits,
+        e.payload->>'$.remark'                                    as remark,
+        e.operator_name                                           as create_by,
+        e.create_time                                             as create_time
+    </sql>
+
+    <select id="selectParturitionsByBatch" resultType="com.rabbit.app.modules.batch.entity.ParturitionRecord">
+        select <include refid="parturitionColumns"/>
+        from repro_events e
+        where e.house_id = #{houseId}
+          and e.batch_id = #{batchId}
+          and e.event_type in ('DELIVERY_DONE', 'DELIVERY_FAILED')
+        order by e.occurred_at desc, e.id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectParturitionsByRabbit" resultType="com.rabbit.app.modules.batch.entity.ParturitionRecord">
+        select <include refid="parturitionColumns"/>
+        from repro_events e
+        where e.house_id = #{houseId}
+          and e.mother_rabbit_id = #{rabbitId}
+          and e.event_type in ('DELIVERY_DONE', 'DELIVERY_FAILED')
+        order by e.occurred_at desc, e.id desc
+        limit #{limit}
+    </select>
+
+    <!--
+      摸胎记录：由三个 PALPATION_* 事件还原。
+      result 沿用旧表的中文取值，因为这是给人看的历史清单，
+      且摸胎结论没有像生产阶段那样的服务端字典可供客户端翻译。
+    -->
+    <sql id="palpationColumns">
+        e.id               as id,
+        e.house_id         as house_id,
+        e.batch_id         as batch_id,
+        e.cycle_id         as breeding_cycle_id,
+        e.mother_rabbit_id as rabbit_id,
+        e.occurred_at      as check_date,
+        case e.payload->>'$.palpationResult'
+            when 'PREGNANT' then '怀孕确认'
+            when 'EMPTY'    then '空怀'
+            when 'UNSURE'   then '不确定'
+            else e.payload->>'$.palpationResult'
+        end                as result,
+        e.payload->>'$.remark' as remark,
+        e.operator_name    as create_by,
+        e.create_time      as create_time
+    </sql>
+
+    <select id="selectPalpationsByBatch" resultType="com.rabbit.app.modules.batch.entity.PregnancyCheckRecord">
+        select <include refid="palpationColumns"/>
+        from repro_events e
+        where e.house_id = #{houseId}
+          and e.batch_id = #{batchId}
+          and e.event_type in ('PALPATION_PREGNANT', 'PALPATION_EMPTY', 'PALPATION_UNSURE')
+        order by e.occurred_at desc, e.id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectPalpationsByRabbit" resultType="com.rabbit.app.modules.batch.entity.PregnancyCheckRecord">
+        select <include refid="palpationColumns"/>
+        from repro_events e
+        where e.house_id = #{houseId}
+          and e.mother_rabbit_id = #{rabbitId}
+          and e.event_type in ('PALPATION_PREGNANT', 'PALPATION_EMPTY', 'PALPATION_UNSURE')
+        order by e.occurred_at desc, e.id desc
+        limit #{limit}
+    </select>
+
+</mapper>
