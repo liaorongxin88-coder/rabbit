@@ -18,16 +18,29 @@
 
 ## 一之二、后一轮（同日）补齐的单号
 
-上一轮列在「客户端待补」「待确认」「不属于本次范围」里的五条，本轮已交付到**待验收**。
-口径不变：能指到测试的才写，只有真机/浏览器验收还没做，所以是「验收中」而不是「已完成」。
+上一轮列在「客户端待补」「待确认」「不属于本次范围」里的五条，本轮已交付并完成验收。
+
+**验收后的最终状态（2026-08-18）**：下表五条中四条已置「已完成」，
+`recvqh5TC8wd3y` 换笼位仍为「验收中」——对调/并笼两端已自动化跑通，
+但 **App 端 NFC 碰标签选目标笼需实体标签人工验收**，该缺口不能用代码证明。
+
+| 验收方式 | 证据 |
+| --- | --- |
+| 真机（OPPO A059） | `app/scripts/android_cage_ops_e2e.sh`，run `20260817233240414116`，13/13 截图 + 14 项数据库断言 |
+| 浏览器（本机 Chrome） | `pnpm --dir admin e2e:browser`，run `20260818001511706795`，16 张截图 + console/page error 0 + 14 项数据库断言 |
+
+两轮验收各抳出一个自动化单测看不见的缺陷：真机上录入完笼内列表不刷新
+（类型页 pop 后用 post-frame 回调另开表单且不 await，调用方的刷新在创建前就跑完了）；
+浏览器上 390px 两张表格把列挤成一列一个字（不触发横向溢出，所以旧检查放过）。
+两处均已修复并补上防回归断言。
 
 | 单号 | 结论 | 证据 |
 | --- | --- | --- |
-| recvrpTL16SBwu 死亡记录 | 验收中 | 根因不在后端：`POST /api/rabbits/events` 一直只要 `rabbitId`，是两端表单自己把 `batchId` 写成必填，于是入口只挂在批次详情的「母兔离场」上，笼内商品兔无处可登记。现两端改为笼位详情逐只可登记；Flutter 191 全绿（含离场弹窗用例） |
-| recvqh5TC8wd3y 换笼位 | 验收中 | 新增 `POST /api/rabbits/{id}/cage-transfer`，三种模式 MOVE / APPEND / SWAP，目标笼用途从**在栏兔实际类型**推导而非 `cages.status` 冷数据。`RabbitCageTransferIT` 6 条覆盖入笼/并笼/拒绝并笼/对调/拒绝对调/幂等重放。SWAP 绕开 `uk_rabbits_house_active_breeding_cage`（生成列唯一键，直接 CASE 互换必报 1062）：同事务内先把一只 `is_active=0` 让生成列归 NULL，移另一只，再落位复活，四条语句 |
-| recvsrEA6TRuK6 笼内兔只管理 | 验收中 | `RabbitMapper.xml` 提取 `RabbitColumns` 片段，把 `current_stage` / `current_cycle_id` / `stage_entered_at` / `last_mating_date` 补进 resultMap 与全部 select——上一轮说的「能力具备、调用方未接」正是这里。两端笼内列表显示生产阶段并支持逐只编辑/换笼/离场 |
-| recvsrnEJ8bKrk 录入时指定阶段+进入日期 | 验收中 | 新增 `GET /api/repro/entry-points` 下发「可入轨阶段 + 该阶段必须补录的事实」，客户端不抄第二份规则表（抄了就会漂移成「填完才 400」）。`ReproParallelCycleIT.entryPointDictionaryTellsClientsWhichFactsAreRequired` 钉住六个入轨点与各自必填项 |
-| recvsrpMlvu2SC 母兔状态可选项缺少 | 验收中 | 两端「新增兔子」不再给种母兔渲染旧的怀孕/空怀/哺乳下拉（后端本就拒收，填了必定 400），改读上面的入轨字典 |
+| recvrpTL16SBwu 死亡记录 | 已完成 | 根因不在后端：`POST /api/rabbits/events` 一直只要 `rabbitId`，是两端表单自己把 `batchId` 写成必填，于是入口只挂在批次详情的「母兔离场」上，笼内商品兔无处可登记。现两端改为笼位详情逐只可登记；Flutter 191 全绿（含离场弹窗用例） |
+| recvqh5TC8wd3y 换笼位 | 验收中（NFC 待人工） | 新增 `POST /api/rabbits/{id}/cage-transfer`，三种模式 MOVE / APPEND / SWAP，目标笼用途从**在栏兔实际类型**推导而非 `cages.status` 冷数据。`RabbitCageTransferIT` 6 条覆盖入笼/并笼/拒绝并笼/对调/拒绝对调/幂等重放。SWAP 绕开 `uk_rabbits_house_active_breeding_cage`（生成列唯一键，直接 CASE 互换必报 1062）：同事务内先把一只 `is_active=0` 让生成列归 NULL，移另一只，再落位复活，四条语句 |
+| recvsrEA6TRuK6 笼内兔只管理 | 已完成 | `RabbitMapper.xml` 提取 `RabbitColumns` 片段，把 `current_stage` / `current_cycle_id` / `stage_entered_at` / `last_mating_date` 补进 resultMap 与全部 select——上一轮说的「能力具备、调用方未接」正是这里。两端笼内列表显示生产阶段并支持逐只编辑/换笼/离场 |
+| recvsrnEJ8bKrk 录入时指定阶段+进入日期 | 已完成 | 新增 `GET /api/repro/entry-points` 下发「可入轨阶段 + 该阶段必须补录的事实」，客户端不抄第二份规则表（抄了就会漂移成「填完才 400」）。`ReproParallelCycleIT.entryPointDictionaryTellsClientsWhichFactsAreRequired` 钉住六个入轨点与各自必填项 |
+| recvsrpMlvu2SC 母兔状态可选项缺少 | 已完成 | 两端「新增兔子」不再给种母兔渲染旧的怀孕/空怀/哺乳下拉（后端本就拒收，填了必定 400），改读上面的入轨字典 |
 
 本轮顺带修掉一处未被任何单号记录的客户端故障：旧的换笼借 `PUT /api/rabbits/{id}` 把整行资料重发，
 其中包含后端已拒收的种母兔 `reproductiveStage`——**种母兔换笼在客户端其实是坏的**，新端点一并解决。
