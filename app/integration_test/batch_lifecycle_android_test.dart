@@ -289,8 +289,13 @@ void main() {
       // 收尾校验：两头都离场，且一条待办都不能残留。
       // 母兔已不存在却还在今日清单里，正是离场不结周期那个缺陷的外部表现。
       await _assertBatchState(api, batchId, step: '两头母兔离场后', expected: _does(a: 'RETIRED/', b: 'RETIRED/'));
-      expect(await api.batchStatus(batchId), '已完成');
       expect(await api.activeBatchRabbitCount(batchId), 0);
+
+      // doe-breeding-v2 之后批次不再自动完成（后端已删除 checkAndCompleteBatch）：
+      // 批次只是个标签，什么时候收标签由人决定，系统不得替人宣布生产结束。
+      // 所以这里要显式点「结束 Batch」；此时活跃成员为 0，不需要勾强制。
+      await _completeBatchThroughUi(tester, batchId);
+      expect(await api.batchStatus(batchId), '已完成');
 
       await _backToHomeTop(tester);
       await tester.tap(find.byTooltip('刷新'));
@@ -539,6 +544,26 @@ Future<void> _submitBulkMating(
   );
 }
 
+/// 显式结束 Batch（活跃成员为 0 时无需强制）。
+Future<void> _completeBatchThroughUi(WidgetTester tester, int batchId) async {
+  await _backToHomeTop(tester);
+  await _openHouse(tester);
+  await tester.tap(find.byKey(const ValueKey('house-batches-entry')));
+  final batchCard = find.byKey(ValueKey('batch-list-item-$batchId'));
+  await _waitFor(tester, batchCard);
+  await tester.tap(batchCard);
+
+  final completeButton = find.byKey(const ValueKey('batch-complete-button'));
+  await _scrollBatchDetailUntilVisible(tester, completeButton);
+  await tester.tap(completeButton);
+  await _waitFor(tester, find.text('结束这个 Batch？'));
+  // 没有活跃成员时弹窗不会出现强制勾，确认键直接可点。
+  expect(find.byKey(const ValueKey('batch-complete-force')), findsNothing);
+  await tester.tap(find.byKey(const ValueKey('batch-complete-confirm')));
+  await _waitFor(tester, find.text('Batch 已结束'));
+  await tester.pumpAndSettle();
+}
+
 Future<void> _cullMotherThroughUi(
   WidgetTester tester,
   int batchId, {
@@ -562,7 +587,8 @@ Future<void> _cullMotherThroughUi(
   );
   await _scrollBatchDetailUntilVisible(tester, departure);
   await tester.tap(departure);
-  await _waitFor(tester, find.text('母兔离场'));
+  // 离场表单已改成全兔种通用（笼内任何一只都能登记），标题从「母兔离场」改为「登记离场」。
+  await _waitFor(tester, find.text('登记离场'));
   final reason = find.byKey(const ValueKey('rabbit-departure-reason'));
   await tester.ensureVisible(reason);
   await tester.enterText(reason, '繁殖性能下降');

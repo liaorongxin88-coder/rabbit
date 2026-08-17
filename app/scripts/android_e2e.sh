@@ -23,12 +23,36 @@ resolve_db_container() {
   printf '%s\n' 'rabbit_mysql_1'
 }
 
+# 真机走局域网直连（与 batch-lifecycle / cage-ops 脚本一致，故意不用 adb reverse，
+# 这样才能真实跑出网络延迟）；10.0.2.2 只对模拟器有效。
+# 以前这里直接写死 10.0.2.2，插真机跑时应用压根连不上后端，
+# 用例会在登录后超时，报“找不到兔舍”——跟真实原因差得很远。
+resolve_host_lan_ip() {
+  if [[ -n "${RABBIT_ANDROID_E2E_HOST_LAN_IP:-}" ]]; then
+    printf '%s\n' "$RABBIT_ANDROID_E2E_HOST_LAN_IP"
+    return
+  fi
+  local ip=""
+  for iface in en0 en1 en2; do
+    ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+    [[ -n "$ip" ]] && break
+  done
+  printf '%s\n' "$ip"
+}
+
 DB_CONTAINER="$(resolve_db_container)"
 DB_NAME="${RABBIT_ANDROID_E2E_DB_NAME:-rabbit_app}"
 DB_USER="${RABBIT_ANDROID_E2E_DB_USER:-root}"
 DB_PASSWORD="${RABBIT_ANDROID_E2E_DB_PASSWORD:-rabbit_root}"
+HOST_LAN_IP="$(resolve_host_lan_ip)"
 HOST_API_URL="${RABBIT_ANDROID_E2E_HOST_API_URL:-http://127.0.0.1:8080}"
-DEVICE_API_URL="${RABBIT_ANDROID_E2E_DEVICE_API_URL:-http://10.0.2.2:8080}"
+if [[ -n "${RABBIT_ANDROID_E2E_DEVICE_API_URL:-}" ]]; then
+  DEVICE_API_URL="$RABBIT_ANDROID_E2E_DEVICE_API_URL"
+elif [[ -n "$HOST_LAN_IP" ]]; then
+  DEVICE_API_URL="http://$HOST_LAN_IP:8080"
+else
+  DEVICE_API_URL="http://10.0.2.2:8080"
+fi
 TEXT_SCALE="${RABBIT_ANDROID_E2E_TEXT_SCALE:-1.0}"
 TEST_PROFILE="${RABBIT_ANDROID_E2E_PROFILE:-}"
 EXPECTED_EFFECTIVE_TEXT_SCALE="${RABBIT_ANDROID_E2E_EXPECTED_EFFECTIVE_TEXT_SCALE:-}"
@@ -170,6 +194,18 @@ if [[ -z "$DEVICE_ID" ]] || \
    [[ "$("$ADB_BIN" -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
   echo "Android device did not become ready" >&2
   exit 69
+fi
+
+# 从设备侧实打一次：主机自测通过不代表手机能访问（监听地址、防火墙、
+# AP 隔离都只卡设备这一侧）。失败时提前报错，而不是让用例在登录页超时。
+if [[ "$DEVICE_API_URL" != http://10.0.2.2:* ]]; then
+  device_probe="$("$ADB_BIN" -s "$DEVICE_ID" shell "curl -s -m 8 -o /dev/null -w '%{http_code}' $DEVICE_API_URL/api/houses" 2>/dev/null | tr -d '\r')"
+  if [[ "$device_probe" != "401" && "$device_probe" != "200" ]]; then
+    echo "Device $DEVICE_ID cannot reach the backend at $DEVICE_API_URL (probe: '${device_probe:-none}')" >&2
+    echo "Check BACKEND_BIND_ADDRESS=0.0.0.0 in .env and that the phone is on the same LAN." >&2
+    exit 69
+  fi
+  echo "Device reaches backend over LAN at $DEVICE_API_URL"
 fi
 
 if [[ "$DEVICE_ID" == emulator-* || "$ALLOW_DEVICE_SETTINGS" == "1" ]]; then

@@ -53,7 +53,8 @@ void main() {
       await _login(tester, _viewUser);
       await _openPrimaryHouse(tester);
       await tester.tap(find.text('进入笼位'));
-      await _waitFor(tester, find.text('R1-C1-L1'));
+      // 笼位区默认是分层地图，格子上不写笼位编号，所以认 key 不认文字。
+      await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
       expect(find.byKey(const ValueKey('house-outbound-action')), findsNothing);
       expect(find.byTooltip('整舍批量出库'), findsNothing);
       await _takeScreenshot(binding, tester, '02-view-permission');
