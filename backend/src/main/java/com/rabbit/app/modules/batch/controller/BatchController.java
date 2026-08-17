@@ -11,6 +11,7 @@ import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.dto.BulkMatingRequest;
 import com.rabbit.app.modules.batch.dto.BulkMatingResult;
 import com.rabbit.app.modules.batch.dto.CompleteBatchRequest;
+import com.rabbit.app.modules.batch.dto.AddBatchMembersRequest;
 import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
 import com.rabbit.app.modules.batch.dto.MatingRequest;
 import com.rabbit.app.modules.batch.dto.ParturitionRequest;
@@ -89,6 +90,25 @@ public class BatchController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
         return ApiResponse.ok(batchService.createBatch(userId, houseId, req.getBatchCode(), req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
+    }
+
+    /**
+     * 向已存在的批次追加母兔。
+     *
+     * <p>批次现在可以先建空壳，母兔陆续到齐再放进来；追加的母兔与建批时一样当场入轨。
+     */
+    @PostMapping("/batches/{batchId}/members")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<Void> addBatchMembers(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @Valid @RequestBody AddBatchMembersRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        batchService.addMembers(
+            userId, houseId, batchId, req.getFemaleRabbitIds(), req.getRequestId());
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/batches/{batchId}")

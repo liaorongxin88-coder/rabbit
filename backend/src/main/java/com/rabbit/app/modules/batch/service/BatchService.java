@@ -227,38 +227,9 @@ public class BatchService {
                 return done;
             }
 
-            if (femaleRabbitIds == null || femaleRabbitIds.isEmpty()) {
-                throw new BizException(400, "母兔列表不能为空");
-            }
-            List<Long> requestedIds = new ArrayList<Long>(
-                new LinkedHashSet<Long>(femaleRabbitIds)
-            );
-            if (requestedIds.size() != femaleRabbitIds.size()) {
-                throw new BizException(400, "母兔列表包含重复项");
-            }
-            // The rabbit row is the serialization point for batch membership.
-            // Lock every requested mother in a stable order before checking active
-            // links, so concurrent batches cannot both observe an empty result.
-            requestedIds.sort(Long::compareTo);
-            List<Rabbit> females = rabbitMapper.selectByIdsForUpdate(
-                houseId,
-                requestedIds
-            );
-            if (females.size() != requestedIds.size()) {
-                throw new BizException(400, "母兔不存在");
-            }
-            // This must be a locking/current read. The idempotency lookups above
-            // may already have established a REPEATABLE READ snapshot before a
-            // concurrent request releases the mother-row lock.
-            Set<Long> activeRabbitIds = new HashSet<Long>(
-                batchRabbitMapper.selectActiveRabbitIdsForUpdate(
-                    houseId,
-                    requestedIds
-                )
-            );
-            if (!activeRabbitIds.isEmpty()) {
-                throw new BizException(400, "母兔已在活跃批次中");
-            }
+            // 新口径：允许先建空批次，母兔随后再追加。
+            // 建批时必须凑齐母兔曾是一道无谓的门槛：用户往往先拉一个批次，再陆续把到期的母兔放进去。
+            List<Rabbit> females = lockAndValidateNewMembers(houseId, femaleRabbitIds);
 
             Date now = DateUtil.now();
 
@@ -289,47 +260,7 @@ public class BatchService {
                 throw e;
             }
 
-            List<BatchRabbit> links = new ArrayList<BatchRabbit>(females.size());
-            List<RabbitStatusHistory> histories =
-                new ArrayList<RabbitStatusHistory>(females.size());
-            for (Rabbit r : females) {
-                Long rid = r.getId();
-                if (r.getIsActive() == null || !r.getIsActive()) {
-                    throw new BizException(400, "母兔不在场");
-                }
-                if (!"0".equals(r.getGender())) {
-                    throw new BizException(400, "仅母兔可加入繁殖批次");
-                }
-                if (!"0".equals(r.getType()) && !"1".equals(r.getType())) {
-                    throw new BizException(400, "仅种兔/后备兔可加入繁殖批次");
-                }
-                BatchRabbit br = new BatchRabbit();
-                br.setBatchId(b.getId());
-                br.setRabbitId(rid);
-                br.setJoinReason("配种");
-                br.setBatchRole("breeding");
-                br.setCurrentStatus("待催情");
-                br.setIsActive(Boolean.TRUE);
-                br.setJoinDate(now);
-                br.setCreateBy(String.valueOf(userId));
-                br.setUpdateBy(String.valueOf(userId));
-                links.add(br);
-
-                RabbitStatusHistory h = new RabbitStatusHistory();
-                h.setHouseId(houseId);
-                h.setRabbitId(rid);
-                h.setBatchId(b.getId());
-                h.setFromStatus(null);
-                h.setToStatus("待催情");
-                h.setChangeTime(now);
-                h.setReason("加入批次");
-                h.setCreateBy(String.valueOf(userId));
-                h.setUpdateBy(String.valueOf(userId));
-                histories.add(h);
-            }
-            insertBatchRabbitLinks(links);
-            insertStatusHistories(histories);
-            openReproCyclesForNewMembers(userId, houseId, b.getId(), females, now, requestId);
+            joinMembers(userId, houseId, b.getId(), females, now, requestId);
 
             requestDedupService.markDone(houseId, userId, api, requestId);
             return b;
@@ -341,6 +272,137 @@ public class BatchService {
                 requestId,
                 e.getMessage()
             );
+            throw e;
+        }
+    }
+
+    /**
+     * 锁住并校验一批待加入的母兔；空列表合法，直接返回空。
+     */
+    private List<Rabbit> lockAndValidateNewMembers(Long houseId, List<Long> femaleRabbitIds) {
+        if (femaleRabbitIds == null || femaleRabbitIds.isEmpty()) {
+            return new ArrayList<Rabbit>();
+        }
+        List<Long> requestedIds = new ArrayList<Long>(
+            new LinkedHashSet<Long>(femaleRabbitIds)
+        );
+        if (requestedIds.size() != femaleRabbitIds.size()) {
+            throw new BizException(400, "母兔列表包含重复项");
+        }
+        // The rabbit row is the serialization point for batch membership.
+        // Lock every requested mother in a stable order before checking active
+        // links, so concurrent batches cannot both observe an empty result.
+        requestedIds.sort(Long::compareTo);
+        List<Rabbit> females = rabbitMapper.selectByIdsForUpdate(houseId, requestedIds);
+        if (females.size() != requestedIds.size()) {
+            throw new BizException(400, "母兔不存在");
+        }
+        // This must be a locking/current read. The idempotency lookups above
+        // may already have established a REPEATABLE READ snapshot before a
+        // concurrent request releases the mother-row lock.
+        Set<Long> activeRabbitIds = new HashSet<Long>(
+            batchRabbitMapper.selectActiveRabbitIdsForUpdate(houseId, requestedIds)
+        );
+        if (!activeRabbitIds.isEmpty()) {
+            throw new BizException(400, "母兔已在活跃批次中");
+        }
+        return females;
+    }
+
+    /**
+     * 建立批次成员关系，并把每头母兔送进生产流程。
+     *
+     * <p>建批与追加成员走同一条路径：两边各写一份就会漂，而这里漏一步的后果是
+     * 母兔既无阶段也无待办、生产流程从界面上无法开始。
+     */
+    private void joinMembers(
+        Long userId,
+        Long houseId,
+        Long batchId,
+        List<Rabbit> females,
+        Date now,
+        String requestId
+    ) {
+        if (females.isEmpty()) {
+            return;
+        }
+        List<BatchRabbit> links = new ArrayList<BatchRabbit>(females.size());
+        List<RabbitStatusHistory> histories =
+            new ArrayList<RabbitStatusHistory>(females.size());
+        for (Rabbit r : females) {
+            Long rid = r.getId();
+            if (r.getIsActive() == null || !r.getIsActive()) {
+                throw new BizException(400, "母兔不在场");
+            }
+            if (!"0".equals(r.getGender())) {
+                throw new BizException(400, "仅母兔可加入繁殖批次");
+            }
+            if (!"0".equals(r.getType()) && !"1".equals(r.getType())) {
+                throw new BizException(400, "仅种兔/后备兔可加入繁殖批次");
+            }
+            BatchRabbit br = new BatchRabbit();
+            br.setBatchId(batchId);
+            br.setRabbitId(rid);
+            br.setJoinReason("配种");
+            br.setBatchRole("breeding");
+            br.setCurrentStatus("待催情");
+            br.setIsActive(Boolean.TRUE);
+            br.setJoinDate(now);
+            br.setCreateBy(String.valueOf(userId));
+            br.setUpdateBy(String.valueOf(userId));
+            links.add(br);
+
+            RabbitStatusHistory h = new RabbitStatusHistory();
+            h.setHouseId(houseId);
+            h.setRabbitId(rid);
+            h.setBatchId(batchId);
+            h.setFromStatus(null);
+            h.setToStatus("待催情");
+            h.setChangeTime(now);
+            h.setReason("加入批次");
+            h.setCreateBy(String.valueOf(userId));
+            h.setUpdateBy(String.valueOf(userId));
+            histories.add(h);
+        }
+        insertBatchRabbitLinks(links);
+        insertStatusHistories(histories);
+        openReproCyclesForNewMembers(userId, houseId, batchId, females, now, requestId);
+    }
+
+    /**
+     * 向已存在的批次追加母兔。
+     *
+     * <p>与建批同一条路径，因此追加的母兔同样会当场入轨、生成待办。
+     */
+    @Transactional
+    public void addMembers(
+        Long userId,
+        Long houseId,
+        Long batchId,
+        List<Long> femaleRabbitIds,
+        String requestId
+    ) {
+        String api = "batch.addMembers";
+        if (femaleRabbitIds == null || femaleRabbitIds.isEmpty()) {
+            throw new BizException(400, "母兔列表不能为空");
+        }
+        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
+            return;
+        }
+        requestDedupService.markProcessing(houseId, userId, api, requestId);
+        try {
+            Batch batch = batchMapper.selectById(houseId, batchId);
+            if (batch == null) {
+                throw new BizException(404, "批次不存在");
+            }
+            if ("已完成".equals(batch.getStatus())) {
+                throw new BizException(409, "批次已结束，无法再加入母兔");
+            }
+            List<Rabbit> females = lockAndValidateNewMembers(houseId, femaleRabbitIds);
+            joinMembers(userId, houseId, batchId, females, DateUtil.now(), requestId);
+            requestDedupService.markDone(houseId, userId, api, requestId);
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
     }
@@ -750,7 +812,7 @@ public class BatchService {
                 );
             }
 
-            checkAndCompleteBatch(houseId, batchId, userId, saleDate);
+            // 新口径：出售后即使批次空了也不自动结束，由用户主动点击。
             requestDedupService.markDone(houseId, userId, api, requestId);
         } catch (RuntimeException e) {
             requestDedupService.markFailed(
@@ -964,30 +1026,6 @@ public class BatchService {
         h.setCreateBy(String.valueOf(userId));
         h.setUpdateBy(String.valueOf(userId));
         rabbitStatusHistoryMapper.insert(h);
-    }
-
-    private void checkAndCompleteBatch(
-        Long houseId,
-        Long batchId,
-        Long userId,
-        Date endDate
-    ) {
-        int active = batchRabbitMapper.countActiveByBatch(batchId);
-        if (active != 0) {
-            return;
-        }
-        Batch b = batchMapper.selectById(houseId, batchId);
-        if (b == null) {
-            return;
-        }
-        batchMapper.updateStatusAndDates(
-            houseId,
-            batchId,
-            "已完成",
-            b.getStartDate(),
-            endDate,
-            String.valueOf(userId)
-        );
     }
 
     private Cage pickCommodityCage(Long houseId) {

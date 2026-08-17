@@ -2,6 +2,7 @@ package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Assertions;
@@ -339,5 +340,85 @@ public class ReproLifecycleIT extends E2eTestSupport {
     private record Fixture(
         UserSession owner, long houseId, long batchId, long buckId, List<Long> doeIds
     ) {
+    }
+
+    /**
+     * 批次新口径：可先建空壳，母兔陆续追加，追加即入轨。
+     *
+     * <p>旧实现强制建批时凑齐母兔，而现场是先拉一个批次、母兔到期了再放进去。
+     */
+    @Test
+    void batchCanStartEmptyAndTakeMembersLater() {
+        UserSession owner = register("batch_empty");
+        long houseId = createHouse(owner, "空批兔舍", 1, 4, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", "empty_doe");
+
+        JsonNode batch = api.postOk("/api/batches", owner.token, houseId, obj(
+                "batchCode", "B-EMPTY-" + java.util.UUID.randomUUID().toString().substring(0, 6),
+                "requestId", requestId("empty_create")
+        ));
+        long batchId = batch.get("id").asLong();
+        Assertions.assertEquals(0,
+                (int) jdbc.queryForObject(
+                        "select count(*) from breeding_cycles where batch_id = ?",
+                        Integer.class, batchId),
+                "空批次不应凭空产生生产周期");
+        // 空批次一建出来就已无在册母兔，因此立刻带上「可结束」提示。
+        Assertions.assertTrue(
+                api.getOk("/api/batches/" + batchId, owner.token, houseId)
+                        .get("pendingCompletion").asBoolean(),
+                "无成员的批次应提示可结束");
+
+        api.postOk("/api/batches/" + batchId + "/members", owner.token, houseId, obj(
+                "femaleRabbitIds", List.of(doeId),
+                "requestId", requestId("empty_add")
+        ));
+
+        Assertions.assertEquals("AWAIT_ESTRUS",
+                jdbc.queryForObject(
+                        "select stage from breeding_cycles where batch_id = ? and mother_rabbit_id = ?",
+                        String.class, batchId, doeId),
+                "追加的母兔必须当场入轨");
+        Assertions.assertEquals(1,
+                (int) jdbc.queryForObject(
+                        "select count(*) from work_tasks where house_id = ? and rabbit_id = ? and status = 'PENDING'",
+                        Integer.class, houseId, doeId));
+        Assertions.assertFalse(
+                api.getOk("/api/batches/" + batchId, owner.token, houseId)
+                        .get("pendingCompletion").asBoolean(),
+                "已有在册母兔就不该再提示结束");
+    }
+
+    /**
+     * 成员全部离场后，批次只提示、不自动结束。
+     *
+     * <p>「这一轮算不算完」是业务判断：母兔可能只是暂时清空，用户还想继续往里补兔。
+     */
+    @Test
+    void emptyingABatchOnlyPromptsInsteadOfClosingIt() {
+        UserSession owner = register("batch_prompt");
+        long houseId = createHouse(owner, "提示兔舍", 1, 4, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", "prompt_doe");
+        JsonNode batch = api.postOk("/api/batches", owner.token, houseId, obj(
+                "batchCode", "B-PROMPT-" + java.util.UUID.randomUUID().toString().substring(0, 6),
+                "femaleRabbitIds", List.of(doeId),
+                "requestId", requestId("prompt_create")
+        ));
+        long batchId = batch.get("id").asLong();
+
+        api.postOk("/api/rabbits/events", owner.token, houseId, obj(
+                "rabbitId", doeId, "eventType", "cull", "actionDate", new Date().getTime(),
+                // 母兔还在活跃批次里，离场需显式确认退出批次。
+                "forceExitBatch", true,
+                "reason", "淘汰", "requestId", requestId("prompt_cull")
+        ));
+
+        JsonNode after = api.getOk("/api/batches/" + batchId, owner.token, houseId);
+        Assertions.assertNotEquals("已完成", after.get("status").asText(),
+                "不应再自动结束批次");
+        Assertions.assertTrue(after.get("pendingCompletion").asBoolean(),
+                "应提示用户去结束批次");
     }
 }

@@ -12,7 +12,7 @@ public class CreateBatchRequest {
     @Size(max = 100, message = "batchCode过长")
     private String batchCode;
 
-    @NotEmpty(message = "母兔列表不能为空")
+    // 新口径：可先建空批次，母兔通过 POST /batches/{id}/members 陆续追加。
     @Size(max = 5000, message = "单个批次母兔数量不能超过5000只")
     private List<@NotNull(message = "母兔ID不能为空") @Positive(message = "母兔ID不合法") Long> femaleRabbitIds;
 

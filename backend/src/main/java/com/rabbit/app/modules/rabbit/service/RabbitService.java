@@ -467,8 +467,8 @@ public class RabbitService {
                         throw new BizException(400, "兔子仍在活跃批次中");
                     }
                     for (BatchRabbit br : activeBatchLinks) {
+                        // 新口径：成员退完不再自动结束批次，改由批次查询派生“可结束”提示。
                         batchRabbitMapper.deactivate(houseId, br.getId(), now, "转为后备兔", operator);
-                        checkAndCompleteBatch(houseId, br.getBatchId(), userId, now);
                     }
                 }
             }
@@ -523,21 +523,6 @@ public class RabbitService {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
-    }
-
-    private void checkAndCompleteBatch(Long houseId, Long batchId, Long userId, Date endDate) {
-        if (batchId == null) {
-            return;
-        }
-        int active = batchRabbitMapper.countActiveByBatch(batchId);
-        if (active != 0) {
-            return;
-        }
-        Batch b = batchMapper.selectById(houseId, batchId);
-        if (b == null) {
-            return;
-        }
-        batchMapper.updateStatusAndDates(houseId, batchId, "已完成", b.getStartDate(), endDate, String.valueOf(userId));
     }
 
     private Cage pickReplacementCage(List<Cage> cages, Map<Long, Integer> projectedCounts,
@@ -831,7 +816,6 @@ public class RabbitService {
                     // 这里只需解除批次成员关系。旧的 closeOpenByMother 只写 status/closed_at，
                     // 再调一次只会把刚写好的结果覆盖成遗留词汇。
                     batchRabbitMapper.deactivateIfActive(houseId, br.getId(), now, "兔离场:" + t, op);
-                    checkAndCompleteBatch(houseId, br.getBatchId(), userId, now);
                 }
             }
 
