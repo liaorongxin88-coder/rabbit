@@ -13,6 +13,7 @@ class Cage {
     required this.status,
     required this.rabbitCount,
     required this.isEnabled,
+    this.isFed = true,
   });
 
   final int id;
@@ -25,6 +26,9 @@ class Cage {
   final String status;
   final int rabbitCount;
   final bool isEnabled;
+
+  /// 今日是否已投喂。缺省按已投喂处理：宁可少报一条待办，也不要凭缺失字段虚报关注。
+  final bool isFed;
 
   String get label {
     final name = cageNumber.isEmpty ? '#$id' : cageNumber;
@@ -169,6 +173,7 @@ class Cage {
       status: json['status'] as String? ?? '',
       rabbitCount: _intValue(json['rabbitCount']),
       isEnabled: _boolValue(json['isEnabled'], fallback: true),
+      isFed: _boolValue(json['isFed'], fallback: true),
     );
   }
 

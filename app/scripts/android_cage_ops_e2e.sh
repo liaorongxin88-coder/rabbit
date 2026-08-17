@@ -205,6 +205,7 @@ fi
 
 screenshots=(
   01-cage-grid
+  01b-cage-map
   02-commodity-cage-two-rabbits
   03-departure-sheet
   04-departure-filled

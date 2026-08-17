@@ -183,7 +183,7 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
 ./scripts/android_cage_ops_e2e.sh
 ```
 
-跡象写到 `app/build/android-e2e/cage-ops-<run_id>/`，通过标准是 13 张 PNG 齐全且
+跡象写到 `app/build/android-e2e/cage-ops-<run_id>/`，通过标准是 14 张 PNG 齐全且
 `database_assertions.txt` 里 `actual=expected`。这个脚本与 Batch 生命周期脚本同样
 走局域网直连、不用 `adb reverse`，并额外做一件事：跑之前先探一下
 `/api/repro/entry-points` 与 `/api/rabbits/{id}/cage-transfer` 是否真的在路由上。
@@ -191,12 +191,28 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
 旧容器会静静少接口，用例就退化成「界面看着没坏」——那不是验收。
 遇到该报错时跑 `docker compose up -d --build --force-recreate backend`。
 
+笼位区默认是**分层地图**（排 → 层 → 位），格子上不写笼位编号，所以用例按
+`cage-map-cell-<cageId>` 点格子进笼位详情，不再认文字；换笼也在弹窗内的地图上选。
+分层地图每一排都是一个横向滚动区，`_scrollUntilPresent` 必须显式传入竖向滚动容器
+（`house-cage-list-scroll` / `rabbit-move-cage-scroll`），否则 `Scrollable.last` 会抓到横向那个，
+竖着拖永远不会动。
+
+`cage_ops_fixture.sql` 故意把五种关注度摆全：C1/C2 已投喂（已满）、C3/C4 未投喂（待投喂）、
+C5/C6 空笼（有空位）、C7 停用、C8 标为空闲却写着在栏 2 只（异常）。
+否则所有有兔的笼都是未投喂，整张地图一片琥色，截图就证明不了颜色真的在分状态。
+
 2026-08-17 首轮通过，run ID `20260817233240414116`，13/13 截图与 14 项数据库断言一致。
 覆盖：两只商品兔同笼时挑一只登记死亡（不需批次）、种母兔与后备兔对调笼位、
 商品兔并入未满的商品兔笼、以及录入种母兔时从【待摸胎】入轨并补录配种日期。
 数据库断言不只看提示语：对调后两只兔的 `cage_id` 互换、两笼用途与计数互换、
 两只都仍在栏（证明 SWAP 的 `is_active` 寄存已恢复），新母兔带着 `current_stage`
 与一条开放周期、一条待办。
+
+2026-08-18 分层地图上线后重跑通过，run ID `20260818013425677899`，14/14 截图。
+新增 `01b-cage-map` 专门留地图本身的证据，并断言图例里五种关注度全部出现。
+这轮真机验收抳出三个单测看不见的问题：带「对调」标注的格子把 56px 方格撑出 2px；
+数量 chip 与展开的筛选把地图整个推到首屏之外（“更直观”反而要先滚一屏）；
+以及商品兔笼被错贴了「对调」标注（它没有对调路径，旧列表模式因为不显示而没暴露）。
 
 NFC 碰标签选目标笼不在本脚本内（需人拿着实体标签贴上去），仍留人工验收。
 

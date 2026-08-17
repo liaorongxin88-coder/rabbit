@@ -6,14 +6,21 @@ import 'package:go_router/go_router.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
+import 'package:rabbit_flutter/src/domain/models/cage_attention.dart';
+import 'package:rabbit_flutter/src/domain/models/cage_layout.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/ui/cages/widgets/cage_map_view.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+
+/// 地图按「排 → 层 → 位」还原笼位的真实位置；列表是原来的扁平网格，
+/// 大兔舍、200% 字号或只想按编号翻的场景下仍然更好用，所以两种都留。
+enum _CageViewMode { map, list }
 
 enum _CageOccupancyFilter { all, empty, occupied }
 
@@ -45,10 +52,18 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   static const _infiniteScrollThreshold = 30;
   static const _batchSize = 20;
 
+  /// 地图按「排」分页：排数远少于笼数，一次多铺几排也不至于卡。
+  static const _rowBatchSize = 6;
+
   final _searchController = TextEditingController();
   var _keyword = '';
   var _occupancyFilter = _CageOccupancyFilter.all;
   var _usageFilter = _CageUsageFilter.all;
+  var _viewMode = _CageViewMode.map;
+
+  /// 筛选默认折叠：展开后它比地图本身还高，真机上会把笼位整个挤到首屏之外。
+  var _filtersExpanded = false;
+  var _visibleRowCount = _rowBatchSize;
   var _visibleCageCount = _batchSize;
   var _availableCageCount = 0;
   var _loadingMore = false;
@@ -97,9 +112,21 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
 
   void _resetPagination() {
     _visibleCageCount = _batchSize;
+    _visibleRowCount = _rowBatchSize;
     _availableCageCount = 0;
     _loadingMore = false;
     _paginationGeneration += 1;
+  }
+
+  void _setViewMode(_CageViewMode value) {
+    if (_viewMode == value) {
+      return;
+    }
+    _scrollToTop();
+    setState(() {
+      _viewMode = value;
+      _resetPagination();
+    });
   }
 
   void _setOccupancyFilter(_CageOccupancyFilter value) {
@@ -306,6 +333,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     }
 
     final occupied = cages.where((cage) => cage.rabbitCount > 0).length;
+    final matches = filtered.map((cage) => cage.id).toSet();
     final showDoeBreeding = cages.any((cage) => cage.isDoeBreedingCage) ||
         _usageFilter == _CageUsageFilter.doeBreeding;
     final showBuckBreeding = cages.any((cage) => cage.isBuckBreedingCage) ||
@@ -315,21 +343,34 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
         ? _visibleCageCount.clamp(0, filtered.length)
         : filtered.length;
     final hasMore = visibleCageCount < filtered.length;
-    _availableCageCount = hasMore ? filtered.length : 0;
+    // 地图模式自己按「排」分页，不能再让滚动到底触发列表页的预取。
+    _availableCageCount =
+        hasMore && _viewMode == _CageViewMode.list ? filtered.length : 0;
+
+    final isMap = _viewMode == _CageViewMode.map;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _CageMetricChip(label: '总笼位', value: '${cages.length}'),
-            _CageMetricChip(label: '空笼', value: '${cages.length - occupied}'),
-            _CageMetricChip(label: '有兔', value: '$occupied'),
-          ],
-        ),
-        const SizedBox(height: 14),
+        // 地图模式不再重复这三个数量 chip：图例本身就是分状态汇总，
+        // 而真机上每多一行控件，笼位就多往屏外推一截。
+        if (!isMap) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _CageMetricChip(label: '总笼位', value: '${cages.length}'),
+              _CageMetricChip(
+                label: '空笼',
+                value: '${cages.length - occupied}',
+              ),
+              _CageMetricChip(label: '有兔', value: '$occupied'),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        _CageViewToggle(mode: _viewMode, onChanged: _setViewMode),
+        const SizedBox(height: 12),
         _CageFilters(
           occupancyFilter: _occupancyFilter,
           usageFilter: _usageFilter,
@@ -337,6 +378,10 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
           totalCount: cages.length,
           showDoeBreeding: showDoeBreeding,
           showBuckBreeding: showBuckBreeding,
+          expanded: _filtersExpanded,
+          onToggleExpanded: () => setState(
+            () => _filtersExpanded = !_filtersExpanded,
+          ),
           onOccupancyChanged: _setOccupancyFilter,
           onUsageChanged: _setUsageFilter,
           onReset: _hasActiveFilters ? _clearFilters : null,
@@ -351,6 +396,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             actionLabel: _hasActiveFilters ? '重置筛选' : null,
             onAction: _hasActiveFilters ? _clearFilters : null,
           )
+        else if (_viewMode == _CageViewMode.map)
+          _buildCageMap(context, cages, matches, permission)
         else
           LayoutBuilder(
             builder: (context, constraints) {
@@ -394,7 +441,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
               );
             },
           ),
-        if (hasMore)
+        if (hasMore && _viewMode == _CageViewMode.list)
           SizedBox(
             height: 42,
             child: Center(
@@ -406,6 +453,58 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                   : null,
             ),
           ),
+      ],
+    );
+  }
+
+  /// 分层地图：坐标用全量笼位构建，筛选/搜索只决定哪些格子高亮。
+  /// 如果改成用筛选后的笼位建地图，排和层会随筛选塔缩，“第几排第几位”就不再可信。
+  Widget _buildCageMap(
+    BuildContext context,
+    List<Cage> cages,
+    Set<int> matchedCageIds,
+    AsyncValue<HousePermission> permission,
+  ) {
+    final layout = CageLayout.fromCages(cages);
+    final counts = <CageAttention, int>{};
+    for (final cage in cages) {
+      counts.update(cage.attention, (value) => value + 1, ifAbsent: () => 1);
+    }
+    final canEdit = permission.valueOrNull?.canEdit == true;
+    final houseId = widget.house.id;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CageAttentionLegend(counts: counts),
+        const SizedBox(height: 12),
+        CageMapView(
+          layout: layout,
+          visibleRowLimit: _visibleRowCount,
+          onShowMoreRows: () => setState(
+            () => _visibleRowCount += _rowBatchSize,
+          ),
+          isMatch: (cage) => matchedCageIds.contains(cage.id),
+          onTapCage: (cage) => context.go('/houses/$houseId/cages/${cage.id}'),
+          rowTrailingBuilder: (row) {
+            if (!canEdit || row.rowCode == 'LEGACY') {
+              return null;
+            }
+            return IconButton(
+              key: ValueKey('cage-map-row-outbound-${row.rowCode}'),
+              tooltip: '${row.rowCode} 排批量出库',
+              constraints: const BoxConstraints.tightFor(
+                width: 48,
+                height: 48,
+              ),
+              onPressed: () => context.push(
+                '/houses/$houseId/outbound?entryType=ROW'
+                '&rowCode=${Uri.encodeQueryComponent(row.rowCode)}',
+              ),
+              icon: const Icon(Icons.local_shipping_outlined),
+            );
+          },
+        ),
       ],
     );
   }
@@ -424,6 +523,45 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   }
 }
 
+class _CageViewToggle extends StatelessWidget {
+  const _CageViewToggle({required this.mode, required this.onChanged});
+
+  final _CageViewMode mode;
+  final ValueChanged<_CageViewMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('显示方式', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('cage-view-map-toggle'),
+                avatar: const Icon(Icons.grid_view_outlined, size: 16),
+                label: const Text('分层地图'),
+                selected: mode == _CageViewMode.map,
+                onSelected: (_) => onChanged(_CageViewMode.map),
+              ),
+              ChoiceChip(
+                key: const ValueKey('cage-view-list-toggle'),
+                avatar: const Icon(Icons.view_list_outlined, size: 16),
+                label: const Text('列表'),
+                selected: mode == _CageViewMode.list,
+                onSelected: (_) => onChanged(_CageViewMode.list),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CageFilters extends StatelessWidget {
   const _CageFilters({
     required this.occupancyFilter,
@@ -432,6 +570,8 @@ class _CageFilters extends StatelessWidget {
     required this.totalCount,
     required this.showDoeBreeding,
     required this.showBuckBreeding,
+    required this.expanded,
+    required this.onToggleExpanded,
     required this.onOccupancyChanged,
     required this.onUsageChanged,
     this.onReset,
@@ -443,6 +583,8 @@ class _CageFilters extends StatelessWidget {
   final int totalCount;
   final bool showDoeBreeding;
   final bool showBuckBreeding;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final ValueChanged<_CageOccupancyFilter> onOccupancyChanged;
   final ValueChanged<_CageUsageFilter> onUsageChanged;
   final VoidCallback? onReset;
@@ -467,102 +609,137 @@ class _CageFilters extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('笼位筛选', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Text('在栏状态', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              key: const ValueKey('cage-occupancy-all-filter'),
-              label: const Text('全部状态'),
-              selected: occupancyFilter == _CageOccupancyFilter.all,
-              onSelected: (_) => onOccupancyChanged(_CageOccupancyFilter.all),
+        // 折叠头：收起时也要能看到“当前匹配多少”和“是否正在筛选”，
+        // 否则用户会对着一张被筛过的地图找不到笼。
+        InkWell(
+          key: const ValueKey('cage-filter-toggle'),
+          onTap: onToggleExpanded,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  expanded ? Icons.expand_less : Icons.filter_alt_outlined,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    onReset == null ? '笼位筛选' : '笼位筛选（已启用）',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  '$matchingCount / $totalCount',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
-            ChoiceChip(
-              key: const ValueKey('cage-occupancy-empty-filter'),
-              label: const Text('空笼'),
-              selected: occupancyFilter == _CageOccupancyFilter.empty,
-              onSelected: (_) => onOccupancyChanged(_CageOccupancyFilter.empty),
-            ),
-            ChoiceChip(
-              key: const ValueKey('cage-occupancy-occupied-filter'),
-              label: const Text('有兔'),
-              selected: occupancyFilter == _CageOccupancyFilter.occupied,
-              onSelected: (_) =>
-                  onOccupancyChanged(_CageOccupancyFilter.occupied),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 12),
-        Text('笼位用途', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              key: const ValueKey('cage-usage-all-filter'),
-              label: const Text('全部用途'),
-              selected: usageFilter == _CageUsageFilter.all,
-              onSelected: (_) => onUsageChanged(_CageUsageFilter.all),
-            ),
-            ChoiceChip(
-              key: const ValueKey('cage-usage-breeding-filter'),
-              label: const Text('繁殖笼'),
-              selected: usageFilter == _CageUsageFilter.breeding,
-              onSelected: (_) => onUsageChanged(_CageUsageFilter.breeding),
-            ),
-            if (showDoeBreeding)
+        if (!expanded) const SizedBox(height: 2),
+        if (expanded) ...[
+          const SizedBox(height: 8),
+          Text('在栏状态', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               ChoiceChip(
-                key: const ValueKey('cage-usage-doe-breeding-filter'),
-                label: const Text('种母兔笼'),
-                selected: usageFilter == _CageUsageFilter.doeBreeding,
-                onSelected: (_) => onUsageChanged(_CageUsageFilter.doeBreeding),
+                key: const ValueKey('cage-occupancy-all-filter'),
+                label: const Text('全部状态'),
+                selected: occupancyFilter == _CageOccupancyFilter.all,
+                onSelected: (_) => onOccupancyChanged(_CageOccupancyFilter.all),
               ),
-            if (showBuckBreeding)
               ChoiceChip(
-                key: const ValueKey('cage-usage-buck-breeding-filter'),
-                label: const Text('种公兔笼'),
-                selected: usageFilter == _CageUsageFilter.buckBreeding,
+                key: const ValueKey('cage-occupancy-empty-filter'),
+                label: const Text('空笼'),
+                selected: occupancyFilter == _CageOccupancyFilter.empty,
                 onSelected: (_) =>
-                    onUsageChanged(_CageUsageFilter.buckBreeding),
+                    onOccupancyChanged(_CageOccupancyFilter.empty),
               ),
-            ChoiceChip(
-              key: const ValueKey('cage-usage-replacement-filter'),
-              label: const Text('后备笼'),
-              selected: usageFilter == _CageUsageFilter.replacement,
-              onSelected: (_) => onUsageChanged(_CageUsageFilter.replacement),
-            ),
-            ChoiceChip(
-              key: const ValueKey('cage-usage-commodity-filter'),
-              label: const Text('商品笼'),
-              selected: usageFilter == _CageUsageFilter.commodity,
-              onSelected: (_) => onUsageChanged(_CageUsageFilter.commodity),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (reset == null)
-          summary
-        else if (largeText)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              summary,
-              const SizedBox(height: 4),
-              Align(alignment: Alignment.centerRight, child: reset),
-            ],
-          )
-        else
-          Row(
-            children: [
-              Expanded(child: summary),
-              reset,
+              ChoiceChip(
+                key: const ValueKey('cage-occupancy-occupied-filter'),
+                label: const Text('有兔'),
+                selected: occupancyFilter == _CageOccupancyFilter.occupied,
+                onSelected: (_) =>
+                    onOccupancyChanged(_CageOccupancyFilter.occupied),
+              ),
             ],
           ),
+          const SizedBox(height: 12),
+          Text('笼位用途', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('cage-usage-all-filter'),
+                label: const Text('全部用途'),
+                selected: usageFilter == _CageUsageFilter.all,
+                onSelected: (_) => onUsageChanged(_CageUsageFilter.all),
+              ),
+              ChoiceChip(
+                key: const ValueKey('cage-usage-breeding-filter'),
+                label: const Text('繁殖笼'),
+                selected: usageFilter == _CageUsageFilter.breeding,
+                onSelected: (_) => onUsageChanged(_CageUsageFilter.breeding),
+              ),
+              if (showDoeBreeding)
+                ChoiceChip(
+                  key: const ValueKey('cage-usage-doe-breeding-filter'),
+                  label: const Text('种母兔笼'),
+                  selected: usageFilter == _CageUsageFilter.doeBreeding,
+                  onSelected: (_) =>
+                      onUsageChanged(_CageUsageFilter.doeBreeding),
+                ),
+              if (showBuckBreeding)
+                ChoiceChip(
+                  key: const ValueKey('cage-usage-buck-breeding-filter'),
+                  label: const Text('种公兔笼'),
+                  selected: usageFilter == _CageUsageFilter.buckBreeding,
+                  onSelected: (_) =>
+                      onUsageChanged(_CageUsageFilter.buckBreeding),
+                ),
+              ChoiceChip(
+                key: const ValueKey('cage-usage-replacement-filter'),
+                label: const Text('后备笼'),
+                selected: usageFilter == _CageUsageFilter.replacement,
+                onSelected: (_) => onUsageChanged(_CageUsageFilter.replacement),
+              ),
+              ChoiceChip(
+                key: const ValueKey('cage-usage-commodity-filter'),
+                label: const Text('商品笼'),
+                selected: usageFilter == _CageUsageFilter.commodity,
+                onSelected: (_) => onUsageChanged(_CageUsageFilter.commodity),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (reset == null)
+            summary
+          else if (largeText)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                summary,
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: reset),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: summary),
+                reset,
+              ],
+            ),
+        ],
       ],
     );
   }

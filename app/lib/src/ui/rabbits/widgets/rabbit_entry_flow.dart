@@ -922,6 +922,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   }
 
   bool _cageFitsRabbit(Cage cage) {
+    // 停用笼位现在会出现在笼位列表里（地图要按实物画），
+    // 所以录入时必须在这里自己把它挡住，不能再指望仓库层已经过滤掉。
+    if (!cage.isEnabled) {
+      return false;
+    }
     return cage.status == '0' || cage.status == _cageStatusForType(_type);
   }
 

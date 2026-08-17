@@ -28,7 +28,7 @@ INSERT INTO rabbit_houses (
 )
 VALUES (
     CONCAT('H-CAGEOPS-', @run_id),
-    'ENABLED', 1, 6, 1,
+    'ENABLED', 1, 8, 1,
     CONCAT('cage-ops-primary-', @run_id),
     CONCAT(@prefix, ':primary'),
     @actor, @actor
@@ -39,17 +39,25 @@ INSERT INTO house_users (house_id, user_id, role, status, perms, is_admin, creat
 VALUES (@house_id, @user_control, 'OWNER', 'ENABLED', 'control', TRUE, @actor, @actor);
 
 -- status: '0' 空笼 / '1' 种兔笼 / '2' 后备兔笼 / '3' 商品兔笼
+--
+-- is_fed / is_enabled 在这里是有意安排的：分层地图按「关注度」着色，
+-- 如果所有有兔的笼都未投喂，整张地图会是一片琥色，验收截图就证明不了颜色真的在分状态。
+-- C1/C2 已投喂（已满，中性）、C3/C4 未投喂（琥）、C5/C6 空笼（绿）、
+-- C7 停用空笼（灰）、C8 故意记一笔不平的账：标为空闲却写着在栏 2 只（红）。
+-- C8 没有对应的 rabbits 行，这正是“异常”要暴露的真实数据形态。
 INSERT INTO cages (
     house_id, cage_number, row_code, layer_index, position_index,
     status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by
 )
 VALUES
-    (@house_id, 'R1-C1-L1', 'R1', 1, 1, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':doe'), @actor, @actor),
-    (@house_id, 'R1-C2-L1', 'R1', 1, 2, '2', 1, FALSE, TRUE, CONCAT(@prefix, ':reserve'), @actor, @actor),
+    (@house_id, 'R1-C1-L1', 'R1', 1, 1, '1', 1, TRUE, TRUE, CONCAT(@prefix, ':doe'), @actor, @actor),
+    (@house_id, 'R1-C2-L1', 'R1', 1, 2, '2', 1, TRUE, TRUE, CONCAT(@prefix, ':reserve'), @actor, @actor),
     (@house_id, 'R1-C3-L1', 'R1', 1, 3, '3', 2, FALSE, TRUE, CONCAT(@prefix, ':commodity-pair'), @actor, @actor),
     (@house_id, 'R1-C4-L1', 'R1', 1, 4, '3', 1, FALSE, TRUE, CONCAT(@prefix, ':commodity-single'), @actor, @actor),
-    (@house_id, 'R1-C5-L1', 'R1', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':empty'), @actor, @actor),
-    (@house_id, 'R1-C6-L1', 'R1', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':intake'), @actor, @actor);
+    (@house_id, 'R1-C5-L1', 'R1', 1, 5, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':empty'), @actor, @actor),
+    (@house_id, 'R1-C6-L1', 'R1', 1, 6, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':intake'), @actor, @actor),
+    (@house_id, 'R1-C7-L1', 'R1', 1, 7, '0', 0, TRUE, FALSE, CONCAT(@prefix, ':disabled'), @actor, @actor),
+    (@house_id, 'R1-C8-L1', 'R1', 1, 8, '0', 2, TRUE, TRUE, CONCAT(@prefix, ':inconsistent'), @actor, @actor);
 
 SET @c1 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C1-L1');
 SET @c2 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C2-L1');

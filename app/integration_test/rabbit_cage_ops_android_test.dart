@@ -53,9 +53,26 @@ void main() {
       await _openHouseCages(tester);
       await _takeScreenshot(binding, tester, '01-cage-grid');
 
+      // 分层地图本身要有一张证据：排/层/位的网格、关注度颜色和图例。
+      final firstCell = find.byKey(ValueKey('cage-map-cell-${_cageIdAt(1)}'));
+      await _scrollUntilPresent(
+        tester,
+        firstCell,
+        scrollable: find.byKey(const ValueKey('house-cage-list-scroll')),
+      );
+      expect(find.byKey(const ValueKey('cage-map-legend')), findsOneWidget,
+          reason: '颜色必须配图例，否则用户只能猜');
+      // fixture 故意把五种关注度都摆出来（已投喂/未投喂/空笼/停用/账不平），
+      // 这样“颜色在分状态”才是被验过的，而不是一片同色。
+      for (final state in const ['异常', '停用', '待投喂', '已满', '有空位']) {
+        expect(find.textContaining(state), findsWidgets,
+            reason: '图例应列出关注度「$state」');
+      }
+      await _takeScreenshot(binding, tester, '01b-cage-map');
+
       // ── 一、多只商品兔笼里挑一只登记死亡（recvrpTL16SBwu）
       // 这是原单点名的场景：单只兔笼可以直接标记，多只商品兔笼必须能在笼位详情里挑。
-      await _openCage(tester, 'R1-C3-L1');
+      await _openCageAt(tester, 3);
       await _waitFor(tester, _rabbitRow(_commodityARabbitId));
       expect(_rabbitRow(_commodityBRabbitId), findsOneWidget,
           reason: '笼内两只商品兔都应列出，才谈得上「挑一只」');
@@ -92,7 +109,7 @@ void main() {
 
       // ── 二、种母兔与后备兔对调笼位（recvqh5TC8wd3y 的第三条规则）
       await _backToCageGrid(tester);
-      await _openCage(tester, 'R1-C1-L1');
+      await _openCageAt(tester, 1);
       await _waitFor(tester, _rabbitRow(_doeRabbitId));
       // 阶段能显示，才算 recvsrEA6TRuK6 的投影列真的接上了调用方。
       expect(find.textContaining('生产阶段：'), findsWidgets,
@@ -103,17 +120,18 @@ void main() {
       await tester.tap(find.text('换笼位').last);
       await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
       // 被占用的后备兔笼此前会被过滤掉，现在必须作为「对调」候选出现。
-      expect(find.textContaining('将与笼内兔只对调'), findsWidgets,
-          reason: '占用的非商品兔笼应作为对调目标出现');
+      // 地图选择器把这个信息写在格子上（而不是列表行的副标题），选中后再在底部说清。
+      expect(find.text('对调'), findsWidgets,
+          reason: '占用的非商品兔笼应在地图上标出对调');
       await _takeScreenshot(binding, tester, '07-move-sheet-swap-target');
 
-      final reserveCageTile = find.byKey(
-        ValueKey('rabbit-move-cage-target-${_reserveCageId(tester)}'),
+      await _pickMoveTarget(tester, _cageIdAt(2));
+      // 底部常驻的选中说明必须当场告知这是一次对调。
+      expect(
+        find.textContaining('将与笼内兔只对调'),
+        findsWidgets,
+        reason: '选中已占用的非商品兔笼后，底部应提示对调',
       );
-      await _scrollUntilPresent(tester, reserveCageTile);
-      await tester.ensureVisible(reserveCageTile);
-      await tester.tap(reserveCageTile);
-      await tester.pumpAndSettle();
       await _tapSubmit(tester, const ValueKey('rabbit-move-cage-submit'));
       await _waitFor(tester, find.textContaining('对调笼位'));
       await _takeScreenshot(binding, tester, '08-swap-done');
@@ -126,18 +144,12 @@ void main() {
 
       // ── 三、商品兔并入未满的商品兔笼（recvqh5TC8wd3y 的第二条规则）
       await _backToCageGrid(tester);
-      await _openCage(tester, 'R1-C4-L1');
+      await _openCageAt(tester, 4);
       await _waitFor(tester, _rabbitRow(_commodityCRabbitId));
       await _openRabbitMenu(tester, _commodityCRabbitId);
       await tester.tap(find.text('换笼位').last);
       await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
-      final commodityCageTile = find.byKey(
-        ValueKey('rabbit-move-cage-target-${_commodityPairCageId(tester)}'),
-      );
-      await _scrollUntilPresent(tester, commodityCageTile);
-      await tester.ensureVisible(commodityCageTile);
-      await tester.tap(commodityCageTile);
-      await tester.pumpAndSettle();
+      await _pickMoveTarget(tester, _cageIdAt(3));
       await _takeScreenshot(binding, tester, '09-move-sheet-append-target');
       await _tapSubmit(tester, const ValueKey('rabbit-move-cage-submit'));
       await _waitFor(tester, find.textContaining('已换至'));
@@ -145,7 +157,7 @@ void main() {
 
       // ── 四、录入种母兔并直接入轨（recvsrnEJ8bKrk / recvsrpMlvu2SC）
       await _backToCageGrid(tester);
-      await _openCage(tester, 'R1-C6-L1');
+      await _openCageAt(tester, 6);
       await _tapAndSettle(tester, const ValueKey('cage-rabbit-entry'));
       await _waitFor(tester, find.text('请选择录入兔子类型'));
       await tester.tap(find.text('种公兔/种母兔'));
@@ -294,7 +306,7 @@ Future<void> _openHouseCages(WidgetTester tester) async {
   await tester.tap(houseCard);
   await _waitFor(tester, find.text('笼位管理'));
   await tester.tap(find.text('进入笼位'));
-  await _waitFor(tester, find.text('R1-C1-L1'));
+  await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
 }
 
 Future<void> _backToCageGrid(WidgetTester tester) async {
@@ -302,17 +314,26 @@ Future<void> _backToCageGrid(WidgetTester tester) async {
   if (back.evaluate().isNotEmpty) {
     await tester.tap(back);
   }
-  await _waitFor(tester, find.text('R1-C1-L1'));
+  await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
 }
 
-Future<void> _openCage(WidgetTester tester, String cageNumber) async {
-  final tile = find.text(cageNumber).first;
-  await tester.ensureVisible(tile);
+/// 笼位区默认是分层地图，格子上只写在栏数与关注状态，不再写笼位编号，
+/// 所以按 id 点格子（比认文字更稳）。position 从 1 开始，fixture 笼位 id 连号。
+Future<void> _openCageAt(WidgetTester tester, int positionIndex) async {
+  final cell = find.byKey(ValueKey('cage-map-cell-${_cageIdAt(positionIndex)}'));
+  await _scrollUntilPresent(
+    tester,
+    cell,
+    scrollable: find.byKey(const ValueKey('house-cage-list-scroll')),
+  );
+  await tester.ensureVisible(cell);
   await tester.pumpAndSettle();
-  await tester.tap(tile);
+  await tester.tap(cell);
   await _waitFor(tester, find.byKey(const ValueKey('cage-detail-back-button')));
   await _pumpUntilSettled(tester);
 }
+
+int _cageIdAt(int positionIndex) => _firstCageId + positionIndex - 1;
 
 Finder _rabbitRow(int rabbitId) =>
     find.byKey(ValueKey('cage-rabbit-row-$rabbitId'));
@@ -325,37 +346,34 @@ Future<void> _openRabbitMenu(WidgetTester tester, int rabbitId) async {
   await tester.pumpAndSettle();
 }
 
-/// 换笼弹窗里的目标笼 id 从当前列表反查：fixture 只保证笼位号，id 由自增决定。
-int _reserveCageId(WidgetTester tester) => _cageIdFromTargets(tester, 1);
-
-int _commodityPairCageId(WidgetTester tester) => _cageIdFromTargets(tester, 2);
-
-int _cageIdFromTargets(WidgetTester tester, int expectedPositionIndex) {
-  const prefix = 'rabbit-move-cage-target-';
-  final ids = <int>[];
-  for (final element in find.byType(RadioListTile<int>).evaluate()) {
-    final key = element.widget.key;
-    if (key is ValueKey<String> && key.value.startsWith(prefix)) {
-      ids.add(int.parse(key.value.substring(prefix.length)));
-    }
-  }
-  expect(ids, isNotEmpty, reason: '换笼弹窗应至少有一个候选目标笼');
-  final target = _firstCageId + expectedPositionIndex;
-  expect(ids, contains(target),
-      reason: '目标笼 $target 应出现在候选里，实际候选=$ids');
-  return target;
+/// 在换笼弹窗的地图上选中目标笼（默认就是地图选择）。
+Future<void> _pickMoveTarget(WidgetTester tester, int cageId) async {
+  final cell = find.byKey(ValueKey('cage-map-cell-$cageId'));
+  await _scrollUntilPresent(
+    tester,
+    cell,
+    scrollable: find.byKey(const ValueKey('rabbit-move-cage-scroll')),
+  );
+  await tester.ensureVisible(cell);
+  await tester.pumpAndSettle();
+  await tester.tap(cell);
+  await tester.pumpAndSettle();
 }
 
 /// 惰性列表里的目标可能还没 build（ListView / SliverList 只建可见项）。
 /// 先把它滚进视口，再交给 ensureVisible 做精细对齐。
+///
+/// [scrollable] 必要时要显式指定：分层地图每一排都是一个横向滚动区，
+/// 默认的 `Scrollable.last` 会抓到横向那个，竖着拖它永远不会动。
 Future<void> _scrollUntilPresent(
   WidgetTester tester,
   Finder finder, {
+  Finder? scrollable,
   int maxDrags = 30,
 }) async {
   for (var i = 0; i < maxDrags && finder.evaluate().isEmpty; i++) {
-    final scrollable = find.byType(Scrollable).last;
-    await tester.drag(scrollable, const Offset(0, -120));
+    final target = scrollable ?? find.byType(Scrollable).last;
+    await tester.drag(target, const Offset(0, -120));
     await tester.pump(const Duration(milliseconds: 120));
   }
   expect(finder, findsWidgets, reason: '滚动到底仍找不到 $finder');

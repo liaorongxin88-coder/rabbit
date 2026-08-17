@@ -28,10 +28,13 @@ class RabbitRepository {
         if (data is! List) {
           throw const ApiException('笼位列表格式不正确');
         }
+        // 不过滤停用笼位：停用的笼子在货架上是真存在的，丢掉它会让分层地图
+        // 凭空少一个位置，用户对着实物数不上。能不能放兔由 `Cage.acceptsMoreRabbits` /
+        // `canAcceptRabbit` 在各个选择入口把关，而不是靠列表里看不见。
         return data
             .whereType<Map>()
             .map((item) => Cage.fromJson(Map<String, dynamic>.from(item)))
-            .where((cage) => cage.id > 0 && cage.isEnabled)
+            .where((cage) => cage.id > 0)
             .toList();
       },
     );

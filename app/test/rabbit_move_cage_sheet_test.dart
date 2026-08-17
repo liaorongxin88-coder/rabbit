@@ -28,11 +28,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('换笼位'), findsOneWidget);
-    await tester.tap(find.text('A-02 · 空笼'));
-    await tester.pumpAndSettle();
 
-    final submit = find.byKey(const ValueKey('rabbit-move-cage-submit'));
-    expect(tester.widget<ElevatedButton>(submit).onPressed, isNotNull);
+    // 先聚焦输入框（开屏就可见），再下去选目标：向下滚之后输入框会被销毁（sliver 按需构建），
+    // 那是滚动列表的正常行为，不是缺陷。
     final search = find.byKey(const ValueKey('rabbit-move-cage-search'));
     await tester.tap(search);
     await tester.pump();
@@ -42,6 +40,17 @@ void main() {
     );
     expect(
         tester.widget<EditableText>(editableText).focusNode.hasFocus, isTrue);
+
+    // 默认是地图选择。这批 fixture 笼位没有排/层/位坐标，所以落在「未编排」里，
+    // 仍然可点——旧数据不能因为换了视图就选不了。
+    final target = find.byKey(const ValueKey('cage-map-cell-12'));
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('rabbit-move-cage-submit'));
+    expect(tester.widget<ElevatedButton>(submit).onPressed, isNotNull);
 
     for (final deviceSize in const [
       Size(360, 800),
@@ -75,6 +84,98 @@ void main() {
     final landscapeSubmitRect = tester.getRect(submit);
     expect(landscapeSubmitRect.top, greaterThanOrEqualTo(0));
     expect(landscapeSubmitRect.bottom, lessThanOrEqualTo(180));
+  });
+
+  testWidgets('typing a full cage number selects that target', (tester) async {
+    await tester.pumpWidget(_testApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('rabbit-move-cage-submit'));
+    expect(
+      tester.widget<ElevatedButton>(submit).onPressed,
+      isNull,
+      reason: '还没选目标时不能允许提交',
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-move-cage-search')),
+      'A-02',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选中 A-02 · 空笼'), findsOneWidget);
+    expect(tester.widget<ElevatedButton>(submit).onPressed, isNotNull);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('rabbit-move-cage-selection')),
+          )
+          .data,
+      contains('A-02'),
+    );
+  });
+
+  testWidgets('typing a cage that cannot take the rabbit says why',
+      (tester) async {
+    await tester.pumpWidget(_testApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-move-cage-search')),
+      'A-04',
+    );
+    await tester.pumpAndSettle();
+
+    // 种母兔进满的商品兔笼既不能入笼也不能对调，必须当场说清，
+    // 而不是等提交后给一个 400。
+    expect(
+      find.byKey(const ValueKey('rabbit-move-cage-number-hint')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('不能接收该兔'), findsOneWidget);
+    expect(
+      tester.widget<ElevatedButton>(
+        find.byKey(const ValueKey('rabbit-move-cage-submit')),
+      ).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('swap targets are marked before submitting', (tester) async {
+    await tester.pumpWidget(_testApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    final swapTarget = find.byKey(const ValueKey('cage-map-cell-15'));
+    await tester.ensureVisible(swapTarget);
+    await tester.pumpAndSettle();
+    await tester.tap(swapTarget);
+    await tester.pumpAndSettle();
+
+    // 底部常驻提示里必须写清这是一次对调，否则用户以为只动了自己那只兔。
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('rabbit-move-cage-selection')),
+          )
+          .data,
+      contains('将与笼内兔只对调'),
+    );
+    expect(find.text('对调'), findsWidgets);
+  });
+
+  testWidgets('only real swap candidates are marked, commodity cages are not',
+      (tester) async {
+    await tester.pumpWidget(_testApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    // A-05 是被占用的后备兔笼（会对调），A-04 是满的商品兔笼（无对调路径）。
+    // 地图会把不可选的笼也画出来，所以标注必须自己把关，不能靠“不显示”遮丑。
+    expect(find.text('对调'), findsOneWidget);
+    expect(find.text('当前'), findsOneWidget);
   });
 }
 
@@ -115,6 +216,24 @@ Widget _testApp() {
       cageNumber: 'A-03-VERY-LONG-CAGE-NUMBER-FOR-LAYOUT',
       status: '0',
       rabbitCount: 0,
+      isEnabled: true,
+    ),
+    // 满的商品兔笼：种母兔既不能入笼也不能对调。
+    Cage(
+      id: 14,
+      houseId: 8,
+      cageNumber: 'A-04',
+      status: '3',
+      rabbitCount: Cage.commodityCapacity,
+      isEnabled: true,
+    ),
+    // 被占用的后备兔笼：种母兔进去走两笼对调。
+    Cage(
+      id: 15,
+      houseId: 8,
+      cageNumber: 'A-05',
+      status: '2',
+      rabbitCount: 1,
       isEnabled: true,
     ),
   ];
