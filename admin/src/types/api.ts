@@ -183,6 +183,14 @@ export interface Rabbit {
   weight?: number | null
   growthStage?: string | null
   reproductiveStage?: string | null
+  /**
+   * 生产阶段投影。种母兔的阶段由生产流程状态机维护，是唯一权威口径；
+   * `reproductiveStage` 是旧词汇，仅对非种母兔仍有意义。
+   */
+  currentStage?: string | null
+  currentCycleId?: number | null
+  stageEnteredAt?: string | null
+  lastMatingDate?: string | null
   stateVersion?: number | null
   isActive: boolean
   isQuarantined: boolean

@@ -164,7 +164,21 @@ export interface RabbitWriteInput {
   reproductiveStage?: string
 }
 
-export function createRabbit(houseId: number, data: RabbitWriteInput) {
+/**
+ * 录入时直接入轨的生产阶段。
+ *
+ * 只对种母兔成立，且只能在创建时传：建兔与开周期必须同事务，否则就会出现
+ * “存栏里有这只母兔、待办里没有”的黑洞。修改已有母兔的阶段走生产动作，不走这里。
+ */
+export interface RabbitReproEntryInput {
+  reproStage?: string
+  stageEnteredAt?: string
+  matingDate?: string
+  birthDate?: string
+  liveKits?: number
+}
+
+export function createRabbit(houseId: number, data: RabbitWriteInput & RabbitReproEntryInput) {
   return workspacePostJson<Rabbit>(
     '/api/rabbits',
     { ...data, requestId: requestId() },
@@ -177,6 +191,29 @@ export function updateRabbit(houseId: number, rabbitId: number, data: RabbitWrit
   return workspacePutJson<Rabbit>(
     `/api/rabbits/${rabbitId}`,
     { ...update, requestId: requestId() },
+    { houseId },
+  )
+}
+
+/**
+ * 换笼位结果。mode 里的三种结局对用户是完全不同的事实，提示文案必须区分。
+ */
+export interface CageTransferResult {
+  mode: 'MOVE' | 'APPEND' | 'SWAP' | 'REPLAY'
+  rabbitId: number
+  fromCageId: number | null
+  toCageId: number | null
+  swappedRabbitId: number | null
+}
+
+/**
+ * 换笼位。与在编辑表单里改笼位不同：目标笼已有种兔时这里会执行两笼对调，
+ * 而编辑路径只会报“该繁殖笼已有在栏种兔”。
+ */
+export function transferRabbitCage(houseId: number, rabbitId: number, targetCageId: number) {
+  return workspacePostJson<CageTransferResult>(
+    `/api/rabbits/${rabbitId}/cage-transfer`,
+    { targetCageId, requestId: requestId() },
     { houseId },
   )
 }
@@ -314,6 +351,17 @@ export function listReproStageActions(houseId: number) {
   return workspaceGetJson<
     { stage: string; stageLabel: string; actions: { action: ReproActionName; label: string }[] }[]
   >('/api/repro/stage-actions', { houseId })
+}
+
+/** 入轨阶段字典：每个可入轨阶段必须补录哪些事实，由服务端的 EntryPoint 表下发。 */
+export interface ReproEntryPoint {
+  stage: string
+  stageLabel: string
+  requiredFacts: { fact: string; label: string }[]
+}
+
+export function listReproEntryPoints(houseId: number) {
+  return workspaceGetJson<ReproEntryPoint[]>('/api/repro/entry-points', { houseId })
 }
 
 /** 待办清单。首页、笼位、兔卡、批次详情共用这一个接口，只是过滤条件不同。 */

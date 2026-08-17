@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/nfc_capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/nfc_intent_service.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
+import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
@@ -45,9 +51,15 @@ class _MoveCageSheet extends ConsumerStatefulWidget {
 
 class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   final _searchController = TextEditingController();
+  StreamSubscription<NfcLaunchEvent>? _nfcSubscription;
+  /// 独占标记的控制器提前取好：`ref` 在 dispose 里已不可用，
+  /// 而此时恰恰是最需要归还它的时候。
+  StateController<bool>? _captureFlag;
   late int _selectedCageId;
   var _keyword = '';
   var _saving = false;
+  var _nfcListening = false;
+  String? _nfcHint;
 
   Rabbit get _rabbit => widget.rabbit;
 
@@ -74,15 +86,49 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
 
   @override
   void dispose() {
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _releaseCaptureFlag();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _releaseCaptureFlag() {
+    _captureFlag?.state = false;
+    _captureFlag = null;
+  }
+
+  /// 目标笼位是否可选。
+  ///
+  /// 不能直接用 [Cage.canAcceptRabbit]：那个判断只知道“能不能再塞一只进去”，
+  /// 而种兔 / 后备兔遇到已占用的非商品兔笼时走的是两笼对调，目标笼满反而是对调的前提。
+  bool _acceptsTarget(Cage cage) {
+    if (!cage.isEnabled) {
+      return false;
+    }
+    if (cage.id == _rabbit.cageId) {
+      return true;
+    }
+    if (cage.canAcceptRabbit(_rabbit.type, exceptRabbitCageId: _rabbit.cageId)) {
+      return true;
+    }
+    // 商品兔没有对调路径：它们是多只共笼的，“两笼互换”对它不成立。
+    if (_rabbit.type == '2') {
+      return false;
+    }
+    return cage.status == '1' || cage.status == '2';
+  }
+
+  bool _isSwapTarget(Cage cage) {
+    return cage.id != _rabbit.cageId &&
+        cage.rabbitCount > 0 &&
+        _rabbit.type != '2';
   }
 
   List<Cage> get _targetCages {
     final keyword = _keyword.toLowerCase();
     return widget.cages.where((cage) {
-      if (!cage.canAcceptRabbit(_rabbit.type,
-          exceptRabbitCageId: _rabbit.cageId)) {
+      if (!_acceptsTarget(cage)) {
         return false;
       }
       if (keyword.isEmpty) {
@@ -111,6 +157,85 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
       return '$name · ${cage.usageLabel} · ${cage.rabbitCount} 只';
     }
     return '$name · 空笼';
+  }
+
+  /// 碰一下目标笼位的 NFC 标签直接选中它。
+  ///
+  /// 现场的真实动作是“手里拎着兔、手机碰笼子”，在一屏笼位号里找到那一行才是不自然的。
+  Future<void> _startNfcCapture() async {
+    if (_nfcListening || _saving) {
+      return;
+    }
+    final service = ref.read(nfcIntentServiceProvider);
+    await service.initialize();
+    if (!mounted) {
+      return;
+    }
+    final flag = ref.read(nfcCaptureActiveProvider.notifier);
+    flag.state = true;
+    _captureFlag = flag;
+    setState(() {
+      _nfcListening = true;
+      _nfcHint = '请将手机靠近目标笼位的 NFC 标签';
+    });
+    _nfcSubscription = service.events.listen(_onNfcEvent);
+  }
+
+  void _stopNfcCapture({String? hint}) {
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _releaseCaptureFlag();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _nfcListening = false;
+      _nfcHint = hint;
+    });
+  }
+
+  Future<void> _onNfcEvent(NfcLaunchEvent event) async {
+    try {
+      final target = NfcPayloadTarget.parse(event.payload);
+      if (target.houseId != widget.houseId) {
+        _stopNfcCapture(hint: '该标签属于其它兔舍，未选中');
+        return;
+      }
+      final binding = await ref.read(nfcRepositoryProvider).resolve(
+            houseId: widget.houseId,
+            tagUid: event.tagUid,
+            payload: event.payload,
+          );
+      if (!mounted) {
+        return;
+      }
+      final cage = _cageById(binding.cageId);
+      if (cage == null) {
+        _stopNfcCapture(hint: '未在当前兔舍找到该笼位，请刷新后重试');
+        return;
+      }
+      if (!_acceptsTarget(cage)) {
+        _stopNfcCapture(hint: '${_cageLabel(cage)} 不能接收该兔');
+        return;
+      }
+      setState(() => _selectedCageId = cage.id);
+      _stopNfcCapture(hint: '已选中 ${_cageLabel(cage)}');
+    } catch (error) {
+      if (mounted) {
+        _stopNfcCapture(
+          hint: error is ApiException ? error.message : '读取标签失败，请重试',
+        );
+      }
+    }
+  }
+
+  Cage? _cageById(int cageId) {
+    for (final cage in widget.cages) {
+      if (cage.id == cageId) {
+        return cage;
+      }
+    }
+    return null;
   }
 
   @override
@@ -190,6 +315,29 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                     ),
                     SliverToBoxAdapter(
                       child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('rabbit-move-cage-nfc'),
+                          onPressed: _saving || _nfcListening
+                              ? null
+                              : () => unawaited(_startNfcCapture()),
+                          icon: const Icon(Icons.nfc),
+                          label: Text(_nfcListening ? '等待碰标签…' : '碰一下目标笼位'),
+                        ),
+                      ),
+                    ),
+                    if (_nfcHint != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                          child: Text(
+                            _nfcHint!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                         child: TextField(
                           key: const ValueKey('rabbit-move-cage-search'),
@@ -206,7 +354,8 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                           child: Text(
-                            '没有可用的目标笼位。种兔/后备兔笼需为空笼，商品兔需匹配商品兔笼。',
+                            '没有可用的目标笼位。商品兔只能进空笼或未满的商品兔笼；'
+                            '种兔、后备兔可进空笼，或与已占用的非商品兔笼对调。',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
@@ -231,7 +380,11 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                                             value ?? _selectedCageId,
                                       ),
                               title: Text(_cageLabel(cage)),
-                              subtitle: Text(cage.usageLabel),
+                              subtitle: Text(
+                                _isSwapTarget(cage)
+                                    ? '${cage.usageLabel} · 将与笼内兔只对调'
+                                    : cage.usageLabel,
+                              ),
                               selected: selected,
                             );
                           },
@@ -289,20 +442,31 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   }
 
   Future<void> _save() async {
+    _stopNfcCapture();
     setState(() => _saving = true);
     try {
-      await ref.read(rabbitRepositoryProvider).moveRabbitToCage(
+      final result = await ref.read(rabbitRepositoryProvider).transferRabbitCage(
             houseId: widget.houseId,
-            rabbit: _rabbit,
+            rabbitId: _rabbit.id,
             targetCageId: _selectedCageId,
           );
       ref.invalidate(houseRabbitsProvider(widget.houseId));
+      ref.invalidate(allActiveHouseRabbitsProvider(widget.houseId));
       ref.invalidate(houseCagesProvider(widget.houseId));
       ref.invalidate(homeEventsProvider);
       if (mounted) {
+        final target = _cageById(_selectedCageId);
+        final targetLabel =
+            target == null ? '#$_selectedCageId' : _cageLabel(target);
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('兔 #${_rabbit.id} 已换至笼位 #$_selectedCageId')),
+          SnackBar(
+            content: Text(
+              result.isSwap
+                  ? '兔 #${_rabbit.id} 已与兔 #${result.swappedRabbitId} 对调笼位'
+                  : '兔 #${_rabbit.id} 已换至 $targetLabel',
+            ),
+          ),
         );
       }
     } catch (error) {

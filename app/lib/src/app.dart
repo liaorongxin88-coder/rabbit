@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/nfc_capture_scope.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/nfc_intent_service.dart';
 import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
@@ -68,6 +69,11 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
   }
 
   Future<void> _handleNfcEvent(NfcLaunchEvent event) async {
+    // 采集窗口开着时（例如换笼时碰目标笼）不能再跳笼位详情，
+    // 否则正在填的表单会被顶掉；事件由那个界面自己消费。
+    if (ref.read(nfcCaptureActiveProvider)) {
+      return;
+    }
     final fingerprint =
         '${event.payload}|${event.tagUid}|${event.receivedAt ~/ 2000}';
     if (_lastNfcFingerprint == fingerprint) return;

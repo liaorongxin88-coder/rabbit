@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
+import 'package:rabbit_flutter/src/domain/models/cage_transfer_result.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
@@ -166,6 +167,11 @@ class RabbitRepository {
     required double? weight,
     String? growthStage,
     String? reproductiveStage,
+    String? reproStage,
+    DateTime? stageEnteredAt,
+    DateTime? matingDate,
+    DateTime? birthDate,
+    int? liveKits,
   }) {
     final body = <String, dynamic>{
       'cageId': cageId,
@@ -175,6 +181,24 @@ class RabbitRepository {
       'arrivalDate': DateTime.now().millisecondsSinceEpoch,
       'requestId': _uuid.v4(),
     };
+    // 录入时直接入轨：建兔与开周期必须同事务，否则存栏里有这只母兔、
+    // 待办里却没有，她会永远不被提醒。
+    final trimmedReproStage = reproStage?.trim();
+    if (trimmedReproStage != null && trimmedReproStage.isNotEmpty) {
+      body['reproStage'] = trimmedReproStage;
+      if (stageEnteredAt != null) {
+        body['stageEnteredAt'] = stageEnteredAt.millisecondsSinceEpoch;
+      }
+      if (matingDate != null) {
+        body['matingDate'] = matingDate.millisecondsSinceEpoch;
+      }
+      if (birthDate != null) {
+        body['birthDate'] = birthDate.millisecondsSinceEpoch;
+      }
+      if (liveKits != null && liveKits >= 0) {
+        body['liveKits'] = liveKits;
+      }
+    }
     final trimmedBreed = breed.trim();
     if (trimmedBreed.isNotEmpty) {
       body['breed'] = trimmedBreed;
@@ -205,22 +229,29 @@ class RabbitRepository {
     );
   }
 
-  Future<Rabbit> moveRabbitToCage({
+  /// 换笼位。
+  ///
+  /// 不再用 `PUT /api/rabbits/{id}` 顺手改 cageId：那条路会把整行资料重新提交，
+  /// 包括种母兔已被后端拒收的 reproductiveStage，也无法表达两笼对调。
+  Future<CageTransferResult> transferRabbitCage({
     required int houseId,
-    required Rabbit rabbit,
+    required int rabbitId,
     required int targetCageId,
+    String? requestId,
   }) {
-    return updateRabbit(
+    return _api.post<CageTransferResult>(
+      '/api/rabbits/$rabbitId/cage-transfer',
       houseId: houseId,
-      rabbitId: rabbit.id,
-      cageId: targetCageId,
-      motherId: rabbit.motherId,
-      breed: rabbit.breed,
-      arrivalMethod: rabbit.arrivalMethod,
-      arrivalDate: rabbit.arrivalDate,
-      weight: rabbit.weight,
-      growthStage: rabbit.growthStage,
-      reproductiveStage: rabbit.reproductiveStage,
+      body: {
+        'targetCageId': targetCageId,
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('换笼位结果格式不正确');
+        }
+        return CageTransferResult.fromJson(Map<String, dynamic>.from(data));
+      },
     );
   }
 

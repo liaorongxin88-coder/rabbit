@@ -16,6 +16,7 @@ import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
+import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
@@ -366,6 +367,238 @@ public class RabbitService {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
+    }
+
+    /**
+     * 换笼位。
+     *
+     * <p>与编辑走的 {@link #updateBaseInfo} 不同：编辑只能把兔子搬进空笼或同用途的
+     * 商品兔笼，目标笼已有种兔时只会撞到唯一键。本方法按目标笼内的实际占用情况分三种结局：
+     *
+     * <ol>
+     *   <li>目标笼无在栏兔：直接入笼，笼位改为对应用途并置为已占用（MOVE）。</li>
+     *   <li>目标笼有兔且被移位的是商品兔：仅当笼内全是商品兔且未满时合笼（APPEND）。</li>
+     *   <li>目标笼有兔且被移位的是种兔或后备兔：仅当笼内不是商品兔时两笼对调（SWAP）。</li>
+     * </ol>
+     *
+     * <p>目标笼的用途一律从在栏兔实行推导，而不是读 {@code cages.status}：后者是反范式
+     * 冷数据，一旦漂移就会把合笼、对调判断得完全相反。
+     */
+    @Transactional
+    public CageTransferResult transferCage(
+            Long userId,
+            Long houseId,
+            Long rabbitId,
+            Long targetCageId,
+            String requestId
+    ) {
+        String api = "rabbit.transferCage";
+        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
+            Rabbit done = rabbitMapper.selectById(houseId, rabbitId);
+            if (done == null) {
+                throw new BizException(500, "幂等回查失败");
+            }
+            // 重放时已无法区分当时走的是哪条分支，只能如实告知当前落位，
+            // 不能随便拿一个 mode 充数——客户端会拿它去提示“已与某兔对调”。
+            return new CageTransferResult(
+                    CageTransferResult.MODE_REPLAY,
+                    rabbitId,
+                    done.getCageId(),
+                    done.getCageId(),
+                    null
+            );
+        }
+        requestDedupService.markProcessing(houseId, userId, api, requestId);
+        try {
+            if (targetCageId == null || targetCageId <= 0) {
+                throw new BizException(400, "targetCageId不能为空");
+            }
+            Rabbit observed = rabbitMapper.selectById(houseId, rabbitId);
+            if (observed == null) {
+                throw new BizException(400, "兔子不存在");
+            }
+            if (!Boolean.TRUE.equals(observed.getIsActive())) {
+                throw new BizException(400, "兔子已离场");
+            }
+            if (targetCageId.equals(observed.getCageId())) {
+                throw new BizException(400, "兔子已在该笼位");
+            }
+
+            // 先用未加锁的观测值凑齐要锁的行，再在拿到锁后复查集合没变，
+            // 与离场路径的 lockRabbitExitState 保持同一套加锁顺序：先兔只、后笼位，均按 id 升序。
+            Set<Long> lockIds = new LinkedHashSet<>();
+            lockIds.add(rabbitId);
+            for (Rabbit occupant : rabbitMapper.selectByHouse(houseId, targetCageId, null, Boolean.TRUE)) {
+                lockIds.add(occupant.getId());
+            }
+            Map<Long, Rabbit> lockedRabbits = new LinkedHashMap<>();
+            for (Rabbit locked : rabbitMapper.selectByIdsForUpdate(houseId, lockIds.stream().sorted().toList())) {
+                lockedRabbits.put(locked.getId(), locked);
+            }
+            Rabbit moving = lockedRabbits.get(rabbitId);
+            if (moving == null) {
+                throw new BizException(400, "兔子不存在");
+            }
+            if (!Boolean.TRUE.equals(moving.getIsActive())) {
+                throw new BizException(409, "兔子已离场");
+            }
+            Long sourceCageId = moving.getCageId();
+            if (targetCageId.equals(sourceCageId)) {
+                throw new BizException(400, "兔子已在该笼位");
+            }
+
+            Map<Long, Cage> lockedCages = new HashMap<>();
+            for (Cage cage : cageMapper.selectByIdsForUpdate(
+                    houseId,
+                    Set.of(sourceCageId, targetCageId).stream().sorted().toList()
+            )) {
+                lockedCages.put(cage.getId(), cage);
+            }
+            Cage sourceCage = lockedCages.get(sourceCageId);
+            Cage targetCage = lockedCages.get(targetCageId);
+            if (sourceCage == null) {
+                throw new BizException(409, "原笼位不存在，请刷新后重试");
+            }
+            if (targetCage == null) {
+                throw new BizException(400, "笼位不存在");
+            }
+            if (Boolean.FALSE.equals(targetCage.getIsEnabled())) {
+                throw new BizException(400, "笼位已停用");
+            }
+
+            List<Rabbit> occupants = rabbitMapper.selectActiveByCageForUpdate(houseId, targetCageId);
+            for (Rabbit occupant : occupants) {
+                if (!lockedRabbits.containsKey(occupant.getId())) {
+                    throw new BizException(409, "目标笼位已变化，请刷新后重试");
+                }
+            }
+
+            String op = String.valueOf(userId);
+            String movingPurpose = typeToCageStatus(moving.getType());
+            if (occupants.isEmpty()) {
+                if (!"0".equals(targetCage.getStatus()) && !movingPurpose.equals(targetCage.getStatus())) {
+                    throw new BizException(400, "笼位用途不匹配");
+                }
+                return moveIntoCage(
+                        houseId,
+                        op,
+                        moving,
+                        sourceCage,
+                        targetCage,
+                        movingPurpose,
+                        CageTransferResult.MODE_MOVE,
+                        userId,
+                        api,
+                        requestId
+                );
+            }
+
+            if ("2".equals(moving.getType())) {
+                boolean allCommodity = occupants.stream().allMatch(o -> "2".equals(o.getType()));
+                if (!allCommodity) {
+                    throw new BizException(400, "目标笼位不是商品兔笼，不能合笼");
+                }
+                if (occupants.size() >= commodityCageCapacity) {
+                    throw new BizException(409, "商品兔笼已满，请刷新后重试");
+                }
+                return moveIntoCage(
+                        houseId,
+                        op,
+                        moving,
+                        sourceCage,
+                        targetCage,
+                        movingPurpose,
+                        CageTransferResult.MODE_APPEND,
+                        userId,
+                        api,
+                        requestId
+                );
+            }
+
+            // 种兔 / 后备兔进入有兔的笼位：只有对调一条路。
+            if (occupants.size() != 1) {
+                throw new BizException(400, "目标笼位是商品兔笼，不能与种兔、后备兔对调");
+            }
+            Rabbit occupant = occupants.get(0);
+            if ("2".equals(occupant.getType())) {
+                throw new BizException(400, "目标笼位是商品兔笼，不能与种兔、后备兔对调");
+            }
+            int sourceActive = rabbitMapper.countActiveByCage(houseId, sourceCageId);
+            if (sourceActive != 1) {
+                // 原笼还有别的在栏兔时换过来的那只会挤进一个已被占的笼，宁可拒绝。
+                throw new BizException(409, "原笼位在栏数量异常，无法对调");
+            }
+
+            // 三步对调：先把被移位的那只临时挂起，让唯一键放开原笼位，
+            // 再把占用者挪过来，最后带着目标笼位复位。详见 RabbitMapper.xml 里的说明。
+            if (rabbitMapper.parkForCageSwap(houseId, rabbitId, op) != 1) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            if (rabbitMapper.updateCageIfActive(houseId, occupant.getId(), sourceCageId, op) != 1) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            if (rabbitMapper.restoreFromCageSwap(houseId, rabbitId, targetCageId, op) != 1) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+            // 两边各一只，数量不变，变的只是笼位用途跟着兔子类型走。
+            if (cageMapper.updateRabbitCountAndStatus(
+                    houseId, sourceCageId, 1, typeToCageStatus(occupant.getType()), op) != 1) {
+                throw new BizException(409, "原笼位状态已变化，请刷新后重试");
+            }
+            if (cageMapper.updateRabbitCountAndStatus(
+                    houseId, targetCageId, 1, movingPurpose, op) != 1) {
+                throw new BizException(409, "目标笼位状态已变化，请刷新后重试");
+            }
+            requestDedupService.markDone(houseId, userId, api, requestId);
+            return new CageTransferResult(
+                    CageTransferResult.MODE_SWAP,
+                    rabbitId,
+                    sourceCageId,
+                    targetCageId,
+                    occupant.getId()
+            );
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
+            throw e;
+        }
+    }
+
+    private CageTransferResult moveIntoCage(
+            Long houseId,
+            String op,
+            Rabbit moving,
+            Cage sourceCage,
+            Cage targetCage,
+            String movingPurpose,
+            String mode,
+            Long userId,
+            String api,
+            String requestId
+    ) {
+        int sourceCount = cageRabbitCount(sourceCage) - 1;
+        if (sourceCount < 0) {
+            throw new BizException(409, "原笼位在栏数量已变化，请刷新后重试");
+        }
+        String sourceStatus = sourceCount == 0 ? "0" : sourceCage.getStatus();
+        if (cageMapper.updateRabbitCountAndStatus(
+                houseId, sourceCage.getId(), sourceCount, sourceStatus, op) != 1) {
+            throw new BizException(409, "原笼位状态已变化，请刷新后重试");
+        }
+        int targetCount = cageRabbitCount(targetCage) + 1;
+        String targetStatus = "0".equals(targetCage.getStatus()) ? movingPurpose : targetCage.getStatus();
+        if (cageMapper.updateRabbitCountAndStatus(
+                houseId, targetCage.getId(), targetCount, targetStatus, op) != 1) {
+            throw new BizException(409, "目标笼位状态已变化，请刷新后重试");
+        }
+        try {
+            if (rabbitMapper.updateCageIfActive(houseId, moving.getId(), targetCage.getId(), op) != 1) {
+                throw new BizException(409, "兔只状态已变化，请刷新后重试");
+            }
+        } catch (DuplicateKeyException e) {
+            throw new BizException(409, "该繁殖笼已有在栏种兔，请刷新后重试");
+        }
+        requestDedupService.markDone(houseId, userId, api, requestId);
+        return new CageTransferResult(mode, moving.getId(), sourceCage.getId(), targetCage.getId(), null);
     }
 
     @Transactional

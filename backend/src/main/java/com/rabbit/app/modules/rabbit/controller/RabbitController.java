@@ -3,6 +3,8 @@ package com.rabbit.app.modules.rabbit.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.house.service.HouseService;
+import com.rabbit.app.modules.rabbit.dto.CageTransferRequest;
+import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.dto.CreateRabbitRequest;
 import com.rabbit.app.modules.rabbit.dto.ReplacementRequest;
 import com.rabbit.app.modules.rabbit.dto.UpdateRabbitRequest;
@@ -100,6 +102,23 @@ public class RabbitController {
         boolean force = req.getForceExitBatch() != null && req.getForceExitBatch();
         rabbitService.convertToReplacement(userId, houseId, req.getRabbitIds(), force, req.getTargetCageId(), req.getRequestId());
         return ApiResponse.ok(null);
+    }
+
+    /**
+     * 换笼位。客户端碰 NFC 拿到目标笼后调这里；结果的 mode 告诉它到底是入笼、合笼还是对调。
+     */
+    @PostMapping("/rabbits/{id}/cage-transfer")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_EDIT)
+    public ApiResponse<CageTransferResult> transferCage(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody CageTransferRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(
+                rabbitService.transferCage(userId, houseId, id, req.getTargetCageId(), req.getRequestId())
+        );
     }
 
     @PutMapping("/rabbits/{id}")

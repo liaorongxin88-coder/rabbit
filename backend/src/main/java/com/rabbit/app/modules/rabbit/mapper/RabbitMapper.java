@@ -34,7 +34,29 @@ public interface RabbitMapper {
                                    @Param("offset") int offset,
                                    @Param("limit") int limit);
 
+    List<Rabbit> selectActiveByCageForUpdate(@Param("houseId") Long houseId, @Param("cageId") Long cageId);
+
     int updateTypeAndCage(@Param("houseId") Long houseId, @Param("id") Long id, @Param("type") String type, @Param("cageId") Long cageId, @Param("updateBy") String updateBy);
+
+    int updateCageIfActive(@Param("houseId") Long houseId,
+                           @Param("id") Long id,
+                           @Param("cageId") Long cageId,
+                           @Param("updateBy") String updateBy);
+
+    /**
+     * 对调换笼的中间态：把兔子临时置为离场，让唯一键 uk_rabbits_house_active_breeding_cage
+     * 让出笼位。只允许 {@code RabbitService#transferCage} 在同一事务里配合
+     * {@link #restoreFromCageSwap} 使用，落单调用会造出一只查不到的活兔。
+     */
+    int parkForCageSwap(@Param("houseId") Long houseId,
+                        @Param("id") Long id,
+                        @Param("updateBy") String updateBy);
+
+    /** 与 {@link #parkForCageSwap} 成对：带着新笼位复位在栏状态。 */
+    int restoreFromCageSwap(@Param("houseId") Long houseId,
+                            @Param("id") Long id,
+                            @Param("cageId") Long cageId,
+                            @Param("updateBy") String updateBy);
 
     int updateDeparture(@Param("houseId") Long houseId, @Param("id") Long id, @Param("departureDate") java.util.Date departureDate, @Param("departureReason") String departureReason, @Param("updateBy") String updateBy);
 

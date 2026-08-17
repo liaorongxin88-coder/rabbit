@@ -194,6 +194,23 @@ public class ReproCycleController {
         return ApiResponse.ok(com.rabbit.app.modules.repro.dto.StageActionsView.all());
     }
 
+    /**
+     * 录入母兔时可选的入轨阶段，及每个阶段必须补录的事实。
+     *
+     * <p>客户端拿它渲染「阶段下拉 + 该阶段特有的日期/数量字段」，不要自己拄一份：
+     * 哪个阶段要配种日、哪个要分娩日与活仔数，真相在 EntryPoint 表里。
+     */
+    @GetMapping("/entry-points")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<java.util.List<com.rabbit.app.modules.repro.dto.EntryPointView>> entryPoints(
+        @RequestHeader("X-House-Id") Long houseId
+    ) {
+        featureFlags.assertV2Enabled();
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(com.rabbit.app.modules.repro.dto.EntryPointView.all());
+    }
+
     private Long requireLogin() {
         Long userId = AuthContext.getUserId();
         if (userId == null) {
