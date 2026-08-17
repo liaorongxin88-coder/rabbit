@@ -268,6 +268,32 @@ curl -s -H 'Content-Type: application/json' \
 
 涉及布局、表格、弹窗和响应式时，还需要浏览器检查桌面和窄屏宽度，确认没有控制台错误、横向溢出、文本重叠或按钮不可达。
 
+### 笼内兔只操作浏览器验收脚本
+
+```bash
+pnpm --dir admin e2e:browser       # 无头
+HEADED=1 pnpm --dir admin e2e:browser  # 看着它点
+```
+
+脚本（`admin/scripts/admin_cage_ops_browser_e2e.mjs`）自己注入隔离 fixture
+（与真机脚本共用 `cage_ops_fixture.sql`）、起 vite、用 Playwright 驱本机 Chrome
+（`channel: 'chrome'`，不下载 Chromium）跑完四个场景，再回头查库。
+一定要给 vite 加 `--host 127.0.0.1`：默认只听 localhost，而本机 localhost 先解到 ::1，
+探活 127.0.0.1 会一直连不上、看起来像 dev server 没起来。
+通过标准：16 张截图齐全、console/page error 为 0、`database_assertions.txt` 里 `actual=expected`，
+跡象在 `admin/build/browser-e2e/cage-ops-<run_id>/`。
+
+2026-08-18 首轮通过，run `20260818001511706795`，14 项数据库断言一致：
+两只商品兔同笼时挑一只登记死亡（提示“兔 #N 已登记死亡”，同笼另一只不受影响）、
+种母兔与后备兔对调（提示“已与兔 #N 对调笼位”，两笼用途与计数互换）、
+商品兔并入未满商品兔笼、录入种母兔从【待摸胎】入轨（服务端字典自动要求配种日期，
+并断言旧的繁殻阶段下拉已不存在）。
+
+本轮浏览器验收抳出一个真缺陷：390px 下两张表格会把列挤成一列一个字
+（“R1-C3-L1”折三行、“商品兔”竖着排）。它不触发“横向溢出”，所以只看溢出的检查放得过去。
+修法是给表格加最小宽度，让已有的 `overflow-auto` 真的横向滚起来（DESIGN.md 允许表格横滚，
+但要求行身份可读）；脚本同时添了 `assertTableScrolls`，以后挤回去会直接失败。
+
 2026-08-15 已从 `/workspace/login` 使用真实本地账号和真实后端完成 Admin Batch 闭环：两母兔首次批量配种、空怀、哺乳期二配、两轮分娩/断奶、7 只商品兔出库、母兔离场和 Batch 自动完成；24 张截图、HTTP 4xx/5xx 为 0、console/page error 为 0。另在 390x844 下分别以 OWNER 和 VIEWER 登录复测完成 Batch 条目，页面无横向溢出，只读账号无可执行写入口。测试账号矩阵保存在 `/private/tmp/rabbit-test-account-matrix-20260815112735492410.txt`，仅适用于当前本机 `rabbit_app`，不得复制到生产或提交密码到仓库。
 
 ## 文档改动

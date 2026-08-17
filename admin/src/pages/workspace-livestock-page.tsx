@@ -255,6 +255,8 @@ export function WorkspaceLivestockPage() {
                 </Button>
               </CardHeader>
               <CardContent>
+                {/* 表格带最小宽度：窄屏下宁可横向滚动（DESIGN.md 允许），也不能把列挤成
+                    一列一个字——那时“R1-C3-L1”会折成三行、“商品兔”竖着排，行身份就读不出来。 */}
                 {filteredRabbits.length === 0 ? (
                   <Empty>
                     <RabbitIcon aria-hidden="true" />
@@ -262,7 +264,7 @@ export function WorkspaceLivestockPage() {
                     <EmptyDescription>清除查询条件或录入第一只兔。</EmptyDescription>
                   </Empty>
                 ) : (
-                  <Table>
+                  <Table className="min-w-[860px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>兔只</TableHead>
@@ -343,7 +345,7 @@ export function WorkspaceLivestockPage() {
                     <EmptyDescription>清除查询条件或新增笼位。</EmptyDescription>
                   </Empty>
                 ) : (
-                  <Table>
+                  <Table className="min-w-[820px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>笼位</TableHead>

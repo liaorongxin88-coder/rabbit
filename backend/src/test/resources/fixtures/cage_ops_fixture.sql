@@ -83,13 +83,35 @@ VALUES
      'FATTENING', NULL, NULL, NULL,
      0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-COMM-C'), @actor, @actor);
 
+-- R1-C5 预先贴好并绑定 NFC 标签：真实养殖场里标签是早就贴在笼上的，
+-- 换笼时“碰一下目标笼位”碰到的就是已绑定的标签。
+-- 两张表都要写：后端 resolve 同时校 nfc_tags 与 cage_nfc_tags，只写一张会报 UID 不一致。
+-- payload 带 HMAC 签名，无法在 SQL 里算，用例改从 GET /api/nfc/cages/write-queue 取。
+SET @c5_uid = CONCAT('04CA6E0P5', UPPER(SUBSTRING(MD5(@run_id), 1, 6)));
+
+INSERT INTO nfc_tags (
+    house_id, tag_uid, target_type, target_id,
+    request_id, remark, create_by, update_by
+)
+VALUES
+    (@house_id, @c5_uid, 'CAGE', @c5,
+     CONCAT('cage-ops-nfc-', @run_id, '-C5'), CONCAT(@prefix, ':nfc-c5'), @actor, @actor);
+
+INSERT INTO cage_nfc_tags (
+    house_id, cage_id, tag_uid, request_id, remark, create_by, update_by
+)
+VALUES
+    (@house_id, @c5, @c5_uid,
+     CONCAT('cage-ops-nfc-', @run_id, '-C5'), CONCAT(@prefix, ':nfc-c5'), @actor, @actor);
+
 COMMIT;
 
 SELECT
     @run_id AS run_id,
     @house_id AS house_id,
     '123456' AS fixture_password,
-    @actor AS control_user;
+    @actor AS control_user,
+    @c5_uid AS c5_tag_uid;
 
 SELECT
     'CAGE' AS kind, c.cage_number AS name, c.id AS id, c.status AS status, c.rabbit_count AS cnt
