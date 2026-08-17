@@ -296,7 +296,7 @@ HEADED=1 pnpm --dir admin e2e:browser  # 看着它点
 （`channel: 'chrome'`，不下载 Chromium）跑完四个场景，再回头查库。
 一定要给 vite 加 `--host 127.0.0.1`：默认只听 localhost，而本机 localhost 先解到 ::1，
 探活 127.0.0.1 会一直连不上、看起来像 dev server 没起来。
-通过标准：16 张截图齐全、console/page error 为 0、`database_assertions.txt` 里 `actual=expected`，
+通过标准：17 张截图齐全、console/page error 为 0、`database_assertions.txt` 里 `actual=expected`，
 跡象在 `admin/build/browser-e2e/cage-ops-<run_id>/`。
 
 2026-08-18 首轮通过，run `20260818001511706795`，14 项数据库断言一致：
@@ -309,6 +309,13 @@ HEADED=1 pnpm --dir admin e2e:browser  # 看着它点
 （“R1-C3-L1”折三行、“商品兔”竖着排）。它不触发“横向溢出”，所以只看溢出的检查放得过去。
 修法是给表格加最小宽度，让已有的 `overflow-auto` 真的横向滚起来（DESIGN.md 允许表格横滚，
 但要求行身份可读）；脚本同时添了 `assertTableScrolls`，以后挤回去会直接失败。
+
+2026-08-18 笼位分层地图搬到 Admin 后重跑通过，run `20260818020642021012`。
+笼位页默认也是分层地图，所以脚本改成认 `data-testid`（`cage-map` / `cage-map-cell-<id>` /
+`cage-map-legend`）而不是认笼位编号文字——地图格子上不写编号。新增三项断言：
+图例里五种关注度全部出现、停用笼位也在图上（它在货架上是真存在的）、
+换笼地图里商品兔笼对种母兔必须是 `disabled`（它没有对调路径，选完只会吃 400）。
+并补了 `14a-narrow-cage-map`，窄屏下地图与列表两个视图都要验。
 
 2026-08-15 已从 `/workspace/login` 使用真实本地账号和真实后端完成 Admin Batch 闭环：两母兔首次批量配种、空怀、哺乳期二配、两轮分娩/断奶、7 只商品兔出库、母兔离场和 Batch 自动完成；24 张截图、HTTP 4xx/5xx 为 0、console/page error 为 0。另在 390x844 下分别以 OWNER 和 VIEWER 登录复测完成 Batch 条目，页面无横向溢出，只读账号无可执行写入口。测试账号矩阵保存在 `/private/tmp/rabbit-test-account-matrix-20260815112735492410.txt`，仅适用于当前本机 `rabbit_app`，不得复制到生产或提交密码到仓库。
 

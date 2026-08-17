@@ -91,13 +91,40 @@ Use semantic Tailwind tokens in code. The hex values below are documentation anc
 | `muted-foreground` | `#64748B` | Descriptions, metadata, secondary table text |
 | `border` | `#E2E8F0` | Hairline borders and input outlines |
 | `destructive` | `#DC2828` | Errors and destructive actions only |
+| `warning` | `#B45309` | Warnings that need attention but are not failures |
 
 Rules:
 
 - Use `bg-background`, `bg-card`, `bg-secondary`, `text-muted-foreground`, `border`, `bg-primary`, and `text-destructive` before raw Tailwind color utilities.
-- Amber is reserved for warnings. Red is reserved for errors and destructive actions.
+- Amber is reserved for warnings and lives in the `warning` token; do not reach for raw amber utilities.
+- Red is reserved for errors and destructive actions.
 - Do not use broad tinted sections. If emphasis is needed, use a badge, status cell, icon, or border.
 - Avoid one-note palettes. Teal should mark intent, not flood the page.
+
+### Cage Attention Palette
+
+The cage map (`src/components/cage-map.tsx`) is the one surface that encodes state with color. It
+colors by **attention** — "which cages need me today" — not by cage usage, because usage is already
+readable as text and would spend color on something nobody acts on.
+
+| State | Meaning | Token | Icon |
+| --- | --- | --- | --- |
+| 异常 | Bookkeeping contradicts itself: empty-but-occupied, single cage over 1, commodity cage over capacity, disabled cage still holding rabbits | `destructive` | `AlertCircle` |
+| 停用 | Disabled and empty; a normal unusable cage | `secondary` / `muted-foreground` | `Ban` |
+| 待投喂 | Holds rabbits and is unfed today | `warning` | `Clock` |
+| 已满 | No room left | `border` / `foreground` | `CircleMinus` |
+| 有空位 | Can still take rabbits | `accent` | `CirclePlus` |
+
+Rules:
+
+- **Primary teal never encodes cage state.** The same map is also the transfer target picker, so teal
+  is reserved for selection; if teal meant both "state" and "chosen", the user could not tell whether
+  a click registered.
+- Every state carries an icon and a Chinese label next to the color, and the map always ships with its
+  legend. Color is never the only signal.
+- Only one state is shown per cage, in the priority order above. A cage can be several things at once;
+  showing all of them turns the map into a badge pile.
+- Fills stay at low opacity so a wall of cages does not read as a color block.
 
 ## Typography
 
@@ -149,6 +176,11 @@ Rules:
 - Do not style page-level sections as floating cards.
 - Responsive controls may wrap, but must not overlap.
 - Tables may scroll horizontally when needed, but primary row identity and actions must remain understandable.
+- Spatial layouts (the cage map) group by row, stack layers top-first to match the physical rack, keep
+  positions ascending, and preserve empty slots. Filters dim non-matching cells instead of removing
+  them, because collapsing a grid makes "row 2, position 5" point at the wrong cage. Paginate by row.
+- A spatial layout is an addition, not a replacement: keep the table view available for lookup by
+  number and for dense scanning.
 
 ## Spacing And Shape
 

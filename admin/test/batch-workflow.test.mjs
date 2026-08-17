@@ -3,7 +3,6 @@ import test from 'node:test'
 import {
   batchStatusLabel,
   batchActionPath,
-  bulkMatingPath,
   getOrCreateBulkMatingRequest,
   getOrCreateBatchActionRequest,
   getOrCreateRabbitDepartureRequest,
@@ -63,7 +62,8 @@ test('normalizes bulk mating order and reuses requestId for the same retry', () 
   assert.deepEqual(first.femaleRabbitIds, [3, 5, 9])
   assert.equal(retry.requestId, 'bulk-1')
   assert.equal(changed.requestId, 'bulk-2')
-  assert.equal(bulkMatingPath(17), '/api/batches/17/mating/bulk')
+  // 批量配种现在走通用的批次动作路径（旧的 bulkMatingPath 已在 doe-breeding-v2 里移除）。
+  assert.equal(batchActionPath(17, 'mating/bulk'), '/api/batches/17/mating/bulk')
 })
 
 test('reuses rabbit departure request only while its draft is unchanged', () => {

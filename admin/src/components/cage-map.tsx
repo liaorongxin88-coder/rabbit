@@ -1,0 +1,247 @@
+import { AlertCircleIcon, BanIcon, CircleMinusIcon, CirclePlusIcon, ClockIcon } from 'lucide-react'
+import type { ComponentType } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  CAGE_ATTENTIONS,
+  cageAlertReason,
+  cageAttention,
+  cageAttentionHints,
+  cageAttentionLabels,
+  cageOccupancyText,
+  countAttentions,
+  type CageAttention,
+  type CageLayout,
+} from '@/lib/cage-map'
+import { cn } from '@/lib/utils'
+import type { Cage } from '@/types/api'
+
+/**
+ * 笼位分层地图：按「排 → 层 → 位」还原货架，用颜色标关注度。
+ *
+ * 两条不能破的规则（同样写在 Flutter 端 `app/.rule` 里）：
+ * 1. 主色（teal）不表示任何笼位状态，只表示「选中」——这张图同时是换笼的选择器，
+ *    如果主色既是状态又是选中，用户就分不清自己点没点中。
+ * 2. 颜色永远配图标和文字，不做唯一信号，色觉障碍下也能读（DESIGN.md 无障碍条款）。
+ */
+
+const attentionIcons: Record<CageAttention, ComponentType<{ className?: string }>> = {
+  alert: AlertCircleIcon,
+  disabled: BanIcon,
+  needsFeeding: ClockIcon,
+  full: CircleMinusIcon,
+  vacancy: CirclePlusIcon,
+}
+
+// 只用语义 token 的低透明度填充，避免把页面变成彩色块（DESIGN.md：不要大面积色块）。
+const attentionCellStyles: Record<CageAttention, string> = {
+  alert: 'border-destructive/40 bg-destructive/5 text-destructive',
+  disabled: 'border-border bg-secondary text-muted-foreground',
+  needsFeeding: 'border-warning/40 bg-warning/5 text-warning',
+  full: 'border-border bg-card text-foreground',
+  vacancy: 'border-accent/40 bg-accent/5 text-accent',
+}
+
+const attentionLegendStyles: Record<CageAttention, string> = {
+  alert: 'text-destructive',
+  disabled: 'text-muted-foreground',
+  needsFeeding: 'text-warning',
+  full: 'text-foreground',
+  vacancy: 'text-accent',
+}
+
+export function CageAttentionLegend({ cages, className }: { cages: Cage[]; className?: string }) {
+  const counts = countAttentions(cages)
+  return (
+    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs', className)} data-testid="cage-map-legend">
+      {CAGE_ATTENTIONS.map((attention) => {
+        const Icon = attentionIcons[attention]
+        return (
+          <span
+            key={attention}
+            className={cn('inline-flex items-center gap-1', attentionLegendStyles[attention])}
+            title={cageAttentionHints[attention]}
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+            {cageAttentionLabels[attention]}
+            {counts[attention] > 0 ? <span className="tabular-nums">{counts[attention]}</span> : null}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+export function CageMap({
+  layout,
+  selectedCageId,
+  isSelectable,
+  cellNote,
+  isMatch,
+  visibleRowLimit,
+  onShowMoreRows,
+  onSelectCage,
+}: {
+  layout: CageLayout
+  selectedCageId?: number | null
+  /** 返回 false 的笼位会变淡且不可点，例如换笼时放不下的目标。 */
+  isSelectable?: (cage: Cage) => boolean
+  /** 格子底部的一行小字，例如换笼时的「对调」「当前」。 */
+  cellNote?: (cage: Cage) => string | null
+  /** 命中筛选条件的笼位；未命中的只变淡，不从图上移除，否则坐标会错位。 */
+  isMatch?: (cage: Cage) => boolean
+  visibleRowLimit?: number
+  onShowMoreRows?: () => void
+  onSelectCage?: (cage: Cage) => void
+}) {
+  const limit = visibleRowLimit ?? layout.rows.length
+  const visibleRows = layout.rows.slice(0, limit)
+  const hiddenRowCount = layout.rows.length - visibleRows.length
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="cage-map">
+      {visibleRows.map((row) => {
+        const counts = countAttentions(row.cages)
+        return (
+          <div key={row.rowCode} className="rounded-md border" data-testid={`cage-map-row-${row.rowCode}`}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-3 py-2 text-xs">
+              <span className="text-sm font-medium">{row.rowCode} 排</span>
+              <span className="text-muted-foreground">{row.cages.length} 笼</span>
+              {counts.vacancy > 0 ? <span className="text-accent">空位 {counts.vacancy}</span> : null}
+              {counts.needsFeeding > 0 ? <span className="text-warning">待投喂 {counts.needsFeeding}</span> : null}
+              {counts.alert > 0 ? <span className="text-destructive">异常 {counts.alert}</span> : null}
+            </div>
+            {/* 一排一个横向滚动区：列数由该排最大位号决定，窄屏下横向滚动
+                比换行更可信——换行会让「第几位」错位。 */}
+            <div className="overflow-x-auto px-3 py-2">
+              <div className="flex min-w-max flex-col gap-1.5">
+                {row.layers.map((layer) => (
+                  <div key={layer.layerIndex} className="flex items-stretch gap-1.5">
+                    <span className="flex w-10 shrink-0 items-center text-xs text-muted-foreground">
+                      {layer.layerIndex} 层
+                    </span>
+                    {layer.cells.map((cell) =>
+                      cell.cage ? (
+                        <CageMapCellButton
+                          key={cell.positionIndex}
+                          cage={cell.cage}
+                          selected={selectedCageId === cell.cage.id}
+                          selectable={isSelectable ? isSelectable(cell.cage) : true}
+                          dimmed={isMatch ? !isMatch(cell.cage) : false}
+                          note={cellNote?.(cell.cage) ?? null}
+                          onSelect={onSelectCage}
+                        />
+                      ) : (
+                        <span
+                          key={cell.positionIndex}
+                          aria-hidden="true"
+                          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground/60"
+                        >
+                          -
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-10 shrink-0" />
+                  {Array.from({ length: row.positionSpan }, (_, index) => (
+                    <span key={index} className="w-16 shrink-0 text-center text-xs text-muted-foreground">
+                      {index + 1}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+
+      {hiddenRowCount > 0 ? (
+        <Button variant="outline" size="sm" className="self-start" onClick={onShowMoreRows} data-testid="cage-map-more-rows">
+          显示更多排（还有 {hiddenRowCount} 排）
+        </Button>
+      ) : null}
+
+      {layout.unplaced.length > 0 ? (
+        <div className="rounded-md border border-dashed p-3" data-testid="cage-map-unplaced">
+          <p className="mb-2 text-xs text-muted-foreground">
+            未编排 {layout.unplaced.length} 笼：缺少排 / 层 / 位坐标，编辑笼位补上后会回到地图。
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {layout.unplaced.map((cage) => (
+              <CageMapCellButton
+                key={cage.id}
+                cage={cage}
+                selected={selectedCageId === cage.id}
+                selectable={isSelectable ? isSelectable(cage) : true}
+                dimmed={isMatch ? !isMatch(cage) : false}
+                note={cellNote?.(cage) ?? null}
+                onSelect={onSelectCage}
+                showCageNumber
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function CageMapCellButton({
+  cage,
+  selected,
+  selectable,
+  dimmed,
+  note,
+  onSelect,
+  showCageNumber = false,
+}: {
+  cage: Cage
+  selected: boolean
+  selectable: boolean
+  dimmed: boolean
+  note: string | null
+  onSelect?: (cage: Cage) => void
+  showCageNumber?: boolean
+}) {
+  const attention = cageAttention(cage)
+  const Icon = attentionIcons[attention]
+  const reason = cageAlertReason(cage)
+  const description = [
+    cage.cageNumber,
+    cageOccupancyText(cage),
+    cageAttentionLabels[attention],
+    reason,
+    selectable ? null : '不可选择',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <button
+      type="button"
+      // 编号不写在格子里（写不下，也会盖掉状态），靠坐标和 title/aria-label 认笼。
+      title={description}
+      aria-label={description}
+      aria-pressed={selected}
+      disabled={!selectable}
+      data-testid={`cage-map-cell-${cage.id}`}
+      onClick={() => onSelect?.(cage)}
+      className={cn(
+        'motion-press flex h-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1 text-xs',
+        showCageNumber ? 'w-24' : 'w-16',
+        attentionCellStyles[attention],
+        // 主色只表示选中，不表示任何笼位状态。
+        selected ? 'border-primary ring-2 ring-primary/40' : null,
+        dimmed ? 'opacity-40' : null,
+        selectable ? 'cursor-pointer hover:border-primary/60' : 'cursor-not-allowed opacity-50',
+      )}
+    >
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      {showCageNumber ? <span className="w-full truncate font-medium">{cage.cageNumber}</span> : null}
+      <span className="w-full truncate tabular-nums">{cageOccupancyText(cage)}</span>
+      {note ? <span className="w-full truncate text-[10px]">{note}</span> : null}
+    </button>
+  )
+}

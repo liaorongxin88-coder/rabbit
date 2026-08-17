@@ -84,13 +84,15 @@ async function main() {
   const c3 = cageId('R1-C3-L1')
   const c4 = cageId('R1-C4-L1')
   const c6 = cageId('R1-C6-L1')
+  // 停用空笼：用来验证地图没有把停用笼位默默丢掉。
+  const c7 = cageId('R1-C7-L1')
   const doeId = rabbitId('CAGEOPS-DOE')
   const reserveId = rabbitId('CAGEOPS-RESERVE')
   const commAId = rabbitId('CAGEOPS-COMM-A')
   const commBId = rabbitId('CAGEOPS-COMM-B')
   const commCId = rabbitId('CAGEOPS-COMM-C')
 
-  if (!runId || !houseId || !controlUser || !c1 || !doeId || !commAId || !commCId) {
+  if (!runId || !houseId || !controlUser || !c1 || !c7 || !doeId || !commAId || !commCId) {
     fail(`unable to parse fixture output:\n${fixtureOutput}`, 65)
   }
 
@@ -224,13 +226,25 @@ async function main() {
     await page.getByRole('link', { name: '兔群管理' }).first().click()
     await page.waitForURL(/\/workspace\/livestock/, { timeout: 30_000 })
     await page.getByRole('tab', { name: /笼位/ }).click()
-    await page.getByText('R1-C3-L1', { exact: false }).first().waitFor({ timeout: 30_000 })
-    await shot('01-cage-tab')
+
+    // 笼位区默认是分层地图（排 → 层 → 位），格子上不写编号，所以认 testid 不认文字。
+    await page.locator('[data-testid="cage-map"]').waitFor({ timeout: 30_000 })
+    await page.locator('[data-testid="cage-map-legend"]').waitFor()
+    // fixture 故意把五种关注度都摆出来；少一种就说明颜色没真的在分状态。
+    for (const state of ['异常', '停用', '待投喂', '已满', '有空位']) {
+      const legendEntry = page.locator('[data-testid="cage-map-legend"]').getByText(state, { exact: false })
+      if (await legendEntry.count() === 0) {
+        fail(`地图图例缺少关注度「${state}」`, 73)
+      }
+    }
+    // 停用笼位必须出现在图上：它在货架上是真存在的，丢掉就凭空少一个位置。
+    await page.locator(`[data-testid="cage-map-cell-${c7}"]`).waitFor()
+    await shot('01-cage-map')
 
     // ---------------------------------------------------------- 场景一：死亡
     // 两只商品兔同笼，从「笼内兔只」里挑一只登记死亡。
-    const cageRow = page.getByRole('row', { name: /R1-C3-L1/ })
-    await cageRow.getByRole('button', { name: '笼内兔只' }).click()
+    // 地图上直接点格子就能开笼内兔只，这是地图视图的主路径。
+    await page.locator(`[data-testid="cage-map-cell-${c3}"]`).click()
     const cageDialog = page.getByRole('dialog')
     await cageDialog.getByText('R1-C3-L1 笼内兔只').waitFor()
     await cageDialog.getByText('在栏 2 只', { exact: false }).waitFor()
@@ -252,7 +266,7 @@ async function main() {
     await shot('04-departure-done')
 
     // 离场后同笼只剩一只，且是另外那只。
-    await page.getByRole('row', { name: /R1-C3-L1/ }).getByRole('button', { name: '笼内兔只' }).click()
+    await page.locator(`[data-testid="cage-map-cell-${c3}"]`).click()
     const afterDialog = page.getByRole('dialog')
     await afterDialog.getByText('在栏 1 只', { exact: false }).waitFor({ timeout: 15_000 })
     await afterDialog.getByText(`兔 #${commBId}`).waitFor()
@@ -269,9 +283,14 @@ async function main() {
     await shot('06-rabbit-list-with-stage')
     await doeRow.getByRole('button', { name: '换笼' }).click()
     const transferDialog = page.getByRole('dialog').filter({ hasText: '换笼位' })
+    // 商品兔笼没有对调路径，不能出现在种母兔的候选里（否则选完才吃 400）。
+    if (await transferDialog.locator(`[data-testid="cage-map-cell-${c3}"][disabled]`).count() === 0) {
+      fail('换笼地图把商品兔笼也做成了可选目标', 74)
+    }
     await page.locator('#transfer-target-cage').click()
-    // 被后备兔占用的 R1-C2 必须出现在候选里，否则对调根本无从发起。
-    await page.getByRole('option', { name: /R1-C2-L1/ }).click()
+    // 被后备兔占用的 R1-C2 必须出现在候选里，否则对调根本无从发起；
+    // 并且要当场标出「对调」，不能让用户提交后才发现自己动了两只兔。
+    await page.getByRole('option', { name: /R1-C2-L1.*对调/ }).click()
     await shot('07-transfer-dialog-swap')
     await transferDialog.getByRole('button', { name: '确认换笼' }).click()
     await expectToast(`已与兔 #${reserveId} 对调笼位`)
@@ -281,8 +300,9 @@ async function main() {
     const commCRow = page.getByRole('row', { name: new RegExp(`兔 #${commCId}\\b`) })
     await commCRow.getByRole('button', { name: '换笼' }).click()
     const appendDialog = page.getByRole('dialog').filter({ hasText: '换笼位' })
-    await page.locator('#transfer-target-cage').click()
-    await page.getByRole('option', { name: /R1-C3-L1/ }).click()
+    // 这一次走“输入笼位编号”那条路：完整对上就直接选中。
+    await appendDialog.locator('#transfer-cage-number').fill('R1-C3-L1')
+    await appendDialog.locator('[data-testid="transfer-number-hint"]').getByText('已选中 R1-C3-L1').waitFor()
     await shot('09-transfer-dialog-append')
     await appendDialog.getByRole('button', { name: '确认换笼' }).click()
     await expectToast('已并入目标商品兔笼')
@@ -323,6 +343,13 @@ async function main() {
     // ------------------------------------------------- 窄屏（DESIGN.md 要求）
     await page.setViewportSize(NARROW)
     await page.getByRole('tab', { name: /笼位/ }).click()
+    // 窄屏先看地图：页面本身不得横向溢出，每排自己横向滚。
+    await page.locator('[data-testid="cage-map"]').waitFor()
+    await assertNoOverflow('cage map')
+    await shot('14a-narrow-cage-map')
+
+    // 再切回列表，保证两个视图在窄屏下都可用。
+    await page.getByRole('button', { name: '列表', exact: true }).click()
     await page.getByText('R1-C3-L1', { exact: false }).first().waitFor()
     await assertNoOverflow('cage tab')
     await assertTableScrolls('cage tab')
@@ -358,11 +385,11 @@ async function main() {
   }
 
   const required = [
-    '01-cage-tab', '02-cage-rabbits-two', '03-departure-dialog', '04-departure-done',
+    '01-cage-map', '02-cage-rabbits-two', '03-departure-dialog', '04-departure-done',
     '05-cage-rabbits-one', '06-rabbit-list-with-stage', '07-transfer-dialog-swap',
     '08-transfer-swap-done', '09-transfer-dialog-append', '10-transfer-append-done',
     '11-doe-entry-form', '12-doe-entry-stage-picked', '13-doe-entry-done',
-    '14-narrow-cage-tab', '15-narrow-cage-rabbits', '16-narrow-transfer-dialog',
+    '14a-narrow-cage-map', '14-narrow-cage-tab', '15-narrow-cage-rabbits', '16-narrow-transfer-dialog',
   ]
   const missing = required.filter((name) => !shots.includes(name))
   if (missing.length > 0) {

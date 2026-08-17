@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeftRightIcon,
   Edit3Icon,
+  Grid2X2Icon,
   HeartCrackIcon,
+  ListIcon,
   PlusIcon,
   RabbitIcon,
   RefreshCwIcon,
@@ -25,8 +27,10 @@ import {
   updateRabbit,
 } from '@/api/workspace'
 import type { ReproEntryPoint } from '@/api/workspace'
+import { CageAttentionLegend, CageMap } from '@/components/cage-map'
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
+import { buildCageLayout, cageAcceptsMoreRabbits } from '@/lib/cage-map'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
 import { getOrCreateRabbitDepartureRequest } from '@/lib/batch-workflow'
 import { formatDateInput } from '@/lib/date'
@@ -93,6 +97,9 @@ const replacementReproductiveStageOptions = [['RESERVE', '后备']] as const
 type BreedingCageFilter = 'all' | 'doe' | 'buck'
 
 /** 换笼位的三种结局对用户是不同的事实，不能统一提示“已换笼”。 */
+/** 地图按排分页：一个几十排的兔场一次铺完会生成上千个格子。 */
+const CAGE_ROW_BATCH = 6
+
 const transferModeMessages: Record<string, string> = {
   MOVE: '已移入目标笼位',
   APPEND: '已并入目标商品兔笼',
@@ -113,6 +120,9 @@ export function WorkspaceLivestockPage() {
   const [transferTarget, setTransferTarget] = useState<Rabbit | null>(null)
   const [departureTarget, setDepartureTarget] = useState<Rabbit | null>(null)
   const [cageDetail, setCageDetail] = useState<Cage | null>(null)
+  /** 笼位区默认看分层地图；列表保留，大兔场按编号翻找时更好用。 */
+  const [cageView, setCageView] = useState<'map' | 'list'>('map')
+  const [visibleRowCount, setVisibleRowCount] = useState(CAGE_ROW_BATCH)
   /** 阶段→中文名。服务端下发，客户端不再自带一张会漂移的对照表。 */
   const [reproStageLabels, setReproStageLabels] = useState<Record<string, string>>({})
   const [entryPoints, setEntryPoints] = useState<ReproEntryPoint[]>([])
@@ -186,6 +196,11 @@ export function WorkspaceLivestockPage() {
       return true
     })
   }, [breedingCageFilter, cages, query])
+
+  // 地图用全量笼位构建，筛选只决定哪些格子变淡：
+  // 把未命中的笼从图上拿掉会让坐标错位，“第几排第几位”就不可信了。
+  const cageLayout = useMemo(() => buildCageLayout(cages), [cages])
+  const matchedCageIds = useMemo(() => new Set(filteredCages.map((cage) => cage.id)), [filteredCages])
 
   const filteredRabbits = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -326,20 +341,56 @@ export function WorkspaceLivestockPage() {
               <CardContent>
                 <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">种兔笼按实际在栏种兔性别筛选。</p>
-                  <Select value={breedingCageFilter} onValueChange={(value) => setBreedingCageFilter(value as BreedingCageFilter)}>
-                    <SelectTrigger className="w-full sm:w-44" aria-label="筛选种兔笼">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="all">全部笼位</SelectItem>
-                        <SelectItem value="doe">种母兔笼</SelectItem>
-                        <SelectItem value="buck">种公兔笼</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1" role="group" aria-label="笼位显示方式">
+                      <Button
+                        variant={cageView === 'map' ? 'secondary' : 'outline'}
+                        size="sm"
+                        aria-pressed={cageView === 'map'}
+                        onClick={() => setCageView('map')}
+                      >
+                        <Grid2X2Icon data-icon="inline-start" />
+                        分层地图
+                      </Button>
+                      <Button
+                        variant={cageView === 'list' ? 'secondary' : 'outline'}
+                        size="sm"
+                        aria-pressed={cageView === 'list'}
+                        onClick={() => setCageView('list')}
+                      >
+                        <ListIcon data-icon="inline-start" />
+                        列表
+                      </Button>
+                    </div>
+                    <Select value={breedingCageFilter} onValueChange={(value) => setBreedingCageFilter(value as BreedingCageFilter)}>
+                      <SelectTrigger className="w-full sm:w-44" aria-label="筛选种兔笼">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="all">全部笼位</SelectItem>
+                          <SelectItem value="doe">种母兔笼</SelectItem>
+                          <SelectItem value="buck">种公兔笼</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                {filteredCages.length === 0 ? (
+                {cages.length > 0 && cageView === 'map' ? (
+                  <div className="flex flex-col gap-3">
+                    <CageAttentionLegend cages={cages} />
+                    <CageMap
+                      layout={cageLayout}
+                      isMatch={(cage) => matchedCageIds.has(cage.id)}
+                      visibleRowLimit={visibleRowCount}
+                      onShowMoreRows={() => setVisibleRowCount((current) => current + CAGE_ROW_BATCH)}
+                      onSelectCage={setCageDetail}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      点格子查看笼内兔只；编辑与删除笼位在列表视图里。
+                    </p>
+                  </div>
+                ) : filteredCages.length === 0 ? (
                   <Empty>
                     <EmptyTitle>没有匹配的笼位</EmptyTitle>
                     <EmptyDescription>清除查询条件或新增笼位。</EmptyDescription>
@@ -657,16 +708,77 @@ function RabbitTransferDialog({
 }) {
   const [targetCageId, setTargetCageId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [cageNumberInput, setCageNumberInput] = useState('')
+  const [numberHint, setNumberHint] = useState<string | null>(null)
 
   useEffect(() => {
     if (!rabbit) return
     setTargetCageId('')
+    setCageNumberInput('')
+    setNumberHint(null)
   }, [rabbit])
 
-  const options = useMemo(
-    () => cages.filter((cage) => cage.isEnabled && cage.id !== rabbit?.cageId),
-    [cages, rabbit?.cageId],
+  const layout = useMemo(() => buildCageLayout(cages), [cages])
+
+  /**
+   * 目标笼能不能选，跟后端 `transferCage` 同一套规则：
+   * 商品兔只能进空笼或未满的商品兔笼；种兔、后备兔可以进空笼，
+   * 或与已占用的非商品兔笼对调。在这里先算一遍，是为了让用户当场看见，
+   * 而不是选完、提交、再吃一个 400。
+   */
+  const acceptsTarget = useCallback(
+    (cage: Cage) => {
+      if (!rabbit || !cage.isEnabled || cage.id === rabbit.cageId) return false
+      if (cage.rabbitCount <= 0) return true
+      if (rabbit.type === '2') {
+        return cage.status === '3' && cageAcceptsMoreRabbits(cage)
+      }
+      return cage.status === '1' || cage.status === '2'
+    },
+    [rabbit],
   )
+
+  const isSwapTarget = useCallback(
+    (cage: Cage) =>
+      Boolean(rabbit) &&
+      cage.id !== rabbit?.cageId &&
+      cage.rabbitCount > 0 &&
+      rabbit?.type !== '2' &&
+      (cage.status === '1' || cage.status === '2'),
+    [rabbit],
+  )
+
+  const options = useMemo(
+    () => cages.filter((cage) => acceptsTarget(cage)),
+    [acceptsTarget, cages],
+  )
+
+  /** 输入笼位编号：完整对上才选中，选不了当场说明原因。 */
+  function selectByExactNumber(value: string) {
+    setCageNumberInput(value)
+    const keyword = value.trim().toLowerCase()
+    if (!keyword) {
+      setNumberHint(null)
+      return
+    }
+    const matches = cages.filter(
+      (cage) => cage.cageNumber.toLowerCase() === keyword || String(cage.id) === keyword,
+    )
+    if (matches.length !== 1) {
+      setNumberHint(matches.length > 1 ? '笼位编号不唯一，请在地图上选' : null)
+      return
+    }
+    const matched = matches[0]
+    if (!acceptsTarget(matched)) {
+      setTargetCageId('')
+      setNumberHint(`${matched.cageNumber} 不能接收该兔`)
+      return
+    }
+    setTargetCageId(String(matched.id))
+    setNumberHint(
+      isSwapTarget(matched) ? `已选中 ${matched.cageNumber}，将与笼内兔只对调` : `已选中 ${matched.cageNumber}`,
+    )
+  }
 
   async function handleSubmit() {
     if (!rabbit || !houseId || !targetCageId) return
@@ -700,19 +812,57 @@ function RabbitTransferDialog({
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="transfer-target-cage">目标笼位</FieldLabel>
-            <Select value={targetCageId} onValueChange={setTargetCageId}>
+            <Select value={targetCageId} onValueChange={(value) => { setTargetCageId(value); setNumberHint(null) }}>
               <SelectTrigger id="transfer-target-cage"><SelectValue placeholder="选择目标笼位" /></SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   {options.map((cage) => (
                     <SelectItem key={cage.id} value={String(cage.id)}>
                       {cage.cageNumber} · {cageUsageLabel(cage)} · {cage.rabbitCount} 只
+                      {isSwapTarget(cage) ? ' · 对调' : ''}
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
+          <Field>
+            <FieldLabel htmlFor="transfer-cage-number">输入笼位编号</FieldLabel>
+            <Input
+              id="transfer-cage-number"
+              value={cageNumberInput}
+              placeholder="完整对上就直接选中，如 R1-C2-L1"
+              onChange={(event) => selectByExactNumber(event.target.value)}
+            />
+            {numberHint ? (
+              <p className="text-xs text-muted-foreground" data-testid="transfer-number-hint">{numberHint}</p>
+            ) : null}
+          </Field>
+          {layout.rows.length > 0 || layout.unplaced.length > 0 ? (
+            <Field>
+              <FieldLabel>在地图上选</FieldLabel>
+              <CageAttentionLegend cages={cages} />
+              <div className="max-h-72 overflow-y-auto">
+                <CageMap
+                  layout={layout}
+                  selectedCageId={targetCageId ? Number(targetCageId) : null}
+                  isSelectable={acceptsTarget}
+                  cellNote={(cage) =>
+                    cage.id === rabbit?.cageId ? '当前' : isSwapTarget(cage) ? '对调' : null
+                  }
+                  onSelectCage={(cage) => {
+                    setTargetCageId(String(cage.id))
+                    setCageNumberInput('')
+                    setNumberHint(
+                      isSwapTarget(cage)
+                        ? `已选中 ${cage.cageNumber}，将与笼内兔只对调`
+                        : `已选中 ${cage.cageNumber}`,
+                    )
+                  }}
+                />
+              </div>
+            </Field>
+          ) : null}
         </FieldGroup>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
