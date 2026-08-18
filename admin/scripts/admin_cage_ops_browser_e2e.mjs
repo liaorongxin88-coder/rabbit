@@ -80,15 +80,15 @@ async function main() {
   const cageId = (number) => Number(cageRows.find((cols) => cols[1] === number)?.[2])
   const rabbitId = (breed) => Number(rabbitRows.find((cols) => cols[1] === breed)?.[2])
 
-  const c1 = cageId('R1-C1-L1')
-  const c2 = cageId('R1-C2-L1')
-  const c3 = cageId('R1-C3-L1')
-  const c4 = cageId('R1-C4-L1')
-  const c6 = cageId('R1-C6-L1')
+  const c1 = cageId('1-1-1')
+  const c2 = cageId('1-2-1')
+  const c3 = cageId('1-3-1')
+  const c4 = cageId('1-4-1')
+  const c6 = cageId('1-6-1')
   // 停用空笼：用来验证地图没有把停用笼位默默丢掉。
-  const c7 = cageId('R1-C7-L1')
+  const c7 = cageId('1-7-1')
   // 末位：验双面笼架的折行（它应该落在第一位的正下方）。
-  const c8 = cageId('R1-C8-L1')
+  const c8 = cageId('1-8-1')
   const doeId = rabbitId('CAGEOPS-DOE')
   const reserveId = rabbitId('CAGEOPS-RESERVE')
   const commAId = rabbitId('CAGEOPS-COMM-A')
@@ -334,7 +334,7 @@ async function main() {
     // 地图上直接点格子就能开笼内兔只，这是地图视图的主路径。
     await page.locator(`[data-testid="cage-map-cell-${c3}"]`).click()
     const cageDialog = page.getByRole('dialog')
-    await cageDialog.getByText('R1-C3-L1 笼内兔只').waitFor()
+    await cageDialog.getByText('1-3-1 笼内兔只').waitFor()
     await cageDialog.getByText('在栏 2 只', { exact: false }).waitFor()
     await shot('02-cage-rabbits-two')
 
@@ -376,9 +376,9 @@ async function main() {
       fail('换笼地图把商品兔笼也做成了可选目标', 74)
     }
     await page.locator('#transfer-target-cage').click()
-    // 被后备兔占用的 R1-C2 必须出现在候选里，否则对调根本无从发起；
+    // 被后备兔占用的 1-2-1 必须出现在候选里，否则对调根本无从发起；
     // 并且要当场标出「对调」，不能让用户提交后才发现自己动了两只兔。
-    await page.getByRole('option', { name: /R1-C2-L1.*对调/ }).click()
+    await page.getByRole('option', { name: /1-2-1.*对调/ }).click()
     await shot('07-transfer-dialog-swap')
     await transferDialog.getByRole('button', { name: '确认换笼' }).click()
     await expectToast(`已与兔 #${reserveId} 对调笼位`)
@@ -389,8 +389,8 @@ async function main() {
     await commCRow.getByRole('button', { name: '换笼' }).click()
     const appendDialog = page.getByRole('dialog').filter({ hasText: '换笼位' })
     // 这一次走“输入笼位编号”那条路：完整对上就直接选中。
-    await appendDialog.locator('#transfer-cage-number').fill('R1-C3-L1')
-    await appendDialog.locator('[data-testid="transfer-number-hint"]').getByText('已选中 R1-C3-L1').waitFor()
+    await appendDialog.locator('#transfer-cage-number').fill('1-3-1')
+    await appendDialog.locator('[data-testid="transfer-number-hint"]').getByText('已选中 1-3-1').waitFor()
     await shot('09-transfer-dialog-append')
     await appendDialog.getByRole('button', { name: '确认换笼' }).click()
     await expectToast('已并入目标商品兔笼')
@@ -400,7 +400,7 @@ async function main() {
     await page.getByRole('button', { name: '录入兔只' }).click()
     const entryDialog = page.getByRole('dialog').filter({ hasText: '录入兔只' })
     await page.locator('#rabbit-cage').click()
-    await page.getByRole('option', { name: /R1-C6-L1/ }).click()
+    await page.getByRole('option', { name: /1-6-1/ }).click()
     await page.locator('#rabbit-type').click()
     await page.getByRole('option', { name: '种兔' }).click()
     await page.locator('#rabbit-gender').click()
@@ -438,11 +438,11 @@ async function main() {
 
     // 再切回列表，保证两个视图在窄屏下都可用。
     await page.getByRole('button', { name: '列表', exact: true }).click()
-    await page.getByText('R1-C3-L1', { exact: false }).first().waitFor()
+    await page.getByText('1-3-1', { exact: false }).first().waitFor()
     await assertNoOverflow('cage tab')
     await assertTableScrolls('cage tab')
     await shot('14-narrow-cage-tab')
-    await page.getByRole('row', { name: /R1-C3-L1/ }).getByRole('button', { name: '笼内兔只' }).click()
+    await page.getByRole('row', { name: /1-3-1/ }).getByRole('button', { name: '笼内兔只' }).click()
     await page.getByRole('dialog').getByText('笼内兔只', { exact: false }).first().waitFor()
     await assertNoOverflow('cage rabbits dialog')
     await shot('15-narrow-cage-rabbits')

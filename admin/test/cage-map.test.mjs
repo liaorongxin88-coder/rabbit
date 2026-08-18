@@ -18,7 +18,7 @@ function cage({ row, layer, position, number, ...overrides } = {}) {
   return {
     id: 1,
     houseId: 8,
-    cageNumber: 'R1-C1-L1',
+    cageNumber: '1-1-1',
     rowCode: 'R1',
     layerIndex: 1,
     positionIndex: 1,

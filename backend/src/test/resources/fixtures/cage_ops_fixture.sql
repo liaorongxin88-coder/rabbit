@@ -2,12 +2,12 @@
 -- 目标库 rabbit_app 或 rabbit_app_e2e；每次运行生成独立的用户与兔舍，可重复执行。
 --
 -- 笼位布局（1 行 6 列 1 层）刻意造出换笼的三种目标形态：
---   R1-C1 种母兔 DOE      （占用的非商品兔笼 → 对调的一端）
---   R1-C2 后备兔 RESERVE  （占用的非商品兔笼 → 对调的另一端）
---   R1-C3 商品兔 ×2       （未满的商品兔笼 → 并笼目标，同时是「多只兔笼挑一只登记死亡」的现场）
---   R1-C4 商品兔 ×1       （被并走的那只）
---   R1-C5 空笼            （直接入笼目标）
---   R1-C6 空笼            （录入母兔用）
+--   1-1-1 种母兔 DOE      （占用的非商品兔笼 → 对调的一端）
+--   1-2-1 后备兔 RESERVE  （占用的非商品兔笼 → 对调的另一端）
+--   1-3-1 商品兔 ×2       （未满的商品兔笼 → 并笼目标，同时是「多只兔笼挑一只登记死亡」的现场）
+--   1-4-1 商品兔 ×1       （被并走的那只）
+--   1-5-1 空笼            （直接入笼目标）
+--   1-6-1 空笼            （录入母兔用）
 
 SET NAMES utf8mb4;
 SET @run_id = DATE_FORMAT(NOW(6), '%Y%m%d%H%i%s%f');
@@ -51,21 +51,21 @@ INSERT INTO cages (
     status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by
 )
 VALUES
-    (@house_id, 'R1-C1-L1', 'R1', 1, 1, '1', 1, TRUE, TRUE, CONCAT(@prefix, ':doe'), @actor, @actor),
-    (@house_id, 'R1-C2-L1', 'R1', 1, 2, '2', 1, TRUE, TRUE, CONCAT(@prefix, ':reserve'), @actor, @actor),
-    (@house_id, 'R1-C3-L1', 'R1', 1, 3, '3', 2, FALSE, TRUE, CONCAT(@prefix, ':commodity-pair'), @actor, @actor),
-    (@house_id, 'R1-C4-L1', 'R1', 1, 4, '3', 1, FALSE, TRUE, CONCAT(@prefix, ':commodity-single'), @actor, @actor),
-    (@house_id, 'R1-C5-L1', 'R1', 1, 5, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':empty'), @actor, @actor),
-    (@house_id, 'R1-C6-L1', 'R1', 1, 6, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':intake'), @actor, @actor),
-    (@house_id, 'R1-C7-L1', 'R1', 1, 7, '0', 0, TRUE, FALSE, CONCAT(@prefix, ':disabled'), @actor, @actor),
-    (@house_id, 'R1-C8-L1', 'R1', 1, 8, '0', 2, TRUE, TRUE, CONCAT(@prefix, ':inconsistent'), @actor, @actor);
+    (@house_id, '1-1-1', 'R1', 1, 1, '1', 1, TRUE, TRUE, CONCAT(@prefix, ':doe'), @actor, @actor),
+    (@house_id, '1-2-1', 'R1', 1, 2, '2', 1, TRUE, TRUE, CONCAT(@prefix, ':reserve'), @actor, @actor),
+    (@house_id, '1-3-1', 'R1', 1, 3, '3', 2, FALSE, TRUE, CONCAT(@prefix, ':commodity-pair'), @actor, @actor),
+    (@house_id, '1-4-1', 'R1', 1, 4, '3', 1, FALSE, TRUE, CONCAT(@prefix, ':commodity-single'), @actor, @actor),
+    (@house_id, '1-5-1', 'R1', 1, 5, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':empty'), @actor, @actor),
+    (@house_id, '1-6-1', 'R1', 1, 6, '0', 0, TRUE, TRUE, CONCAT(@prefix, ':intake'), @actor, @actor),
+    (@house_id, '1-7-1', 'R1', 1, 7, '0', 0, TRUE, FALSE, CONCAT(@prefix, ':disabled'), @actor, @actor),
+    (@house_id, '1-8-1', 'R1', 1, 8, '0', 2, TRUE, TRUE, CONCAT(@prefix, ':inconsistent'), @actor, @actor);
 
-SET @c1 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C1-L1');
-SET @c2 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C2-L1');
-SET @c3 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C3-L1');
-SET @c4 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C4-L1');
-SET @c5 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C5-L1');
-SET @c6 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C6-L1');
+SET @c1 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-1-1');
+SET @c2 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-2-1');
+SET @c3 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-3-1');
+SET @c4 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-4-1');
+SET @c5 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-5-1');
+SET @c6 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-6-1');
 
 -- type: '0' 种兔 / '1' 后备兔 / '2' 商品兔；gender: '0' 母 / '1' 公
 -- 种母兔的 current_stage 由生产流程投影，这里直接给一个在轨阶段，验的正是列表能读到它。
@@ -92,7 +92,7 @@ VALUES
      'FATTENING', NULL, NULL, NULL,
      0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-COMM-C'), @actor, @actor);
 
--- R1-C5 预先贴好并绑定 NFC 标签：真实养殖场里标签是早就贴在笼上的，
+-- 1-5-1 预先贴好并绑定 NFC 标签：真实养殖场里标签是早就贴在笼上的，
 -- 换笼时“碰一下目标笼位”碰到的就是已绑定的标签。
 -- 两张表都要写：后端 resolve 同时校 nfc_tags 与 cage_nfc_tags，只写一张会报 UID 不一致。
 -- payload 带 HMAC 签名，无法在 SQL 里算，用例改从 GET /api/nfc/cages/write-queue 取。

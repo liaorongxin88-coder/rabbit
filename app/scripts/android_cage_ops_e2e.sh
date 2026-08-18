@@ -167,13 +167,13 @@ fixture_output=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" -i "$DB_CONTAINER" \
 
 run_id=$(awk 'NR == 2 { print $1 }' <<<"$fixture_output")
 house_id=$(awk 'NR == 2 { print $2 }' <<<"$fixture_output")
-first_cage_id=$(awk '$1 == "CAGE" && $2 ~ /R1-C1-L1/ { print $3 }' <<<"$fixture_output")
+first_cage_id=$(awk '$1 == "CAGE" && $2 == "1-1-1" { print $3 }' <<<"$fixture_output")
 doe_id=$(awk '$2 == "CAGEOPS-DOE" { print $3 }' <<<"$fixture_output")
 reserve_id=$(awk '$2 == "CAGEOPS-RESERVE" { print $3 }' <<<"$fixture_output")
 comm_a_id=$(awk '$2 == "CAGEOPS-COMM-A" { print $3 }' <<<"$fixture_output")
 comm_b_id=$(awk '$2 == "CAGEOPS-COMM-B" { print $3 }' <<<"$fixture_output")
 comm_c_id=$(awk '$2 == "CAGEOPS-COMM-C" { print $3 }' <<<"$fixture_output")
-# R1-C5 上预先绑好的标签 UID（fixture 首块第五列），用来模拟碰一下。
+# 1-5-1 上预先绑好的标签 UID（fixture 首块第五列），用来模拟碰一下。
 c5_tag_uid=$(awk 'NR == 2 { print $5 }' <<<"$fixture_output")
 
 if [[ -z "$run_id" || -z "$house_id" || -z "$first_cage_id" || -z "$doe_id" || \

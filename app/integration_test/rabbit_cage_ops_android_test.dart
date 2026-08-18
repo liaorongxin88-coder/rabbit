@@ -5,7 +5,7 @@
 // 目标笼位筛不出来、种母兔录入必定 400，都是单元测试和 mock 看不见的。
 //
 // NFC 碰标签的**硬件读写**仍是手工（得有人拿真卡贴上去），但碰到之后的整条链路
-// 已经自动化：fixture 预先把 R1-C5 的标签绑好，用例从 GET /api/nfc/cages/write-queue
+// 已经自动化：fixture 预先把 1-5-1 的标签绑好，用例从 GET /api/nfc/cages/write-queue
 // 取回**真实签名**的 payload（HMAC 算不出来，SQL 造不了假的），再把它从
 // com.rabbit.app.flutter/nfc_intents 通道注入，等同于 Android 把 NDEF intent 递给 Flutter。
 // 真正碰不到的只剩“手机天线读到了卡”这一步。
@@ -34,7 +34,7 @@ const _commodityCRabbitId = int.fromEnvironment('RABBIT_E2E_COMM_C_RABBIT_ID');
 /// fixture 的六个笼位是一条 INSERT 连号插入的，第 N 列的 id = 首列 id + (N-1)。
 const _firstCageId = int.fromEnvironment('RABBIT_E2E_FIRST_CAGE_ID');
 
-/// R1-C5 上预先贴好的标签 UID（fixture 写入 nfc_tags + cage_nfc_tags 两张表）。
+/// 1-5-1 上预先贴好的标签 UID（fixture 写入 nfc_tags + cage_nfc_tags 两张表）。
 const _c5TagUid = String.fromEnvironment('RABBIT_E2E_C5_TAG_UID');
 const _apiBaseUrl = String.fromEnvironment(
   'RABBIT_API_BASE_URL',
@@ -234,7 +234,7 @@ void main() {
       // 接下来碰标签会把它再搬走，终态的数据库元组就看不到它曾在 C1 了。
       expect(find.byKey(const ValueKey('cage-rabbit-row-$_reserveRabbitId')),
           findsOneWidget,
-          reason: '对调后后备兔应当在原种兔笼 R1-C1-L1 里');
+          reason: '对调后后备兔应当在原种兔笼 1-1-1 里');
       await _openRabbitMenu(tester, _reserveRabbitId);
       await tester.tap(find.text('换笼位').last);
       await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-nfc')));
@@ -251,17 +251,17 @@ void main() {
       );
       await _waitFor(tester, find.textContaining('属于其它兔舍'));
 
-      // 再碰真标签：这次要选中 R1-C5。
+      // 再碰真标签：这次要选中 1-5-1。
       await tester.tap(find.byKey(const ValueKey('rabbit-move-cage-nfc')));
       await _pumpUntilSettled(tester);
       await _tapNfcTag(tester, payload: signedPayload, tagUid: _c5TagUid);
-      await _waitFor(tester, find.textContaining('已选中 R1-C5-L1'));
+      await _waitFor(tester, find.textContaining('已选中 1-5-1'));
       await _takeScreenshot(binding, tester, '15-nfc-target-picked');
       await _tapSubmit(tester, const ValueKey('rabbit-move-cage-submit'));
-      await _waitFor(tester, find.textContaining('已换至 R1-C5-L1'));
+      await _waitFor(tester, find.textContaining('已换至 1-5-1'));
       await _takeScreenshot(binding, tester, '16-nfc-move-done');
 
-      // 没有采集窗口时碰同一张标签：应该直接跳进 R1-C5 详情，
+      // 没有采集窗口时碰同一张标签：应该直接跳进 1-5-1 详情，
       // 而且里面已经能看到刚搬过去的后备兔。
       await _backToCageGrid(tester);
       await _tapNfcTag(tester, payload: signedPayload, tagUid: _c5TagUid);
@@ -270,7 +270,7 @@ void main() {
         find.byKey(const ValueKey('cage-rabbit-row-$_reserveRabbitId')),
         timeout: const Duration(seconds: 30),
       );
-      expect(find.text('R1-C5-L1'), findsWidgets,
+      expect(find.text('1-5-1'), findsWidgets,
           reason: '碰标签应该落在该标签绑定的笼位详情页');
       await _takeScreenshot(binding, tester, '17-nfc-jump-to-cage');
 
@@ -507,7 +507,7 @@ Future<String> _fetchSignedCagePayload(int cageId) async {
       orElse: () => throw StateError('write queue has no cage $cageId'),
     );
     expect(item['bindingStatus'], 'BOUND',
-        reason: 'fixture 已把 R1-C5 的标签绑定，否则碰上去会报 4603');
+        reason: 'fixture 已把 1-5-1 的标签绑定，否则碰上去会报 4603');
     final payload = item['payload'] as String;
     expect(payload, startsWith('r1.'), reason: 'payload 必须是 r1 协议');
     return payload;

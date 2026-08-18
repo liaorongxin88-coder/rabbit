@@ -271,7 +271,7 @@ export function WorkspaceLivestockPage() {
               </CardHeader>
               <CardContent>
                 {/* 表格带最小宽度：窄屏下宁可横向滚动（DESIGN.md 允许），也不能把列挤成
-                    一列一个字——那时“R1-C3-L1”会折成三行、“商品兔”竖着排，行身份就读不出来。 */}
+                    一列一个字——那时“商品兔笼 1-3-1”会折成三行、“商品兔”竖着排，行身份就读不出来。 */}
                 {filteredRabbits.length === 0 ? (
                   <Empty>
                     <RabbitIcon aria-hidden="true" />
@@ -845,7 +845,7 @@ function RabbitTransferDialog({
             <Input
               id="transfer-cage-number"
               value={cageNumberInput}
-              placeholder="完整对上就直接选中，如 R1-C2-L1"
+              placeholder="完整对上就直接选中，如 2-3-1"
               onChange={(event) => selectByExactNumber(event.target.value)}
             />
             {numberHint ? (

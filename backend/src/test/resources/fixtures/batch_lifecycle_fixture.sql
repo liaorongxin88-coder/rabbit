@@ -53,22 +53,22 @@ INSERT INTO cages (
     status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by
 )
 VALUES
-    (@house_id, 'R1-C1-L1', 'R1', 1, 1, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':doe-a'), @actor, @actor),
-    (@house_id, 'R1-C2-L1', 'R1', 1, 2, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':doe-b'), @actor, @actor),
-    (@house_id, 'R1-C3-L1', 'R1', 1, 3, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':buck'), @actor, @actor),
-    (@house_id, 'R1-C4-L1', 'R1', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':commodity-a'), @actor, @actor),
-    (@house_id, 'R1-C5-L1', 'R1', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':commodity-b'), @actor, @actor),
-    (@house_id, 'R1-C6-L1', 'R1', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-1'), @actor, @actor),
-    (@house_id, 'R2-C1-L1', 'R2', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-2'), @actor, @actor),
-    (@house_id, 'R2-C2-L1', 'R2', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-3'), @actor, @actor),
-    (@house_id, 'R2-C3-L1', 'R2', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-4'), @actor, @actor),
-    (@house_id, 'R2-C4-L1', 'R2', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-5'), @actor, @actor),
-    (@house_id, 'R2-C5-L1', 'R2', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-6'), @actor, @actor),
-    (@house_id, 'R2-C6-L1', 'R2', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-7'), @actor, @actor);
+    (@house_id, '1-1-1', 'R1', 1, 1, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':doe-a'), @actor, @actor),
+    (@house_id, '1-2-1', 'R1', 1, 2, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':doe-b'), @actor, @actor),
+    (@house_id, '1-3-1', 'R1', 1, 3, '1', 1, FALSE, TRUE, CONCAT(@prefix, ':buck'), @actor, @actor),
+    (@house_id, '1-4-1', 'R1', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':commodity-a'), @actor, @actor),
+    (@house_id, '1-5-1', 'R1', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':commodity-b'), @actor, @actor),
+    (@house_id, '1-6-1', 'R1', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-1'), @actor, @actor),
+    (@house_id, '2-1-1', 'R2', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-2'), @actor, @actor),
+    (@house_id, '2-2-1', 'R2', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-3'), @actor, @actor),
+    (@house_id, '2-3-1', 'R2', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-4'), @actor, @actor),
+    (@house_id, '2-4-1', 'R2', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-5'), @actor, @actor),
+    (@house_id, '2-5-1', 'R2', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-6'), @actor, @actor),
+    (@house_id, '2-6-1', 'R2', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':spare-7'), @actor, @actor);
 
-SET @doe_a_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C1-L1');
-SET @doe_b_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C2-L1');
-SET @buck_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = 'R1-C3-L1');
+SET @doe_a_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-1-1');
+SET @doe_b_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-2-1');
+SET @buck_cage = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-3-1');
 
 INSERT INTO rabbits (
     house_id, cage_id, type, gender, breed, arrival_method, arrival_date, weight,

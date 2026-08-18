@@ -102,7 +102,7 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('outbound-summary-early-sale')),
       );
-      final earlySaleCage = find.text('R1-C2-L1');
+      final earlySaleCage = find.text('1-2-1');
       await _waitFor(tester, earlySaleCage);
       await tester.ensureVisible(earlySaleCage);
       await tester.pumpAndSettle();

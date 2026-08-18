@@ -72,32 +72,32 @@ INSERT INTO cages (
     status, rabbit_count, is_fed, is_enabled, remark, create_by, update_by
 )
 VALUES
-    (@primary_house_id, 'R1-C1-L1', 'R1', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C1'), @actor, @actor),
-    (@primary_house_id, 'R1-C2-L1', 'R1', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C2'), @actor, @actor),
-    (@primary_house_id, 'R1-C3-L1', 'R1', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C3'), @actor, @actor),
-    (@primary_house_id, 'R1-C4-L1', 'R1', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C4'), @actor, @actor),
-    (@primary_house_id, 'R1-C5-L1', 'R1', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C5'), @actor, @actor),
-    (@primary_house_id, 'R1-C6-L1', 'R1', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C6'), @actor, @actor),
-    (@primary_house_id, 'R2-C1-L1', 'R2', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C1'), @actor, @actor),
-    (@primary_house_id, 'R2-C2-L1', 'R2', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C2'), @actor, @actor),
-    (@primary_house_id, 'R2-C3-L1', 'R2', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C3'), @actor, @actor),
-    (@primary_house_id, 'R2-C4-L1', 'R2', 1, 4, '0', 0, FALSE, FALSE, CONCAT(@prefix, ':R2-C4-disabled'), @actor, @actor),
-    (@primary_house_id, 'R2-C5-L1', 'R2', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C5-reserved-G10'), @actor, @actor),
-    (@primary_house_id, 'R2-C6-L1', 'R2', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C6'), @actor, @actor),
-    (@branch_house_id, 'BR-R1-C1-L1', 'R1', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':branch-G11'), @actor, @actor),
-    (@branch_house_id, 'BR-R1-C2-L1', 'R1', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':branch-G12'), @actor, @actor);
+    (@primary_house_id, '1-1-1', 'R1', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C1'), @actor, @actor),
+    (@primary_house_id, '1-2-1', 'R1', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C2'), @actor, @actor),
+    (@primary_house_id, '1-3-1', 'R1', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C3'), @actor, @actor),
+    (@primary_house_id, '1-4-1', 'R1', 1, 4, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C4'), @actor, @actor),
+    (@primary_house_id, '1-5-1', 'R1', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C5'), @actor, @actor),
+    (@primary_house_id, '1-6-1', 'R1', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R1-C6'), @actor, @actor),
+    (@primary_house_id, '2-1-1', 'R2', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C1'), @actor, @actor),
+    (@primary_house_id, '2-2-1', 'R2', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C2'), @actor, @actor),
+    (@primary_house_id, '2-3-1', 'R2', 1, 3, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C3'), @actor, @actor),
+    (@primary_house_id, '2-4-1', 'R2', 1, 4, '0', 0, FALSE, FALSE, CONCAT(@prefix, ':R2-C4-disabled'), @actor, @actor),
+    (@primary_house_id, '2-5-1', 'R2', 1, 5, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C5-reserved-G10'), @actor, @actor),
+    (@primary_house_id, '2-6-1', 'R2', 1, 6, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':R2-C6'), @actor, @actor),
+    (@branch_house_id, 'BR-1-1-1', 'R1', 1, 1, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':branch-G11'), @actor, @actor),
+    (@branch_house_id, 'BR-1-2-1', 'R1', 1, 2, '0', 0, FALSE, TRUE, CONCAT(@prefix, ':branch-G12'), @actor, @actor);
 
-SET @c_g01 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C1-L1');
-SET @c_g02 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C2-L1');
-SET @c_g03 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C3-L1');
-SET @c_g04 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C4-L1');
-SET @c_g05 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C5-L1');
-SET @c_g07 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R1-C6-L1');
-SET @c_g06 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R2-C1-L1');
-SET @c_g08 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R2-C3-L1');
-SET @c_g09 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = 'R2-C4-L1');
-SET @c_g11 = (SELECT id FROM cages WHERE house_id = @branch_house_id AND cage_number = 'BR-R1-C1-L1');
-SET @c_g12 = (SELECT id FROM cages WHERE house_id = @branch_house_id AND cage_number = 'BR-R1-C2-L1');
+SET @c_g01 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-1-1');
+SET @c_g02 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-2-1');
+SET @c_g03 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-3-1');
+SET @c_g04 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-4-1');
+SET @c_g05 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-5-1');
+SET @c_g07 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '1-6-1');
+SET @c_g06 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '2-1-1');
+SET @c_g08 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '2-3-1');
+SET @c_g09 = (SELECT id FROM cages WHERE house_id = @primary_house_id AND cage_number = '2-4-1');
+SET @c_g11 = (SELECT id FROM cages WHERE house_id = @branch_house_id AND cage_number = 'BR-1-1-1');
+SET @c_g12 = (SELECT id FROM cages WHERE house_id = @branch_house_id AND cage_number = 'BR-1-2-1');
 
 INSERT INTO rabbits (
     house_id, cage_id, type, gender, breed, arrival_method, arrival_date, weight,

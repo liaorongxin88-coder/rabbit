@@ -203,7 +203,7 @@ void main() {
         Cage(
           id: 1,
           houseId: 8,
-          cageNumber: 'R1-C1-L1',
+          cageNumber: '1-1-1',
           rowCode: 'R1',
           layerIndex: 1,
           positionIndex: 1,
@@ -338,7 +338,7 @@ const _rack = [
   Cage(
     id: 1,
     houseId: 8,
-    cageNumber: 'R1-C1-L1',
+    cageNumber: '1-1-1',
     rowCode: 'R1',
     layerIndex: 1,
     positionIndex: 1,
@@ -349,7 +349,7 @@ const _rack = [
   Cage(
     id: 2,
     houseId: 8,
-    cageNumber: 'R1-C2-L1',
+    cageNumber: '1-2-1',
     rowCode: 'R1',
     layerIndex: 1,
     positionIndex: 2,
@@ -361,7 +361,7 @@ const _rack = [
   Cage(
     id: 3,
     houseId: 8,
-    cageNumber: 'R1-C1-L2',
+    cageNumber: '1-1-2',
     rowCode: 'R1',
     layerIndex: 2,
     positionIndex: 1,
@@ -373,7 +373,7 @@ const _rack = [
   Cage(
     id: 4,
     houseId: 8,
-    cageNumber: 'R2-C1-L1',
+    cageNumber: '2-1-1',
     rowCode: 'R2',
     layerIndex: 1,
     positionIndex: 1,
@@ -385,7 +385,7 @@ const _rack = [
   Cage(
     id: 5,
     houseId: 8,
-    cageNumber: 'R2-C2-L1',
+    cageNumber: '2-2-1',
     rowCode: 'R2',
     layerIndex: 1,
     positionIndex: 2,
@@ -396,7 +396,7 @@ const _rack = [
   Cage(
     id: 6,
     houseId: 8,
-    cageNumber: 'R2-C3-L1',
+    cageNumber: '2-3-1',
     rowCode: 'R2',
     layerIndex: 1,
     positionIndex: 3,
