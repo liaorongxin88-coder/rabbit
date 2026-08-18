@@ -47,7 +47,7 @@ test('层是顶层维度，从 1 层往上排', () => {
   )
 })
 
-test('一排双面笼折成两行，回程那行反着排', () => {
+test('一排就是一条线，位号从左往右递增', () => {
   const layout = buildCageLayout(
     Array.from({ length: 10 }, (_, index) =>
       cage({ id: index + 1, row: 'B', layer: 1, position: index + 1 }),
@@ -55,44 +55,11 @@ test('一排双面笼折成两行，回程那行反着排', () => {
   )
 
   const row = layout.layers[0].rows[0]
-  assert.equal(row.lines.length, 2)
   assert.deepEqual(
-    row.lines[0].cells.map((cell) => cell.positionIndex),
-    [1, 2, 3, 4, 5],
+    row.cells.map((cell) => cell.positionIndex),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
   )
-  // 人是绕到另一面走回来的，5 和 6 在现场贴着，屏幕上也要贴着。
-  assert.deepEqual(
-    row.lines[1].cells.map((cell) => cell.positionIndex),
-    [10, 9, 8, 7, 6],
-  )
-})
-
-test('位数为奇数时回程行靠右对齐，折角落在右端', () => {
-  const layout = buildCageLayout(
-    Array.from({ length: 5 }, (_, index) =>
-      cage({ id: index + 1, row: 'B', layer: 1, position: index + 1 }),
-    ),
-  )
-
-  const lines = layout.layers[0].rows[0].lines
-  assert.deepEqual(
-    lines[0].cells.map((cell) => cell.positionIndex),
-    [1, 2, 3],
-  )
-  // 第 4 位要正对着第 3 位，左边空出来的是留白（positionIndex 为 null），不是笼位。
-  assert.deepEqual(
-    lines[1].cells.map((cell) => cell.positionIndex),
-    [null, 5, 4],
-  )
-})
-
-test('位数太少的排不折行', () => {
-  const layout = buildCageLayout([
-    cage({ id: 1, row: 'B', layer: 1, position: 1 }),
-    cage({ id: 2, row: 'B', layer: 1, position: 2 }),
-  ])
-
-  assert.equal(layout.layers[0].rows[0].lines.length, 1)
+  assert.equal(row.positionSpan, 10)
 })
 
 test('排宽取跨层最大位号，切层时网格不跳', () => {
@@ -106,8 +73,8 @@ test('排宽取跨层最大位号，切层时网格不跳', () => {
   const secondLayerRow = layout.layers[1].rows[0]
   assert.equal(secondLayerRow.positionSpan, 6)
   assert.deepEqual(
-    secondLayerRow.lines[0].cells.map((cell) => cell.positionIndex),
-    [1, 2, 3],
+    secondLayerRow.cells.map((cell) => cell.positionIndex),
+    [1, 2, 3, 4, 5, 6],
   )
 })
 
@@ -149,7 +116,7 @@ test('duplicate coordinates displace the later cage rather than overwriting it',
     cage({ id: 2, row: 'R1', layer: 1, position: 1, number: '撞车' }),
   ])
 
-  assert.equal(layout.layers[0].rows[0].lines[0].cells[0].cage?.id, 1)
+  assert.equal(layout.layers[0].rows[0].cells[0].cage?.id, 1)
   assert.deepEqual(
     layout.unplaced.map((c) => c.id),
     [2],

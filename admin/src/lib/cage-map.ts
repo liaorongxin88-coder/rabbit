@@ -109,20 +109,15 @@ export function cageOccupancyText(cage: Cage): string {
 }
 
 export interface CageMapCell {
-  /** 折行后左侧的留白为 null：不是笼位，也不是缺笼的空槽，只是让折角对齐。 */
-  positionIndex: number | null
+  positionIndex: number
   /** 该坐标没有笼位时为 null：留空槽，不把后面的笼往前挤。 */
   cage: Cage | null
 }
 
-export interface CageMapLine {
-  cells: CageMapCell[]
-}
-
 export interface CageMapRow {
   rowCode: string
-  /** 一行或两行：双面笼架折回来的那一行反着排。 */
-  lines: CageMapLine[]
+  /** 这一排的位，按位号从左往右。 */
+  cells: CageMapCell[]
   /** 该排最大位号，决定网格列数。 */
   positionSpan: number
   cages: Cage[]
@@ -144,9 +139,6 @@ export interface CageLayout {
    */
   unplaced: Cage[]
 }
-
-/** 一排最多折成两行；低于这个位数的排不折，免得两位的小架子也被劈成两半。 */
-export const CAGE_ROW_FOLD_THRESHOLD = 4
 
 function normalizeIndex(value: number | null | undefined): number | null {
   // 后端历史数据里 0 表示「没有坐标」，负数是脏数据，都不该被当成第 0 位。
@@ -298,32 +290,12 @@ function buildRow(
   return {
     row: {
       rowCode,
-      lines: foldRow(cells),
+      cells,
       positionSpan: span,
       cages: cells.map((cell) => cell.cage).filter((cage): cage is Cage => cage !== null),
     },
     displaced,
   }
-}
-
-/**
- * 把一排折成最多两行：前半段正着排，后半段反着排。
- *
- * 后半段左侧补留白，让折角对齐在右端——位数是奇数时，最后一位应该正对着
- * 前半段的末位，而不是从左边开始摆。
- */
-function foldRow(cells: CageMapCell[]): CageMapLine[] {
-  if (cells.length < CAGE_ROW_FOLD_THRESHOLD) {
-    return [{ cells }]
-  }
-  const frontLength = Math.ceil(cells.length / 2)
-  const front = cells.slice(0, frontLength)
-  const back = cells.slice(frontLength).reverse()
-  const padding: CageMapCell[] = Array.from(
-    { length: front.length - back.length },
-    () => ({ positionIndex: null, cage: null }),
-  )
-  return [{ cells: front }, { cells: [...padding, ...back] }]
 }
 
 /** 按关注度统计，用于图例与每排概览。 */

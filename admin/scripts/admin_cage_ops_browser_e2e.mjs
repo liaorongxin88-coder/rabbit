@@ -316,13 +316,13 @@ async function main() {
     // 停用笼位必须出现在图上：它在货架上是真存在的，丢掉就凭空少一个位置。
     await page.locator(`[data-testid="cage-map-cell-${c7}"]`).waitFor()
 
-    // 一排是双面笼架，位号绕着架子走：8 位的排要折成 1234 / 8765，
-    // 末位落在首位正下方。只断言“格子都在”的话，排成一条直线也能蒙混过去。
+    // 一排就是一条线：末位要在首位右边、同一行上。
+    // 只断言“格子都在”的话，排成两行或者反序也能蒙混过去。
     const firstBox = await page.locator(`[data-testid="cage-map-cell-${c1}"]`).boundingBox()
     const lastBox = await page.locator(`[data-testid="cage-map-cell-${c8}"]`).boundingBox()
-    if (!firstBox || !lastBox || lastBox.y <= firstBox.y || Math.abs(lastBox.x - firstBox.x) > 4) {
+    if (!firstBox || !lastBox || lastBox.x <= firstBox.x || Math.abs(lastBox.y - firstBox.y) > 4) {
       console.error(
-        `✖ 双面笼架没有折行：首位 ${JSON.stringify(firstBox)}，末位 ${JSON.stringify(lastBox)}`,
+        `✖ 一排没有从左往右排开：首位 ${JSON.stringify(firstBox)}，末位 ${JSON.stringify(lastBox)}`,
       )
       process.exit(75)
     }

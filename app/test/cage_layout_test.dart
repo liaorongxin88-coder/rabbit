@@ -46,49 +46,19 @@ void main() {
       expect(layout.layers.first.rows.single.cages.map((cage) => cage.id), [2]);
     });
 
-    test('一排双面笼折成两行，回程那行反着排', () {
+    test('一排就是一条线，位号从左往右递增', () {
       final layout = CageLayout.fromCages([
         for (var position = 1; position <= 10; position++)
           _cage(id: position, row: 'B', layer: 1, position: position),
       ]);
 
       final row = layout.layers.single.rows.single;
-      expect(row.lines, hasLength(2));
       expect(
-        row.lines.first.cells.map((cell) => cell.positionIndex),
-        [1, 2, 3, 4, 5],
+        row.cells.map((cell) => cell.positionIndex),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        reason: '排内不折行，第 N 位就在第 N 个格子',
       );
-      expect(
-        row.lines.last.cells.map((cell) => cell.positionIndex),
-        [10, 9, 8, 7, 6],
-        reason: '人是绕到另一面走回来的，5 和 6 在现场贴着，屏幕上也要贴着',
-      );
-    });
-
-    test('位数为奇数时回程行靠右对齐，折角落在右端', () {
-      final layout = CageLayout.fromCages([
-        for (var position = 1; position <= 5; position++)
-          _cage(id: position, row: 'B', layer: 1, position: position),
-      ]);
-
-      final lines = layout.layers.single.rows.single.lines;
-      expect(lines.first.cells.map((cell) => cell.positionIndex), [1, 2, 3]);
-      expect(
-        lines.last.cells.map((cell) => cell.positionIndex),
-        [null, 5, 4],
-        reason: '第 4 位要正对着第 3 位，左边空出来的是留白不是笼位',
-      );
-      expect(lines.last.cells.first.isPad, isTrue);
-      expect(lines.last.cells.first.isEmptySlot, isFalse);
-    });
-
-    test('位数太少的排不折行', () {
-      final layout = CageLayout.fromCages([
-        _cage(id: 1, row: 'B', layer: 1, position: 1),
-        _cage(id: 2, row: 'B', layer: 1, position: 2),
-      ]);
-
-      expect(layout.layers.single.rows.single.lines, hasLength(1));
+      expect(row.positionSpan, 10);
     });
 
     test('排宽取跨层最大位号，切层时网格不跳', () {
@@ -101,11 +71,11 @@ void main() {
       final secondLayerRow = layout.layers.last.rows.single;
       expect(secondLayerRow.positionSpan, 6);
       expect(
-        secondLayerRow.lines.first.cells.map((cell) => cell.positionIndex),
-        [1, 2, 3],
+        secondLayerRow.cells.map((cell) => cell.positionIndex),
+        [1, 2, 3, 4, 5, 6],
       );
       expect(
-        secondLayerRow.lines.last.cells.map((cell) => cell.cage),
+        secondLayerRow.cells.skip(1).map((cell) => cell.cage),
         everyElement(isNull),
         reason: '二层只装了一个笼，其余是空槽，但排宽跟一层一致',
       );
@@ -130,10 +100,8 @@ void main() {
         _cage(id: 2, row: 'R1', layer: 1, position: 4),
       ]);
 
-      final cells = layout.layers.single.rows.single.lines
-          .expand((line) => line.cells)
-          .toList();
-      expect(cells.map((cell) => cell.positionIndex), [1, 2, 4, 3]);
+      final cells = layout.layers.single.rows.single.cells;
+      expect(cells.map((cell) => cell.positionIndex), [1, 2, 3, 4]);
       expect(
         cells.where((cell) => cell.isEmptySlot).map((cell) => cell.positionIndex),
         [2, 3],
@@ -161,7 +129,7 @@ void main() {
       ]);
 
       expect(
-        layout.layers.single.rows.single.lines.single.cells.single.cage?.id,
+        layout.layers.single.rows.single.cells.single.cage?.id,
         1,
       );
       expect(

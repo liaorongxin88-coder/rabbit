@@ -7,16 +7,10 @@ import 'package:rabbit_flutter/src/domain/models/cage_attention.dart';
 /// 堆在同一排里，看着像货架剖面图，实际找笼时反而对不上——人站在某一层前面时，
 /// 眼里只有这一层的那几排。所以顶层结构是「层 → 排 → 位」，界面一次只显示一层。
 ///
-/// 排内的位号是**绕着笼子走**的：一排双面笼共 10 位时，1→5 在这一面，
-/// 6→10 从另一头折回来，于是 5 和 6 在物理上贴着。所以一排画成两行，
-/// 第二行反着排、并且靠右对齐，折角就落在右端——和人绕过去的路线一致：
+/// 一层之内，排从上往下（排号自然序），位从左往右（位号递增），
+/// 就是站在过道里看这一层的样子。
 ///
-/// ```
-///   B1  B2  B3  B4  B5
-///   B10 B9  B8  B7  B6
-/// ```
-///
-/// 这里只做分组、折行与排序，不碰任何 UI，方便单测钉住边界。
+/// 这里只做分组与排序，不碰任何 UI，方便单测钉住边界。
 class CageLayout {
   const CageLayout({required this.layers, required this.unplaced});
 
@@ -32,8 +26,6 @@ class CageLayout {
   int get placedCount =>
       layers.fold(0, (total, layer) => total + layer.cages.length);
 
-  /// 一排最多折成两行；低于这个位数的排不折，免得两位的小架子也被劈成两半。
-  static const int foldThreshold = 4;
 
   static CageLayout fromCages(Iterable<Cage> cages) {
     final placed = <Cage>[];
@@ -118,32 +110,11 @@ class CageLayout {
     return _RowBuild(
       row: CageMapRow(
         rowCode: rowCode,
-        lines: _fold(cells),
+        cells: cells,
         positionSpan: span,
       ),
       displaced: displaced,
     );
-  }
-
-  /// 把一排折成最多两行：前半段正着排，后半段反着排。
-  ///
-  /// 后半段左侧补留白，让折角对齐在右端——位数是奇数时，最后一位应该正对着
-  /// 前半段的末位，而不是从左边开始摆。
-  static List<CageMapLine> _fold(List<CageMapCell> cells) {
-    if (cells.length < foldThreshold) {
-      return [CageMapLine(cells: cells)];
-    }
-    final frontLength = (cells.length / 2).ceil();
-    final front = cells.sublist(0, frontLength);
-    final back = cells.sublist(frontLength).reversed.toList();
-    final padding = List.generate(
-      front.length - back.length,
-      (_) => const CageMapCell.pad(),
-    );
-    return [
-      CageMapLine(cells: front),
-      CageMapLine(cells: [...padding, ...back]),
-    ];
   }
 
   /// R2 要排在 R10 前面：按「数字段按数值、其余按字符」比较。
@@ -212,20 +183,19 @@ class CageMapLayer {
 class CageMapRow {
   const CageMapRow({
     required this.rowCode,
-    required this.lines,
+    required this.cells,
     required this.positionSpan,
   });
 
   final String rowCode;
 
-  /// 一行或两行（双面笼折回来的那一行反着排）。
-  final List<CageMapLine> lines;
+  /// 这一排的位，按位号从左往右；缺笼的位置是空槽，不把后面的位往前挤。
+  final List<CageMapCell> cells;
 
   /// 该排最大位号，决定网格列数。
   final int positionSpan;
 
-  Iterable<Cage> get cages =>
-      lines.expand((line) => line.cells).map((cell) => cell.cage).nonNulls;
+  Iterable<Cage> get cages => cells.map((cell) => cell.cage).nonNulls;
 
   int countWhere(bool Function(Cage cage) test) => cages.where(test).length;
 
@@ -233,27 +203,14 @@ class CageMapRow {
       countWhere((cage) => cage.attention == attention);
 }
 
-class CageMapLine {
-  const CageMapLine({required this.cells});
-
-  final List<CageMapCell> cells;
-}
-
 class CageMapCell {
   const CageMapCell({required this.positionIndex, this.cage});
 
-  /// 折行后左侧的留白：不是笼位，也不是「缺笼的空槽」，只是让折角对齐。
-  const CageMapCell.pad()
-      : positionIndex = null,
-        cage = null;
-
-  final int? positionIndex;
+  final int positionIndex;
   final Cage? cage;
 
-  bool get isPad => positionIndex == null;
-
   /// 有这个位号但没有笼：现场缺一个笼，格子留白。
-  bool get isEmptySlot => !isPad && cage == null;
+  bool get isEmptySlot => cage == null;
 }
 
 class _RowBuild {

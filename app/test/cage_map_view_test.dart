@@ -91,32 +91,30 @@ void main() {
     expect(first.dx, lessThan(second.dx));
   });
 
-  testWidgets('双面笼架折成两行：回程那行反着排，折角对齐在右端',
-      (tester) async {
+  testWidgets('一排从左往右一条线排开，位号递增', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(_testApp(_doubleSidedRack(6)));
     await tester.pumpAndSettle();
 
-    final front = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
-    final fold = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-3')));
-    final backFold =
-        tester.getCenter(find.byKey(const ValueKey('cage-map-cell-4')));
-    final backEnd =
-        tester.getCenter(find.byKey(const ValueKey('cage-map-cell-6')));
+    final centers = [
+      for (var position = 1; position <= 6; position++)
+        tester.getCenter(find.byKey(ValueKey('cage-map-cell-$position'))),
+    ];
 
-    expect(backFold.dy, greaterThan(front.dy), reason: '回程在第二行');
-    expect(
-      backFold.dx,
-      closeTo(fold.dx, 1),
-      reason: '第 4 位要正对着第 3 位——现场就是绕过架子那一头折回来的',
-    );
-    expect(
-      backEnd.dx,
-      closeTo(front.dx, 1),
-      reason: '最后一位回到起点这一端',
-    );
+    for (var index = 1; index < centers.length; index++) {
+      expect(
+        centers[index].dx,
+        greaterThan(centers[index - 1].dx),
+        reason: '第 ${index + 1} 位要排在第 $index 位右边',
+      );
+      expect(
+        centers[index].dy,
+        closeTo(centers[0].dy, 1),
+        reason: '一排就是一条线，不折行',
+      );
+    }
   });
 
   testWidgets('legend explains every colour and doubles as a tally',
@@ -302,7 +300,7 @@ double _cellOpacity(WidgetTester tester, int cageId) {
   return opacity.opacity;
 }
 
-/// 一排 N 位的双面笼架，用来验折行。
+/// 一排 N 位的长排，用来验位号从左往右递增。
 List<Cage> _doubleSidedRack(int positions) => [
       for (var position = 1; position <= positions; position++)
         Cage(

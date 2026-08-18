@@ -429,43 +429,28 @@ class _CageMapRowSection extends StatelessWidget {
           SingleChildScrollView(
             key: ValueKey('cage-map-row-scroll-${row.rowCode}'),
             scrollDirection: Axis.horizontal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                for (final line in row.lines)
+                // 一排就是一条线，位号从左往右递增。
+                for (final cell in row.cells)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        for (final cell in line.cells)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: SizedBox(
-                              width: cellExtent,
-                              height: cellExtent,
-                              // 留白不是笼位也不是空槽，只是让折角对齐，什么都不画。
-                              child: cell.isPad
-                                  ? const SizedBox.shrink()
-                                  : cell.cage == null
-                                      ? _EmptySlot(
-                                          positionIndex: cell.positionIndex!,
-                                        )
-                                      : _CageMapCellTile(
-                                          cage: cell.cage!,
-                                          positionIndex: cell.positionIndex!,
-                                          onTap: onTapCage,
-                                          selected:
-                                              selectedCageId == cell.cage!.id,
-                                          dimmed: isMatch != null &&
-                                              !isMatch!(cell.cage!),
-                                          selectable: selectableCage
-                                                  ?.call(cell.cage!) ??
-                                              true,
-                                          note: cellNote?.call(cell.cage!),
-                                        ),
+                    padding: const EdgeInsets.only(right: 6),
+                    child: SizedBox(
+                      width: cellExtent,
+                      height: cellExtent,
+                      child: cell.cage == null
+                          ? _EmptySlot(positionIndex: cell.positionIndex)
+                          : _CageMapCellTile(
+                              cage: cell.cage!,
+                              positionIndex: cell.positionIndex,
+                              onTap: onTapCage,
+                              selected: selectedCageId == cell.cage!.id,
+                              dimmed:
+                                  isMatch != null && !isMatch!(cell.cage!),
+                              selectable:
+                                  selectableCage?.call(cell.cage!) ?? true,
+                              note: cellNote?.call(cell.cage!),
                             ),
-                          ),
-                      ],
                     ),
                   ),
               ],

@@ -158,40 +158,32 @@ export function CageMap({
               {counts.alert > 0 ? <span className="text-destructive">异常 {counts.alert}</span> : null}
             </div>
             {/* 一排一个横向滚动区：列数由该排最大位号决定，窄屏下横向滚动
-                比换行更可信——换行会让「第几位」错位。
-                一排是双面笼架，位号绕着架子走，所以折成两行、回程那行反着排。 */}
+                比换行更可信——换行会让「第几位」错位。 */}
             <div className="overflow-x-auto px-3 py-2">
-              <div className="flex min-w-max flex-col gap-1.5">
-                {row.lines.map((line, lineIndex) => (
-                  <div key={lineIndex} className="flex items-stretch gap-1.5">
-                    {line.cells.map((cell, cellIndex) =>
-                      cell.positionIndex === null ? (
-                        // 折角对齐用的留白：不是笼位，也不是缺笼，什么都不画。
-                        <span key={`pad-${cellIndex}`} aria-hidden="true" className="h-16 w-16 shrink-0" />
-                      ) : cell.cage ? (
-                        <CageMapCellButton
-                          key={cell.positionIndex}
-                          cage={cell.cage}
-                          positionIndex={cell.positionIndex}
-                          selected={selectedCageId === cell.cage.id}
-                          selectable={isSelectable ? isSelectable(cell.cage) : true}
-                          dimmed={isMatch ? !isMatch(cell.cage) : false}
-                          note={cellNote?.(cell.cage) ?? null}
-                          onSelect={onSelectCage}
-                        />
-                      ) : (
-                        <span
-                          key={cell.positionIndex}
-                          aria-label={`第 ${cell.positionIndex} 位，缺笼`}
-                          className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground/60"
-                        >
-                          <span className="self-start pl-1.5 text-[10px]">{cell.positionIndex}</span>
-                          <span className="grow content-center">-</span>
-                        </span>
-                      ),
-                    )}
-                  </div>
-                ))}
+              <div className="flex min-w-max items-stretch gap-1.5">
+                {row.cells.map((cell) =>
+                  cell.cage ? (
+                    <CageMapCellButton
+                      key={cell.positionIndex}
+                      cage={cell.cage}
+                      positionIndex={cell.positionIndex}
+                      selected={selectedCageId === cell.cage.id}
+                      selectable={isSelectable ? isSelectable(cell.cage) : true}
+                      dimmed={isMatch ? !isMatch(cell.cage) : false}
+                      note={cellNote?.(cell.cage) ?? null}
+                      onSelect={onSelectCage}
+                    />
+                  ) : (
+                    <span
+                      key={cell.positionIndex}
+                      aria-label={`第 ${cell.positionIndex} 位，缺笼`}
+                      className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground/60"
+                    >
+                      <span className="self-start pl-1.5 text-[10px]">{cell.positionIndex}</span>
+                      <span className="grow content-center">-</span>
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           </div>
