@@ -57,12 +57,17 @@ DEVICE_ID="${RABBIT_ANDROID_E2E_DEVICE_ID:-}"
 KEEP_DEVICE_AWAKE="${RABBIT_ANDROID_E2E_KEEP_DEVICE_AWAKE:-1}"
 
 original_stay_on_while_plugged_in=""
+original_accelerometer_rotation=""
 artifact_dir=""
 
 cleanup() {
   if [[ -n "$original_stay_on_while_plugged_in" && -n "$DEVICE_ID" ]]; then
     "$ADB_BIN" -s "$DEVICE_ID" shell settings put global stay_on_while_plugged_in \
       "$original_stay_on_while_plugged_in" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$original_accelerometer_rotation" && -n "$DEVICE_ID" ]]; then
+    "$ADB_BIN" -s "$DEVICE_ID" shell settings put system accelerometer_rotation \
+      "$original_accelerometer_rotation" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -143,6 +148,15 @@ if [[ "$KEEP_DEVICE_AWAKE" == "1" ]]; then
   "$ADB_BIN" -s "$DEVICE_ID" shell wm dismiss-keyguard >/dev/null 2>&1 || true
 fi
 
+# 锁竖屏。手机平放在桌上被自动旋转转成横屏后，逻辑视口只剩 ~360px 高，
+# ListView 里靠下的卡片压根不会被构建，用例会以一连串「Found 0 widgets」
+# 报错——看起来像界面坏了，其实只是手机躺歪了。截图证据在横屏下也没法看。
+original_accelerometer_rotation="$(
+  "$ADB_BIN" -s "$DEVICE_ID" shell settings get system accelerometer_rotation | tr -d '\r'
+)"
+"$ADB_BIN" -s "$DEVICE_ID" shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+"$ADB_BIN" -s "$DEVICE_ID" shell settings put system user_rotation 0 >/dev/null 2>&1 || true
+
 fixture_file="$REPO_DIR/backend/src/test/resources/fixtures/cage_ops_fixture.sql"
 if [[ ! -f "$fixture_file" ]]; then
   echo "Cage-ops fixture not found: $fixture_file" >&2
@@ -159,9 +173,12 @@ reserve_id=$(awk '$2 == "CAGEOPS-RESERVE" { print $3 }' <<<"$fixture_output")
 comm_a_id=$(awk '$2 == "CAGEOPS-COMM-A" { print $3 }' <<<"$fixture_output")
 comm_b_id=$(awk '$2 == "CAGEOPS-COMM-B" { print $3 }' <<<"$fixture_output")
 comm_c_id=$(awk '$2 == "CAGEOPS-COMM-C" { print $3 }' <<<"$fixture_output")
+# R1-C5 上预先绑好的标签 UID（fixture 首块第五列），用来模拟碰一下。
+c5_tag_uid=$(awk 'NR == 2 { print $5 }' <<<"$fixture_output")
 
 if [[ -z "$run_id" || -z "$house_id" || -z "$first_cage_id" || -z "$doe_id" || \
-      -z "$reserve_id" || -z "$comm_a_id" || -z "$comm_b_id" || -z "$comm_c_id" ]]; then
+      -z "$reserve_id" || -z "$comm_a_id" || -z "$comm_b_id" || -z "$comm_c_id" || \
+      -z "$c5_tag_uid" ]]; then
   echo "Unable to parse cage-ops fixture output" >&2
   printf '%s\n' "$fixture_output" >&2
   exit 65
@@ -170,8 +187,8 @@ fi
 artifact_dir="$PROJECT_DIR/build/android-e2e/cage-ops-$run_id"
 mkdir -p "$artifact_dir"
 printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
-printf 'device=%s\napi=%s\nrun_id=%s\nhouse_id=%s\nfirst_cage_id=%s\n' \
-  "$DEVICE_ID" "$DEVICE_API_URL" "$run_id" "$house_id" "$first_cage_id" \
+printf 'device=%s\napi=%s\nrun_id=%s\nhouse_id=%s\nfirst_cage_id=%s\nc5_tag_uid=%s\n' \
+  "$DEVICE_ID" "$DEVICE_API_URL" "$run_id" "$house_id" "$first_cage_id" "$c5_tag_uid" \
   > "$artifact_dir/environment.txt"
 
 export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
@@ -194,6 +211,7 @@ set +e
   --dart-define=RABBIT_E2E_COMM_A_RABBIT_ID="$comm_a_id" \
   --dart-define=RABBIT_E2E_COMM_B_RABBIT_ID="$comm_b_id" \
   --dart-define=RABBIT_E2E_COMM_C_RABBIT_ID="$comm_c_id" \
+  --dart-define=RABBIT_E2E_C5_TAG_UID="$c5_tag_uid" \
   2>&1 | tee "$artifact_dir/flutter-drive.log"
 drive_status=${PIPESTATUS[0]}
 set -e
@@ -204,6 +222,7 @@ if [[ "$drive_status" != "0" ]]; then
 fi
 
 screenshots=(
+  00-house-detail
   01-cage-grid
   01b-cage-map
   02-commodity-cage-two-rabbits
@@ -218,6 +237,10 @@ screenshots=(
   11-doe-intake-form
   12-doe-intake-stage-picked
   13-doe-intake-done
+  14-nfc-waiting
+  15-nfc-target-picked
+  16-nfc-move-done
+  17-nfc-jump-to-cage
 )
 for screenshot in "${screenshots[@]}"; do
   if [[ ! -s "$artifact_dir/$screenshot.png" ]]; then
@@ -234,10 +257,12 @@ c1=$first_cage_id
 c2=$((first_cage_id + 1))
 c3=$((first_cage_id + 2))
 c4=$((first_cage_id + 3))
+c5=$((first_cage_id + 4))
 c6=$((first_cage_id + 5))
 
 read -r departed departure_rows comm_b_active doe_cage reserve_cage active_swapped \
         c1_state c2_state comm_c_cage c3_state c4_state new_doe_stage open_cycles pending_tasks \
+        c5_state \
   <<<"$(
   docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
     mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
@@ -262,14 +287,20 @@ read -r departed departure_rows comm_b_active doe_cage reserve_cage active_swapp
            WHERE r.house_id = $house_id AND r.cage_id = $c6 AND bc.closed_at IS NULL),
         (SELECT COUNT(*) FROM work_tasks wt
            INNER JOIN rabbits r ON r.id = wt.rabbit_id
-           WHERE r.house_id = $house_id AND r.cage_id = $c6 AND wt.status = 'PENDING');
+           WHERE r.house_id = $house_id AND r.cage_id = $c6 AND wt.status = 'PENDING'),
+        (SELECT CONCAT(status, ':', rabbit_count) FROM cages WHERE id = $c5);
     "
 )"
 
-actual="$departed $departure_rows $comm_b_active $doe_cage $reserve_cage $active_swapped $c1_state $c2_state $comm_c_cage $c3_state $c4_state $new_doe_stage $open_cycles $pending_tasks"
-# 对调后：种母兔在原后备笼($c2)、后备兔在原种兔笼($c1)，两笼各 1 只且用途互换
-# （$c1 变后备兔笼 '2'，$c2 变种兔笼 '1'）。并笼后 $c3 恢复 2 只、$c4 空且状态归 '0'。
-expected="1 1 1 $c2 $c1 2 2:1 1:1 $c3 3:2 0:0 AWAIT_PALPATION 1 1"
+actual="$departed $departure_rows $comm_b_active $doe_cage $reserve_cage $active_swapped $c1_state $c2_state $comm_c_cage $c3_state $c4_state $new_doe_stage $open_cycles $pending_tasks $c5_state"
+# 对调后：种母兔落在原后备笼($c2，状态转 '1')、后备兔落在原种兔笼($c1)。
+# 并笼后 $c3 恢复 2 只、$c4 空且状态归 '0'。
+#
+# 最后一步碰 NFC 标签又把后备兔从 $c1 搬到了贴着标签的 $c5，所以终态是
+# reserve_cage=$c5、$c1 空了（'0:0'）、$c5 变后备兔笼（'2:1'）。
+# 对调把后备兔放进 $c1 这一半的证据在用例里：场景 5 是从 $c1 的笼位详情
+# 里找到这只后备兔才能开换笼表单的（并有显式断言）。
+expected="1 1 1 $c2 $c5 2 0:0 1:1 $c3 3:2 0:0 AWAIT_PALPATION 1 1 2:1"
 printf 'expected=%s\nactual=%s\n' "$expected" "$actual" | tee "$artifact_dir/database_assertions.txt"
 if [[ "$actual" != "$expected" ]]; then
   echo "Cage-ops E2E database assertions failed" >&2

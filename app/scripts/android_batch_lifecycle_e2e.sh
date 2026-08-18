@@ -63,6 +63,7 @@ KEEP_DEVICE_AWAKE="${RABBIT_ANDROID_E2E_KEEP_DEVICE_AWAKE:-1}"
 
 original_font_scale=""
 original_stay_on_while_plugged_in=""
+original_accelerometer_rotation=""
 time_accelerator_pid=""
 
 if [[ -z "$EXPECTED_EFFECTIVE_TEXT_SCALE" ]]; then

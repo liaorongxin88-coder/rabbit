@@ -65,6 +65,7 @@ ALLOW_DEVICE_SETTINGS="${RABBIT_ANDROID_E2E_ALLOW_DEVICE_SETTINGS:-0}"
 
 started_emulator=0
 original_font_scale=""
+original_accelerometer_rotation=""
 artifact_dir=""
 
 if [[ -z "$TEST_PROFILE" ]]; then
@@ -100,6 +101,10 @@ USAGE
 cleanup() {
   if [[ -n "$DEVICE_ID" && -n "$original_font_scale" ]]; then
     "$ADB_BIN" -s "$DEVICE_ID" shell settings put system font_scale "$original_font_scale" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$DEVICE_ID" && -n "$original_accelerometer_rotation" ]]; then
+    "$ADB_BIN" -s "$DEVICE_ID" shell settings put system accelerometer_rotation \
+      "$original_accelerometer_rotation" >/dev/null 2>&1 || true
   fi
   if [[ "$started_emulator" == "1" && "$KEEP_EMULATOR" != "1" && -n "$DEVICE_ID" ]]; then
     "$ADB_BIN" -s "$DEVICE_ID" emu kill >/dev/null 2>&1 || true
@@ -198,6 +203,15 @@ fi
 
 # 从设备侧实打一次：主机自测通过不代表手机能访问（监听地址、防火墙、
 # AP 隔离都只卡设备这一侧）。失败时提前报错，而不是让用例在登录页超时。
+# 锁竖屏。手机平放在桌上被自动旋转转成横屏后，逻辑视口只剩 ~360px 高，
+# ListView 里靠下的卡片压根不会被构建，用例会以一连串「Found 0 widgets」
+# 报错——看起来像界面坏了，其实只是手机躺歪了。
+original_accelerometer_rotation="$(
+  "$ADB_BIN" -s "$DEVICE_ID" shell settings get system accelerometer_rotation | tr -d '\r'
+)"
+"$ADB_BIN" -s "$DEVICE_ID" shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
+"$ADB_BIN" -s "$DEVICE_ID" shell settings put system user_rotation 0 >/dev/null 2>&1 || true
+
 if [[ "$DEVICE_API_URL" != http://10.0.2.2:* ]]; then
   device_probe="$("$ADB_BIN" -s "$DEVICE_ID" shell "curl -s -m 8 -o /dev/null -w '%{http_code}' $DEVICE_API_URL/api/houses" 2>/dev/null | tr -d '\r')"
   if [[ "$device_probe" != "401" && "$device_probe" != "200" ]]; then
