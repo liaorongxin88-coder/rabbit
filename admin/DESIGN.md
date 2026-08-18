@@ -193,9 +193,10 @@ Rules:
 - Do not style page-level sections as floating cards.
 - Responsive controls may wrap, but must not overlap.
 - Tables may scroll horizontally when needed, but primary row identity and actions must remain understandable.
-- Spatial layouts (the cage map) group by row, stack layers top-first to match the physical rack, keep
-  positions ascending, and preserve empty slots. Filters dim non-matching cells instead of removing
-  them, because collapsing a grid makes "row 2, position 5" point at the wrong cage. Paginate by row.
+- Spatial layouts (the cage map) show one layer at a time (layer 1 is the bottom tier; layers count
+  upward), group by row, keep positions ascending, and preserve empty slots. Filters dim non-matching
+  cells instead of removing them, because collapsing a grid makes "row 2, position 5" point at the
+  wrong cage. Paginate by row.
 - A spatial layout is an addition, not a replacement: keep the table view available for lookup by
   number and for dense scanning.
 

@@ -44,6 +44,22 @@ void main() {
     );
   });
 
+  testWidgets('层签从下往上排：1 层在最左，也是默认停留的那层', (tester) async {
+    await tester.pumpWidget(_testApp(_rack));
+    await tester.pumpAndSettle();
+
+    final first = tester.getCenter(find.byKey(const ValueKey('cage-map-layer-1')));
+    final second = tester.getCenter(find.byKey(const ValueKey('cage-map-layer-2')));
+
+    // 层号从下往上递增，切换器也照这个顺序排。倒过来排的话，
+    // 人按「1 层」找的是最底层，界面却把它摆在最右边，读起来是拧的。
+    expect(
+      first.dx,
+      lessThan(second.dx),
+      reason: '1 层（最下层）排在 2 层左边',
+    );
+  });
+
   testWidgets('层是切出来的空间：默认停在 1 层，二层的笼要切过去才看得见',
       (tester) async {
     await tester.pumpWidget(_testApp(_rack));

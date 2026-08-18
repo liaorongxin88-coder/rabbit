@@ -30,13 +30,15 @@ function cage({ row, layer, position, number, ...overrides } = {}) {
   }
 }
 
-test('层是顶层维度，从 1 层往上排', () => {
+test('层从下往上递增：1 层是最底层，排在最前面', () => {
   const layout = buildCageLayout([
     cage({ id: 1, row: 'R1', layer: 2, position: 1 }),
     cage({ id: 2, row: 'R1', layer: 1, position: 1 }),
     cage({ id: 3, row: 'R1', layer: 3, position: 1 }),
   ])
 
+  // 层号从下往上数，切换器也照这个顺序给。倒过来的话，
+  // 人按「1 层」找最底层，界面却把它摆在最后。
   assert.deepEqual(
     layout.layers.map((layer) => layer.layerIndex),
     [1, 2, 3],
