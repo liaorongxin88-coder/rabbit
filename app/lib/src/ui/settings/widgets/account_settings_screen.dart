@@ -152,6 +152,7 @@ class _AccountSettingsContentState
                 Text('用户名', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
                 TextFormField(
+                  key: const ValueKey('account-user-name-field'),
                   controller: _nameController,
                   decoration: const InputDecoration(labelText: '用户名'),
                   maxLength: 64,
@@ -164,6 +165,7 @@ class _AccountSettingsContentState
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
+                  key: const ValueKey('account-user-name-save'),
                   onPressed: _savingName ? null : _saveName,
                   icon: _savingName
                       ? const SizedBox.square(
@@ -191,6 +193,7 @@ class _AccountSettingsContentState
                 const SizedBox(height: 12),
                 if (widget.profile.hasPassword) ...[
                   TextFormField(
+                    key: const ValueKey('account-old-password'),
                     controller: _oldPasswordController,
                     decoration: const InputDecoration(labelText: '旧密码'),
                     obscureText: true,
@@ -204,6 +207,7 @@ class _AccountSettingsContentState
                   const SizedBox(height: 12),
                 ],
                 TextFormField(
+                  key: const ValueKey('account-new-password'),
                   controller: _newPasswordController,
                   decoration: const InputDecoration(labelText: '新密码'),
                   obscureText: true,
@@ -218,6 +222,7 @@ class _AccountSettingsContentState
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
+                  key: const ValueKey('account-confirm-password'),
                   controller: _confirmPasswordController,
                   decoration: const InputDecoration(labelText: '确认新密码'),
                   obscureText: true,
@@ -230,6 +235,7 @@ class _AccountSettingsContentState
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
+                  key: const ValueKey('account-password-save'),
                   onPressed: _savingPassword ? null : _savePassword,
                   icon: _savingPassword
                       ? const SizedBox.square(

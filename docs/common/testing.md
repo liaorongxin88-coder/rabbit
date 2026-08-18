@@ -342,6 +342,32 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
 - 建舍/建笼表单原本一个 key 都没有，「确定」「创建」这类文案还重名；
   已补 `house-create-*` 与 `cage-bulk-*`、`cage-create-entry`。
 
+## 身份与设置真机脚本
+
+`app/scripts/android_identity_e2e.sh`，夹具 `identity_settings_fixture.sql`，
+产物在 `app/build/android-e2e/identity-<run_id>`。12 张截图 + `actual=expected` 才算过。
+
+覆盖：账号设置（兔号展示/复制、改用户名）、默认与兔舍两级生产设置、数据面板、
+应用设置（主题、默认启动页、清理本地设置）、改密码后用新密码重新登录。
+数据库断言之外还额外打了两次登录接口：**旧密码必须被拒、新密码必须放行**——
+库里 hash 变了不等于新密码真能用。
+
+三个坑，都是真金白银试出来的：
+
+- **短信验证码登录测不了**，别再试。dev 后端 `app.sms.enabled=false`，发码直接 503；
+  验证码在 valkey 里只存哈希，明文只走真实短信通道。运营商一键登录同理（要真 SIM）。
+  这两条永久留人工。
+- **改存储骗不了运行中的 app**。`SessionStore` 有内存缓存 `_cachedSession`，
+  把安全存储里的 token 改坏，运行中的会话照样拿旧 token 请求成功。
+- **`app.main()` 在 integration_test 里是空操作**，要模拟重启得
+  `pumpWidget(ProviderScope(child: RabbitManagerApp()))`，这样才拿到新的 SessionStore。
+  但即便如此它也连着旧的全局 navigator key 和旧路由栈，**不能用来验证“失效令牌回登录页”**——
+  我被它骗过一次，一度以为是产品 bug。那条逻辑由 `test/session_expiry_test.dart` 确定性地钉住
+  （冷启动带失效令牌、会话中途失效，两种都必须落回登录页）。
+
+还有一个反面教材：断言 `find.text('数据面板')` 是**假通过**，底部导航上就写着这四个字，
+重启没生效也照样命中。挑断言对象时要挑那一页独有的东西。
+
 ## 笼位编号约定
 
 笼位编号统一是「排-位-层」，例如 `2-3-1`。夹具、真机脚本、浏览器脚本里的笼位
