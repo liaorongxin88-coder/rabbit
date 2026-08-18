@@ -12,6 +12,7 @@ import com.rabbit.app.modules.auth.service.PhoneIdentityService;
 import com.rabbit.app.modules.auth.support.PhoneNumbers;
 import com.rabbit.app.modules.auth.support.UserCodes;
 import com.rabbit.app.modules.cage.entity.Cage;
+import com.rabbit.app.modules.cage.support.CageNumbers;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.house.dto.HouseMemberItem;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
@@ -339,7 +340,7 @@ public class AdminFarmService {
                 for (int layer = 1; layer <= layers; layer++) {
                     Cage cage = new Cage();
                     cage.setHouseId(houseId);
-                    cage.setCageNumber(row + "-" + column + "-" + layer);
+                    cage.setCageNumber(CageNumbers.canonical(row, column, layer));
                     cage.setRowCode("R" + row);
                     cage.setPositionIndex(column);
                     cage.setLayerIndex(layer);

@@ -115,10 +115,11 @@ export function listCages(houseId: number) {
   return workspaceGetJson<Cage[]>('/api/cages', { houseId })
 }
 
+/** cageNumber 留空时由后端按「排-位-层」生成，与建兔舍自动铺的笼位同一套规则。 */
 export function createCage(
   houseId: number,
   data: {
-    cageNumber: string
+    cageNumber?: string
     rowCode?: string
     layerIndex?: number
     positionIndex?: number

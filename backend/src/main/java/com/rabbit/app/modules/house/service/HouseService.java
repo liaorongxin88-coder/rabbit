@@ -4,6 +4,7 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.cage.entity.Cage;
+import com.rabbit.app.modules.cage.support.CageNumbers;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.dto.HousePermissionInfo;
@@ -147,7 +148,7 @@ public class HouseService {
                     for (int layer = 1; layer <= layers; layer++) {
                         Cage cage = new Cage();
                         cage.setHouseId(house.getId());
-                        cage.setCageNumber(row + "-" + column + "-" + layer);
+                        cage.setCageNumber(CageNumbers.canonical(row, column, layer));
                         cage.setRowCode("R" + row);
                         cage.setPositionIndex(column);
                         cage.setLayerIndex(layer);

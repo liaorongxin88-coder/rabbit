@@ -1,10 +1,9 @@
 package com.rabbit.app.modules.cage.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public class CreateCageRequest {
-    @NotBlank(message = "笼位编号不能为空")
+    /** 可以不传：坐标填全时由后端按 排-位-层 生成，见 CageNumbers。 */
     @Size(max = 50, message = "笼位编号过长")
     private String cageNumber;
 

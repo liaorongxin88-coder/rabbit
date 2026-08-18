@@ -4,6 +4,7 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.cage.dto.CageCountRow;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
+import com.rabbit.app.modules.cage.support.CageNumbers;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import java.util.HashMap;
@@ -31,10 +32,10 @@ public class CageAdminService {
         houseService.assertHousePermission(userId, houseId, "control");
         Cage c = new Cage();
         c.setHouseId(houseId);
-        c.setCageNumber(cageNumber);
         c.setRowCode(normalizeRowCode(rowCode));
         c.setLayerIndex(positiveOrNull(layerIndex));
         c.setPositionIndex(positiveOrNull(positionIndex));
+        c.setCageNumber(resolveCageNumber(cageNumber, c));
         c.setStatus("0");
         c.setRabbitCount(0);
         c.setIsFed(Boolean.FALSE);
@@ -75,6 +76,24 @@ public class CageAdminService {
             throw new BizException(400, "笼位编号已存在");
         }
         return cageMapper.selectById(houseId, id);
+    }
+
+    /**
+     * 客户端不传编号时按 排-位-层 生成。
+     *
+     * <p>留了「客户端仍可自带编号」这条路：兔舍角落里加的零散笼位没有规整坐标，
+     * 让人手写一个名字比逼他编一套坐标更实在。但只要坐标齐全又没自带编号，
+     * 就一律用系统这套，免得各端再各拼各的。
+     */
+    private String resolveCageNumber(String cageNumber, Cage cage) {
+        if (cageNumber != null && !cageNumber.trim().isEmpty()) {
+            return cageNumber.trim();
+        }
+        String derived = CageNumbers.canonical(cage.getRowCode(), cage.getPositionIndex(), cage.getLayerIndex());
+        if (derived == null) {
+            throw new BizException(400, "笼位编号不能为空：要么直接填编号，要么把排号、位号、层号填全由系统生成");
+        }
+        return derived;
     }
 
     private String normalizeRowCode(String rowCode) {

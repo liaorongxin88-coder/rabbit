@@ -14,7 +14,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart'
 
 /// 批量建笼生成的编号会被贴到笼子上，人拿着它对实物，所以它必须和地图对得上。
 void main() {
-  testWidgets('批量建笼编号是「排(层)位」：层号 1 在最下面，尾数是位号', (tester) async {
+  testWidgets('批量建笼编号统一成「排-位-层」，跟系统自动铺的一致', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -34,17 +34,22 @@ void main() {
 
     final preview = _previewText(tester);
 
-    // 层号 1 是最下面那层：现场从地面往上数。
-    expect(preview, contains('R2(下)1'));
-    expect(preview, contains('R2(上)1'));
+    // 编号统一成「排-位-层」，跟建兔舍自动铺的笼位一致。
+    // 排号输的是 R2，编号里只留数字，不然会变成 R2-1-1、跟 2-1-1 又是两套。
+    expect(preview, contains('2-1-1'));
+    expect(preview, contains('2-1-2'));
 
-    // 尾数是位号，不是流水号。写成流水号的话，两层时第 2 位会拿到 3、4——
+    // 中间那位是位号，不是流水号。写成流水号的话，两层时第 2 位会拿到 3、4——
     // 地图上那个格子写着「2」，笼上的签写着「3」，对实物时必错。
-    expect(preview, contains('R2(下)2'));
-    expect(preview, contains('R2(上)2'));
-    expect(preview, contains('R2(下)3'));
-    expect(preview, isNot(contains('R2(下)4')));
-    expect(preview, isNot(contains('(上)6')));
+    expect(preview, contains('2-2-1'));
+    expect(preview, contains('2-2-2'));
+    expect(preview, contains('2-3-1'));
+    expect(preview, isNot(contains('2-4-1')));
+    expect(preview, isNot(contains('2-6-')));
+
+    // 旧的「排(层)位」写法不能再出现，否则同一个兔舍里会同时存两套编号。
+    expect(preview, isNot(contains('(下)')));
+    expect(preview, isNot(contains('(上)')));
   });
 }
 

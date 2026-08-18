@@ -46,7 +46,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
@@ -617,7 +617,8 @@ function CageDialog({
     if (!houseId) return
     setSaving(true)
     const data = {
-      cageNumber: number.trim(),
+      // 留空就不传，由后端按「排-位-层」生成，跟建兔舍自动铺的笼位一致。
+      cageNumber: number.trim() || undefined,
       rowCode: rowCode.trim() || undefined,
       positionIndex: position ? Number(position) : undefined,
       layerIndex: layer ? Number(layer) : undefined,
@@ -626,7 +627,11 @@ function CageDialog({
     }
     try {
       if (state.cage) {
-        await updateCage(houseId, state.cage.id, data)
+        // 编辑时留空意味着「不改编号」，不是「把编号抹掉」。
+        await updateCage(houseId, state.cage.id, {
+          ...data,
+          cageNumber: data.cageNumber ?? state.cage.cageNumber,
+        })
         toast.success('笼位已更新')
       } else {
         await createCage(houseId, data)
@@ -652,7 +657,16 @@ function CageDialog({
           <FieldGroup className="overflow-y-auto pr-1">
             <Field>
               <FieldLabel htmlFor="cage-number">笼位编号</FieldLabel>
-              <Input id="cage-number" value={number} required maxLength={50} onChange={(event) => setNumber(event.target.value)} />
+              <Input
+                id="cage-number"
+                value={number}
+                maxLength={50}
+                placeholder="留空按「排-位-层」自动生成，如 2-3-1"
+                onChange={(event) => setNumber(event.target.value)}
+              />
+              <FieldDescription>
+                填全下面的排号、位号、层号就不用自己编号；只有角落里那种没有规整坐标的笼位才需要手填。
+              </FieldDescription>
             </Field>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field>

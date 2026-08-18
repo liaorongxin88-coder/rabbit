@@ -1148,29 +1148,23 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
     final row = _rowController.text.trim();
     final layers = int.parse(_layersController.text.trim());
     final positions = int.parse(_positionsController.text.trim());
-    final labels = _buildCageNumbers(
-      row: row,
-      layers: layers,
-      positions: positions,
-    );
     final rowCode = row.toUpperCase().startsWith('R') ? row : 'R$row';
 
     setState(() => _saving = true);
     var created = 0;
     try {
       final repository = ref.read(rabbitRepositoryProvider);
-      var index = 0;
       for (var position = 1; position <= positions; position++) {
         for (var layer = 1; layer <= layers; layer++) {
+          // 只报坐标，编号交给后端生成：建兔舍铺的笼位走的是同一套规则，
+          // 两边各拼各的，同一个兔舍里就会长出两种编号。
           await repository.createCage(
             houseId: widget.houseId,
-            cageNumber: labels[index],
             rowCode: rowCode,
             layerIndex: layer,
             positionIndex: position,
             remark: '客户端批量新增',
           );
-          index++;
           created++;
         }
       }
@@ -1208,35 +1202,36 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
     }
   }
 
-  /// 编号形如 `R1(下)2`：排号 + 层 + **位号**。
+  /// 预览编号形如 `2-3-1`，即 **排-位-层**，跟后端 CageNumbers 是同一套规则。
   ///
-  /// 尾数必须是位号，不能是流水号。之前这里累加一个 serial，
-  /// 两层时第 2 位拿到的是 3 和 4——地图上那个格子写着「2」，
-  /// 笼上的签却写着「3」，人对照实物时必错。
+  /// 这里只是让人按确定之前看一眼要建出什么，真正落库的编号由后端生成。
+  /// 万一两边算得不一样，预览会跟建出来的对不上——那是看得见的错，
+  /// 好过客户端自说自话地把另一套编号写进库里。
   List<String> _buildCageNumbers({
     required String row,
     required int layers,
     required int positions,
   }) {
+    final rowLabel = _rowLabel(row);
     final labels = <String>[];
     for (var position = 1; position <= positions; position++) {
       for (var layer = 1; layer <= layers; layer++) {
-        labels.add('$row(${_layerLabel(layer, layers)})$position');
+        labels.add('$rowLabel-$position-$layer');
       }
     }
     return labels;
   }
 
-  /// 层号 1 是**最下面**那一层：现场从地面往上数，编号也跟着这么读。
-  String _layerLabel(int layer, int totalLayers) {
-    if (totalLayers == 2) {
-      return layer == 1 ? '下' : '上';
+  /// 排号存成 `R2`，编号里只留数字部分；不是 R+数字就原样保留。
+  String _rowLabel(String row) {
+    final trimmed = row.trim();
+    if (trimmed.length > 1 && (trimmed[0] == 'R' || trimmed[0] == 'r')) {
+      final rest = trimmed.substring(1);
+      if (RegExp(r'^\d+$').hasMatch(rest)) {
+        return int.parse(rest).toString();
+      }
     }
-    if (totalLayers == 3) {
-      return const ['下', '中', '上'][layer - 1];
-    }
-    // 单层没有上下之分，层数多了「上中下」也不够用，一律写层号。
-    return '第$layer层';
+    return trimmed;
   }
 }
 

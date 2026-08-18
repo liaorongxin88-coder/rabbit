@@ -131,9 +131,12 @@ class RabbitRepository {
     );
   }
 
+  /// [cageNumber] 留空时由后端按「排-位-层」生成（见后端 CageNumbers）。
+  /// 客户端别自己拼编号：以前 App 拼 `2(下)1`、后端建舍拼 `2-1-1`，
+  /// 同一个兔舍里两套写法，工人拿笼上的签对不上系统。
   Future<Cage> createCage({
     required int houseId,
-    required String cageNumber,
+    String? cageNumber,
     String? rowCode,
     int? layerIndex,
     int? positionIndex,
@@ -143,7 +146,8 @@ class RabbitRepository {
       '/api/cages',
       houseId: houseId,
       body: {
-        'cageNumber': cageNumber,
+        if (cageNumber != null && cageNumber.trim().isNotEmpty)
+          'cageNumber': cageNumber.trim(),
         if (rowCode != null && rowCode.trim().isNotEmpty)
           'rowCode': rowCode.trim(),
         if (layerIndex != null) 'layerIndex': layerIndex,

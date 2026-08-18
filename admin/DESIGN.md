@@ -134,6 +134,9 @@ Rules:
 - **层是切换出来的空间，不是叠在一起的格子。** 现场的多层笼是错位阶梯，人站在某一层
   前面时眼里只有这一层的那几排；剖面图看着信息全，找笼时对不上眼前的架子。
   地图一次只画一层；单层兔舍不显示层签（只有一个选项的切换器是纯噪音）。
+- Cage numbers are always `row-position-layer` (e.g. `2-3-1`), matching the order a worker walks
+  the barn. Leave the number field blank and the server derives it; only odd corner cages without
+  clean coordinates get a hand-written number.
 - **层号 1 是最下面那一层**（现场从地面往上数），层签按 1、2、3 顺着排。
 - 一排就是一条线：位从左往右按位号递增，缺笼的位置留空槽。窄屏下整排横向滚动，
   不换行——换行会让「第几位」错位。
