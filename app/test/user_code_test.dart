@@ -4,7 +4,7 @@ import 'package:rabbit_flutter/src/domain/models/user_code.dart';
 
 void main() {
   test('accepts a code however the farmer copies it down', () {
-    // 兔号是靠嘴说、靠手抄传出去的，所以这几种写法必须都认。
+    // 账号是靠嘴说、靠手抄传出去的，所以这几种写法必须都认。
     const written = <String>[
       'R3F9A0C21B7',
       'r3f9a0c21b7',
@@ -41,7 +41,7 @@ void main() {
     expect(UserCode.looksLikeMobile('13800138000'), isTrue);
     expect(UserCode.looksLikeMobile('138 0013 8000'), isTrue);
     expect(UserCode.looksLikeMobile('12345'), isFalse);
-    // 手机号是纯数字，不该被当成兔号
+    // 手机号是纯数字，不该被当成账号
     expect(UserCode.looksLikeUserCode('13800138000'), isFalse);
   });
 }

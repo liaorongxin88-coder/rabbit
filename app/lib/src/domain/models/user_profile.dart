@@ -15,7 +15,7 @@ class UserProfile {
   final int userId;
   final String userName;
 
-  /// 兔号：自己看得见、可以报给别人拉自己进兔舍的唯一标识。
+  /// 账号：自己看得见、可以报给别人拉自己进兔舍的唯一标识。
   /// 老后端不返回这个字段时为空串，界面需要自己兼容。
   final String userCode;
   final bool openidBound;

@@ -71,7 +71,7 @@ void main() {
 
     final body = Map<String, dynamic>.from(adapter.request.data as Map);
     expect(body['identifier'], 'R3F9A0C21B7');
-    // 按兔号邀请的整个意义就是不碰手机号，请求体里也不该冒出一个来。
+    // 按账号邀请的整个意义就是不碰手机号，请求体里也不该冒出一个来。
     expect(body.containsKey('phone'), isFalse);
     expect(body.keys, hasLength(3));
   });

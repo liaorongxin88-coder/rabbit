@@ -8,11 +8,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 按兔号邀请成员。
+ * 按账号邀请成员。
  *
- * <p>兔号存在的理由是：邀请人不该必须知道对方的手机号，而对方能报出来的、
+ * <p>账号存在的理由是：邀请人不该必须知道对方的手机号，而对方能报出来的、
  * 又不该是登录凭证的东西，只能是一个专门的公开标识。所以这里除了验通路，
- * 还盯着两件容易做错的事——兔号不能泄露手机号，兔号邀请不能把已有的高权限降下去。
+ * 还盯着两件容易做错的事——账号不能泄露手机号，账号邀请不能把已有的高权限降下去。
  */
 class HouseInvitationByUserCodeIT extends E2eTestSupport {
 
@@ -29,16 +29,16 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
 
         Assertions.assertTrue(
                 firstCode.matches("^R[0-9A-F]{10}$"),
-                "兔号应形如 R3F9A0C21B7，实际是 " + firstCode
+                "账号应形如 R3F9A0C21B7，实际是 " + firstCode
         );
-        Assertions.assertNotEquals(firstCode, secondCode, "两个账号的兔号不能撞");
+        Assertions.assertNotEquals(firstCode, secondCode, "两个账号的账号不能撞");
     }
 
     @Test
     void invitingByUserCodeLetsTheMateInRightAway() {
         UserSession owner = register("code_invite_owner");
         UserSession mate = register("code_invite_mate");
-        long houseId = createHouse(owner, "兔号邀请兔场", 1, 1, 1);
+        long houseId = createHouse(owner, "账号邀请兔场", 1, 1, 1);
         String mateCode = userCodeOf(mate);
 
         // 入伙前：外人一点权限都没有
@@ -46,7 +46,7 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
 
         JsonNode response = inviteByIdentifier(owner, houseId, mateCode, "STAFF", requestId("code_invite"));
 
-        // 手机号邀请只能挂起等对方注册；兔号的主人已经在平台上，没什么好等的
+        // 手机号邀请只能挂起等对方注册；账号的主人已经在平台上，没什么好等的
         Assertions.assertEquals("JOINED", response.get("status").asText());
         Assertions.assertEquals("STAFF", response.get("role").asText());
         Assertions.assertFalse(response.has("phone"), "邀请回执不该回显手机号");
@@ -63,10 +63,10 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
     void userCodeIsForgivingAboutHowPeopleTypeIt() {
         UserSession owner = register("code_typo_owner");
         UserSession mate = register("code_typo_mate");
-        long houseId = createHouse(owner, "兔号手抄兔场", 1, 1, 1);
+        long houseId = createHouse(owner, "账号手抄兔场", 1, 1, 1);
         String mateCode = userCodeOf(mate);
 
-        // 口头传达的兔号常常带空格、连字符、大小写混乱，
+        // 口头传达的账号常常带空格、连字符、大小写混乱，
         // 而且十六进制里没有 O/I/L，所以把它们当成 0/1/1 才是对的。
         String sloppy = ("  " + mateCode.toLowerCase().replace('0', 'o').replace('1', 'l') + "  ")
                 .replaceFirst("(?<=^\\s\\sR|^\\s\\sr)", "-");
@@ -84,7 +84,7 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
     void replayingTheSameInvitationDoesNotPileUpMemberships() {
         UserSession owner = register("code_replay_owner");
         UserSession mate = register("code_replay_mate");
-        long houseId = createHouse(owner, "兔号重放兔场", 1, 1, 1);
+        long houseId = createHouse(owner, "账号重放兔场", 1, 1, 1);
         String mateCode = userCodeOf(mate);
         String sharedRequestId = requestId("code_replay");
 
@@ -108,7 +108,7 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
     void invitingAnExistingMemberNeverDemotesThem() {
         UserSession owner = register("code_demote_owner");
         UserSession mate = register("code_demote_mate");
-        long houseId = createHouse(owner, "兔号降权兔场", 1, 1, 1);
+        long houseId = createHouse(owner, "账号降权兔场", 1, 1, 1);
         String mateCode = userCodeOf(mate);
 
         inviteByIdentifier(owner, houseId, mateCode, "MANAGER", requestId("code_manager"));
@@ -129,13 +129,13 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
     @Test
     void badUserCodesFailWithSomethingActionable() {
         UserSession owner = register("code_bad_owner");
-        long houseId = createHouse(owner, "兔号报错兔场", 1, 1, 1);
+        long houseId = createHouse(owner, "账号报错兔场", 1, 1, 1);
 
         api.expectError("/api/house-invitations", HttpMethod.POST, owner.token, houseId, obj(
                 "identifier", "R00000000AB",
                 "role", "STAFF",
                 "requestId", requestId("code_missing")
-        ), 404, "没找到兔号");
+        ), 404, "没找到账号");
 
         api.expectError("/api/house-invitations", HttpMethod.POST, owner.token, houseId, obj(
                 "identifier", userCodeOf(owner),
@@ -147,9 +147,9 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
                 "identifier", "  ",
                 "role", "STAFF",
                 "requestId", requestId("code_blank")
-        ), 400, "请填写手机号或兔号");
+        ), 400, "请填写手机号或账号");
 
-        // 既不像手机号也不像兔号：走手机号那条路给出手机号的报错，别憋着
+        // 既不像手机号也不像账号：走手机号那条路给出手机号的报错，别憋着
         api.expectError("/api/house-invitations", HttpMethod.POST, owner.token, houseId, obj(
                 "identifier", "隔壁老王",
                 "role", "STAFF",
@@ -190,7 +190,7 @@ class HouseInvitationByUserCodeIT extends E2eTestSupport {
 
     private String userCodeOf(UserSession user) {
         JsonNode profile = api.getOk("/api/auth/me", user.token, null);
-        Assertions.assertTrue(profile.hasNonNull("userCode"), "账号资料里必须能看到自己的兔号");
+        Assertions.assertTrue(profile.hasNonNull("userCode"), "账号资料里必须能看到自己的账号");
         return profile.get("userCode").asText();
     }
 

@@ -6,9 +6,9 @@
 // 全部由用例在界面上一步步做出来。
 //
 // 覆盖：建兔舍 → 批量建笼 → 录入兔只 → 兔只总表行内编辑/换笼/单兔出库入口
-//      → 按兔号邀请同事 → 同事登录确认权限真的生效。
+//      → 按账号邀请同事 → 同事登录确认权限真的生效。
 //
-// 「按兔号邀请」是这条链路的重点：场主拿不到对方手机号也得能把人拉进来，
+// 「按账号邀请」是这条链路的重点：场主拿不到对方手机号也得能把人拉进来，
 // 而且必须验到最后一步——不是「邀请发出了」，是对方登录后真的看得见这个兔舍。
 
 import 'dart:convert';
@@ -168,7 +168,7 @@ void main() {
       await _goBack(tester);
       await _waitFor(tester, find.byKey(const ValueKey('house-rabbit-list')));
 
-      // ── 五、按兔号邀请同事
+      // ── 五、按账号邀请同事
       await _openMembers(tester);
       await _enterField(
         tester,
@@ -185,7 +185,7 @@ void main() {
       await tester.tap(find.text('游客（只读）').last);
       await tester.pumpAndSettle();
       await _tapAndSettle(tester, const ValueKey('submit-house-invitation'));
-      // 兔号的主人已经在平台上，所以是「已加入」，不是「邀请已发出」。
+      // 账号的主人已经在平台上，所以是「已加入」，不是「邀请已发出」。
       await _waitFor(tester, find.textContaining('已加入本兔舍，角色：游客'));
       await _waitFor(tester, find.textContaining(_mateUser));
       await _takeScreenshot(binding, tester, '10-member-invited');

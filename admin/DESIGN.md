@@ -343,6 +343,9 @@ Rules:
 - Never leak English domain nouns into the UI. The production container is 批次, never `Batch`;
   `Batch` stays in code, types and API payloads only. Same rule for any other backend concept:
   an operator reads Chinese, a developer reads the identifier.
+- The invite identifier (`R3F9A0C21B7` shape) is 账号 in the UI, never 兔号 — 兔号 already means
+  a rabbit's number in batch and search copy, and one word for two things gets the wrong number typed.
+  The code still calls it `userCode`.
 - A control should say exactly what happens: `新增兔场`, `添加成员`, `查询`, `编辑`, `停用兔场`, `启用兔场`.
 - Toast vocabulary should match the action vocabulary.
 - Empty copy should explain what makes data appear and provide an action only when the operator can perform it here.

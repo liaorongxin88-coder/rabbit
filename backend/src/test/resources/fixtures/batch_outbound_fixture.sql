@@ -9,7 +9,7 @@ SET @prefix = CONCAT('batch-outbound-fixture:', @run_id);
 
 START TRANSACTION;
 
--- user_code 是 V30 之后的 NOT NULL 列，四个账号各给各的兔号（唯一键会挡重复）。
+-- user_code 是 V30 之后的 NOT NULL 列，四个账号各给各的账号（唯一键会挡重复）。
 INSERT INTO sys_user (user_name, user_code, password, status)
 VALUES
     (@actor, CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'outbound-control'), 256), 1, 10))), @password_hash, 'ENABLED'),

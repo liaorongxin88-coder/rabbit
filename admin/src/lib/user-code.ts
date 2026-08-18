@@ -1,5 +1,5 @@
 /**
- * 兔号：用户在「账号安全」里能看到、可以报给别人的唯一标识。
+ * 账号：用户在「账号安全」里能看到、可以报给别人的唯一标识。
  *
  * 形如 `R3F9A0C21B7`——R 前缀加 10 位十六进制。十六进制字母表里没有 O/I/L，
  * 所以口头传达时的「零还是欧」「一还是艾」可以在归一化阶段直接消掉。
@@ -21,7 +21,7 @@ export function normalizeUserCode(raw: string): string {
     .replaceAll('L', '1')
 }
 
-/** 归一化之后是不是一个兔号。手机号是纯数字，不会命中。 */
+/** 归一化之后是不是一个账号。手机号是纯数字，不会命中。 */
 export function looksLikeUserCode(raw: string): boolean {
   return USER_CODE_PATTERN.test(normalizeUserCode(raw))
 }

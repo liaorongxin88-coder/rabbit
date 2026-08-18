@@ -111,7 +111,7 @@ export function WorkspaceMembersPage() {
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>兔场成员</CardTitle>
-              <CardDescription>用手机号或对方的兔号邀请用户，并为其设置兔场角色。</CardDescription>
+              <CardDescription>用手机号或对方的账号邀请用户，并为其设置兔场角色。</CardDescription>
             </div>
             <InviteMemberDialog
               open={inviteOpen}
@@ -211,7 +211,7 @@ export function WorkspaceMembersPage() {
 
 /**
  * 两条通道结局不同，别都糊成一句「邀请已提交」：
- * 兔号邀请的人当场就进来了，手机号邀请还得等对方登录。
+ * 账号邀请的人当场就进来了，手机号邀请还得等对方登录。
  */
 function inviteOutcomeMessage(result: HouseInvitationResult, requested: HouseRole) {
   if (result.status !== 'JOINED') {
@@ -253,7 +253,7 @@ function InviteMemberDialog({
     event.preventDefault()
     const { identifier: normalized, kind } = normalizeInviteIdentifier(identifier)
     if (kind === 'invalid') {
-      toast.error('请输入 11 位手机号，或对方的兔号（形如 R3F9A0C21B7）')
+      toast.error('请输入 11 位手机号，或对方的账号（形如 R3F9A0C21B7）')
       return
     }
     const invitationRequest = getOrCreateInvitationRequest(
@@ -291,22 +291,22 @@ function InviteMemberDialog({
         <DialogHeader>
           <DialogTitle>邀请兔场成员</DialogTitle>
           <DialogDescription>
-            填兔号的话对方当场加入；填手机号的话，对方下次用该号码登录时加入。
+            填账号的话对方当场加入；填手机号的话，对方下次用该号码登录时加入。
           </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="invite-identifier">手机号或兔号</FieldLabel>
+              <FieldLabel htmlFor="invite-identifier">手机号或账号</FieldLabel>
               <Input
                 id="invite-identifier"
                 value={identifier}
-                placeholder="11 位手机号，或形如 R3F9A0C21B7 的兔号"
+                placeholder="11 位手机号，或形如 R3F9A0C21B7 的账号"
                 required
                 onChange={(event) => setIdentifier(event.target.value)}
               />
               <FieldDescription>
-                兔号在对方的「账号安全」页面里，报兔号就不用交换手机号。完整号码仅用于发起邀请，成员列表始终脱敏展示。
+                对方在自己的「账号安全」页里能看到这串号，报给你就不用交换手机号。完整号码仅用于发起邀请，成员列表始终脱敏展示。
               </FieldDescription>
             </Field>
             <RoleField

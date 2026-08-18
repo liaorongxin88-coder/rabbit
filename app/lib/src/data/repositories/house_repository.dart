@@ -91,7 +91,7 @@ class HouseRepository {
     );
   }
 
-  /// [identifier] 可以是手机号，也可以是对方的兔号，服务端自己认。
+  /// [identifier] 可以是手机号，也可以是对方的账号，服务端自己认。
   /// phone 字段同时也发：新客户端碰上老后端时，手机号那条路还能走通。
   Future<HouseInvitationResult> inviteMember({
     required int houseId,

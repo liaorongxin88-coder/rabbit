@@ -53,22 +53,22 @@ void main() {
       await _login(tester, _ownerUser, _password);
       await _takeScreenshot(tester, binding, '01-logged-in');
 
-      // ---- 账号设置：兔号看得见、用户名能改 ----
+      // ---- 账号设置：账号看得见、用户名能改 ----
       await _openProfile(tester);
       await _tapKey(tester, 'profile-entry-account');
       await _waitFor(tester, find.text('账号设置'));
       await _waitFor(tester, find.byKey(const ValueKey('account-user-code')));
 
-      // 兔号是邀请别人用的凭证，必须原样显示，不能截断或加空格
+      // 账号是邀请别人用的凭证，必须原样显示，不能截断或加空格
       expect(
         find.text(_ownerCode),
         findsOneWidget,
-        reason: '账号设置页要把兔号原样显示出来，对方才能照着输',
+        reason: '账号设置页要把账号原样显示出来，对方才能照着输',
       );
       await _takeScreenshot(tester, binding, '02-account-settings');
 
       await _tapKey(tester, 'account-user-code-copy');
-      await _expectSnackBar(tester, '兔号已复制');
+      await _expectSnackBar(tester, '账号已复制');
 
       await _enterByKey(tester, 'account-user-name-field', _renamedUser);
       await _tapKey(tester, 'account-user-name-save');

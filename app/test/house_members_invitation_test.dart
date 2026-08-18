@@ -45,7 +45,7 @@ void main() {
           const HouseInvitationResult(status: 'JOINED', role: 'STAFF');
     await _pumpMembersScreen(tester, repository, const <HouseMember>[]);
 
-    // 场主拿不到对方手机号也得能拉人：对方报一个自己看得见的兔号就够了。
+    // 场主拿不到对方手机号也得能拉人：对方报一个自己看得见的账号就够了。
     await tester.enterText(
       find.byKey(const ValueKey('house-invitation-identifier-field')),
       'R3F9A0C21B7',

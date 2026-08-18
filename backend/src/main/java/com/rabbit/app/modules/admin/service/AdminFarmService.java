@@ -285,7 +285,7 @@ public class AdminFarmService {
         created.setPhoneHash(phoneHash);
         created.setPhoneMasked(phoneIdentityService.mask(phone));
         created.setPhoneBoundTime(new Date());
-        // 平台后台代建的账号也得有兔号，否则这批人没法被别人邀请。
+        // 平台后台代建的账号也得有账号，否则这批人没法被别人邀请。
         created.setUserCode(nextUserCode());
         try {
             sysUserMapper.insert(created);
@@ -306,7 +306,7 @@ public class AdminFarmService {
                 return candidate;
             }
         }
-        throw new BizException(500, "兔号生成失败，请重试");
+        throw new BizException(500, "账号生成失败，请重试");
     }
 
     private AdminFarmItem verifyIdempotentCreate(

@@ -57,7 +57,7 @@ test('switching from a phone to a user code rotates the requestId', () => {
     { identifier: '13800138000', phone: '13800138000', role: 'STAFF' },
     nextRequestId,
   )
-  // 换成兔号就是在邀请「另一种指向」，哪怕最后可能是同一个人，
+  // 换成账号就是在邀请「另一种指向」，哪怕最后可能是同一个人，
   // 也必须换 requestId，否则后端会按幂等判成同一次邀请。
   const byCode = getOrCreateInvitationRequest(
     byPhone,

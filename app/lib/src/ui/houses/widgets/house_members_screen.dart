@@ -92,7 +92,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
               Text('邀请成员', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Text(
-                '填对方的手机号，或对方在「我的 → 账号设置」里看到的兔号。',
+                '填对方的手机号，或对方在「我的 → 账号设置」里看到的那串号。',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
@@ -101,11 +101,11 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
                 controller: _identifierController,
                 keyboardType: TextInputType.text,
                 textCapitalization: TextCapitalization.characters,
-                // 这里不能再限制成纯数字：兔号是字母数字混排的。
+                // 这里不能再限制成纯数字：账号是字母数字混排的。
                 inputFormatters: [LengthLimitingTextInputFormatter(24)],
                 decoration: const InputDecoration(
-                  labelText: '手机号或兔号',
-                  hintText: '11位手机号，或形如 R3F9A0C21B7 的兔号',
+                  labelText: '手机号或账号',
+                  hintText: '11位手机号，或形如 R3F9A0C21B7 的账号',
                   prefixIcon: Icon(Icons.person_search_outlined),
                 ),
                 onChanged: (_) {
@@ -196,7 +196,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
   Future<void> _inviteMember() async {
     final identifier = _identifierController.text.trim();
     if (!UserCode.isInvitable(identifier)) {
-      setState(() => _inviteError = '请填 11 位手机号，或对方的兔号（形如 R3F9A0C21B7）');
+      setState(() => _inviteError = '请填 11 位手机号，或对方的账号（形如 R3F9A0C21B7）');
       return;
     }
     setState(() {
@@ -247,7 +247,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
   }
 
   /// 两条通道结局不同，别都糊成一句「邀请已提交」：
-  /// 兔号邀请的人当场就进来了，手机号邀请还得等对方登录。
+  /// 账号邀请的人当场就进来了，手机号邀请还得等对方登录。
   String _inviteOutcomeMessage(HouseInvitationResult result) {
     if (!result.joined) {
       return '邀请已发出，对方登录后自动加入';

@@ -289,7 +289,7 @@ public class AuthService {
     }
 
     /**
-     * 取一个还没被占用的兔号。唯一键最终兜底，这里先查重是为了让极小概率的
+     * 取一个还没被占用的账号。唯一键最终兜底，这里先查重是为了让极小概率的
      * 碰撞在这一步就被换掉，而不是变成注册接口上一个莫名其妙的 500。
      */
     private String nextUserCode() {
@@ -299,7 +299,7 @@ public class AuthService {
                 return candidate;
             }
         }
-        throw new BizException(500, "兔号生成失败，请重试");
+        throw new BizException(500, "账号生成失败，请重试");
     }
 
     private String buildPhoneUserName() {

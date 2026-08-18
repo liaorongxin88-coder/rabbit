@@ -5,16 +5,16 @@
 -- 全部由用例在界面上一步步做出来，那才是客户拿到 App 的第一天真正走的路。
 -- fixture 只负责准备两个账号：
 --   founder  场主，名下一个兔舍都没有（首屏应该是空态，而不是兔舍列表）
---   mate     被邀请的人，同样没有兔舍；它的兔号是这条链路的关键道具
+--   mate     被邀请的人，同样没有兔舍；它的账号是这条链路的关键道具
 --
--- mate 的兔号必须能被 shell 取到再传给用例，所以这里显式指定而不是交给后端生成。
+-- mate 的账号必须能被 shell 取到再传给用例，所以这里显式指定而不是交给后端生成。
 SET NAMES utf8mb4;
 SET @run_id = DATE_FORMAT(NOW(6), '%Y%m%d%H%i%s%f');
 SET @founder = CONCAT('farm_setup_', @run_id, '_founder');
 SET @mate = CONCAT('farm_setup_', @run_id, '_mate');
 -- 与其它 fixture 相同的 bcrypt("123456")
 SET @password_hash = '$2a$10$OIR2d8mdeNFv4Ddm.W.S6eKSB.fx2mCJ3G35eVdxxyedn9AyGCIA6';
--- 兔号形如 R + 10 位十六进制，和后端 UserCodes 的形态一致
+-- 账号形如 R + 10 位十六进制，和后端 UserCodes 的形态一致
 SET @founder_code = CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'founder'), 256), 1, 10)));
 SET @mate_code = CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'mate'), 256), 1, 10)));
 

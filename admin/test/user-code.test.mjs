@@ -7,7 +7,7 @@ import {
 } from '../src/lib/user-code.ts'
 
 test('accepts a code however it was copied down', () => {
-  // 兔号靠嘴说、靠手抄传出去，这几种写法必须都认。
+  // 账号靠嘴说、靠手抄传出去，这几种写法必须都认。
   for (const input of [
     'R3F9A0C21B7',
     'r3f9a0c21b7',

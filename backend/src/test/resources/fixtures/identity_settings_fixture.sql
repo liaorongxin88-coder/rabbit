@@ -17,8 +17,8 @@ SET @prefix = CONCAT('identity-fixture:', @run_id);
 
 START TRANSACTION;
 
--- user_code 是 V30 之后的 NOT NULL 列：兔号由建号方负责给，fixture 也不例外。
--- 这个兔号会在「账号设置」页面上被读出来核对，所以必须是合法的 R+10 位十六进制。
+-- user_code 是 V30 之后的 NOT NULL 列：账号由建号方负责给，fixture 也不例外。
+-- 这个账号会在「账号设置」页面上被读出来核对，所以必须是合法的 R+10 位十六进制。
 INSERT INTO sys_user (user_name, user_code, password, status)
 VALUES (@actor, CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'identity'), 256), 1, 10))), @password_hash, 'ENABLED');
 SET @user_owner = (SELECT user_id FROM sys_user WHERE user_name = @actor);

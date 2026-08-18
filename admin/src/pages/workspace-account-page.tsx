@@ -188,8 +188,8 @@ export function WorkspaceAccountPage() {
               <CardContent>
                 {profile.userCode ? (
                   <Field className="mb-4">
-                    <FieldLabel htmlFor="workspace-account-user-code">我的兔号</FieldLabel>
-                    {/* 兔号存在的意义就是报给别人，所以要能一键复制，
+                    <FieldLabel htmlFor="workspace-account-user-code">我的账号</FieldLabel>
+                    {/* 账号存在的意义就是报给别人，所以要能一键复制，
                         而不是让人对着屏幕拄。用只读 Input 而非纯文本，方便全选。 */}
                     <div className="flex items-center gap-2">
                       <Input
@@ -203,7 +203,7 @@ export function WorkspaceAccountPage() {
                         variant="outline"
                         onClick={async () => {
                           await navigator.clipboard.writeText(profile.userCode ?? '')
-                          toast.success('兔号已复制')
+                          toast.success('账号已复制')
                         }}
                       >
                         <CopyIcon data-icon="inline-start" />

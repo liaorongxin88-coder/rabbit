@@ -320,7 +320,7 @@ class _AccountSettingsContentState
   }
 }
 
-/// 兔号卡片。它存在的意义就是「报给别人」，所以必须能选中、能一键复制，
+/// 账号卡片。它存在的意义就是「报给别人」，所以必须能选中、能一键复制，
 /// 而不是一行只能干看的小字。
 class _UserCodeCard extends StatelessWidget {
   const _UserCodeCard({required this.userCode});
@@ -329,7 +329,7 @@ class _UserCodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 老后端还没返回兔号时不占位，总比摆一个空卡片强。
+    // 老后端还没返回账号时不占位，总比摆一个空卡片强。
     if (userCode.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -340,7 +340,7 @@ class _UserCodeCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('我的兔号', style: Theme.of(context).textTheme.titleMedium),
+            Text('我的账号', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
               '把它报给场主，就能被拉进兔舍，不用把手机号给出去。',
@@ -373,7 +373,7 @@ class _UserCodeCard extends StatelessWidget {
                       return;
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('兔号已复制')),
+                      const SnackBar(content: Text('账号已复制')),
                     );
                   },
                   icon: const Icon(Icons.copy_outlined),

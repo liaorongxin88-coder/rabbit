@@ -9,7 +9,7 @@ public class HouseInvitationRequest {
      */
     private String phone;
 
-    /** 手机号或兔号。两种形态在服务端自动识别，客户端只需要一个输入框。 */
+    /** 手机号或账号。两种形态在服务端自动识别，客户端只需要一个输入框。 */
     private String identifier;
 
     @NotBlank(message = "角色不能为空")

@@ -54,11 +54,11 @@ public class HouseInvitationService {
 
     /**
      * 邀人进兔舍。identifier 可以是手机号，也可以是对方在「我的 → 账号设置」
-     * 里看得到的兔号。两条通道的语义天生不同，不能揉成一条：
+     * 里看得到的账号。两条通道的语义天生不同，不能揉成一条：
      *
      * <ul>
      *   <li>手机号：对方可能还没注册，只能先挂着，等他用这个号码登录时才生效；</li>
-     *   <li>兔号：兔号只属于已存在的账号，没什么好等的，当场入伙。</li>
+     *   <li>账号：账号只属于已存在的账号，没什么好等的，当场入伙。</li>
      * </ul>
      */
     @Transactional
@@ -77,7 +77,7 @@ public class HouseInvitationService {
         String role = normalizeInvitationRole(requestedRole);
         String trimmed = identifier == null ? "" : identifier.trim();
         if (trimmed.isEmpty()) {
-            throw new BizException(400, "请填写手机号或兔号");
+            throw new BizException(400, "请填写手机号或账号");
         }
         String candidateCode = UserCodes.normalize(trimmed);
         if (UserCodes.looksLikeUserCode(candidateCode)) {
@@ -95,7 +95,7 @@ public class HouseInvitationService {
     ) {
         SysUser target = sysUserMapper.selectByUserCode(userCode);
         if (target == null) {
-            throw new BizException(404, "没找到兔号 " + userCode + "，请让对方在「我的 → 账号设置」里核对");
+            throw new BizException(404, "没找到账号 " + userCode + "，请让对方在「我的 → 账号设置」里核对");
         }
         if (target.getUserId().equals(inviterUserId)) {
             throw new BizException(400, "不用邀请自己");
