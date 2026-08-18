@@ -99,7 +99,7 @@ const actionLabels: Record<BatchWorkflowAction, string> = {
   delivery: '记录分娩',
   weaning: '记录分笼',
   abortion: '记录流产',
-  departure: '母兔离场',
+  departure: '登记离场',
   complete: '完成批次',
 }
 
@@ -745,7 +745,7 @@ function BatchActionDialog({
       if (!canRabbitEdit) return
       const reason = departureReason.trim()
       if (!reason) {
-        toast.error('请填写母兔离场原因')
+        toast.error('请填写离场原因')
         return
       }
       if (!departureConfirmed) {
@@ -1211,7 +1211,7 @@ function BatchActionDialog({
               }
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认母兔离场' : '保存记录'}
+              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认离场' : '保存记录'}
             </Button>
           </DialogFooter>
         </form>

@@ -14,7 +14,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart'
 /// 记录流产。
 ///
 /// 与六个流程动作不同，流产是<b>非计划事件</b>：它不对应任何待办，不能从今日清单
-/// 进入，只能对着一头具体的母兔记录。所以它和「母兔离场」一样单列入口，
+/// 进入，只能对着一头具体的母兔记录。所以它和「登记离场」一样单列入口，
 /// 而不是塞进推进流程的表单里。
 ///
 /// 入口的显隐由服务端的阶段字典决定（见 `ReproRepository.stageActions`）：

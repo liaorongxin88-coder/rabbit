@@ -1351,7 +1351,9 @@ class _BatchMemberCard extends StatelessWidget {
               if (onDeparture != null)
                 IconButton(
                   key: ValueKey('batch-member-departure-${item.rabbitId}'),
-                  tooltip: '母兔离场',
+                  // 跟表单标题保持一致：离场表单已是全兔种通用的「登记离场」，
+                  // 入口写「母兔离场」会让人以为是另一个功能。
+                  tooltip: '登记离场',
                   onPressed: saving ? null : onDeparture,
                   icon: const Icon(Icons.exit_to_app_outlined),
                 ),
