@@ -69,7 +69,15 @@ class CageAttentionStyle {
 ///
 /// 同一个组件既用于笼位管理，也用于换笼选目标笼，靠 [selectableCage]
 /// 和 [selectedCageId] 切换语义，避免两处各画一套地图后慢慢长歪。
-class CageMapView extends StatelessWidget {
+/// 分层笼位地图。
+///
+/// **层是切换出来的空间，不是叠在一起的格子。** 现场的多层笼是错位的阶梯，
+/// 人站在某一层前面时眼里只有这一层的那几排；把三层画成剖面图看着信息全，
+/// 实际找笼时对不上眼前的架子。所以这里一次只画一层，层之间用切换器换。
+///
+/// 一排是双面笼架，位号绕着架子走，所以一排折成两行、回程那行反着排
+/// （见 [CageLayout]）。
+class CageMapView extends StatefulWidget {
   const CageMapView({
     super.key,
     required this.layout,
@@ -87,6 +95,7 @@ class CageMapView extends StatelessWidget {
   final ValueChanged<Cage> onTapCage;
 
   /// 选中态（换笼选目标笼时用），主蓝加粗边框 + 对勾。
+  /// 选中的笼在别的层时会自动切过去，否则用户会看到「已选中」却找不到那一格。
   final int? selectedCageId;
 
   /// 搜索/筛选命中判定。不命中的格子压暗但保留位置，
@@ -96,10 +105,10 @@ class CageMapView extends StatelessWidget {
   /// 该格是否可选；返回 false 时不可点。
   final bool Function(Cage cage)? selectableCage;
 
-  /// 格子右下角的极短标注，例如换笼时的「换」。
+  /// 格子右下角的极短标注，例如换笼时的「对调」。
   final String? Function(Cage cage)? cellNote;
 
-  /// 只渲染前 N 排，避免大兔舍一次铺几千个格子。
+  /// 只渲染当前层的前 N 排，避免大兔舍一次铺几千个格子。
   final int? visibleRowLimit;
   final VoidCallback? onShowMoreRows;
 
@@ -107,25 +116,81 @@ class CageMapView extends StatelessWidget {
   final Widget? Function(CageMapRow row)? rowTrailingBuilder;
 
   @override
+  State<CageMapView> createState() => _CageMapViewState();
+}
+
+class _CageMapViewState extends State<CageMapView> {
+  int? _activeLayer;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeLayer = _layerOfSelection() ?? _firstLayer();
+  }
+
+  @override
+  void didUpdateWidget(CageMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 换笼时可以靠碰标签或输入编号选中一个笼，它可能不在当前层。
+    // 不跟着切层的话，用户看到的是「已选中 B7」加一屏没有高亮的格子。
+    if (widget.selectedCageId != oldWidget.selectedCageId) {
+      final layer = _layerOfSelection();
+      if (layer != null && layer != _activeLayer) {
+        _activeLayer = layer;
+      }
+    }
+    if (!widget.layout.layers.any((l) => l.layerIndex == _activeLayer)) {
+      _activeLayer = _layerOfSelection() ?? _firstLayer();
+    }
+  }
+
+  int? _firstLayer() =>
+      widget.layout.layers.isEmpty ? null : widget.layout.layers.first.layerIndex;
+
+  int? _layerOfSelection() {
+    final selected = widget.selectedCageId;
+    if (selected == null) return null;
+    for (final layer in widget.layout.layers) {
+      if (layer.cages.any((cage) => cage.id == selected)) {
+        return layer.layerIndex;
+      }
+    }
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    final limit = visibleRowLimit ?? layout.rows.length;
-    final visibleRows = layout.rows.take(limit).toList();
-    final hiddenRowCount = layout.rows.length - visibleRows.length;
+    final layers = widget.layout.layers;
+    final active = layers.where((l) => l.layerIndex == _activeLayer).firstOrNull ??
+        (layers.isEmpty ? null : layers.first);
+
+    final rows = active?.rows ?? const <CageMapRow>[];
+    final limit = widget.visibleRowLimit ?? rows.length;
+    final visibleRows = rows.take(limit).toList();
+    final hiddenRowCount = rows.length - visibleRows.length;
 
     return Column(
       key: const ValueKey('cage-map'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (layers.length > 1) ...[
+          _LayerSwitcher(
+            layers: layers,
+            activeLayer: active?.layerIndex,
+            onSelect: (index) => setState(() => _activeLayer = index),
+          ),
+          const SizedBox(height: 10),
+        ],
         for (final row in visibleRows) ...[
           _CageMapRowSection(
             row: row,
-            onTapCage: onTapCage,
-            selectedCageId: selectedCageId,
-            isMatch: isMatch,
-            selectableCage: selectableCage,
-            cellNote: cellNote,
-            trailing: rowTrailingBuilder?.call(row),
+            onTapCage: widget.onTapCage,
+            selectedCageId: widget.selectedCageId,
+            isMatch: widget.isMatch,
+            selectableCage: widget.selectableCage,
+            cellNote: widget.cellNote,
+            trailing: widget.rowTrailingBuilder?.call(row),
           ),
           const SizedBox(height: 12),
         ],
@@ -134,21 +199,148 @@ class CageMapView extends StatelessWidget {
             alignment: Alignment.center,
             child: TextButton(
               key: const ValueKey('cage-map-more-rows'),
-              onPressed: onShowMoreRows,
+              onPressed: widget.onShowMoreRows,
               child: Text('显示更多排（还有 $hiddenRowCount 排）'),
             ),
           ),
-        if (layout.unplaced.isNotEmpty)
+        if (widget.layout.unplaced.isNotEmpty)
           _UnplacedCages(
-            cages: layout.unplaced,
-            onTapCage: onTapCage,
-            selectedCageId: selectedCageId,
-            isMatch: isMatch,
-            selectableCage: selectableCage,
-            cellNote: cellNote,
+            cages: widget.layout.unplaced,
+            onTapCage: widget.onTapCage,
+            selectedCageId: widget.selectedCageId,
+            isMatch: widget.isMatch,
+            selectableCage: widget.selectableCage,
+            cellNote: widget.cellNote,
             palette: palette,
           ),
       ],
+    );
+  }
+}
+
+/// 层切换器。
+///
+/// 切层会把别的层整个藏起来，所以每个层签上带该层「要处理的笼」的数量
+/// （异常 + 待投喂）。否则站在 1 层永远不知道 3 层有笼子等着喂。
+class _LayerSwitcher extends StatelessWidget {
+  const _LayerSwitcher({
+    required this.layers,
+    required this.activeLayer,
+    required this.onSelect,
+  });
+
+  final List<CageMapLayer> layers;
+  final int? activeLayer;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Semantics(
+      container: true,
+      label: '楼层切换，共 ${layers.length} 层',
+      child: SingleChildScrollView(
+        key: const ValueKey('cage-map-layer-switcher'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final layer in layers)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _LayerChip(
+                  layer: layer,
+                  selected: layer.layerIndex == activeLayer,
+                  onTap: () => onSelect(layer.layerIndex),
+                  palette: palette,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LayerChip extends StatelessWidget {
+  const _LayerChip({
+    required this.layer,
+    required this.selected,
+    required this.onTap,
+    required this.palette,
+  });
+
+  final CageMapLayer layer;
+  final bool selected;
+  final VoidCallback onTap;
+  final AppPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final todo = layer.countAttention(CageAttention.alert) +
+        layer.countAttention(CageAttention.needsFeeding);
+    final label = '${layer.layerIndex}层';
+
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: todo > 0 ? '$label，$todo 个笼要处理' : label,
+      child: Material(
+        color: selected ? palette.primarySoft : palette.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: selected ? palette.primary : palette.line,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: InkWell(
+          key: ValueKey('cage-map-layer-${layer.layerIndex}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            // 48 是可点区域下限，切层是这张图上最高频的操作。
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 64),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? palette.primary : palette.text,
+                    ),
+                  ),
+                  if (todo > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.warningSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '$todo',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: palette.warning,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -180,7 +372,6 @@ class _CageMapRowSection extends StatelessWidget {
     // 带标注（换笼时的「对调」）的格子多一行文字，真机上正是这一行把 56 的方格撑出 2px。
     final base = cellNote == null ? 56.0 : 68.0;
     final cellExtent = (base * textScale).clamp(base, 128.0);
-    final gutter = (34.0 * textScale).clamp(34.0, 68.0);
 
     final vacancy = row.countAttention(CageAttention.vacancy);
     final feeding = row.countAttention(CageAttention.needsFeeding);
@@ -241,71 +432,42 @@ class _CageMapRowSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final layer in row.layers)
+                for (final line in row.lines)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Row(
                       children: [
-                        SizedBox(
-                          width: gutter,
-                          child: Text(
-                            '${layer.layerIndex}层',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        for (final cell in layer.cells)
+                        for (final cell in line.cells)
                           Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: SizedBox(
                               width: cellExtent,
                               height: cellExtent,
-                              child: cell.cage == null
-                                  ? const _EmptySlot()
-                                  : _CageMapCellTile(
-                                      cage: cell.cage!,
-                                      onTap: onTapCage,
-                                      selected:
-                                          selectedCageId == cell.cage!.id,
-                                      dimmed: isMatch != null &&
-                                          !isMatch!(cell.cage!),
-                                      selectable:
-                                          selectableCage?.call(cell.cage!) ??
+                              // 留白不是笼位也不是空槽，只是让折角对齐，什么都不画。
+                              child: cell.isPad
+                                  ? const SizedBox.shrink()
+                                  : cell.cage == null
+                                      ? _EmptySlot(
+                                          positionIndex: cell.positionIndex!,
+                                        )
+                                      : _CageMapCellTile(
+                                          cage: cell.cage!,
+                                          positionIndex: cell.positionIndex!,
+                                          onTap: onTapCage,
+                                          selected:
+                                              selectedCageId == cell.cage!.id,
+                                          dimmed: isMatch != null &&
+                                              !isMatch!(cell.cage!),
+                                          selectable: selectableCage
+                                                  ?.call(cell.cage!) ??
                                               true,
-                                      note: cellNote?.call(cell.cage!),
-                                    ),
+                                          note: cellNote?.call(cell.cage!),
+                                        ),
                             ),
                           ),
                       ],
                     ),
                   ),
-                Row(
-                  children: [
-                    SizedBox(width: gutter),
-                    for (var position = 1;
-                        position <= row.positionSpan;
-                        position += 1)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: SizedBox(
-                          width: cellExtent,
-                          child: Text(
-                            '$position',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -333,6 +495,7 @@ class _RowMetric extends StatelessWidget {
 class _CageMapCellTile extends StatelessWidget {
   const _CageMapCellTile({
     required this.cage,
+    required this.positionIndex,
     required this.onTap,
     required this.selected,
     required this.dimmed,
@@ -341,6 +504,7 @@ class _CageMapCellTile extends StatelessWidget {
   });
 
   final Cage cage;
+  final int positionIndex;
   final ValueChanged<Cage> onTap;
   final bool selected;
   final bool dimmed;
@@ -359,6 +523,7 @@ class _CageMapCellTile extends StatelessWidget {
     final borderColor = selected ? palette.primary : style.border;
     final semantics = [
       cage.cageNumber.isEmpty ? '笼位 ${cage.id}' : cage.cageNumber,
+      '第 $positionIndex 位',
       cage.usageLabel,
       cage.occupancyText,
       attention.label,
@@ -390,10 +555,26 @@ class _CageMapCellTile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    selected ? Icons.check_circle : style.icon,
-                    size: 16,
-                    color: selected ? palette.primary : style.foreground,
+                  // 位号写在格子里：折行之后底下那条 1..N 的标尺对不上号了，
+                  // 而现场找笼靠的就是笼上那个号。排号在排头、层号在切换器，
+                  // 加上位号就能拼回完整笼位（完整编号在无障碍标签里）。
+                  Row(
+                    children: [
+                      Text(
+                        '$positionIndex',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? palette.primary : palette.muted,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        selected ? Icons.check_circle : style.icon,
+                        size: 14,
+                        color: selected ? palette.primary : style.foreground,
+                      ),
+                    ],
                   ),
                   // 不用 FittedBox 缩字：那等于把系统字号设置抹掉。
                   // 格子本身跟着 textScale 长；Flexible 只是最后一道保险，
@@ -431,20 +612,26 @@ class _CageMapCellTile extends StatelessWidget {
 
 /// 该坐标没有笼位（例如这一层只装了 4 个笼，第 5 位是空的）。
 class _EmptySlot extends StatelessWidget {
-  const _EmptySlot();
+  const _EmptySlot({required this.positionIndex});
+
+  final int positionIndex;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: palette.background,
-      ),
-      child: Center(
-        child: Text(
-          '—',
-          style: TextStyle(color: palette.line, fontSize: 14),
+    return Semantics(
+      container: true,
+      label: '第 $positionIndex 位，缺笼',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: palette.background,
+        ),
+        child: Center(
+          child: Text(
+            '—',
+            style: TextStyle(color: palette.line, fontSize: 14),
+          ),
         ),
       ),
     );

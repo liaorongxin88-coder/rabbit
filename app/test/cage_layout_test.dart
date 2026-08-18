@@ -31,57 +31,116 @@ Cage _cage({
 
 void main() {
   group('CageLayout', () {
-    test('groups cages into rows, layers descending and positions ascending',
-        () {
+    test('层是顶层维度，从 1 层往上排', () {
       final layout = CageLayout.fromCages([
-        _cage(id: 1, row: 'R1', layer: 1, position: 2),
-        _cage(id: 2, row: 'R1', layer: 2, position: 1),
-        _cage(id: 3, row: 'R1', layer: 1, position: 1),
-        _cage(id: 4, row: 'R1', layer: 2, position: 2),
+        _cage(id: 1, row: 'R1', layer: 2, position: 1),
+        _cage(id: 2, row: 'R1', layer: 1, position: 1),
+        _cage(id: 3, row: 'R1', layer: 3, position: 1),
       ]);
 
-      expect(layout.rows, hasLength(1));
-      final row = layout.rows.single;
-      expect(row.rowCode, 'R1');
-      expect(row.positionSpan, 2);
       expect(
-        row.layers.map((layer) => layer.layerIndex),
-        [2, 1],
-        reason: '最上层显示在最上面，跟物理货架一致',
+        layout.layers.map((layer) => layer.layerIndex),
+        [1, 2, 3],
+        reason: '层是切换空间，切换器按 1 层、2 层、3 层顺着来',
+      );
+      expect(layout.layers.first.rows.single.cages.map((cage) => cage.id), [2]);
+    });
+
+    test('一排双面笼折成两行，回程那行反着排', () {
+      final layout = CageLayout.fromCages([
+        for (var position = 1; position <= 10; position++)
+          _cage(id: position, row: 'B', layer: 1, position: position),
+      ]);
+
+      final row = layout.layers.single.rows.single;
+      expect(row.lines, hasLength(2));
+      expect(
+        row.lines.first.cells.map((cell) => cell.positionIndex),
+        [1, 2, 3, 4, 5],
       );
       expect(
-        row.layers.first.cells.map((cell) => cell.cage?.id),
-        [2, 4],
-      );
-      expect(
-        row.layers.last.cells.map((cell) => cell.cage?.id),
-        [1, 3].reversed,
+        row.lines.last.cells.map((cell) => cell.positionIndex),
+        [10, 9, 8, 7, 6],
+        reason: '人是绕到另一面走回来的，5 和 6 在现场贴着，屏幕上也要贴着',
       );
     });
 
-    test('sorts row codes naturally so R2 comes before R10', () {
+    test('位数为奇数时回程行靠右对齐，折角落在右端', () {
+      final layout = CageLayout.fromCages([
+        for (var position = 1; position <= 5; position++)
+          _cage(id: position, row: 'B', layer: 1, position: position),
+      ]);
+
+      final lines = layout.layers.single.rows.single.lines;
+      expect(lines.first.cells.map((cell) => cell.positionIndex), [1, 2, 3]);
+      expect(
+        lines.last.cells.map((cell) => cell.positionIndex),
+        [null, 5, 4],
+        reason: '第 4 位要正对着第 3 位，左边空出来的是留白不是笼位',
+      );
+      expect(lines.last.cells.first.isPad, isTrue);
+      expect(lines.last.cells.first.isEmptySlot, isFalse);
+    });
+
+    test('位数太少的排不折行', () {
+      final layout = CageLayout.fromCages([
+        _cage(id: 1, row: 'B', layer: 1, position: 1),
+        _cage(id: 2, row: 'B', layer: 1, position: 2),
+      ]);
+
+      expect(layout.layers.single.rows.single.lines, hasLength(1));
+    });
+
+    test('排宽取跨层最大位号，切层时网格不跳', () {
+      final layout = CageLayout.fromCages([
+        for (var position = 1; position <= 6; position++)
+          _cage(id: position, row: 'B', layer: 1, position: position),
+        _cage(id: 7, row: 'B', layer: 2, position: 1),
+      ]);
+
+      final secondLayerRow = layout.layers.last.rows.single;
+      expect(secondLayerRow.positionSpan, 6);
+      expect(
+        secondLayerRow.lines.first.cells.map((cell) => cell.positionIndex),
+        [1, 2, 3],
+      );
+      expect(
+        secondLayerRow.lines.last.cells.map((cell) => cell.cage),
+        everyElement(isNull),
+        reason: '二层只装了一个笼，其余是空槽，但排宽跟一层一致',
+      );
+    });
+
+    test('同层内的排按排号自然序，R2 在 R10 前面', () {
       final layout = CageLayout.fromCages([
         _cage(id: 1, row: 'R10'),
         _cage(id: 2, row: 'R2'),
         _cage(id: 3, row: 'R1'),
       ]);
 
-      expect(layout.rows.map((row) => row.rowCode), ['R1', 'R2', 'R10']);
+      expect(
+        layout.layers.single.rows.map((row) => row.rowCode),
+        ['R1', 'R2', 'R10'],
+      );
     });
 
-    test('keeps missing positions as empty slots so columns stay aligned', () {
+    test('缺笼的位置留成空槽，位号照样对齐', () {
       final layout = CageLayout.fromCages([
         _cage(id: 1, row: 'R1', layer: 1, position: 1),
         _cage(id: 2, row: 'R1', layer: 1, position: 4),
       ]);
 
-      final cells = layout.rows.single.layers.single.cells;
-      expect(cells, hasLength(4));
-      expect(cells.map((cell) => cell.positionIndex), [1, 2, 3, 4]);
-      expect(cells.map((cell) => cell.isEmptySlot), [false, true, true, false]);
+      final cells = layout.layers.single.rows.single.lines
+          .expand((line) => line.cells)
+          .toList();
+      expect(cells.map((cell) => cell.positionIndex), [1, 2, 4, 3]);
+      expect(
+        cells.where((cell) => cell.isEmptySlot).map((cell) => cell.positionIndex),
+        [2, 3],
+      );
     });
 
-    test('routes cages without coordinates and LEGACY rows to unplaced', () {
+    test('没坐标、LEGACY 排号的笼位进未编排，但不会消失', () {
       final layout = CageLayout.fromCages([
         _cage(id: 1, row: 'R1', layer: 1, position: 1),
         _cage(id: 2, row: 'R1', layer: null, position: 3, number: '缺层'),
@@ -90,21 +149,21 @@ void main() {
         _cage(id: 5, row: '', layer: 1, position: 1, number: '无排号'),
       ]);
 
-      expect(layout.rows.single.cages.map((cage) => cage.id), [1]);
-      expect(
-        layout.unplaced.map((cage) => cage.id).toSet(),
-        {2, 3, 4, 5},
-      );
+      expect(layout.layers.single.rows.single.cages.map((cage) => cage.id), [1]);
+      expect(layout.unplaced.map((cage) => cage.id).toSet(), {2, 3, 4, 5});
       expect(layout.placedCount, 1);
     });
 
-    test('displaces a duplicate coordinate instead of dropping the cage', () {
+    test('坐标撞车的笼位被挤到未编排，而不是被覆盖', () {
       final layout = CageLayout.fromCages([
         _cage(id: 1, row: 'R1', layer: 1, position: 1, number: '先到'),
         _cage(id: 2, row: 'R1', layer: 1, position: 1, number: '撞车'),
       ]);
 
-      expect(layout.rows.single.layers.single.cells.single.cage?.id, 1);
+      expect(
+        layout.layers.single.rows.single.lines.single.cells.single.cage?.id,
+        1,
+      );
       expect(
         layout.unplaced.map((cage) => cage.id),
         [2],

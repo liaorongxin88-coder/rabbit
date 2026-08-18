@@ -44,26 +44,79 @@ void main() {
     );
   });
 
-  testWidgets('map shows layers top-down and position axis left-to-right',
+  testWidgets('层是切出来的空间：默认停在 1 层，二层的笼要切过去才看得见',
       (tester) async {
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
 
-    expect(find.text('2层'), findsWidgets);
-    expect(find.text('1层'), findsWidgets);
-
-    final upper = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-3')));
-    final lower = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
     expect(
-      upper.dy,
-      lessThan(lower.dy),
-      reason: '2 层要显示在 1 层上面，跟物理货架一致',
+      find.byKey(const ValueKey('cage-map-cell-1')),
+      findsOneWidget,
+      reason: '默认落在 1 层',
     );
+    expect(
+      find.byKey(const ValueKey('cage-map-cell-3')),
+      findsNothing,
+      reason: '二层的笼不该和一层混在同一屏里——现场是错位的阶梯，看的人只站在一层前面',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('cage-map-layer-2')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('cage-map-cell-3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cage-map-cell-1')), findsNothing);
+  });
+
+  testWidgets('层签上带该层要处理的笼数，切走了也知道那边有活',
+      (tester) async {
+    await tester.pumpWidget(_testApp(_rack));
+    await tester.pumpAndSettle();
+
+    // 1 层有一个待投喂（id 4）和一个异常（id 5）。
+    final layerOne = find.byKey(const ValueKey('cage-map-layer-1'));
+    expect(
+      tester.getSemantics(layerOne).label,
+      contains('2 个笼要处理'),
+      reason: '不然站在 2 层永远不知道 1 层有笼子等着喂',
+    );
+  });
+
+  testWidgets('同一排的位号从左到右', (tester) async {
+    await tester.pumpWidget(_testApp(_rack));
+    await tester.pumpAndSettle();
 
     final first = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
     final second =
         tester.getCenter(find.byKey(const ValueKey('cage-map-cell-2')));
     expect(first.dx, lessThan(second.dx));
+  });
+
+  testWidgets('双面笼架折成两行：回程那行反着排，折角对齐在右端',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_testApp(_doubleSidedRack(6)));
+    await tester.pumpAndSettle();
+
+    final front = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
+    final fold = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-3')));
+    final backFold =
+        tester.getCenter(find.byKey(const ValueKey('cage-map-cell-4')));
+    final backEnd =
+        tester.getCenter(find.byKey(const ValueKey('cage-map-cell-6')));
+
+    expect(backFold.dy, greaterThan(front.dy), reason: '回程在第二行');
+    expect(
+      backFold.dx,
+      closeTo(fold.dx, 1),
+      reason: '第 4 位要正对着第 3 位——现场就是绕过架子那一头折回来的',
+    );
+    expect(
+      backEnd.dx,
+      closeTo(front.dx, 1),
+      reason: '最后一位回到起点这一端',
+    );
   });
 
   testWidgets('legend explains every colour and doubles as a tally',
@@ -248,6 +301,22 @@ double _cellOpacity(WidgetTester tester, int cageId) {
   );
   return opacity.opacity;
 }
+
+/// 一排 N 位的双面笼架，用来验折行。
+List<Cage> _doubleSidedRack(int positions) => [
+      for (var position = 1; position <= positions; position++)
+        Cage(
+          id: position,
+          houseId: 8,
+          cageNumber: 'B-C$position-L1',
+          rowCode: 'B',
+          layerIndex: 1,
+          positionIndex: position,
+          status: '0',
+          rabbitCount: 0,
+          isEnabled: true,
+        ),
+    ];
 
 /// R1 两层两位 + R2 一层三位，覆盖全部五种关注度。
 const _rack = [

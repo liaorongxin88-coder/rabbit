@@ -126,10 +126,22 @@ void main() {
       await _waitFor(tester, find.textContaining('SETUP-RENAMED'));
       await _takeScreenshot(binding, tester, '07-rabbit-edited');
 
-      // 换笼：目标是第 2 个笼位，地图上直接点
+      // 换笼：目标是第 2 个笼位，地图上直接点。
+      // 后端铺笼是排→位→层嵌套的，所以 id 逐个差一层：第 2 个笼在 2 层。
+      // 地图一次只画一层，得先切过去——这正好把切层也拉进真机验收。
       await _scrollUntilPresent(tester, find.byKey(ValueKey('rabbit-row-move-$rabbitId')));
       await _tapAndSettle(tester, ValueKey('rabbit-row-move-$rabbitId'));
       await _waitFor(tester, find.text('换笼位'));
+      final layerTwo = find.byKey(const ValueKey('cage-map-layer-2'));
+      await _scrollUntilPresent(
+        tester,
+        layerTwo,
+        scrollable: find.byKey(const ValueKey('rabbit-move-cage-scroll')),
+      );
+      await tester.ensureVisible(layerTwo);
+      await tester.pumpAndSettle();
+      await tester.tap(layerTwo);
+      await tester.pumpAndSettle();
       final target = find.byKey(ValueKey('cage-map-cell-${cageIds[1]}'));
       await _scrollUntilPresent(
         tester,

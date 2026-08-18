@@ -177,6 +177,134 @@ void main() {
     expect(find.text('对调'), findsOneWidget);
     expect(find.text('当前'), findsOneWidget);
   });
+
+  testWidgets('输入别层的笼位编号，地图会自己切到那一层', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(500, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_layeredApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    // 兔子在 1 层，地图默认也停在 1 层。
+    expect(find.byKey(const ValueKey('cage-map-cell-22')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cage-map-cell-32')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-move-cage-search')),
+      'B-02-L2',
+    );
+    await tester.pumpAndSettle();
+
+    // 选中的笼在 2 层。地图不跟着切的话，用户看到「已选中」却在屏幕上找不到那一格。
+    expect(
+      find.byKey(const ValueKey('cage-map-cell-32')),
+      findsOneWidget,
+      reason: '选中的笼必须出现在眼前，不能让人自己去猜它在哪一层',
+    );
+    expect(
+      find.text('目标：B-02-L2 · 空笼'),
+      findsOneWidget,
+      reason: '底部的常驻摘要要能确认真选中了，而不只是地图切了层',
+    );
+  });
+
+  testWidgets('层切换器只在真的有多层时出现', (tester) async {
+    await tester.pumpWidget(_testApp());
+    await tester.tap(find.byKey(const ValueKey('open-move-cage-sheet')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('cage-map-layer-switcher')),
+      findsNothing,
+      reason: '单层兔舍不该被塞一个只有一个选项的切换器',
+    );
+  });
+}
+
+/// 两层各两位的排，用来验「选中的笼在别层」这件事。
+Widget _layeredApp() {
+  const rabbit = Rabbit(
+    id: 801,
+    houseId: 8,
+    cageId: 21,
+    motherId: null,
+    type: '0',
+    gender: '0',
+    breed: 'New Zealand White',
+    arrivalMethod: '0',
+    arrivalDate: null,
+    weight: 4.2,
+    isActive: true,
+  );
+  const cages = [
+    Cage(
+      id: 21,
+      houseId: 8,
+      cageNumber: 'B-01-L1',
+      rowCode: 'B',
+      layerIndex: 1,
+      positionIndex: 1,
+      status: '1',
+      rabbitCount: 1,
+      isEnabled: true,
+    ),
+    Cage(
+      id: 22,
+      houseId: 8,
+      cageNumber: 'B-02-L1',
+      rowCode: 'B',
+      layerIndex: 1,
+      positionIndex: 2,
+      status: '0',
+      rabbitCount: 0,
+      isEnabled: true,
+    ),
+    Cage(
+      id: 31,
+      houseId: 8,
+      cageNumber: 'B-01-L2',
+      rowCode: 'B',
+      layerIndex: 2,
+      positionIndex: 1,
+      status: '0',
+      rabbitCount: 0,
+      isEnabled: true,
+    ),
+    Cage(
+      id: 32,
+      houseId: 8,
+      cageNumber: 'B-02-L2',
+      rowCode: 'B',
+      layerIndex: 2,
+      positionIndex: 2,
+      status: '0',
+      rabbitCount: 0,
+      isEnabled: true,
+    ),
+  ];
+
+  return ProviderScope(
+    child: MaterialApp(
+      theme: buildAppTheme(),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              key: const ValueKey('open-move-cage-sheet'),
+              onPressed: () => showRabbitMoveCageSheet(
+                context: context,
+                houseId: 8,
+                rabbit: rabbit,
+                cages: cages,
+              ),
+              child: const Text('换笼位'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 Widget _testApp() {
