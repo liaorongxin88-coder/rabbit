@@ -362,6 +362,20 @@ curl -s -H 'Content-Type: application/json' \
 
 ### 笼内兔只操作浏览器验收脚本
 
+> **端口 5173 不是随便挑的**：后端 CORS 白名单（`APP_CORS_ALLOWED_ORIGINS`，默认
+> `localhost:5173,127.0.0.1:5173,admin.dzht.top`）只放行它。脚本会先探这个口——
+> 上面跑的是本项目就复用，被别的项目占了就换一个空闲口，**并在开跑前用一次预检请求
+> 问后端认不认这个来源**，不认就直接报错并打印该执行的命令。
+> 不做这一步的话，现象是页面能打开、填完账号密码「登录后不跳转」，
+> 真正的原因（登录请求被 403 挡下）藏在 network 面板里，很容易当成前端 bug 查半天。
+> 换口时这样跑：
+>
+> ```bash
+> APP_CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5273" \
+>   docker compose up -d --force-recreate backend
+> ADMIN_DEV_PORT=5273 pnpm --dir admin e2e:browser
+> ```
+
 ```bash
 pnpm --dir admin e2e:browser       # 无头
 HEADED=1 pnpm --dir admin e2e:browser  # 看着它点

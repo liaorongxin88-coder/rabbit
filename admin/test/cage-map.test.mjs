@@ -6,11 +6,15 @@ import {
   cageAlertReason,
   cageAttention,
   cageOccupancyText,
-  compareRowCodes,
   countAttentions,
 } from '../src/lib/cage-map.ts'
 
-function cage(overrides = {}) {
+function cage({ row, layer, position, number, ...overrides } = {}) {
+  // 允许 row/layer/position/number 这套简写，省得每个用例都写全字段名。
+  if (row !== undefined) overrides.rowCode = row
+  if (layer !== undefined) overrides.layerIndex = layer
+  if (position !== undefined) overrides.positionIndex = position
+  if (number !== undefined) overrides.cageNumber = number
   return {
     id: 1,
     houseId: 8,
@@ -26,72 +30,128 @@ function cage(overrides = {}) {
   }
 }
 
-test('groups cages by row, stacks layers top-first and keeps positions ascending', () => {
+test('层是顶层维度，从 1 层往上排', () => {
   const layout = buildCageLayout([
-    cage({ id: 3, cageNumber: 'R1-C2-L2', layerIndex: 2, positionIndex: 2 }),
-    cage({ id: 1, cageNumber: 'R1-C1-L1', layerIndex: 1, positionIndex: 1 }),
-    cage({ id: 2, cageNumber: 'R1-C2-L1', layerIndex: 1, positionIndex: 2 }),
+    cage({ id: 1, row: 'R1', layer: 2, position: 1 }),
+    cage({ id: 2, row: 'R1', layer: 1, position: 1 }),
+    cage({ id: 3, row: 'R1', layer: 3, position: 1 }),
   ])
 
-  assert.equal(layout.rows.length, 1)
-  const row = layout.rows[0]
-  // 最上层排在最前面，跟物理货架一致。
   assert.deepEqual(
-    row.layers.map((layer) => layer.layerIndex),
-    [2, 1],
-  )
-  assert.equal(row.positionSpan, 2)
-  // 第 2 层只有第 2 位有笼，第 1 位必须留空槽，否则列对不齐。
-  assert.deepEqual(
-    row.layers[0].cells.map((cell) => cell.cage?.id ?? null),
-    [null, 3],
+    layout.layers.map((layer) => layer.layerIndex),
+    [1, 2, 3],
   )
   assert.deepEqual(
-    row.layers[1].cells.map((cell) => cell.cage?.id ?? null),
-    [1, 2],
+    layout.layers[0].rows[0].cages.map((c) => c.id),
+    [2],
+  )
+})
+
+test('一排双面笼折成两行，回程那行反着排', () => {
+  const layout = buildCageLayout(
+    Array.from({ length: 10 }, (_, index) =>
+      cage({ id: index + 1, row: 'B', layer: 1, position: index + 1 }),
+    ),
+  )
+
+  const row = layout.layers[0].rows[0]
+  assert.equal(row.lines.length, 2)
+  assert.deepEqual(
+    row.lines[0].cells.map((cell) => cell.positionIndex),
+    [1, 2, 3, 4, 5],
+  )
+  // 人是绕到另一面走回来的，5 和 6 在现场贴着，屏幕上也要贴着。
+  assert.deepEqual(
+    row.lines[1].cells.map((cell) => cell.positionIndex),
+    [10, 9, 8, 7, 6],
+  )
+})
+
+test('位数为奇数时回程行靠右对齐，折角落在右端', () => {
+  const layout = buildCageLayout(
+    Array.from({ length: 5 }, (_, index) =>
+      cage({ id: index + 1, row: 'B', layer: 1, position: index + 1 }),
+    ),
+  )
+
+  const lines = layout.layers[0].rows[0].lines
+  assert.deepEqual(
+    lines[0].cells.map((cell) => cell.positionIndex),
+    [1, 2, 3],
+  )
+  // 第 4 位要正对着第 3 位，左边空出来的是留白（positionIndex 为 null），不是笼位。
+  assert.deepEqual(
+    lines[1].cells.map((cell) => cell.positionIndex),
+    [null, 5, 4],
+  )
+})
+
+test('位数太少的排不折行', () => {
+  const layout = buildCageLayout([
+    cage({ id: 1, row: 'B', layer: 1, position: 1 }),
+    cage({ id: 2, row: 'B', layer: 1, position: 2 }),
+  ])
+
+  assert.equal(layout.layers[0].rows[0].lines.length, 1)
+})
+
+test('排宽取跨层最大位号，切层时网格不跳', () => {
+  const layout = buildCageLayout([
+    ...Array.from({ length: 6 }, (_, index) =>
+      cage({ id: index + 1, row: 'B', layer: 1, position: index + 1 }),
+    ),
+    cage({ id: 7, row: 'B', layer: 2, position: 1 }),
+  ])
+
+  const secondLayerRow = layout.layers[1].rows[0]
+  assert.equal(secondLayerRow.positionSpan, 6)
+  assert.deepEqual(
+    secondLayerRow.lines[0].cells.map((cell) => cell.positionIndex),
+    [1, 2, 3],
   )
 })
 
 test('sorts row codes naturally so R2 comes before R10', () => {
   const layout = buildCageLayout([
-    cage({ id: 1, rowCode: 'R10', cageNumber: 'R10-C1-L1' }),
-    cage({ id: 2, rowCode: 'R2', cageNumber: 'R2-C1-L1' }),
-    cage({ id: 3, rowCode: 'R1', cageNumber: 'R1-C1-L1' }),
+    cage({ id: 1, row: 'R10', layer: 1, position: 1 }),
+    cage({ id: 2, row: 'R2', layer: 1, position: 1 }),
+    cage({ id: 3, row: 'R1', layer: 1, position: 1 }),
   ])
 
   assert.deepEqual(
-    layout.rows.map((row) => row.rowCode),
+    layout.layers[0].rows.map((row) => row.rowCode),
     ['R1', 'R2', 'R10'],
   )
-  assert.ok(compareRowCodes('R2', 'R10') < 0)
 })
 
 test('cages without usable coordinates land in the unplaced bucket instead of vanishing', () => {
   const layout = buildCageLayout([
-    cage({ id: 1, rowCode: 'LEGACY', cageNumber: 'OLD-1' }),
-    cage({ id: 2, rowCode: '', cageNumber: 'OLD-2' }),
-    cage({ id: 3, layerIndex: null, cageNumber: 'OLD-3' }),
-    cage({ id: 4, positionIndex: 0, cageNumber: 'OLD-4' }),
-    cage({ id: 5, cageNumber: 'R1-C1-L1' }),
+    cage({ id: 1, row: 'R1', layer: 1, position: 1 }),
+    cage({ id: 2, row: 'R1', layer: 0, position: 3, number: '缺层' }),
+    cage({ id: 3, row: 'LEGACY', layer: 1, position: 1, number: '历史' }),
+    cage({ id: 4, row: '', layer: 1, position: 1, number: '无排号' }),
   ])
 
-  assert.equal(layout.rows.length, 1)
+  assert.equal(layout.layers.length, 1)
   assert.deepEqual(
-    layout.unplaced.map((item) => item.cageNumber),
-    ['OLD-1', 'OLD-2', 'OLD-3', 'OLD-4'],
+    layout.layers[0].rows[0].cages.map((c) => c.id),
+    [1],
+  )
+  assert.deepEqual(
+    layout.unplaced.map((c) => c.id).sort((a, b) => a - b),
+    [2, 3, 4],
   )
 })
 
 test('duplicate coordinates displace the later cage rather than overwriting it', () => {
   const layout = buildCageLayout([
-    cage({ id: 1, cageNumber: 'R1-C1-L1' }),
-    cage({ id: 2, cageNumber: 'R1-C1-L1-DUP' }),
+    cage({ id: 1, row: 'R1', layer: 1, position: 1, number: '先到' }),
+    cage({ id: 2, row: 'R1', layer: 1, position: 1, number: '撞车' }),
   ])
 
-  assert.equal(layout.rows[0].layers[0].cells[0].cage?.id, 1)
-  // 覆盖掉就等于界面上凭空少一个笼，必须挪到「未编排」。
+  assert.equal(layout.layers[0].rows[0].lines[0].cells[0].cage?.id, 1)
   assert.deepEqual(
-    layout.unplaced.map((item) => item.id),
+    layout.unplaced.map((c) => c.id),
     [2],
   )
 })

@@ -126,6 +126,22 @@ Rules:
   showing all of them turns the map into a badge pile.
 - Fills stay at low opacity so a wall of cages does not read as a color block.
 
+### Cage Map Layout
+
+结构是「层 → 排 → 位」，和 Flutter 端同一套规则（`src/lib/cage-map.ts` 对应
+`app/lib/src/domain/models/cage_layout.dart`，两端必须一致）。
+
+- **层是切换出来的空间，不是叠在一起的格子。** 现场的多层笼是错位阶梯，人站在某一层
+  前面时眼里只有这一层的那几排；剖面图看着信息全，找笼时对不上眼前的架子。
+  地图一次只画一层；单层兔舍不显示层签（只有一个选项的切换器是纯噪音）。
+- 一排是双面笼架，位号绕着架子走（1→5 在这一面，6→10 从另一头折回来），所以一排折成
+  两行：回程那行反着排并靠右对齐，折角落在右端，和人绕过去的路线一致。
+- 切层会把别的层整个藏起来，所以层签上带该层「要处理的笼」数量（异常 + 待投喂）；
+  选中的笼在别的层时地图自动切过去，不能让人看到「已选中」却在图上找不到那一格。
+- 缺笼的坐标留空槽，不把后面的笼往前挤；筛选只压暗不命中的格子，不从图上移除。
+- 格子上写位号（排号在排头、层号在层签，三者拼起来就是一个笼位），
+  完整编号走 `title` / `aria-label`。
+
 ## Typography
 
 Use the system sans stack defined in `src/index.css`. The product should read as a professional management tool, not editorial content.

@@ -17,6 +17,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
+import { createServer } from 'node:net'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -86,6 +87,8 @@ async function main() {
   const c6 = cageId('R1-C6-L1')
   // 停用空笼：用来验证地图没有把停用笼位默默丢掉。
   const c7 = cageId('R1-C7-L1')
+  // 末位：验双面笼架的折行（它应该落在第一位的正下方）。
+  const c8 = cageId('R1-C8-L1')
   const doeId = rabbitId('CAGEOPS-DOE')
   const reserveId = rabbitId('CAGEOPS-RESERVE')
   const commAId = rabbitId('CAGEOPS-COMM-A')
@@ -124,13 +127,90 @@ async function main() {
   }
 
   // ------------------------------------------------------------- dev server
+  let devServerAlreadyRunning = false
+
+  /** 这个口有没有人在听（不管是谁）。 */
+  const portInUse = (port) =>
+    new Promise((resolve) => {
+      const probe = createServer()
+      probe.once('error', () => resolve(true))
+      probe.once('listening', () => probe.close(() => resolve(false)))
+      probe.listen(port, '127.0.0.1')
+    })
+
+  const freePort = () =>
+    new Promise((resolve, reject) => {
+      const probe = createServer()
+      probe.once('error', reject)
+      probe.listen(0, '127.0.0.1', () => {
+        const { port } = probe.address()
+        probe.close(() => resolve(port))
+      })
+    })
+
+  /**
+   * 后端认不认这个来源。用预检请求问一声，把“登录后神秘不跳转”
+   * 提前成一句说得清楚的报错。
+   */
+  const backendAllowsOrigin = async (origin) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: origin,
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'content-type',
+        },
+      })
+      return res.headers.get('access-control-allow-origin') === origin
+    } catch {
+      return false
+    }
+  }
+
+  /** 这个口上应门的是不是本项目的 dev server。 */
+  const servesThisAdmin = async (url) => {
+    try {
+      const res = await fetch(url, { method: 'GET' })
+      return res.ok && (await res.text()).includes('/src/main.tsx')
+    } catch {
+      return false
+    }
+  }
+
   let devServer = null
   let baseUrl = process.env.ADMIN_BASE_URL
   if (!baseUrl) {
-    baseUrl = 'http://127.0.0.1:5173'
+    // 首选 5173：后端 CORS 默认白名单写的就是它。被占了就换一个空口，
+    // 但换口之后必须先确认后端认这个来源，否则页面能打开、登录被 403 挡下，
+    // 现象只是“登录后不跳转”，很难想到是跨域。
+    const preferred = Number(process.env.ADMIN_DEV_PORT ?? 5173)
+    let port = preferred
+
+    // 占口的服务同样会对 GET / 回 200，不验内容的话，探活会以为“起来了”，
+    // 然后在别人的页面上找登录框。
+    if (await servesThisAdmin(`http://127.0.0.1:${preferred}`)) {
+      console.log(`ℹ 复用已在 127.0.0.1:${preferred} 运行的 admin dev server`)
+      devServerAlreadyRunning = true
+    } else if (await portInUse(preferred)) {
+      port = await freePort()
+      console.log(`ℹ 端口 ${preferred} 被其它服务占着，改用 ${port}`)
+    }
+    baseUrl = `http://127.0.0.1:${port}`
+
+    if (!(await backendAllowsOrigin(baseUrl))) {
+      fail(
+        `后端不接受来源 ${baseUrl}，登录会被 CORS 挡成 403。\n` +
+          `要么腾出端口 ${preferred}（lsof -ti tcp:${preferred}），要么把这个来源声明给后端：\n` +
+          `  APP_CORS_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,${baseUrl}" \\\n` +
+          '    docker compose up -d --force-recreate backend',
+        72,
+      )
+    }
     // 必须显式 --host 127.0.0.1：vite 默认只听 localhost，而本机 localhost 先解到 ::1，
     // 探活 127.0.0.1 会一直连不上，看起来像“dev server 没起来”。
-    devServer = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
+    if (!devServerAlreadyRunning) {
+    devServer = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: ADMIN_DIR,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -144,13 +224,9 @@ async function main() {
         writeFileSync(path.join(artifactDir, 'vite.log'), devLog.join(''))
         fail('vite dev server did not become reachable within 60s', 70)
       }
-      try {
-        const res = await fetch(baseUrl, { method: 'GET' })
-        if (res.ok) break
-      } catch {
-        // keep waiting
-      }
+      if (await servesThisAdmin(baseUrl)) break
       await new Promise((resolve) => setTimeout(resolve, 500))
+    }
     }
   }
   console.log(`admin at ${baseUrl}`)
@@ -239,6 +315,18 @@ async function main() {
     }
     // 停用笼位必须出现在图上：它在货架上是真存在的，丢掉就凭空少一个位置。
     await page.locator(`[data-testid="cage-map-cell-${c7}"]`).waitFor()
+
+    // 一排是双面笼架，位号绕着架子走：8 位的排要折成 1234 / 8765，
+    // 末位落在首位正下方。只断言“格子都在”的话，排成一条直线也能蒙混过去。
+    const firstBox = await page.locator(`[data-testid="cage-map-cell-${c1}"]`).boundingBox()
+    const lastBox = await page.locator(`[data-testid="cage-map-cell-${c8}"]`).boundingBox()
+    if (!firstBox || !lastBox || lastBox.y <= firstBox.y || Math.abs(lastBox.x - firstBox.x) > 4) {
+      console.error(
+        `✖ 双面笼架没有折行：首位 ${JSON.stringify(firstBox)}，末位 ${JSON.stringify(lastBox)}`,
+      )
+      process.exit(75)
+    }
+
     await shot('01-cage-map')
 
     // ---------------------------------------------------------- 场景一：死亡

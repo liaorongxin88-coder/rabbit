@@ -1,5 +1,5 @@
 import { AlertCircleIcon, BanIcon, CircleMinusIcon, CirclePlusIcon, ClockIcon } from 'lucide-react'
-import type { ComponentType } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -94,12 +94,58 @@ export function CageMap({
   onShowMoreRows?: () => void
   onSelectCage?: (cage: Cage) => void
 }) {
-  const limit = visibleRowLimit ?? layout.rows.length
-  const visibleRows = layout.rows.slice(0, limit)
-  const hiddenRowCount = layout.rows.length - visibleRows.length
+  // 层是切换出来的空间：现场的多层笼是错位阶梯，人站在某一层前面时
+  // 眼里只有这一层的那几排，所以一次只画一层。
+  const layers = layout.layers
+  const [activeLayer, setActiveLayer] = useState<number | null>(layers[0]?.layerIndex ?? null)
+
+  // 换笼时可以直接输入编号选中一个笼，它可能不在当前层。不跟着切的话，
+  // 用户看到「已选中 B7」，图上却没有任何一格是高亮的。
+  const selectedLayer = selectedCageId
+    ? (layers.find((layer) => layer.cages.some((cage) => cage.id === selectedCageId))?.layerIndex ?? null)
+    : null
+  useEffect(() => {
+    if (selectedLayer !== null) setActiveLayer(selectedLayer)
+  }, [selectedLayer])
+
+  const active = layers.find((layer) => layer.layerIndex === activeLayer) ?? layers[0] ?? null
+  const rows = active?.rows ?? []
+  const limit = visibleRowLimit ?? rows.length
+  const visibleRows = rows.slice(0, limit)
+  const hiddenRowCount = rows.length - visibleRows.length
 
   return (
     <div className="flex flex-col gap-3" data-testid="cage-map">
+      {layers.length > 1 ? (
+        <div className="flex flex-wrap gap-2" data-testid="cage-map-layer-switcher">
+          {layers.map((layer) => {
+            // 切层会把别的层整个藏起来，所以层签上带该层「要处理的笼」数量，
+            // 否则站在 1 层永远不知道 3 层有笼子等着喂。
+            const counts = countAttentions(layer.cages)
+            const todo = counts.alert + counts.needsFeeding
+            const selected = layer.layerIndex === active?.layerIndex
+            return (
+              <button
+                key={layer.layerIndex}
+                type="button"
+                data-testid={`cage-map-layer-${layer.layerIndex}`}
+                aria-pressed={selected}
+                onClick={() => setActiveLayer(layer.layerIndex)}
+                className={cn(
+                  'inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm',
+                  selected ? 'border-primary bg-primary/10 font-medium text-primary' : 'hover:bg-muted',
+                )}
+              >
+                {layer.layerIndex} 层
+                {todo > 0 ? (
+                  <span className="rounded-full bg-warning/15 px-1.5 text-xs tabular-nums text-warning">{todo}</span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       {visibleRows.map((row) => {
         const counts = countAttentions(row.cages)
         return (
@@ -112,19 +158,21 @@ export function CageMap({
               {counts.alert > 0 ? <span className="text-destructive">异常 {counts.alert}</span> : null}
             </div>
             {/* 一排一个横向滚动区：列数由该排最大位号决定，窄屏下横向滚动
-                比换行更可信——换行会让「第几位」错位。 */}
+                比换行更可信——换行会让「第几位」错位。
+                一排是双面笼架，位号绕着架子走，所以折成两行、回程那行反着排。 */}
             <div className="overflow-x-auto px-3 py-2">
               <div className="flex min-w-max flex-col gap-1.5">
-                {row.layers.map((layer) => (
-                  <div key={layer.layerIndex} className="flex items-stretch gap-1.5">
-                    <span className="flex w-10 shrink-0 items-center text-xs text-muted-foreground">
-                      {layer.layerIndex} 层
-                    </span>
-                    {layer.cells.map((cell) =>
-                      cell.cage ? (
+                {row.lines.map((line, lineIndex) => (
+                  <div key={lineIndex} className="flex items-stretch gap-1.5">
+                    {line.cells.map((cell, cellIndex) =>
+                      cell.positionIndex === null ? (
+                        // 折角对齐用的留白：不是笼位，也不是缺笼，什么都不画。
+                        <span key={`pad-${cellIndex}`} aria-hidden="true" className="h-16 w-16 shrink-0" />
+                      ) : cell.cage ? (
                         <CageMapCellButton
                           key={cell.positionIndex}
                           cage={cell.cage}
+                          positionIndex={cell.positionIndex}
                           selected={selectedCageId === cell.cage.id}
                           selectable={isSelectable ? isSelectable(cell.cage) : true}
                           dimmed={isMatch ? !isMatch(cell.cage) : false}
@@ -134,23 +182,16 @@ export function CageMap({
                       ) : (
                         <span
                           key={cell.positionIndex}
-                          aria-hidden="true"
-                          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground/60"
+                          aria-label={`第 ${cell.positionIndex} 位，缺笼`}
+                          className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground/60"
                         >
-                          -
+                          <span className="self-start pl-1.5 text-[10px]">{cell.positionIndex}</span>
+                          <span className="grow content-center">-</span>
                         </span>
                       ),
                     )}
                   </div>
                 ))}
-                <div className="flex items-center gap-1.5">
-                  <span className="w-10 shrink-0" />
-                  {Array.from({ length: row.positionSpan }, (_, index) => (
-                    <span key={index} className="w-16 shrink-0 text-center text-xs text-muted-foreground">
-                      {index + 1}
-                    </span>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -190,6 +231,7 @@ export function CageMap({
 
 function CageMapCellButton({
   cage,
+  positionIndex,
   selected,
   selectable,
   dimmed,
@@ -198,6 +240,8 @@ function CageMapCellButton({
   showCageNumber = false,
 }: {
   cage: Cage
+  /** 未编排的笼位没有位号。 */
+  positionIndex?: number
   selected: boolean
   selectable: boolean
   dimmed: boolean
@@ -210,6 +254,7 @@ function CageMapCellButton({
   const reason = cageAlertReason(cage)
   const description = [
     cage.cageNumber,
+    positionIndex ? `第 ${positionIndex} 位` : null,
     cageOccupancyText(cage),
     cageAttentionLabels[attention],
     reason,
@@ -221,7 +266,8 @@ function CageMapCellButton({
   return (
     <button
       type="button"
-      // 编号不写在格子里（写不下，也会盖掉状态），靠坐标和 title/aria-label 认笼。
+      // 完整编号写不进格子，格子上只写位号（排号在排头、层号在切换器，
+      // 三者拼起来就是一个笼位）；完整编号走 title/aria-label。
       title={description}
       aria-label={description}
       aria-pressed={selected}
@@ -238,7 +284,10 @@ function CageMapCellButton({
         selectable ? 'cursor-pointer hover:border-primary/60' : 'cursor-not-allowed opacity-50',
       )}
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="flex w-full items-center justify-between gap-1">
+        <span className="text-[10px] tabular-nums text-muted-foreground">{positionIndex ?? ''}</span>
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+      </span>
       {showCageNumber ? <span className="w-full truncate font-medium">{cage.cageNumber}</span> : null}
       <span className="w-full truncate tabular-nums">{cageOccupancyText(cage)}</span>
       {note ? <span className="w-full truncate text-[10px]">{note}</span> : null}

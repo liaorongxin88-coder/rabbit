@@ -838,7 +838,7 @@ function RabbitTransferDialog({
               <p className="text-xs text-muted-foreground" data-testid="transfer-number-hint">{numberHint}</p>
             ) : null}
           </Field>
-          {layout.rows.length > 0 || layout.unplaced.length > 0 ? (
+          {layout.layers.length > 0 || layout.unplaced.length > 0 ? (
             <Field>
               <FieldLabel>在地图上选</FieldLabel>
               <CageAttentionLegend cages={cages} />

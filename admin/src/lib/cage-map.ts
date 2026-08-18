@@ -109,34 +109,44 @@ export function cageOccupancyText(cage: Cage): string {
 }
 
 export interface CageMapCell {
-  positionIndex: number
+  /** 折行后左侧的留白为 null：不是笼位，也不是缺笼的空槽，只是让折角对齐。 */
+  positionIndex: number | null
   /** 该坐标没有笼位时为 null：留空槽，不把后面的笼往前挤。 */
   cage: Cage | null
 }
 
-export interface CageMapLayer {
-  layerIndex: number
-  /** 位号从小到大。 */
+export interface CageMapLine {
   cells: CageMapCell[]
 }
 
 export interface CageMapRow {
   rowCode: string
-  /** 层号从大到小。 */
-  layers: CageMapLayer[]
+  /** 一行或两行：双面笼架折回来的那一行反着排。 */
+  lines: CageMapLine[]
   /** 该排最大位号，决定网格列数。 */
   positionSpan: number
   cages: Cage[]
 }
 
-export interface CageLayout {
+export interface CageMapLayer {
+  layerIndex: number
+  /** 该层里的排，按排号自然序。 */
   rows: CageMapRow[]
+  cages: Cage[]
+}
+
+export interface CageLayout {
+  /** 层号从小到大：层是切换出来的空间，一次只看一层。 */
+  layers: CageMapLayer[]
   /**
    * 没有层/位坐标、排号为空或 `LEGACY` 的笼位，以及坐标撞车被挤出来的笼位。
    * 它们放不进网格，但绝不能从界面上消失。
    */
   unplaced: Cage[]
 }
+
+/** 一排最多折成两行；低于这个位数的排不折，免得两位的小架子也被劈成两半。 */
+export const CAGE_ROW_FOLD_THRESHOLD = 4
 
 function normalizeIndex(value: number | null | undefined): number | null {
   // 后端历史数据里 0 表示「没有坐标」，负数是脏数据，都不该被当成第 0 位。
@@ -201,82 +211,119 @@ function segments(value: string): Array<string | number> {
   return result
 }
 
+/**
+ * 把扁平的笼位还原成现场的样子：**层是要切换的空间，不是往上叠的一格**。
+ *
+ * 现场的多层笼是错位的阶梯，人站在某一层前面时眼里只有这一层的那几排，
+ * 所以顶层结构是「层 → 排 → 位」。排内的位号绕着双面架子走，因此一排折成两行、
+ * 回程那行反着排（和 Flutter 端 CageLayout 同一套规则，两端必须一致）。
+ */
 export function buildCageLayout(cages: Cage[]): CageLayout {
-  const byRow = new Map<string, Cage[]>()
+  const placed: Cage[] = []
   const unplaced: Cage[] = []
-
   for (const cage of cages) {
-    if (isPlaceable(cage)) {
-      const rowCode = (cage.rowCode ?? '').trim()
-      const bucket = byRow.get(rowCode)
-      if (bucket) {
-        bucket.push(cage)
-      } else {
-        byRow.set(rowCode, [cage])
-      }
-    } else {
-      unplaced.push(cage)
+    if (isPlaceable(cage)) placed.push(cage)
+    else unplaced.push(cage)
+  }
+
+  // 每排的位宽取「跨所有层的最大位号」：切层时网格不该忽宽忽窄地跳。
+  const spanByRow = new Map<string, number>()
+  for (const cage of placed) {
+    const rowCode = (cage.rowCode ?? '').trim()
+    const position = normalizeIndex(cage.positionIndex) as number
+    if (position > (spanByRow.get(rowCode) ?? 0)) {
+      spanByRow.set(rowCode, position)
     }
   }
 
-  const rows: CageMapRow[] = []
-  for (const rowCode of [...byRow.keys()].sort(compareRowCodes)) {
-    const built = buildRow(rowCode, byRow.get(rowCode) ?? [])
-    rows.push(built.row)
-    unplaced.push(...built.displaced)
+  const byLayer = new Map<number, Map<string, Cage[]>>()
+  for (const cage of placed) {
+    const layerIndex = normalizeIndex(cage.layerIndex) as number
+    const rowCode = (cage.rowCode ?? '').trim()
+    let rowsByCode = byLayer.get(layerIndex)
+    if (!rowsByCode) {
+      rowsByCode = new Map<string, Cage[]>()
+      byLayer.set(layerIndex, rowsByCode)
+    }
+    const bucket = rowsByCode.get(rowCode)
+    if (bucket) bucket.push(cage)
+    else rowsByCode.set(rowCode, [cage])
+  }
+
+  const layers: CageMapLayer[] = []
+  for (const layerIndex of [...byLayer.keys()].sort((a, b) => a - b)) {
+    const rowsByCode = byLayer.get(layerIndex) as Map<string, Cage[]>
+    const rows: CageMapRow[] = []
+    for (const rowCode of [...rowsByCode.keys()].sort(compareRowCodes)) {
+      const built = buildRow(rowCode, rowsByCode.get(rowCode) ?? [], spanByRow.get(rowCode) ?? 0)
+      rows.push(built.row)
+      unplaced.push(...built.displaced)
+    }
+    layers.push({
+      layerIndex,
+      rows,
+      cages: rows.flatMap((row) => row.cages),
+    })
   }
 
   unplaced.sort((a, b) => a.cageNumber.localeCompare(b.cageNumber))
-  return { rows, unplaced }
+  return { layers, unplaced }
 }
 
-function buildRow(rowCode: string, cages: Cage[]): { row: CageMapRow; displaced: Cage[] } {
+function buildRow(
+  rowCode: string,
+  cages: Cage[],
+  span: number,
+): { row: CageMapRow; displaced: Cage[] } {
   const displaced: Cage[] = []
-  const slots = new Map<number, Map<number, Cage>>()
-  let positionSpan = 0
+  const byPosition = new Map<number, Cage>()
 
   for (const cage of cages) {
-    const layer = normalizeIndex(cage.layerIndex) as number
     const position = normalizeIndex(cage.positionIndex) as number
-    let layerSlots = slots.get(layer)
-    if (!layerSlots) {
-      layerSlots = new Map<number, Cage>()
-      slots.set(layer, layerSlots)
-    }
-    if (layerSlots.has(position)) {
+    if (byPosition.has(position)) {
       // 同一坐标出现两个笼位属于数据问题。保留先到的那个，另一个挪到
       // 「未编排」而不是覆盖掉，否则界面上会凭空少一个笼。
       displaced.push(cage)
       continue
     }
-    layerSlots.set(position, cage)
-    if (position > positionSpan) {
-      positionSpan = position
-    }
+    byPosition.set(position, cage)
   }
 
-  // 层号从大到小：现实里最上层在最上面，地图跟着物理货架走。
-  const layerIndexes = [...slots.keys()].sort((a, b) => b - a)
-  const layers: CageMapLayer[] = layerIndexes.map((layerIndex) => {
-    const layerSlots = slots.get(layerIndex) as Map<number, Cage>
-    return {
-      layerIndex,
-      // 补齐空槽，让每层的第 N 列在屏幕上真的对齐；缺笼的位置留白。
-      cells: Array.from({ length: positionSpan }, (_, index) => ({
-        positionIndex: index + 1,
-        cage: layerSlots.get(index + 1) ?? null,
-      })),
-    }
-  })
+  // 补齐空槽，让第 N 位在屏幕上始终对得齐；缺笼的位置留白。
+  const cells: CageMapCell[] = Array.from({ length: span }, (_, index) => ({
+    positionIndex: index + 1,
+    cage: byPosition.get(index + 1) ?? null,
+  }))
 
-  const placed: Cage[] = []
-  for (const layer of layers) {
-    for (const cell of layer.cells) {
-      if (cell.cage) placed.push(cell.cage)
-    }
+  return {
+    row: {
+      rowCode,
+      lines: foldRow(cells),
+      positionSpan: span,
+      cages: cells.map((cell) => cell.cage).filter((cage): cage is Cage => cage !== null),
+    },
+    displaced,
   }
+}
 
-  return { row: { rowCode, layers, positionSpan, cages: placed }, displaced }
+/**
+ * 把一排折成最多两行：前半段正着排，后半段反着排。
+ *
+ * 后半段左侧补留白，让折角对齐在右端——位数是奇数时，最后一位应该正对着
+ * 前半段的末位，而不是从左边开始摆。
+ */
+function foldRow(cells: CageMapCell[]): CageMapLine[] {
+  if (cells.length < CAGE_ROW_FOLD_THRESHOLD) {
+    return [{ cells }]
+  }
+  const frontLength = Math.ceil(cells.length / 2)
+  const front = cells.slice(0, frontLength)
+  const back = cells.slice(frontLength).reverse()
+  const padding: CageMapCell[] = Array.from(
+    { length: front.length - back.length },
+    () => ({ positionIndex: null, cage: null }),
+  )
+  return [{ cells: front }, { cells: [...padding, ...back] }]
 }
 
 /** 按关注度统计，用于图例与每排概览。 */
