@@ -39,6 +39,8 @@ export interface WorkspaceSession {
 export interface WorkspaceUserProfile {
   userId: number
   userName: string
+  /** 兔号：自己看得见、可以报给别人拉自己进兔舍的唯一标识。老后端不返回时为空。 */
+  userCode?: string
   openidBound: boolean
   phoneBound: boolean
   maskedPhone: string | null
@@ -56,9 +58,18 @@ export interface SmsCodeDelivery {
 export type HouseRole = 'OWNER' | 'MANAGER' | 'STAFF' | 'VIEWER'
 
 export interface HouseInvitationRequest {
-  phone: string
+  /** 手机号或兔号，服务端自己识别。 */
+  identifier: string
+  /** 老后端只认 phone；识别成手机号时一并带上，保证向后兼容。 */
+  phone?: string
   role: HouseRole
   requestId: string
+}
+
+export interface HouseInvitationResult {
+  /** JOINED：按兔号邀请，对方当场入伙；SUBMITTED：手机号邀请，等对方登录。 */
+  status: 'JOINED' | 'SUBMITTED'
+  role: HouseRole
 }
 
 export interface HousePermission {

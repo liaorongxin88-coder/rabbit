@@ -5,7 +5,8 @@ export function getOrCreateInvitationRequest(
   payload: Omit<HouseInvitationRequest, 'requestId'>,
   createRequestId: () => string,
 ): HouseInvitationRequest {
-  if (current?.phone === payload.phone && current.role === payload.role) {
+  // 指纹按 identifier 比：同一个人换个大小写写法重试，不该变成两条邀请。
+  if (current?.identifier === payload.identifier && current.role === payload.role) {
     return current
   }
 

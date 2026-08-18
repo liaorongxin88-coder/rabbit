@@ -5,6 +5,7 @@ import java.util.Date;
 public class SysUser {
     private Long userId;
     private String userName;
+    private String userCode;
     private String password;
     private Boolean passwordInitialized;
     private String openid;
@@ -30,6 +31,14 @@ public class SysUser {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getUserCode() {
+        return userCode;
+    }
+
+    public void setUserCode(String userCode) {
+        this.userCode = userCode;
     }
 
     public String getPassword() {

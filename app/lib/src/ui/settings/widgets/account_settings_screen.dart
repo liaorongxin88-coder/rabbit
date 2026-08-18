@@ -140,6 +140,7 @@ class _AccountSettingsContentState
           ),
         ),
         const SizedBox(height: 12),
+        _UserCodeCard(userCode: widget.profile.userCode),
         _PhoneSecurityCard(profile: widget.profile),
         const SizedBox(height: 12),
         SectionCard(
@@ -310,6 +311,74 @@ class _AccountSettingsContentState
       return error.message;
     }
     return error.toString();
+  }
+}
+
+/// 兔号卡片。它存在的意义就是「报给别人」，所以必须能选中、能一键复制，
+/// 而不是一行只能干看的小字。
+class _UserCodeCard extends StatelessWidget {
+  const _UserCodeCard({required this.userCode});
+
+  final String userCode;
+
+  @override
+  Widget build(BuildContext context) {
+    // 老后端还没返回兔号时不占位，总比摆一个空卡片强。
+    if (userCode.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final palette = AppPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('我的兔号', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              '把它报给场主，就能被拉进兔舍，不用把手机号给出去。',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: palette.muted),
+            ),
+            const SizedBox(height: 12),
+            // 字号大一点、字间距宽一点，因为这东西经常是对着屏幕念出去的。
+            // 用 Wrap 而不是 Row：200% 字号下号码和按钮肯定一行放不下。
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SelectableText(
+                  userCode,
+                  key: const ValueKey('account-user-code'),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        letterSpacing: 1.5,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                ),
+                TextButton.icon(
+                  key: const ValueKey('account-user-code-copy'),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: userCode));
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('兔号已复制')),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('复制'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

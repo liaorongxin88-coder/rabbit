@@ -8,6 +8,8 @@
         <result column="house_id" property="houseId"/>
         <result column="phone_hash" property="phoneHash"/>
         <result column="phone_masked" property="phoneMasked"/>
+        <result column="invite_channel" property="inviteChannel"/>
+        <result column="invited_user_id" property="invitedUserId"/>
         <result column="role" property="role"/>
         <result column="status" property="status"/>
         <result column="request_id" property="requestId"/>
@@ -20,7 +22,7 @@
     </resultMap>
 
     <sql id="Columns">
-        id, house_id, phone_hash, phone_masked, role, status, request_id,
+        id, house_id, phone_hash, phone_masked, invite_channel, invited_user_id, role, status, request_id,
         invited_by_user_id, accepted_user_id, expires_time, accepted_time,
         create_time, update_time
     </sql>
@@ -47,10 +49,10 @@
 
     <insert id="insertOrKeepExisting">
         insert into house_invitations (
-            house_id, phone_hash, phone_masked, role, status, request_id,
+            house_id, phone_hash, phone_masked, invite_channel, invited_user_id, role, status, request_id,
             invited_by_user_id, accepted_user_id, expires_time, accepted_time
         ) values (
-            #{houseId}, #{phoneHash}, #{phoneMasked}, #{role}, #{status}, #{requestId},
+            #{houseId}, #{phoneHash}, #{phoneMasked}, #{inviteChannel}, #{invitedUserId}, #{role}, #{status}, #{requestId},
             #{invitedByUserId}, #{acceptedUserId}, #{expiresTime}, #{acceptedTime}
         )
         on duplicate key update id = id

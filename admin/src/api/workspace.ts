@@ -13,6 +13,7 @@ import type {
   Cage,
   DashboardSummary,
   HouseInvitationRequest,
+  HouseInvitationResult,
   HouseMember,
   HousePermission,
   OutboundSelectedItem,
@@ -469,7 +470,9 @@ export function createHouseInvitation(
   houseId: number,
   data: HouseInvitationRequest,
 ) {
-  return workspacePostJson<void>('/api/house-invitations', data, { houseId })
+  return workspacePostJson<HouseInvitationResult>('/api/house-invitations', data, {
+    houseId,
+  })
 }
 
 export function updateHouseMember(

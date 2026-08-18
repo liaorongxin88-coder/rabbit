@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
+import 'package:rabbit_flutter/src/domain/models/house_invitation_result.dart';
 import 'package:rabbit_flutter/src/domain/models/house_member.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
@@ -24,16 +25,75 @@ void main() {
     expect(find.text('查找账号'), findsNothing);
     expect(find.textContaining('同商户'), findsNothing);
     await tester.enterText(
-      find.byKey(const ValueKey('house-invitation-phone-field')),
+      find.byKey(const ValueKey('house-invitation-identifier-field')),
       '13800138000',
     );
     await tester.tap(find.byKey(const ValueKey('submit-house-invitation')));
     await tester.pumpAndSettle();
 
     expect(repository.invitedHouseId, 8);
-    expect(repository.invitedPhone, '13800138000');
+    expect(repository.invitedIdentifier, '13800138000');
     expect(repository.invitedRole, 'STAFF');
-    expect(find.text('邀请已提交'), findsOneWidget);
+    // 手机号那头的人可能还没注册，所以只能说「发出去了」，不能说「进来了」。
+    expect(find.text('邀请已发出，对方登录后自动加入'), findsOneWidget);
+  });
+
+  testWidgets('invites by the code the mate can read off their own profile',
+      (tester) async {
+    final repository = _InvitationHouseRepository()
+      ..inviteResult =
+          const HouseInvitationResult(status: 'JOINED', role: 'STAFF');
+    await _pumpMembersScreen(tester, repository, const <HouseMember>[]);
+
+    // 场主拿不到对方手机号也得能拉人：对方报一个自己看得见的兔号就够了。
+    await tester.enterText(
+      find.byKey(const ValueKey('house-invitation-identifier-field')),
+      'R3F9A0C21B7',
+    );
+    await tester.tap(find.byKey(const ValueKey('submit-house-invitation')));
+    await tester.pumpAndSettle();
+
+    expect(repository.invitedIdentifier, 'R3F9A0C21B7');
+    expect(find.text('已加入本兔舍，角色：生产人员'), findsOneWidget);
+  });
+
+  testWidgets('keeps a stronger existing role instead of silently demoting',
+      (tester) async {
+    final repository = _InvitationHouseRepository()
+      ..inviteResult =
+          const HouseInvitationResult(status: 'JOINED', role: 'MANAGER');
+    await _pumpMembersScreen(tester, repository, const <HouseMember>[]);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('house-invitation-identifier-field')),
+      'R3F9A0C21B7',
+    );
+    await tester.tap(find.byKey(const ValueKey('submit-house-invitation')));
+    await tester.pumpAndSettle();
+
+    // 请求的是生产人员，后端回了更高的设备管理员：界面必须说清楚，
+    // 否则场主会以为自己把人降权了。
+    expect(find.text('对方已在本兔舍，权限保持为设备管理员'), findsOneWidget);
+  });
+
+  testWidgets('rejects an input that is neither a phone nor a code',
+      (tester) async {
+    final repository = _InvitationHouseRepository();
+    await _pumpMembersScreen(tester, repository, const <HouseMember>[]);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('house-invitation-identifier-field')),
+      '隔壁老王',
+    );
+    await tester.tap(find.byKey(const ValueKey('submit-house-invitation')));
+    await tester.pumpAndSettle();
+
+    expect(repository.invitedIdentifier, isNull,
+        reason: '本地就该拦下，不该发请求');
+    expect(
+      find.textContaining('请填 11 位手机号'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('adds a co-owner without demoting the current owner',
@@ -194,8 +254,10 @@ class _InvitationHouseRepository extends HouseRepository {
   _InvitationHouseRepository() : super(ApiClient(SessionStore()));
 
   int? invitedHouseId;
-  String? invitedPhone;
+  String? invitedIdentifier;
   String? invitedRole;
+  HouseInvitationResult inviteResult =
+      const HouseInvitationResult(status: 'SUBMITTED', role: 'STAFF');
   int? updatedHouseId;
   int? updatedMemberUserId;
   String? updatedPerms;
@@ -205,14 +267,15 @@ class _InvitationHouseRepository extends HouseRepository {
   ApiException? removeError;
 
   @override
-  Future<void> inviteMember({
+  Future<HouseInvitationResult> inviteMember({
     required int houseId,
-    required String phone,
+    required String identifier,
     required String role,
   }) async {
     invitedHouseId = houseId;
-    invitedPhone = phone;
+    invitedIdentifier = identifier;
     invitedRole = role;
+    return inviteResult;
   }
 
   @override

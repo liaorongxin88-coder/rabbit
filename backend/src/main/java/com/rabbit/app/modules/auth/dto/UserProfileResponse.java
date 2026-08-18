@@ -7,6 +7,7 @@ import java.util.List;
 public class UserProfileResponse {
     private Long userId;
     private String userName;
+    private String userCode;
     private Boolean openidBound;
     private Boolean phoneBound;
     private String maskedPhone;
@@ -21,6 +22,7 @@ public class UserProfileResponse {
     public UserProfileResponse(SysUser user) {
         this.userId = user.getUserId();
         this.userName = user.getUserName();
+        this.userCode = user.getUserCode();
         this.openidBound = user.getOpenid() != null && !user.getOpenid().trim().isEmpty();
         this.phoneBound = user.getPhoneBoundTime() != null;
         this.maskedPhone = user.getPhoneMasked();
@@ -39,6 +41,14 @@ public class UserProfileResponse {
 
     public String getUserName() {
         return userName;
+    }
+
+    public String getUserCode() {
+        return userCode;
+    }
+
+    public void setUserCode(String userCode) {
+        this.userCode = userCode;
     }
 
     public void setUserName(String userName) {

@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
 import { getOrCreateInvitationRequest } from '@/lib/invitation-request'
+import { normalizeInviteIdentifier } from '@/lib/user-code'
 import { houseRoleLabel } from '@/lib/permission-labels'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
 import { Badge } from '@/components/ui/badge'
@@ -39,7 +40,12 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { HouseMember, HouseRole } from '@/types/api'
+import type {
+  HouseInvitationRequest,
+  HouseInvitationResult,
+  HouseMember,
+  HouseRole,
+} from '@/types/api'
 
 export function WorkspaceMembersPage() {
   const workspace = useWorkspace()
@@ -105,7 +111,7 @@ export function WorkspaceMembersPage() {
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>兔场成员</CardTitle>
-              <CardDescription>通过手机号邀请用户，并为其设置兔场角色。</CardDescription>
+              <CardDescription>用手机号或对方的兔号邀请用户，并为其设置兔场角色。</CardDescription>
             </div>
             <InviteMemberDialog
               open={inviteOpen}
@@ -203,6 +209,22 @@ export function WorkspaceMembersPage() {
   )
 }
 
+/**
+ * 两条通道结局不同，别都糊成一句「邀请已提交」：
+ * 兔号邀请的人当场就进来了，手机号邀请还得等对方登录。
+ */
+function inviteOutcomeMessage(result: HouseInvitationResult, requested: HouseRole) {
+  if (result.status !== 'JOINED') {
+    return '邀请已发出，对方登录后自动加入'
+  }
+  const label = houseRoleLabel(result.role)
+  if (result.role && result.role !== requested) {
+    // 后端只抬权限不降权限，这时候必须说清楚，否则会以为自己把人降权了。
+    return `对方已在本兔舍，权限保持为${label}`
+  }
+  return `已加入本兔舍，角色：${label}`
+}
+
 function InviteMemberDialog({
   open,
   houseId,
@@ -214,18 +236,14 @@ function InviteMemberDialog({
   onOpenChange: (open: boolean) => void
   onInvited: () => Promise<void>
 }) {
-  const [phone, setPhone] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [role, setRole] = useState<HouseRole>('STAFF')
   const [saving, setSaving] = useState(false)
-  const pendingRequest = useRef<{
-    phone: string
-    role: HouseRole
-    requestId: string
-  } | null>(null)
+  const pendingRequest = useRef<HouseInvitationRequest | null>(null)
 
   useEffect(() => {
     if (open) {
-      setPhone('')
+      setIdentifier('')
       setRole('STAFF')
       pendingRequest.current = null
     }
@@ -233,22 +251,25 @@ function InviteMemberDialog({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const normalizedPhone = normalizeMainlandPhone(phone)
-    if (!/^1[3-9]\d{9}$/.test(normalizedPhone)) {
-      toast.error('请输入有效的中国大陆手机号')
+    const { identifier: normalized, kind } = normalizeInviteIdentifier(identifier)
+    if (kind === 'invalid') {
+      toast.error('请输入 11 位手机号，或对方的兔号（形如 R3F9A0C21B7）')
       return
     }
     const invitationRequest = getOrCreateInvitationRequest(
       pendingRequest.current,
-      { phone: normalizedPhone, role },
+      // 识别成手机号时同时带上 phone：新前端配老后端也能用。
+      kind === 'phone'
+        ? { identifier: normalized, phone: normalized, role }
+        : { identifier: normalized, role },
       createRequestId,
     )
     pendingRequest.current = invitationRequest
     setSaving(true)
     try {
-      await createHouseInvitation(houseId, invitationRequest)
+      const result = await createHouseInvitation(houseId, invitationRequest)
       pendingRequest.current = null
-      toast.success('邀请已提交')
+      toast.success(inviteOutcomeMessage(result, role))
       onOpenChange(false)
       await onInvited()
     } catch {
@@ -269,22 +290,24 @@ function InviteMemberDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>邀请兔场成员</DialogTitle>
-          <DialogDescription>邀请提交后，对方下次使用该手机号验证登录时加入。</DialogDescription>
+          <DialogDescription>
+            填兔号的话对方当场加入；填手机号的话，对方下次用该号码登录时加入。
+          </DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="invite-phone">手机号</FieldLabel>
+              <FieldLabel htmlFor="invite-identifier">手机号或兔号</FieldLabel>
               <Input
-                id="invite-phone"
-                value={phone}
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="请输入 11 位手机号"
+                id="invite-identifier"
+                value={identifier}
+                placeholder="11 位手机号，或形如 R3F9A0C21B7 的兔号"
                 required
-                onChange={(event) => setPhone(event.target.value)}
+                onChange={(event) => setIdentifier(event.target.value)}
               />
-              <FieldDescription>完整号码仅用于发起邀请，成员列表始终脱敏展示。</FieldDescription>
+              <FieldDescription>
+                兔号在对方的「账号安全」页面里，报兔号就不用交换手机号。完整号码仅用于发起邀请，成员列表始终脱敏展示。
+              </FieldDescription>
             </Field>
             <RoleField
               id="invite-role"
@@ -445,12 +468,6 @@ function RemoveMemberDialog({
   )
 }
 
-function normalizeMainlandPhone(value: string) {
-  const digits = value.replace(/\D/g, '')
-  if (digits.startsWith('0086')) return digits.slice(4)
-  if (digits.startsWith('86') && digits.length === 13) return digits.slice(2)
-  return digits
-}
 
 function formatDate(value?: string | null) {
   if (!value) return '-'
