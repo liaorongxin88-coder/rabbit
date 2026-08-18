@@ -1208,32 +1208,34 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
     }
   }
 
+  /// 编号形如 `R1(下)2`：排号 + 层 + **位号**。
+  ///
+  /// 尾数必须是位号，不能是流水号。之前这里累加一个 serial，
+  /// 两层时第 2 位拿到的是 3 和 4——地图上那个格子写着「2」，
+  /// 笼上的签却写着「3」，人对照实物时必错。
   List<String> _buildCageNumbers({
     required String row,
     required int layers,
     required int positions,
   }) {
     final labels = <String>[];
-    var serial = 1;
     for (var position = 1; position <= positions; position++) {
       for (var layer = 1; layer <= layers; layer++) {
-        labels.add('$row(${_layerLabel(layer, layers)})$serial');
-        serial++;
+        labels.add('$row(${_layerLabel(layer, layers)})$position');
       }
     }
     return labels;
   }
 
+  /// 层号 1 是**最下面**那一层：现场从地面往上数，编号也跟着这么读。
   String _layerLabel(int layer, int totalLayers) {
-    if (totalLayers == 1) {
-      return '上';
-    }
     if (totalLayers == 2) {
-      return layer == 1 ? '上' : '下';
+      return layer == 1 ? '下' : '上';
     }
     if (totalLayers == 3) {
-      return const ['上', '中', '下'][layer - 1];
+      return const ['下', '中', '上'][layer - 1];
     }
+    // 单层没有上下之分，层数多了「上中下」也不够用，一律写层号。
     return '第$layer层';
   }
 }
