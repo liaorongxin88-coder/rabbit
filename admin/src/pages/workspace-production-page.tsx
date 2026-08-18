@@ -17,10 +17,12 @@ import {
   listBreedingCycles,
   listCages,
   listRabbits,
+  listReproStageActions,
   submitBatchAction,
   submitBulkMating,
   submitRabbitDeparture,
-  type BatchAction,
+  submitReproAction,
+  type ReproActionName,
 } from '@/api/workspace'
 import { PageHeader } from '@/components/page-header'
 import { WorkspaceOutboundDialog } from '@/components/workspace-outbound-dialog'
@@ -69,19 +71,48 @@ import type {
   RabbitDepartureType,
 } from '@/types/api'
 
-type BatchWorkflowAction = Exclude<BatchAction, 'sale'> | 'mating/bulk' | 'departure'
+/**
+ * 工作台上可选的动作。
+ *
+ * 前六个是生产动作，挂在生产周期上（走 /api/repro/cycles/{id}/actions）；
+ * 旧版把它们挂在批次上，且把催情拆成「开始」与「完成」两步——
+ * doe-breeding-v2 取消了那个中间态，所以催情只剩一个动作。
+ */
+type BatchWorkflowAction =
+  | 'estrus'
+  | 'mating'
+  | 'mating/bulk'
+  | 'palpation'
+  | 'prepartum'
+  | 'delivery'
+  | 'weaning'
+  | 'abortion'
+  | 'departure'
+  | 'complete'
 
 const actionLabels: Record<BatchWorkflowAction, string> = {
-  'aphrodisiac/start': '开始催情',
-  'aphrodisiac/finish': '完成催情',
+  estrus: '记录催情',
   mating: '记录配种',
   'mating/bulk': '批量配种',
-  'pregnancy-check': '记录孕检',
-  'prepartum/finish': '完成产前准备',
-  parturition: '记录分娩',
-  weaning: '记录断奶',
-  departure: '母兔离场',
+  palpation: '记录摸胎',
+  prepartum: '完成备产',
+  delivery: '记录分娩',
+  weaning: '记录分笼',
+  abortion: '记录流产',
+  departure: '登记离场',
   complete: '完成批次',
+}
+
+/** 工作台动作 → 服务端生产动作。不在表中的不走生产写入口。 */
+const reproActionByWorkflow: Partial<Record<BatchWorkflowAction, ReproActionName>> = {
+  estrus: 'ESTRUS',
+  mating: 'MATING',
+  'mating/bulk': 'MATING',
+  palpation: 'PALPATION',
+  prepartum: 'PREPARTUM',
+  delivery: 'DELIVERY',
+  weaning: 'WEANING',
+  abortion: 'ABORTION',
 }
 
 export function WorkspaceProductionPage() {
@@ -476,6 +507,9 @@ function BatchActionDialog({
   const [batchRabbits, setBatchRabbits] = useState<BatchRabbit[]>([])
   const [breedingCycles, setBreedingCycles] = useState<BreedingCycle[]>([])
   const [breedingCycleId, setBreedingCycleId] = useState('')
+  const [stillbirthCount, setStillbirthCount] = useState('')
+  /** 阶段→可执行动作，服务端下发；决定「记录流产」是否出现。 */
+  const [stageActions, setStageActions] = useState<Record<string, string[]>>({})
   const [rabbitId, setRabbitId] = useState('')
   const [motherSearch, setMotherSearch] = useState('')
   const [motherPage, setMotherPage] = useState(1)
@@ -566,12 +600,45 @@ function BatchActionDialog({
     () => batchRabbits.filter((item) => item.isActive && item.batchRole === 'breeding'),
     [batchRabbits],
   )
+  // 阶段字典是业务常量，开一次弹窗拉一次即可。
+  useEffect(() => {
+    if (!houseId) return
+    let cancelled = false
+    listReproStageActions(houseId)
+      .then((rows) => {
+        if (cancelled) return
+        const next: Record<string, string[]> = {}
+        for (const row of rows ?? []) {
+          next[row.stage] = (row.actions ?? []).map((item) => item.action)
+        }
+        setStageActions(next)
+      })
+      .catch(() => {
+        // 拉不到就不提供流产入口，宁可少给也不给一个点下去必定 409 的选项
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [houseId])
+
   const selectedMotherCycles = useMemo(
     () => breedingCycles
       .filter((cycle) => String(cycle.motherRabbitId) === rabbitId)
       .sort((left, right) => right.cycleNo - left.cycleNo),
     [breedingCycles, rabbitId],
   )
+  /**
+   * 流产只在孕期三个阶段成立，且必须落到具体周期上。
+   * 判据来自服务端字典，不在前端写死阶段名。
+   */
+  const abortionAllowed = useMemo(() => {
+    const cycle = selectedMotherCycles.find(
+      (item) => String(item.id) === breedingCycleId,
+    )
+    const stage = cycle?.stage ?? ''
+    return Boolean(stage) && (stageActions[stage] ?? []).includes('ABORTION')
+  }, [selectedMotherCycles, breedingCycleId, stageActions])
+
   const filteredActiveMothers = useMemo(() => {
     const keyword = motherSearch.trim().toLowerCase()
     if (!keyword) return activeBatchRabbits
@@ -678,7 +745,7 @@ function BatchActionDialog({
       if (!canRabbitEdit) return
       const reason = departureReason.trim()
       if (!reason) {
-        toast.error('请填写母兔离场原因')
+        toast.error('请填写离场原因')
         return
       }
       if (!departureConfirmed) {
@@ -712,42 +779,106 @@ function BatchActionDialog({
       }
       return
     }
+    const reproAction = reproActionByWorkflow[action]
     let data: Record<string, unknown>
-    switch (action) {
-      case 'aphrodisiac/start':
-      case 'aphrodisiac/finish':
-        data = { rabbitIds: [Number(rabbitId)], triggerHardware: false }
-        break
-      case 'mating':
-        data = { femaleRabbitId: Number(rabbitId), maleRabbitId: Number(maleRabbitId), matingDate: timestamp }
-        break
-      case 'pregnancy-check':
-        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, checkDate: timestamp, result, remark: remark.trim() }
-        break
-      case 'prepartum/finish':
-        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, actionDate: timestamp, remark: remark.trim() }
-        break
-      case 'parturition': {
-        const parturition = normalizeParturitionPayload(
-          parturitionFailed,
-          Number(totalKits),
-          Number(liveKits),
-        )
-        data = {
-          rabbitId: Number(rabbitId),
-          breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined,
-          birthDate: timestamp,
-          ...parturition,
-          remark: remark.trim(),
-        }
-        break
+    if (reproAction) {
+      // 生产动作必须落在具体周期上。旧版允许「自动选择」并在服务端猜，
+      // 但一头母兔可能同时持有哺乳周期与新怀孕周期（血配），猜错就是静默写错周期。
+      const cycleId = Number(breedingCycleId)
+      if (!cycleId) {
+        toast.error('请先选择要推进的生产周期')
+        return
       }
-      case 'weaning':
-        data = { rabbitId: Number(rabbitId), breedingCycleId: breedingCycleId ? Number(breedingCycleId) : undefined, weaningDate: timestamp, weaningCount: Number(weaningCount), maleCount: Number(maleCount), femaleCount: Number(femaleCount), targetCageId: targetCageId ? Number(targetCageId) : undefined, avgWeight: avgWeight ? Number(avgWeight) : undefined, remark: remark.trim() }
-        break
+      switch (action) {
+        case 'estrus':
+        case 'prepartum':
+          data = { action: reproAction, occurredAt: timestamp, remark: remark.trim() }
+          break
+        case 'abortion':
+          data = {
+            action: reproAction,
+            occurredAt: timestamp,
+            // 死胎数可不填；填了才能统计流产损失
+            ...(stillbirthCount.trim() ? { stillbirthCount: Number(stillbirthCount) } : {}),
+            remark: remark.trim(),
+          }
+          break
+        case 'mating':
+          data = {
+            action: reproAction,
+            occurredAt: timestamp,
+            maleRabbitId: Number(maleRabbitId),
+            matingMethod: 'NATURAL',
+            remark: remark.trim(),
+          }
+          break
+        case 'palpation':
+          data = {
+            action: reproAction,
+            occurredAt: timestamp,
+            palpationResult: result,
+            remark: remark.trim(),
+          }
+          break
+        case 'delivery': {
+          const parturition = normalizeParturitionPayload(
+            parturitionFailed,
+            Number(totalKits),
+            Number(liveKits),
+          )
+          data = {
+            action: reproAction,
+            outcome: parturitionFailed ? 'FAILED' : 'BORN',
+            occurredAt: timestamp,
+            ...(parturitionFailed
+              ? {}
+              : { totalKits: parturition.totalKits, liveKits: parturition.liveKits }),
+            remark: remark.trim(),
+          }
+          break
+        }
+        case 'weaning':
+          data = {
+            action: reproAction,
+            occurredAt: timestamp,
+            weanedCount: Number(weaningCount),
+            maleCount: Number(maleCount),
+            femaleCount: Number(femaleCount),
+            targetCageId: targetCageId ? Number(targetCageId) : undefined,
+            avgWeaningWeight: avgWeight ? Number(avgWeight) : undefined,
+            remark: remark.trim(),
+          }
+          break
+        default:
+          return
+      }
+      const reproRequest = getOrCreateBatchActionRequest(
+        pendingBatchActionRequest.current,
+        { batchId: cycleId, action, payload: data },
+        () => crypto.randomUUID(),
+      )
+      pendingBatchActionRequest.current = reproRequest
+      setSaving(true)
+      try {
+        await submitReproAction(houseId, cycleId, reproRequest.payload, reproRequest.requestId)
+        pendingBatchActionRequest.current = null
+        toast.success(`${actionLabels[action]}已保存`)
+        onOpenChange(false)
+        await onSaved()
+      } catch {
+        // 保留 requestId，让未改动载荷的重试保持幂等。
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    switch (action) {
       case 'complete':
         data = { endDate: timestamp, force, remark: remark.trim() }
         break
+      default:
+        return
     }
     const request = getOrCreateBatchActionRequest(
       pendingBatchActionRequest.current,
@@ -770,7 +901,8 @@ function BatchActionDialog({
   }
 
   const requiresRabbit = action !== 'complete' && action !== 'mating/bulk'
-  const usesDate = !['aphrodisiac/start', 'aphrodisiac/finish'].includes(action)
+  // 所有生产动作现在都记录发生时间（occurredAt），不再有无日期的动作。
+  const usesDate = true
   const batchCompleted = isCompletedBatchStatus(batch?.status)
 
   return (
@@ -786,7 +918,7 @@ function BatchActionDialog({
               <FieldLabel htmlFor="batch-action">操作类型</FieldLabel>
               <Select value={action} onValueChange={(value) => setAction(value as BatchWorkflowAction)}>
                 <SelectTrigger id="batch-action"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup>{Object.entries(actionLabels).filter(([value]) => value !== 'departure' || canRabbitEdit).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
+                <SelectContent><SelectGroup>{Object.entries(actionLabels).filter(([value]) => (value !== 'departure' || canRabbitEdit) && (value !== 'abortion' || abortionAllowed)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </Field>
             {requiresRabbit ? (
@@ -842,7 +974,7 @@ function BatchActionDialog({
                 </div>
               </Field>
             ) : null}
-            {['pregnancy-check', 'prepartum/finish', 'parturition', 'weaning'].includes(action) && selectedMotherCycles.length > 0 ? (
+            {['palpation', 'prepartum', 'delivery', 'weaning', 'estrus', 'mating', 'abortion'].includes(action) && selectedMotherCycles.length > 0 ? (
               <Field>
                 <FieldLabel htmlFor="breeding-cycle">繁殖周期</FieldLabel>
                 <Select value={breedingCycleId || 'auto'} onValueChange={(value) => setBreedingCycleId(value === 'auto' ? '' : value)}>
@@ -968,12 +1100,12 @@ function BatchActionDialog({
                       checked={departureConfirmed}
                       onChange={(event) => setDepartureConfirmed(event.target.checked)}
                     />
-                    <span><span className="font-medium text-destructive">确认强制离场</span><br /><span className="text-muted-foreground">将同时退出该母兔的活跃 Batch 关系并关闭进行中的繁殖周期。</span></span>
+                    <span><span className="font-medium text-destructive">确认强制离场</span><br /><span className="text-muted-foreground">将同时退出该母兔的活跃批次关系并关闭进行中的繁殖周期。</span></span>
                   </label>
                 </Field>
               </>
             ) : null}
-            {action === 'pregnancy-check' ? (
+            {action === 'palpation' ? (
               <Field>
                 <FieldLabel htmlFor="pregnancy-result">孕检结果</FieldLabel>
                 <Select value={result} onValueChange={setResult}>
@@ -982,7 +1114,21 @@ function BatchActionDialog({
                 </Select>
               </Field>
             ) : null}
-            {action === 'parturition' ? (
+            {action === 'abortion' ? (
+              <Field>
+                <FieldLabel htmlFor="abortion-stillbirth">死胎数</FieldLabel>
+                <Input
+                  id="abortion-stillbirth"
+                  type="number"
+                  min={0}
+                  value={stillbirthCount}
+                  placeholder="可不填；填了才能统计流产损失"
+                  onChange={(event) => setStillbirthCount(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">本轮周期将结束，母兔复旧后重新进入待催情。</p>
+              </Field>
+            ) : null}
+            {action === 'delivery' ? (
               <>
                 <Field>
                   <label className="flex items-center gap-3 text-sm font-medium" htmlFor="parturition-failed">
@@ -1044,7 +1190,7 @@ function BatchActionDialog({
                 <Input id="batch-action-date" type="date" value={date} required onChange={(event) => setDate(event.target.value)} />
               </Field>
             ) : null}
-            {!['mating', 'mating/bulk', 'aphrodisiac/start', 'aphrodisiac/finish'].includes(action) ? (
+            {!['mating', 'mating/bulk'].includes(action) ? (
               <Field>
                 <FieldLabel htmlFor="batch-action-remark">备注</FieldLabel>
                 <Textarea id="batch-action-remark" value={remark} onChange={(event) => setRemark(event.target.value)} />
@@ -1065,7 +1211,7 @@ function BatchActionDialog({
               }
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认母兔离场' : '保存记录'}
+              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认离场' : '保存记录'}
             </Button>
           </DialogFooter>
         </form>

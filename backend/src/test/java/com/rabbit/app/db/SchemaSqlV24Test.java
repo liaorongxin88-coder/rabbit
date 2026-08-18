@@ -115,6 +115,90 @@ class SchemaSqlV24Test {
         );
     }
 
+    @Test
+    void schemaContainsDoeBreedingV2AdditiveStructure() {
+        String cycles = table("breeding_cycles");
+
+        assertAll(
+            // V28 tightened both: the legacy batch writer that inserted stage-less cycles is
+            // gone, and V27 already backfilled every existing row.
+            () -> assertContains(cycles, "stage varchar(20) not null"),
+            () -> assertContains(cycles, "stage_entered_at datetime not null"),
+            // Compat mirrors dropped by V28. Reminders live in work_tasks; the authoritative
+            // state is stage + lifecycle + result, never the Chinese status string (one stage
+            // could map to several legacy values, so it was never a reliable discriminator).
+            () -> assertFalse(cycles.contains("status varchar(30) not null")),
+            () -> assertFalse(cycles.contains("next_event_date datetime")),
+            () -> assertFalse(cycles.contains("next_event_type varchar(30)")),
+            () -> assertFalse(cycles.contains("overlap_days int")),
+            () -> assertContains(cycles, "lifecycle varchar(10) not null default 'open'"),
+            () -> assertContains(cycles, "result varchar(10)"),
+            () -> assertContains(cycles, "mating_method varchar(10)"),
+            () -> assertContains(cycles, "state_version bigint not null default 0"),
+            () -> assertContains(cycles, "pipeline_guard bigint generated always as"),
+            // batch_member_guard was dropped by V28 together with the key it was meant to feed.
+            () -> assertFalse(cycles.contains("batch_member_guard varchar(64) generated")),
+            // V27 enforces one in-flight pipeline cycle per doe.
+            () -> assertContains(cycles, "unique key uk_bc_pipeline (house_id, pipeline_guard)"),
+            // uk_bc_batch_member is deliberately NEVER created: batch_member_guard covers every
+            // OPEN cycle including lactation, so enforcing it would block blood mating inside a
+            // single batch -- exactly what pipeline_guard's AWAIT_WEANING exclusion exists to
+            // allow. The generated column stays as a diagnostic handle only.
+            // Matches the KEY, not the name: schema.sql documents in a comment why this key is
+            // absent, and that explanation must not trip the guard it is explaining.
+            () -> assertFalse(cycles.contains("unique key uk_bc_batch_member")),
+            // Free-range does belong to no batch (business ruling 2026-08-16). Widening a
+            // NOT NULL column is backward compatible, so it ships with the additive migration
+            // rather than V27 -- the new write path cannot serve free-range does without it.
+            () -> assertContains(cycles, "batch_id bigint,"),
+            () -> assertFalse(cycles.contains("batch_id bigint not null")),
+            () -> assertContains(table("batches"), "is_archived boolean not null default false"),
+            () -> assertContains(table("global_setting"), "gestation_days int not null default 30"),
+            // V29: a free-range doe has no batch, so her weaning record cannot carry one
+            // either. The record belongs to the litter and cycle; batch_id is legacy
+            // denormalisation. Leaving it NOT NULL made weaning crash for free-range does.
+            () -> assertFalse(table("weaning_records").contains("batch_id bigint not null"))
+        );
+    }
+
+    @Test
+    void schemaContainsDoeBreedingV2Projections() {
+        String rabbits = table("rabbits");
+
+        assertAll(
+            () -> assertContains(rabbits, "current_stage varchar(20)"),
+            () -> assertContains(rabbits, "current_cycle_id bigint"),
+            () -> assertContains(rabbits, "stage_entered_at datetime"),
+            () -> assertContains(rabbits, "last_mating_date datetime"),
+            () -> assertContains(
+                rabbits,
+                "key idx_rabbits_house_current_stage (house_id, current_stage, id)"
+            )
+        );
+    }
+
+    @Test
+    void schemaContainsReproEventStoreAndTaskCenter() {
+        assertAll(
+            () -> assertContains(table("repro_events"), "unique key uk_re_request (house_id, request_id)"),
+            () -> assertContains(table("repro_events"), "operator_id bigint"),
+            () -> assertContains(table("repro_events"), "operator_name varchar(64) not null"),
+            () -> assertContains(table("repro_events"), "payload json"),
+            () -> assertContains(table("litters"), "unique key uk_lt_cycle (house_id, cycle_id)"),
+            () -> assertContains(table("litters"), "current_nursing int not null default 0"),
+            () -> assertContains(table("work_tasks"), "unique key uk_wt_dedup (house_id, dedup_key)"),
+            () -> assertContains(
+                table("work_tasks"),
+                "key idx_wt_due (house_id, status, due_date, task_type)"
+            ),
+            () -> assertContains(table("work_tasks"), "key idx_wt_cage (house_id, cage_id, status)"),
+            () -> assertContains(
+                table("biz_attachments"),
+                "unique key uk_ba_biz_file (house_id, biz_type, biz_id, file_id)"
+            )
+        );
+    }
+
     private static void assertCycleReference(String tableName, String indexName) {
         String definition = table(tableName);
         assertContains(definition, "breeding_cycle_id bigint");

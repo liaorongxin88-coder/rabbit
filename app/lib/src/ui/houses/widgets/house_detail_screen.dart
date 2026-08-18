@@ -171,8 +171,8 @@ class _HouseDetailContent extends ConsumerWidget {
             iconBackground: palette.warningSoft,
             title: '生产批次',
             message: perm.canEdit
-                ? '查看全部 Batch，按状态筛选或创建新的生产批次。'
-                : '查看当前兔舍全部 Batch 及其生产周期状态。',
+                ? '查看全部批次，按状态筛选或创建新的生产批次。'
+                : '查看当前兔舍全部批次及其生产周期状态。',
             actionLabel: '查看批次',
             onTap: () => context.go('/houses/${house.id}/batches'),
           ),

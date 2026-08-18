@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  CopyIcon,
   KeyRoundIcon,
   PhoneIcon,
   RefreshCwIcon,
@@ -185,6 +186,35 @@ export function WorkspaceAccountPage() {
                 <CardDescription>用户 ID {profile.userId}</CardDescription>
               </CardHeader>
               <CardContent>
+                {profile.userCode ? (
+                  <Field className="mb-4">
+                    <FieldLabel htmlFor="workspace-account-user-code">我的账号</FieldLabel>
+                    {/* 账号存在的意义就是报给别人，所以要能一键复制，
+                        而不是让人对着屏幕拄。用只读 Input 而非纯文本，方便全选。 */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="workspace-account-user-code"
+                        value={profile.userCode}
+                        readOnly
+                        className="font-mono tracking-wider"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(profile.userCode ?? '')
+                          toast.success('账号已复制')
+                        }}
+                      >
+                        <CopyIcon data-icon="inline-start" />
+                        复制
+                      </Button>
+                    </div>
+                    <FieldDescription>
+                      把它报给场主，就能被拉进兔舍，不用把手机号给出去。
+                    </FieldDescription>
+                  </Field>
+                ) : null}
                 <form className="grid gap-4" onSubmit={saveUserName}>
                   <Field>
                     <FieldLabel htmlFor="workspace-account-user-name">用户名</FieldLabel>

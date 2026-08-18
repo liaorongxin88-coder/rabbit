@@ -8,7 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
@@ -37,7 +37,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          batchRepositoryProvider.overrideWithValue(BatchRepository(client)),
+          reproRepositoryProvider.overrideWithValue(ReproRepository(client)),
           allActiveHouseRabbitsProvider(8).overrideWith(
             (_) async => const [
               Rabbit(
@@ -120,6 +120,8 @@ void main() {
   });
 }
 
+/// 批量配种现在是两步：先拉取该批次的待配种任务，再按任务 id 批量提交。
+/// [requests] 只记录真正的写请求，因为本用例要盯的是写请求的 requestId 行为。
 class _BulkMatingAdapter implements HttpClientAdapter {
   _BulkMatingAdapter({required this.failuresBeforeSuccess});
 
@@ -132,6 +134,32 @@ class _BulkMatingAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    if (options.path.startsWith('/api/tasks')) {
+      return _json({
+        'total': 2,
+        'page': 1,
+        'size': 50,
+        'items': [
+          {
+            'id': 701,
+            'taskType': 'MATING',
+            'taskLabel': '待配种',
+            'action': 'MATING',
+            'cycleId': 301,
+            'rabbitId': 101,
+          },
+          {
+            'id': 702,
+            'taskType': 'MATING',
+            'taskLabel': '待配种',
+            'action': 'MATING',
+            'cycleId': 302,
+            'rabbitId': 102,
+          },
+        ],
+      });
+    }
+
     requests.add(Map<String, dynamic>.from(options.data as Map));
     if (requests.length <= failuresBeforeSuccess) {
       throw DioException.connectionError(
@@ -139,8 +167,12 @@ class _BulkMatingAdapter implements HttpClientAdapter {
         reason: 'fixture connection loss',
       );
     }
+    return _json({'total': 2, 'succeeded': 2, 'failed': 0, 'items': []});
+  }
+
+  static ResponseBody _json(Object? data) {
     return ResponseBody.fromString(
-      jsonEncode({'code': 0, 'message': 'ok', 'data': null}),
+      jsonEncode({'code': 0, 'message': 'ok', 'data': data}),
       200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],

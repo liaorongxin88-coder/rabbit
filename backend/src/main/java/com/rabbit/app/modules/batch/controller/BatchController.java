@@ -3,10 +3,15 @@ package com.rabbit.app.modules.batch.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.AphrodisiacRequest;
+import com.rabbit.app.modules.repro.compat.LegacyEventType;
+import com.rabbit.app.modules.repro.domain.TaskType;
+import com.rabbit.app.modules.repro.dto.TaskView;
+import com.rabbit.app.modules.repro.service.WorkTaskService;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.dto.BulkMatingRequest;
 import com.rabbit.app.modules.batch.dto.BulkMatingResult;
 import com.rabbit.app.modules.batch.dto.CompleteBatchRequest;
+import com.rabbit.app.modules.batch.dto.AddBatchMembersRequest;
 import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
 import com.rabbit.app.modules.batch.dto.MatingRequest;
 import com.rabbit.app.modules.batch.dto.ParturitionRequest;
@@ -53,8 +58,11 @@ public class BatchController {
     private final EventService eventService;
     private final TreatmentService treatmentService;
     private final HardwareLinkService hardwareLinkService;
+    /** 生产提醒的唯一来源；首页与笼位共用它，不再各读一张镜像表。 */
+    private final WorkTaskService workTaskService;
 
-    public BatchController(HouseService houseService, BatchService batchService, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService) {
+    public BatchController(HouseService houseService, BatchService batchService, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService, WorkTaskService workTaskService) {
+        this.workTaskService = workTaskService;
         this.houseService = houseService;
         this.batchService = batchService;
         this.batchRabbitMapper = batchRabbitMapper;
@@ -82,6 +90,25 @@ public class BatchController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
         return ApiResponse.ok(batchService.createBatch(userId, houseId, req.getBatchCode(), req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
+    }
+
+    /**
+     * 向已存在的批次追加母兔。
+     *
+     * <p>批次现在可以先建空壳，母兔陆续到齐再放进来；追加的母兔与建批时一样当场入轨。
+     */
+    @PostMapping("/batches/{batchId}/members")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<Void> addBatchMembers(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @Valid @RequestBody AddBatchMembersRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        batchService.addMembers(
+            userId, houseId, batchId, req.getFemaleRabbitIds(), req.getRequestId());
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/batches/{batchId}")
@@ -126,97 +153,10 @@ public class BatchController {
         return ApiResponse.ok(batchService.listBreedingCycles(houseId, batchId, motherRabbitId, activeOnly));
     }
 
-    @PostMapping("/batches/{batchId}/mating")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> mating(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody MatingRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.mating(userId, houseId, batchId, req.getFemaleRabbitId(), req.getMaleRabbitId(), req.getMatingDate(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
+    // 旧的繁殖写端点（配种/批量配种/催情开始/催情完成/孕检/备产/接产/分笼）已于
+    // doe-breeding-v2 P4 删除，统一走 POST /api/repro/cycles/{cycleId}/actions。
+    // 硬件催情不随之消失：它本就有独立的 HardwareController 端点，客户端分别调用。
 
-    @PostMapping("/batches/{batchId}/mating/bulk")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<BulkMatingResult> bulkMating(
-            @RequestHeader("X-House-Id") Long houseId,
-            @PathVariable("batchId") Long batchId,
-            @Valid @RequestBody BulkMatingRequest req
-    ) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        return ApiResponse.ok(batchService.matingBulk(
-                userId,
-                houseId,
-                batchId,
-                req.getFemaleRabbitIds(),
-                req.getMaleRabbitId(),
-                req.getMatingDate(),
-                req.getRequestId()
-        ));
-    }
-
-    @PostMapping("/batches/{batchId}/aphrodisiac/start")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> aphrodisiacStart(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody AphrodisiacRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        if (req.getTriggerHardware() != null && req.getTriggerHardware()) {
-            houseService.assertHousePermission(userId, houseId, "control");
-            hardwareLinkService.aphrodisiacStart(houseId, batchId, req.getRabbitIds());
-        }
-        batchService.aphrodisiacStart(userId, houseId, batchId, req.getRabbitIds(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/batches/{batchId}/aphrodisiac/finish")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> aphrodisiacFinish(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody AphrodisiacRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        if (req.getTriggerHardware() != null && req.getTriggerHardware()) {
-            houseService.assertHousePermission(userId, houseId, "control");
-            hardwareLinkService.aphrodisiacFinish(houseId, batchId, req.getRabbitIds());
-        }
-        batchService.aphrodisiacFinish(userId, houseId, batchId, req.getRabbitIds(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/batches/{batchId}/pregnancy-check")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> pregnancyCheck(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PregnancyCheckRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.pregnancyCheck(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getCheckDate(), req.getResult(), req.getRemark(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/batches/{batchId}/prepartum/finish")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> prepartumFinish(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody PrepartumRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.prepartumFinish(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getActionDate(), req.getRemark(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/batches/{batchId}/parturition")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> parturition(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody ParturitionRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        boolean failed = req.getFailed() != null && req.getFailed();
-        batchService.parturition(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getBirthDate(), req.getTotalKits(), req.getLiveKits(), failed, req.getRemark(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
-
-    @PostMapping("/batches/{batchId}/weaning")
-    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
-    public ApiResponse<Void> weaning(@RequestHeader("X-House-Id") Long houseId, @PathVariable("batchId") Long batchId, @Valid @RequestBody WeaningRequest req) {
-        Long userId = requireLogin();
-        houseService.assertHousePermission(userId, houseId, "edit");
-        batchService.weaning(userId, houseId, batchId, req.getRabbitId(), req.getBreedingCycleId(), req.getWeaningDate(), req.getWeaningCount(), req.getMaleCount(), req.getFemaleCount(), req.getTargetCageId(), req.getAvgWeight(), req.getRemark(), req.getRequestId());
-        return ApiResponse.ok(null);
-    }
 
     @PostMapping("/batches/{batchId}/sale")
     @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
@@ -250,19 +190,29 @@ public class BatchController {
         java.util.Set<Long> suppressedReview = eventService.getSuppressedIds(userId, houseId, "治疗复查");
 
         boolean x = onlyUnnotified != null && onlyUnnotified;
-        List<BreedingCycle> dueCycles = batchService.listDueBreedingCycleEvents(houseId, x);
-        for (BreedingCycle cycle : dueCycles) {
-            if (suppressedCycles.contains(cycle.getId())) {
+
+        // 生产提醒一律来自待办中心（work_tasks）。
+        //
+        // 旧实现分两路读 breeding_cycles.next_event_* 与 batch_rabbits.next_event_*，
+        // 两张表各自维护、各自漂移，首页与笼位因此给出不一致的提醒（飞书 recvsrmZKv1cqp）。
+        // 现在首页、笼位 NFC、兔卡、批次详情共用 work_tasks 这一个来源，不可能再分歧。
+        // 后备成熟与治疗复查暂未进入待办中心，仍走各自的数据源。
+        for (TaskView task : workTaskService.pendingDue(
+                houseId, null, null, null, null, null, 1, 500).items()) {
+            if (task.cycleId() == null || suppressedCycles.contains(task.cycleId())) {
                 continue;
             }
-            items.add(new EventItem(cycle.getId(), "生产周期", cycle.getNextEventType(), cycle.getNextEventDate(), cycle.getBatchId(), cycle.getMotherRabbitId(), cycle.getStatus()));
-        }
-        List<BatchRabbit> due = batchService.listDueBatchEvents(houseId, x);
-        for (BatchRabbit br : due) {
-            if (suppressedProd.contains(br.getId())) {
-                continue;
-            }
-            items.add(new EventItem(br.getId(), "生产", br.getNextEventType(), br.getNextEventDate(), br.getBatchId(), br.getRabbitId(), br.getCurrentStatus()));
+            items.add(new EventItem(
+                task.cycleId(),
+                "生产周期",
+                // 旧客户端按中文事件名分流，而 TaskType.label() 是新 UI 词汇（待分笼 ≠ 断奶），
+                // 所以这里走 compat 映射而不是直接用 label。
+                LegacyEventType.of(TaskType.parse(task.taskType())),
+                task.dueDate(),
+                task.batchId(),
+                task.rabbitId(),
+                task.overdue() ? "overdue" : null
+            ));
         }
         List<ReplacementRecord> dueRep = batchService.listDueReplacement(houseId, x);
         for (ReplacementRecord rr : dueRep) {

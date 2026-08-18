@@ -23,12 +23,37 @@ resolve_db_container() {
   printf '%s\n' 'rabbit_mysql_1'
 }
 
+# 主机局域网 IP。真机是通过局域网直连后端的，不走 adb reverse：
+# 后者会把流量隧道回 USB，掩盖掉真实网络下的延迟与断连行为。
+resolve_host_lan_ip() {
+  if [[ -n "${RABBIT_ANDROID_E2E_HOST_LAN_IP:-}" ]]; then
+    printf '%s\n' "$RABBIT_ANDROID_E2E_HOST_LAN_IP"
+    return
+  fi
+  local ip=""
+  for iface in en0 en1 en2; do
+    ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+    [[ -n "$ip" ]] && break
+  done
+  printf '%s\n' "$ip"
+}
+
 DB_CONTAINER="$(resolve_db_container)"
+CACHE_CONTAINER="${RABBIT_ANDROID_E2E_CACHE_CONTAINER:-rabbit_valkey_1}"
+BACKEND_CONTAINER="${RABBIT_ANDROID_E2E_BACKEND_CONTAINER:-rabbit_backend_1}"
 DB_NAME="${RABBIT_ANDROID_E2E_DB_NAME:-rabbit_app}"
 DB_USER="${RABBIT_ANDROID_E2E_DB_USER:-root}"
 DB_PASSWORD="${RABBIT_ANDROID_E2E_DB_PASSWORD:-rabbit_root}"
+HOST_LAN_IP="$(resolve_host_lan_ip)"
 HOST_API_URL="${RABBIT_ANDROID_E2E_HOST_API_URL:-http://127.0.0.1:8080}"
-DEVICE_API_URL="${RABBIT_ANDROID_E2E_DEVICE_API_URL:-http://10.0.2.2:8080}"
+# 默认走局域网；只有模拟器才回退到 10.0.2.2。
+if [[ -n "${RABBIT_ANDROID_E2E_DEVICE_API_URL:-}" ]]; then
+  DEVICE_API_URL="$RABBIT_ANDROID_E2E_DEVICE_API_URL"
+elif [[ -n "$HOST_LAN_IP" ]]; then
+  DEVICE_API_URL="http://$HOST_LAN_IP:8080"
+else
+  DEVICE_API_URL="http://10.0.2.2:8080"
+fi
 TEXT_SCALE="${RABBIT_ANDROID_E2E_TEXT_SCALE:-1.0}"
 EXPECTED_EFFECTIVE_TEXT_SCALE="${RABBIT_ANDROID_E2E_EXPECTED_EFFECTIVE_TEXT_SCALE:-}"
 ADB_BIN="${RABBIT_ANDROID_E2E_ADB:-}"
@@ -38,6 +63,7 @@ KEEP_DEVICE_AWAKE="${RABBIT_ANDROID_E2E_KEEP_DEVICE_AWAKE:-1}"
 
 original_font_scale=""
 original_stay_on_while_plugged_in=""
+original_accelerometer_rotation=""
 time_accelerator_pid=""
 
 if [[ -z "$EXPECTED_EFFECTIVE_TEXT_SCALE" ]]; then
@@ -87,11 +113,43 @@ if ! curl -fsS "$HOST_API_URL/api/houses" >/dev/null; then
   exit 69
 fi
 
+# 必须跑在完整 compose 集群上（mysql + valkey + backend 容器），而不是临时拼的环境。
+# 本地跑 mvn spring-boot:run 也能让用例通过，但那就测不到容器网络、镜像构建
+# 与缓存接线这三件真实部署才有的事。
+for container in "$DB_CONTAINER" "$CACHE_CONTAINER" "$BACKEND_CONTAINER"; do
+  if ! docker inspect "$container" >/dev/null 2>&1; then
+    echo "Missing compose container: $container" >&2
+    echo "Start the full cluster first: docker compose --profile valkey up -d --build" >&2
+    exit 69
+  fi
+done
+
+# 缓存必须真的是 valkey 且连得上。仅看环境变量不够：配错主机名时后端照样启动，
+# 只在真正用到缓存的路径上才报错（短信验证码）。
+cache_provider=$(docker exec "$BACKEND_CONTAINER" printenv APP_CACHE_PROVIDER 2>/dev/null || true)
+if [[ "$cache_provider" != "valkey" ]]; then
+  echo "Backend cache provider must be valkey for this run (got: '${cache_provider:-unset}')" >&2
+  exit 78
+fi
+if ! docker exec "$CACHE_CONTAINER" valkey-cli ping 2>/dev/null | grep -q PONG; then
+  echo "Valkey is not responding in container $CACHE_CONTAINER" >&2
+  exit 69
+fi
+
+# 真机必须能从局域网直接访问后端。这一步失败通常是 BACKEND_BIND_ADDRESS 仍为
+# 127.0.0.1（只监听回环），或手机不在同一局域网。
+if [[ "$DEVICE_API_URL" == http://10.0.2.2:* ]]; then
+  echo "Warning: falling back to emulator loopback; no host LAN IP detected" >&2
+fi
+
+
+# V27 carries the doe-breeding-v2 backfill and uk_bc_pipeline; without it the
+# production flow this test drives does not exist.
 migration_present=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
   mysql -N -B -u"$DB_USER" -D "$DB_NAME" \
-  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '25' AND success = 1;")
+  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '27' AND success = 1;")
 if [[ "$migration_present" != "1" ]]; then
-  echo "Expected successful Flyway V25 in $DB_NAME" >&2
+  echo "Expected successful Flyway V27 in $DB_NAME" >&2
   exit 65
 fi
 
@@ -103,6 +161,18 @@ if [[ -z "$DEVICE_ID" ]] || \
    [[ "$("$ADB_BIN" -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
   echo "A connected Android device is required for the Batch lifecycle E2E" >&2
   exit 69
+fi
+
+# 从设备侧实打一次：主机自测通过不代表手机能访问（监听地址、防火墙、
+# AP 隔离都会只卡设备这一侧）。失败时提前报错，而不是让用例在登录页超时。
+if [[ "$DEVICE_API_URL" != http://10.0.2.2:* ]]; then
+  device_probe="$("$ADB_BIN" -s "$DEVICE_ID" shell "curl -s -m 8 -o /dev/null -w '%{http_code}' $DEVICE_API_URL/api/houses" 2>/dev/null | tr -d '\r')"
+  if [[ "$device_probe" != "401" && "$device_probe" != "200" ]]; then
+    echo "Device $DEVICE_ID cannot reach the backend at $DEVICE_API_URL (probe: '${device_probe:-none}')" >&2
+    echo "Check BACKEND_BIND_ADDRESS=0.0.0.0 in .env and that the phone is on the same LAN." >&2
+    exit 69
+  fi
+  echo "Device reaches backend over LAN at $DEVICE_API_URL"
 fi
 
 if [[ "$KEEP_DEVICE_AWAKE" == "1" ]]; then
@@ -147,8 +217,10 @@ mkdir -p "$artifact_dir"
 printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
 physical_size="$($ADB_BIN -s "$DEVICE_ID" shell wm size | awk -F ': ' '/Physical size/ { print $2; exit }' | tr -d '\r')"
 physical_density="$($ADB_BIN -s "$DEVICE_ID" shell wm density | awk -F ': ' '/Physical density/ { print $2; exit }' | tr -d '\r')"
-printf 'device=%s\nprofile=batch-lifecycle\ntime_mode=compressed-next-event-dates\nsystem_text_scale=%s\neffective_text_scale=%s\nphysical_size=%s\nphysical_density=%s\nrun_id=%s\nprimary_house_id=%s\nmother_a_id=%s\nmother_b_id=%s\nfather_id=%s\n' \
-  "$DEVICE_ID" "$TEXT_SCALE" "$EXPECTED_EFFECTIVE_TEXT_SCALE" "$physical_size" "$physical_density" \
+cache_keys_before=$(docker exec "$CACHE_CONTAINER" valkey-cli dbsize 2>/dev/null | tr -d '\r')
+printf 'device=%s\nprofile=batch-lifecycle\ntime_mode=compressed-work-task-due\ntransport=lan\ndevice_api_url=%s\ncache_provider=valkey\ncache_container=%s\ncache_keys_before=%s\nsystem_text_scale=%s\neffective_text_scale=%s\nphysical_size=%s\nphysical_density=%s\nrun_id=%s\nprimary_house_id=%s\nmother_a_id=%s\nmother_b_id=%s\nfather_id=%s\n' \
+  "$DEVICE_ID" "$DEVICE_API_URL" "$CACHE_CONTAINER" "${cache_keys_before:-0}" \
+  "$TEXT_SCALE" "$EXPECTED_EFFECTIVE_TEXT_SCALE" "$physical_size" "$physical_density" \
   "$run_id" "$house_id" "$mother_a_id" "$mother_b_id" "$father_id" \
   > "$artifact_dir/environment.txt"
 
@@ -156,17 +228,21 @@ export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
 
 # Production reminders are date-gated. Compress only this isolated fixture's
 # pending reminder dates so a 30+ day lifecycle remains visible in one run.
+#
+# work_tasks is the only reminder source after doe-breeding-v2: V28 dropped
+# breeding_cycles.next_event_*, and batch_rabbits' copy now only feeds the
+# replacement/sale reminders that have not moved into the task centre yet.
 (
   while true; do
     docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
       mysql --default-character-set=utf8mb4 -N -B -u"$DB_USER" -D "$DB_NAME" -e "
-        UPDATE breeding_cycles bc
-        JOIN batches b ON b.id = bc.batch_id
-        SET bc.next_event_date = CURDATE()
+        UPDATE work_tasks wt
+        JOIN batches b ON b.id = wt.batch_id
+        SET wt.due_date = CURDATE(), wt.due_time = NOW()
         WHERE b.house_id = $house_id
           AND b.batch_code = 'B-LIFECYCLE-$run_id'
-          AND bc.closed_at IS NULL
-          AND bc.next_event_date > CURDATE();
+          AND wt.status = 'PENDING'
+          AND wt.due_date > CURDATE();
         UPDATE batch_rabbits br
         JOIN batches b ON b.id = br.batch_id
         SET br.next_event_date = CURDATE()
@@ -217,10 +293,11 @@ screenshots=(
   12-prepartum-second-cycle
   13-parturition-second-cycle
   14-weaning-second-cycle
-  15-outbound-selection
-  16-outbound-confirmation
-  17-outbound-success
-  18-batch-completed
+  15-abortion-mother-b
+  16-outbound-selection
+  17-outbound-confirmation
+  18-outbound-success
+  19-batch-completed
 )
 for screenshot in "${screenshots[@]}"; do
   if [[ ! -s "$artifact_dir/$screenshot.png" ]]; then
@@ -238,10 +315,27 @@ if [[ -z "$batch_id" ]]; then
   exit 1
 fi
 
-expected="1 9 0 3 2 1 1 2 2 7 7 7 7 1 1 0 1 1"
+# doe-breeding-v2 下的预期值。与旧模型的差异都是设计使然，不是回归：
+#
+#   cycles 3 -> 6      空怀/流产/断奶后都会自动接续下一轮，而不是把母兔丢出流程。
+#                      构成（可逐条复核，不是魔数）：
+#                        母兔 A：#1 配种→产仔→断奶；#2 血配→产仔→断奶；
+#                                #3 断奶后自动接续的待催情周期，淘汰时置为 REMOVED
+#                        母兔 B：#1 配种→空怀；#2 重开后再配→待摸胎时流产；
+#                                #3 流产后自动接续的待催情周期，淘汰时置为 REMOVED
+#   aborted_cycles 1   流产是非计划事件，无待办可走，只能从母兔行的独立入口提交。
+#                      单看 cycles 变化不足以证明流产真的落库，所以单独计一列。
+#   阶段计数改用 lifecycle/result   而不再看中文 status 镜像列（V28 将删除）。
+#   overlap_cycles 改义              从「写过 overlap_* 列的周期数」改为「本批次里拥有多轮
+#                                    周期的母兔数」＝2（A 三轮、B 两轮）。
+#   parturitions 2 -> 0              产仔已由 repro_events 记录，不再写遗留记录表。
+#   mother_b_active 1 -> 0           母兔 B 空怀后仍在生产中，需显式离场批次才能结束。
+#
+# lineage_kits 仍为 7：谱系（父/母/出生周期）是硬要求，不得因重构而丢失。
+expected="1 9 0 6 2 1 2 2 0 7 7 7 7 0 1 0 1 1 1"
 actual=""
 for _ in {1..40}; do
-  read -r completed_batches batch_members active_members cycles weaned_cycles empty_cycles overlap_cycles weanings parturitions born_kits lineage_kits sold_kits sale_items mother_b_active mother_a_inactive nursing_kits cull_departures sale_orders <<<"$(
+  read -r completed_batches batch_members active_members cycles weaned_cycles empty_cycles overlap_cycles weanings parturitions born_kits lineage_kits sold_kits sale_items mother_b_active mother_a_inactive nursing_kits cull_departures sale_orders aborted_cycles <<<"$(
     docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
       mysql --default-character-set=utf8mb4 -N -B -u"$DB_USER" -D "$DB_NAME" -e "
         SELECT
@@ -249,9 +343,15 @@ for _ in {1..40}; do
           (SELECT COUNT(*) FROM batch_rabbits WHERE batch_id = $batch_id),
           (SELECT COUNT(*) FROM batch_rabbits WHERE batch_id = $batch_id AND is_active = TRUE),
           (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id),
-          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND status = '已断奶'),
-          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND status = '空怀'),
-          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND overlap_litter_cycle_no IS NOT NULL AND postpartum_remating_days IS NOT NULL),
+          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND result = 'WEANED'),
+          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND result = 'EMPTY'),
+          -- 血配的新证据：同一头母兔在本批次里拥有多条周期。
+          -- 旧的 overlap_* 列已随 V28 删除（只写不读的死数据）；新模型里血配就是
+          -- 「哺乳周期与新怀孕周期并存」，落到最终数据上即母兔持有多轮周期。
+          (SELECT COUNT(*) FROM (
+              SELECT mother_rabbit_id FROM breeding_cycles WHERE batch_id = $batch_id
+               GROUP BY mother_rabbit_id HAVING COUNT(*) > 1
+          ) repeat_breeders),
           (SELECT COUNT(*) FROM weaning_records WHERE batch_id = $batch_id),
           (SELECT COUNT(*) FROM parturition_records WHERE batch_id = $batch_id),
           (SELECT COUNT(*) FROM rabbits WHERE birth_batch_id = $batch_id),
@@ -262,10 +362,12 @@ for _ in {1..40}; do
           (SELECT COUNT(*) FROM rabbits WHERE id = $mother_a_id AND house_id = $house_id AND is_active = FALSE),
           (SELECT COALESCE(SUM(current_nursing_kits), 0) FROM breeding_cycles WHERE batch_id = $batch_id),
           (SELECT COUNT(*) FROM rabbit_departure_records WHERE house_id = $house_id AND rabbit_id = $mother_a_id AND departure_type = 'cull'),
-          (SELECT COUNT(*) FROM sale_orders WHERE house_id = $house_id);
+          (SELECT COUNT(*) FROM sale_orders WHERE house_id = $house_id),
+          -- 流产落库的直接证据：周期以 ABORTED 结束。
+          (SELECT COUNT(*) FROM breeding_cycles WHERE batch_id = $batch_id AND result = 'ABORTED');
       "
   )"
-  actual="$completed_batches $batch_members $active_members $cycles $weaned_cycles $empty_cycles $overlap_cycles $weanings $parturitions $born_kits $lineage_kits $sold_kits $sale_items $mother_b_active $mother_a_inactive $nursing_kits $cull_departures $sale_orders"
+  actual="$completed_batches $batch_members $active_members $cycles $weaned_cycles $empty_cycles $overlap_cycles $weanings $parturitions $born_kits $lineage_kits $sold_kits $sale_items $mother_b_active $mother_a_inactive $nursing_kits $cull_departures $sale_orders $aborted_cycles"
   if [[ "$actual" == "$expected" ]]; then
     break
   fi

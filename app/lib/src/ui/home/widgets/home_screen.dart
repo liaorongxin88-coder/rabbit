@@ -446,7 +446,7 @@ class _WorkQueueFilters extends StatelessWidget {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               labelText: '搜索生产任务',
-              hintText: '母兔、Batch、兔舍或任务类型',
+              hintText: '母兔、批次、兔舍或任务类型',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: query.isEmpty
                   ? null

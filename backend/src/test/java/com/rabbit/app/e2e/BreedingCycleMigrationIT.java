@@ -95,7 +95,10 @@ class BreedingCycleMigrationIT {
                 motherId
         );
         assertNotEquals(0, cycleId);
-        assertEquals("哺乳中", queryString("SELECT status FROM breeding_cycles WHERE id = ?", cycleId));
+        // V21 当时写的是中文 status='哺乳中'；V27 把它推导成 stage，V28 删掉了那一列。
+        // 这里改断言最终形态，验的仍是同一件事：回填把这头母兔认定为在哺乳。
+        assertEquals("AWAIT_WEANING",
+            queryString("SELECT stage FROM breeding_cycles WHERE id = ?", cycleId));
         assertEquals(8, queryLong("SELECT total_kits FROM breeding_cycles WHERE id = ?", cycleId));
         assertEquals(6, queryLong("SELECT live_kits FROM breeding_cycles WHERE id = ?", cycleId));
         assertEquals(6, queryLong("SELECT current_nursing_kits FROM breeding_cycles WHERE id = ?", cycleId));

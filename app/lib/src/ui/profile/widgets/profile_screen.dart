@@ -22,6 +22,7 @@ class ProfileScreen extends ConsumerWidget {
       title: '我的',
       actions: [
         IconButton(
+          key: const ValueKey('profile-settings-entry'),
           tooltip: '设置',
           onPressed: () => context.go('/settings'),
           icon: const Icon(Icons.settings_outlined),
@@ -71,6 +72,7 @@ class ProfileScreen extends ConsumerWidget {
             child: Column(
               children: [
                 _ProfileEntry(
+                  entryKey: const ValueKey('profile-entry-account'),
                   icon: Icons.manage_accounts_outlined,
                   iconColor: palette.primary,
                   iconBackground: palette.primarySoft,
@@ -80,6 +82,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 _ProfileEntry(
+                  entryKey: const ValueKey('profile-entry-app'),
                   icon: Icons.tune_outlined,
                   iconColor: palette.success,
                   iconBackground: palette.successSoft,
@@ -91,6 +94,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 _ProfileEntry(
+                  entryKey: const ValueKey('profile-entry-production'),
                   icon: Icons.calendar_month_outlined,
                   iconColor: palette.warning,
                   iconBackground: palette.warningSoft,
@@ -103,6 +107,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
+            key: const ValueKey('profile-logout-button'),
             onPressed: () => ref.read(authControllerProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
             label: const Text('退出登录'),
@@ -115,6 +120,7 @@ class ProfileScreen extends ConsumerWidget {
 
 class _ProfileEntry extends StatelessWidget {
   const _ProfileEntry({
+    required this.entryKey,
     required this.icon,
     required this.iconColor,
     required this.iconBackground,
@@ -123,6 +129,7 @@ class _ProfileEntry extends StatelessWidget {
     required this.onTap,
   });
 
+  final Key entryKey;
   final IconData icon;
   final Color iconColor;
   final Color iconBackground;
@@ -133,6 +140,7 @@ class _ProfileEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      key: entryKey,
       contentPadding: EdgeInsets.zero,
       leading: Container(
         width: 40,

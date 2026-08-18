@@ -76,24 +76,10 @@ void main() {
       growthStage: ' GROWING ',
       reproductiveStage: ' ',
     );
-    await repository.moveRabbitToCage(
+    await repository.transferRabbitCage(
       houseId: 8,
+      rabbitId: 801,
       targetCageId: 13,
-      rabbit: const Rabbit(
-        id: 801,
-        houseId: 8,
-        cageId: 12,
-        motherId: null,
-        type: '0',
-        gender: '0',
-        breed: '新西兰白兔',
-        arrivalMethod: '0',
-        arrivalDate: null,
-        weight: 4.3,
-        isActive: true,
-        growthStage: 'MATURE',
-        reproductiveStage: 'LACTATING',
-      ),
     );
 
     expect(adapter.requests, hasLength(3));
@@ -113,12 +99,16 @@ void main() {
     expect(update.body['growthStage'], 'GROWING');
     expect(update.body.containsKey('reproductiveStage'), isFalse);
 
+    // 换笼走专用端点，而不是把整行资料重发一遍。两个原因：
+    // 一是后端已拒收种母兔手录的 reproductiveStage，重发就是 400；
+    // 二是只有专用端点能表达“目标笼已有种兔时两笼对调”。
     final move = adapter.requests[2];
-    expect(move.path, '/api/rabbits/801');
-    expect(move.method, 'PUT');
-    expect(move.body['cageId'], 13);
-    expect(move.body['growthStage'], 'MATURE');
-    expect(move.body['reproductiveStage'], 'LACTATING');
+    expect(move.path, '/api/rabbits/801/cage-transfer');
+    expect(move.method, 'POST');
+    expect(move.body['targetCageId'], 13);
+    expect(move.body['requestId'], isNotEmpty);
+    expect(move.body.containsKey('growthStage'), isFalse);
+    expect(move.body.containsKey('reproductiveStage'), isFalse);
   });
 }
 

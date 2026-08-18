@@ -128,7 +128,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-departure-sheet')));
     await tester.pumpAndSettle();
 
-    expect(find.text('母兔离场'), findsOneWidget);
+    expect(find.text('登记离场'), findsOneWidget);
     for (final deviceSize in const [
       Size(360, 800),
       Size(393, 852),
@@ -224,7 +224,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('rabbit-departure-submit')));
     await tester.pumpAndSettle();
 
-    expect(find.text('母兔离场'), findsNothing);
+    expect(find.text('登记离场'), findsNothing);
     expect(adapter.requests, hasLength(1));
     expect(adapter.requests.single.body['eventType'], 'death');
     expect(adapter.requests.single.body['rabbitId'], 801);

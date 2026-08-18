@@ -13,6 +13,13 @@ public class UpdateSettingRequest {
     @Min(0)
     private Integer palpationDays;
 
+    /**
+     * 妊娠天数。刷意不加 {@code @NotNull}：旧 APK 无 OTA，它们提交的表单里没有这个字段，
+     * 加必填会直接把存量客户端的保存操作打成 400。为空时服务层保留原值。
+     */
+    @Min(1)
+    private Integer gestationDays;
+
     @NotNull
     @Min(0)
     private Integer prepartumDays;
@@ -52,6 +59,14 @@ public class UpdateSettingRequest {
 
     public void setPalpationDays(Integer palpationDays) {
         this.palpationDays = palpationDays;
+    }
+
+    public Integer getGestationDays() {
+        return gestationDays;
+    }
+
+    public void setGestationDays(Integer gestationDays) {
+        this.gestationDays = gestationDays;
     }
 
     public Integer getPrepartumDays() {

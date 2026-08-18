@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Param;
 public interface SysUserMapper {
     SysUser selectByUserName(@Param("userName") String userName);
 
+    SysUser selectByUserCode(@Param("userCode") String userCode);
+
     SysUser selectByOpenid(@Param("openid") String openid);
 
     SysUser selectByPhoneHash(@Param("phoneHash") String phoneHash);

@@ -29,6 +29,14 @@
             and r.house_id = bc.house_id
         where bc.house_id in <include refid="houseIds"/>
           and bc.closed_at is null
+          <!--
+            「已配种」看的是周期是否真的过了配种这一步，而不是「有一条未关闭的周期」。
+            doe-breeding-v2 之后母兔入批即入轨，一开始就有一条处于待催情的开放周期；
+            若仍按 closed_at is null 计数，则全场母兔建批当天就都变成「已配种」，
+            而「待配种」永远为 0——两个指标同时失去意义。
+            mating_date 仅在配种动作里写入，因此是最直接的事实依据。
+          -->
+          and bc.mating_date is not null
           and r.is_active = true
           and r.type = '0'
           and r.gender = '0'
@@ -46,12 +54,15 @@
     </select>
 
     <select id="sumCurrentNursingKits" resultType="int">
-        select coalesce(sum(br.current_nursing_kits), 0)
-        from batch_rabbits br
-        join batches b on b.id = br.batch_id
-        where b.house_id in <include refid="houseIds"/>
-          and br.batch_role = 'breeding'
-          and br.is_active = true
+        <!--
+          在哺仔兔数取自 litters，它是新模型里的权威来源。
+          旧实现读 batch_rabbits.current_nursing_kits，而那一列由已删除的旧写路径维护；
+          再读它不会报错，只会让这个指标永远显示 0——比报错更难发现。
+        -->
+        select coalesce(sum(l.current_nursing), 0)
+        from litters l
+        where l.house_id in <include refid="houseIds"/>
+          and l.status = 'NURSING'
     </select>
 
     <select id="selectMonthlyBirths" resultType="com.rabbit.app.modules.report.dto.MonthlyCount">

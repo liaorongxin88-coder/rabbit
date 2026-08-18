@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.ReproEventMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.repro.entity.ReproEvent">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="cycle_id" property="cycleId"/>
+        <result column="litter_id" property="litterId"/>
+        <result column="mother_rabbit_id" property="motherRabbitId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="event_type" property="eventType"/>
+        <result column="from_stage" property="fromStage"/>
+        <result column="to_stage" property="toStage"/>
+        <result column="occurred_at" property="occurredAt"/>
+        <result column="payload" property="payload"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="operator_name" property="operatorName"/>
+        <result column="request_id" property="requestId"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into repro_events (
+            tenant_id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id,
+            event_type, from_stage, to_stage, occurred_at, payload,
+            operator_id, operator_name, request_id, create_time
+        ) values (
+            #{tenantId}, #{houseId}, #{cycleId}, #{litterId}, #{motherRabbitId}, #{batchId},
+            #{eventType}, #{fromStage}, #{toStage}, #{occurredAt}, #{payload},
+            #{operatorId}, #{operatorName}, #{requestId}, now()
+        )
+    </insert>
+
+    <select id="selectByRequestId" resultMap="Map">
+        select * from repro_events
+        where house_id = #{houseId} and request_id = #{requestId}
+        limit 1
+    </select>
+
+    <select id="selectByCycle" resultMap="Map">
+        select * from repro_events
+        where house_id = #{houseId} and cycle_id = #{cycleId}
+        order by occurred_at, id
+    </select>
+
+    <select id="selectByMother" resultMap="Map">
+        select * from repro_events
+        where house_id = #{houseId} and mother_rabbit_id = #{motherRabbitId}
+        order by occurred_at desc, id desc
+        limit #{limit}
+    </select>
+</mapper>

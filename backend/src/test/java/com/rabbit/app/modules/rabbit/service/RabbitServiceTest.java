@@ -30,8 +30,8 @@ class RabbitServiceTest {
             }
         };
         RabbitService service = new RabbitService(
-                null, null, null, null, null, null, null, null, null,
-                null, houseService, 10
+                null, null, null, null, null, null, null, null, null, null,
+                null, null, null, houseService, 10
         );
 
         BizException error = assertThrows(BizException.class,
@@ -75,7 +75,6 @@ class RabbitServiceTest {
             .thenReturn(List.of(rabbit));
         org.mockito.Mockito.when(batchRabbitMapper.selectActiveByRabbitForUpdate(1L, 3L))
             .thenReturn(List.of(link));
-        org.mockito.Mockito.when(cycleMapper.countOpenByMother(1L, 2L, 3L)).thenReturn(0);
         org.mockito.Mockito.when(batchRabbitMapper.countActiveByBatch(2L)).thenReturn(0);
         org.mockito.Mockito.when(batchMapper.selectById(1L, 2L)).thenReturn(batch);
 
@@ -88,6 +87,14 @@ class RabbitServiceTest {
             batchRabbitMapper,
             batchMapper,
             cycleMapper,
+            // 兔子离场会先走 RETIRE 结清生产周期；本用例只验锁序，给个 mock 即可。
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.service.ReproActionService.class),
+            // 录入时按生产阶段入轨会用到状态机与操作人解析；本用例不走创建路径。
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.service.ReproStateMachineService.class),
+            org.mockito.Mockito.mock(
+                com.rabbit.app.modules.repro.service.OperatorNameResolver.class),
             historyMapper,
             departureMapper,
             dedup,
@@ -114,9 +121,8 @@ class RabbitServiceTest {
         lockOrder.verify(batchMapper).selectByIdForUpdate(1L, 2L);
         lockOrder.verify(rabbitMapper).selectByIdsForUpdate(1L, List.of(3L));
         lockOrder.verify(batchRabbitMapper).selectActiveByRabbitForUpdate(1L, 3L);
-        org.mockito.Mockito.verify(cycleMapper, org.mockito.Mockito.times(2))
-            .closeOpenByMother(1L, 2L, 3L, actionDate, "兔离场:cull", "7");
-        org.mockito.Mockito.verify(cycleMapper).countOpenByMother(1L, 2L, 3L);
+        // 周期结清已改由 ReproActionService.retireMother 负责（同时维护 lifecycle、
+        // 待办与母兔投影），旧的 closeOpenByMother/countOpenByMother 已随 V28 一并删除。
         org.mockito.Mockito.verify(batchRabbitMapper).deactivateIfActive(
             1L,
             103L,

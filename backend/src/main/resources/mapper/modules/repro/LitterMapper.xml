@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.LitterMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.repro.entity.Litter">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="cycle_id" property="cycleId"/>
+        <result column="mother_rabbit_id" property="motherRabbitId"/>
+        <result column="sire_rabbit_id" property="sireRabbitId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="birth_date" property="birthDate"/>
+        <result column="total_kits" property="totalKits"/>
+        <result column="live_kits" property="liveKits"/>
+        <result column="kept_kits" property="keptKits"/>
+        <result column="foster_in" property="fosterIn"/>
+        <result column="foster_out" property="fosterOut"/>
+        <result column="loss_count" property="lossCount"/>
+        <result column="current_nursing" property="currentNursing"/>
+        <result column="status" property="status"/>
+        <result column="weaning_date" property="weaningDate"/>
+        <result column="weaned_count" property="weanedCount"/>
+        <result column="avg_weaning_weight" property="avgWeaningWeight"/>
+        <result column="nursing_cage_id" property="nursingCageId"/>
+        <result column="request_id" property="requestId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into litters (
+            tenant_id, house_id, cycle_id, mother_rabbit_id, sire_rabbit_id, batch_id,
+            birth_date, total_kits, live_kits, kept_kits, foster_in, foster_out,
+            loss_count, current_nursing, status, weaning_date, weaned_count,
+            avg_weaning_weight, nursing_cage_id, request_id, remark,
+            create_by, create_time, update_by, update_time
+        ) values (
+            #{tenantId}, #{houseId}, #{cycleId}, #{motherRabbitId}, #{sireRabbitId}, #{batchId},
+            #{birthDate}, #{totalKits}, #{liveKits}, #{keptKits}, #{fosterIn}, #{fosterOut},
+            #{lossCount}, #{currentNursing}, #{status}, #{weaningDate}, #{weanedCount},
+            #{avgWeaningWeight}, #{nursingCageId}, #{requestId}, #{remark},
+            #{createBy}, now(), #{updateBy}, now()
+        )
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select * from litters where house_id = #{houseId} and id = #{id} limit 1
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="Map">
+        select * from litters where house_id = #{houseId} and id = #{id} limit 1 for update
+    </select>
+
+    <select id="selectByCycleId" resultMap="Map">
+        select * from litters where house_id = #{houseId} and cycle_id = #{cycleId} limit 1
+    </select>
+
+    <select id="selectByCycleIdForUpdate" resultMap="Map">
+        select * from litters where house_id = #{houseId} and cycle_id = #{cycleId} limit 1 for update
+    </select>
+
+    <update id="update">
+        update litters
+        set total_kits = #{totalKits},
+            live_kits = #{liveKits},
+            kept_kits = #{keptKits},
+            foster_in = #{fosterIn},
+            foster_out = #{fosterOut},
+            loss_count = #{lossCount},
+            current_nursing = #{currentNursing},
+            status = #{status},
+            weaning_date = #{weaningDate},
+            weaned_count = #{weanedCount},
+            avg_weaning_weight = #{avgWeaningWeight},
+            nursing_cage_id = #{nursingCageId},
+            remark = #{remark},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <select id="selectNursingByMother" resultMap="Map">
+        select * from litters
+        where house_id = #{houseId} and mother_rabbit_id = #{motherRabbitId} and status = 'NURSING'
+        order by birth_date, id
+    </select>
+</mapper>

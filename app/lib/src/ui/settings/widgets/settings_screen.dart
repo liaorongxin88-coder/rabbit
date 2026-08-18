@@ -22,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               children: [
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-account'),
                   icon: Icons.manage_accounts_outlined,
                   iconColor: palette.primary,
                   iconBackground: palette.primarySoft,
@@ -31,6 +32,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-app'),
                   icon: Icons.tune_outlined,
                   iconColor: palette.success,
                   iconBackground: palette.successSoft,
@@ -40,6 +42,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-production'),
                   icon: Icons.calendar_month_outlined,
                   iconColor: palette.warning,
                   iconBackground: palette.warningSoft,
@@ -55,6 +58,7 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               children: [
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-privacy'),
                   icon: Icons.privacy_tip_outlined,
                   iconColor: palette.primary,
                   iconBackground: palette.primarySoft,
@@ -71,6 +75,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-agreement'),
                   icon: Icons.description_outlined,
                   iconColor: palette.success,
                   iconBackground: palette.successSoft,
@@ -96,6 +101,7 @@ class SettingsScreen extends StatelessWidget {
 
 class _SettingsEntry extends StatelessWidget {
   const _SettingsEntry({
+    required this.entryKey,
     required this.icon,
     required this.iconColor,
     required this.iconBackground,
@@ -104,6 +110,7 @@ class _SettingsEntry extends StatelessWidget {
     required this.onTap,
   });
 
+  final Key entryKey;
   final IconData icon;
   final Color iconColor;
   final Color iconBackground;
@@ -114,6 +121,7 @@ class _SettingsEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      key: entryKey,
       contentPadding: EdgeInsets.zero,
       leading: Container(
         width: 40,

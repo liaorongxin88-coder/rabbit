@@ -16,6 +16,7 @@ void main() {
   testWidgets('small cage list is available in a single batch', (tester) async {
     await tester.pumpWidget(_testApp(_cages(12)));
     await tester.pumpAndSettle();
+    await _switchToList(tester);
 
     expect(find.text('总笼位 12'), findsOneWidget);
     expect(_cageGridChildCount(tester), 12);
@@ -25,6 +26,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_testApp(_filterCages));
     await tester.pumpAndSettle();
+    await _switchToList(tester);
+    await _expandFilters(tester);
 
     expect(find.text('笼位筛选'), findsOneWidget);
     expect(find.text('繁殖笼'), findsOneWidget);
@@ -82,6 +85,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_testApp(_sexClassifiedBreedingCages));
     await tester.pumpAndSettle();
+    await _switchToList(tester);
+    await _expandFilters(tester);
 
     final doeFilter = find.byKey(
       const ValueKey('cage-usage-doe-breeding-filter'),
@@ -119,6 +124,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_testApp(_cages(45)));
     await tester.pumpAndSettle();
+    await _switchToList(tester);
 
     expect(find.text('总笼位 45'), findsOneWidget);
     expect(_cageGridChildCount(tester), 20);
@@ -155,6 +161,7 @@ void main() {
     );
     await tester.pumpWidget(_testApp(cages));
     await tester.pumpAndSettle();
+    await _switchToList(tester);
 
     expect(_cageGridChildCount(tester), 20);
     await tester.drag(
@@ -169,6 +176,7 @@ void main() {
       const Offset(0, 4000),
     );
     await tester.pumpAndSettle();
+    await _expandFilters(tester);
     await tester.tap(
       find.byKey(const ValueKey('cage-occupancy-empty-filter')),
     );
@@ -242,6 +250,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await _switchToList(tester);
 
         final outbound = find.byKey(const ValueKey('cage-row-outbound-1'));
         final outboundContext = tester.element(outbound);
@@ -259,6 +268,25 @@ void main() {
       },
     );
   }
+}
+
+/// 分层地图现在是默认视图，这个文件里验的是列表视图的分页与筛选，
+/// 所以先切到列表。地图自己的行为在 cage_map_view_test.dart 里验。
+Future<void> _switchToList(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('cage-view-list-toggle'));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
+}
+
+/// 筛选区默认折叠（展开后比地图还高），要点 chip 先展开。
+Future<void> _expandFilters(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('cage-filter-toggle'));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
 }
 
 Widget _testApp(

@@ -9,7 +9,7 @@ function requestIdSequence() {
 
 test('creates a non-empty requestId and reuses it for the same retry', () => {
   const nextRequestId = requestIdSequence()
-  const payload = { phone: '13800138000', role: 'STAFF' }
+  const payload = { identifier: '13800138000', phone: '13800138000', role: 'STAFF' }
   const first = getOrCreateInvitationRequest(null, payload, nextRequestId)
   const retry = getOrCreateInvitationRequest(first, payload, nextRequestId)
 
@@ -21,17 +21,17 @@ test('creates a new requestId when the invitation payload changes', () => {
   const nextRequestId = requestIdSequence()
   const first = getOrCreateInvitationRequest(
     null,
-    { phone: '13800138000', role: 'STAFF' },
+    { identifier: '13800138000', phone: '13800138000', role: 'STAFF' },
     nextRequestId,
   )
   const changedPhone = getOrCreateInvitationRequest(
     first,
-    { phone: '13900139000', role: 'STAFF' },
+    { identifier: '13900139000', phone: '13900139000', role: 'STAFF' },
     nextRequestId,
   )
   const changedRole = getOrCreateInvitationRequest(
     changedPhone,
-    { phone: '13900139000', role: 'OWNER' },
+    { identifier: '13900139000', phone: '13900139000', role: 'OWNER' },
     nextRequestId,
   )
 
@@ -43,9 +43,33 @@ test('creates a new requestId when the invitation payload changes', () => {
 
 test('creates a new requestId after a completed request is cleared', () => {
   const nextRequestId = requestIdSequence()
-  const payload = { phone: '13800138000', role: 'MANAGER' }
+  const payload = { identifier: '13800138000', phone: '13800138000', role: 'MANAGER' }
   const completed = getOrCreateInvitationRequest(null, payload, nextRequestId)
   const nextSubmission = getOrCreateInvitationRequest(null, payload, nextRequestId)
 
   assert.notEqual(nextSubmission.requestId, completed.requestId)
+})
+
+test('switching from a phone to a user code rotates the requestId', () => {
+  const nextRequestId = requestIdSequence()
+  const byPhone = getOrCreateInvitationRequest(
+    null,
+    { identifier: '13800138000', phone: '13800138000', role: 'STAFF' },
+    nextRequestId,
+  )
+  // 换成账号就是在邀请「另一种指向」，哪怕最后可能是同一个人，
+  // 也必须换 requestId，否则后端会按幂等判成同一次邀请。
+  const byCode = getOrCreateInvitationRequest(
+    byPhone,
+    { identifier: 'R3F9A0C21B7', role: 'STAFF' },
+    nextRequestId,
+  )
+  const codeRetry = getOrCreateInvitationRequest(
+    byCode,
+    { identifier: 'R3F9A0C21B7', role: 'STAFF' },
+    nextRequestId,
+  )
+
+  assert.notEqual(byCode.requestId, byPhone.requestId)
+  assert.strictEqual(codeRetry, byCode)
 })

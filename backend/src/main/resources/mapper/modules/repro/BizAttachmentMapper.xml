@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.BizAttachmentMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.repro.entity.BizAttachment">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="biz_type" property="bizType"/>
+        <result column="biz_id" property="bizId"/>
+        <result column="file_id" property="fileId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="content_type" property="contentType"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="sort_no" property="sortNo"/>
+        <result column="request_id" property="requestId"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        insert ignore into biz_attachments (
+            tenant_id, house_id, biz_type, biz_id, file_id, file_name,
+            content_type, file_size, sort_no, request_id, create_by, create_time
+        ) values (
+            #{tenantId}, #{houseId}, #{bizType}, #{bizId}, #{fileId}, #{fileName},
+            #{contentType}, #{fileSize}, #{sortNo}, #{requestId}, #{createBy}, now()
+        )
+    </insert>
+
+    <select id="selectByBiz" resultMap="Map">
+        select * from biz_attachments
+        where house_id = #{houseId} and biz_type = #{bizType} and biz_id = #{bizId}
+        order by sort_no, id
+    </select>
+</mapper>

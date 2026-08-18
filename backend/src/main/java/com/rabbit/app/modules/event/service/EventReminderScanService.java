@@ -29,10 +29,11 @@ public class EventReminderScanService {
         if (houseId == null || houseId <= 0) {
             return r;
         }
-        int prodLogged = eventReminderLogMapper.insertDueBatchEventLogs(houseId, now)
-            + eventReminderLogMapper.insertDueBreedingCycleEventLogs(houseId, now);
-        int prodMarked = markAllDueBatchEvents(houseId, now)
-            + markAllDueBreedingCycleEvents(houseId, now);
+        // 生产周期的提醒已由 work_tasks 承载，不再走这套「扫表 + 标记已通知」机制；
+        // breeding_cycles 上的 next_event_date / is_event_notified 已随 V28 删除。
+        // batch_rabbits 侧暂时保留（后备成熟等仍依赖它）。
+        int prodLogged = eventReminderLogMapper.insertDueBatchEventLogs(houseId, now);
+        int prodMarked = markAllDueBatchEvents(houseId, now);
         int repLogged = eventReminderLogMapper.insertDueReplacementLogs(houseId, now);
         int repMarked = markAllDueReplacementEvents(houseId, now);
         r.setProdLogged(prodLogged);
@@ -57,20 +58,6 @@ public class EventReminderScanService {
         return total;
     }
 
-    private int markAllDueBreedingCycleEvents(Long houseId, Date now) {
-        int total = 0;
-        int rows;
-        do {
-            rows = breedingCycleMapper.markDueEventsAsNotified(
-                houseId,
-                now,
-                "job",
-                MARK_CHUNK_SIZE
-            );
-            total += rows;
-        } while (rows == MARK_CHUNK_SIZE);
-        return total;
-    }
 
     private int markAllDueReplacementEvents(Long houseId, Date now) {
         int total = 0;

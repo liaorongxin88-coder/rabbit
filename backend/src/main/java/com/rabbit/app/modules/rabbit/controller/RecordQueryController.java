@@ -7,9 +7,8 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.ParturitionRecord;
 import com.rabbit.app.modules.batch.entity.PregnancyCheckRecord;
 import com.rabbit.app.modules.batch.entity.WeaningRecord;
-import com.rabbit.app.modules.batch.mapper.ParturitionRecordMapper;
-import com.rabbit.app.modules.batch.mapper.PregnancyCheckRecordMapper;
 import com.rabbit.app.modules.batch.mapper.WeaningRecordMapper;
+import com.rabbit.app.modules.repro.mapper.ReproRecordQueryMapper;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
@@ -28,15 +27,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class RecordQueryController {
     private final HouseService houseService;
-    private final PregnancyCheckRecordMapper pregnancyCheckRecordMapper;
-    private final ParturitionRecordMapper parturitionRecordMapper;
+    // 摸胎与分娩历史改从事件库读：旧的两张记录表自新生产流程上线后已无人写入。
+    private final ReproRecordQueryMapper reproRecordQueryMapper;
     private final WeaningRecordMapper weaningRecordMapper;
     private final RabbitDepartureRecordMapper rabbitDepartureRecordMapper;
 
-    public RecordQueryController(HouseService houseService, PregnancyCheckRecordMapper pregnancyCheckRecordMapper, ParturitionRecordMapper parturitionRecordMapper, WeaningRecordMapper weaningRecordMapper, RabbitDepartureRecordMapper rabbitDepartureRecordMapper) {
+    public RecordQueryController(HouseService houseService, ReproRecordQueryMapper reproRecordQueryMapper, WeaningRecordMapper weaningRecordMapper, RabbitDepartureRecordMapper rabbitDepartureRecordMapper) {
         this.houseService = houseService;
-        this.pregnancyCheckRecordMapper = pregnancyCheckRecordMapper;
-        this.parturitionRecordMapper = parturitionRecordMapper;
+        this.reproRecordQueryMapper = reproRecordQueryMapper;
         this.weaningRecordMapper = weaningRecordMapper;
         this.rabbitDepartureRecordMapper = rabbitDepartureRecordMapper;
     }
@@ -51,10 +49,10 @@ public class RecordQueryController {
         houseService.assertHousePermission(userId, houseId, "view");
         int lim = clampLimit(limit);
         if (batchId != null && batchId > 0) {
-            return ApiResponse.ok(pregnancyCheckRecordMapper.selectByBatch(houseId, batchId, lim));
+            return ApiResponse.ok(reproRecordQueryMapper.selectPalpationsByBatch(houseId, batchId, lim));
         }
         if (rabbitId != null && rabbitId > 0) {
-            return ApiResponse.ok(pregnancyCheckRecordMapper.selectByRabbit(houseId, rabbitId, lim));
+            return ApiResponse.ok(reproRecordQueryMapper.selectPalpationsByRabbit(houseId, rabbitId, lim));
         }
         throw new BizException(400, "batchId或rabbitId至少提供一个");
     }
@@ -69,10 +67,10 @@ public class RecordQueryController {
         houseService.assertHousePermission(userId, houseId, "view");
         int lim = clampLimit(limit);
         if (batchId != null && batchId > 0) {
-            return ApiResponse.ok(parturitionRecordMapper.selectByBatch(houseId, batchId, lim));
+            return ApiResponse.ok(reproRecordQueryMapper.selectParturitionsByBatch(houseId, batchId, lim));
         }
         if (rabbitId != null && rabbitId > 0) {
-            return ApiResponse.ok(parturitionRecordMapper.selectByRabbit(houseId, rabbitId, lim));
+            return ApiResponse.ok(reproRecordQueryMapper.selectParturitionsByRabbit(houseId, rabbitId, lim));
         }
         throw new BizException(400, "batchId或rabbitId至少提供一个");
     }

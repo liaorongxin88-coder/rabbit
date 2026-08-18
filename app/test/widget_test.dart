@@ -428,7 +428,7 @@ void main() {
 
     expect(find.text('今日生产'), findsOneWidget);
     expect(find.text('母兔 #18'), findsOneWidget);
-    expect(find.text('Batch #9'), findsOneWidget);
+    expect(find.text('批次 #9'), findsOneWidget);
     expect(find.text('周期记录 #71'), findsOneWidget);
     expect(find.text('记录配种'), findsOneWidget);
     expect(find.text('分娩'), findsOneWidget);

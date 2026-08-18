@@ -13,6 +13,15 @@ public class Batch {
     private String remark;
     private String createBy;
     private Date createTime;
+    /**
+     * 派生字段（非数据库列）：批次内已无在册母兔，提示用户可以结束。
+     *
+     * <p>旧实现在成员全部退出时自动把批次置为已完成，但“这一轮生产算不算结束”
+     * 是业务判断：母兔可能只是暂时全部离场，用户还想往里补兔。现在改为只提醒，
+     * 结束动作交回给人。
+     */
+    private Boolean pendingCompletion;
+
     private String updateBy;
     private Date updateTime;
 
@@ -98,6 +107,14 @@ public class Batch {
 
     public String getUpdateBy() {
         return updateBy;
+    }
+
+    public Boolean getPendingCompletion() {
+        return pendingCompletion;
+    }
+
+    public void setPendingCompletion(Boolean pendingCompletion) {
+        this.pendingCompletion = pendingCompletion;
     }
 
     public void setUpdateBy(String updateBy) {

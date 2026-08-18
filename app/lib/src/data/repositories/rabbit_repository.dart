@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
+import 'package:rabbit_flutter/src/domain/models/cage_transfer_result.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
@@ -27,10 +28,13 @@ class RabbitRepository {
         if (data is! List) {
           throw const ApiException('笼位列表格式不正确');
         }
+        // 不过滤停用笼位：停用的笼子在货架上是真存在的，丢掉它会让分层地图
+        // 凭空少一个位置，用户对着实物数不上。能不能放兔由 `Cage.acceptsMoreRabbits` /
+        // `canAcceptRabbit` 在各个选择入口把关，而不是靠列表里看不见。
         return data
             .whereType<Map>()
             .map((item) => Cage.fromJson(Map<String, dynamic>.from(item)))
-            .where((cage) => cage.id > 0 && cage.isEnabled)
+            .where((cage) => cage.id > 0)
             .toList();
       },
     );
@@ -127,9 +131,12 @@ class RabbitRepository {
     );
   }
 
+  /// [cageNumber] 留空时由后端按「排-位-层」生成（见后端 CageNumbers）。
+  /// 客户端别自己拼编号：以前 App 拼 `2(下)1`、后端建舍拼 `2-1-1`，
+  /// 同一个兔舍里两套写法，工人拿笼上的签对不上系统。
   Future<Cage> createCage({
     required int houseId,
-    required String cageNumber,
+    String? cageNumber,
     String? rowCode,
     int? layerIndex,
     int? positionIndex,
@@ -139,7 +146,8 @@ class RabbitRepository {
       '/api/cages',
       houseId: houseId,
       body: {
-        'cageNumber': cageNumber,
+        if (cageNumber != null && cageNumber.trim().isNotEmpty)
+          'cageNumber': cageNumber.trim(),
         if (rowCode != null && rowCode.trim().isNotEmpty)
           'rowCode': rowCode.trim(),
         if (layerIndex != null) 'layerIndex': layerIndex,
@@ -166,6 +174,11 @@ class RabbitRepository {
     required double? weight,
     String? growthStage,
     String? reproductiveStage,
+    String? reproStage,
+    DateTime? stageEnteredAt,
+    DateTime? matingDate,
+    DateTime? birthDate,
+    int? liveKits,
   }) {
     final body = <String, dynamic>{
       'cageId': cageId,
@@ -175,6 +188,24 @@ class RabbitRepository {
       'arrivalDate': DateTime.now().millisecondsSinceEpoch,
       'requestId': _uuid.v4(),
     };
+    // 录入时直接入轨：建兔与开周期必须同事务，否则存栏里有这只母兔、
+    // 待办里却没有，她会永远不被提醒。
+    final trimmedReproStage = reproStage?.trim();
+    if (trimmedReproStage != null && trimmedReproStage.isNotEmpty) {
+      body['reproStage'] = trimmedReproStage;
+      if (stageEnteredAt != null) {
+        body['stageEnteredAt'] = stageEnteredAt.millisecondsSinceEpoch;
+      }
+      if (matingDate != null) {
+        body['matingDate'] = matingDate.millisecondsSinceEpoch;
+      }
+      if (birthDate != null) {
+        body['birthDate'] = birthDate.millisecondsSinceEpoch;
+      }
+      if (liveKits != null && liveKits >= 0) {
+        body['liveKits'] = liveKits;
+      }
+    }
     final trimmedBreed = breed.trim();
     if (trimmedBreed.isNotEmpty) {
       body['breed'] = trimmedBreed;
@@ -205,22 +236,29 @@ class RabbitRepository {
     );
   }
 
-  Future<Rabbit> moveRabbitToCage({
+  /// 换笼位。
+  ///
+  /// 不再用 `PUT /api/rabbits/{id}` 顺手改 cageId：那条路会把整行资料重新提交，
+  /// 包括种母兔已被后端拒收的 reproductiveStage，也无法表达两笼对调。
+  Future<CageTransferResult> transferRabbitCage({
     required int houseId,
-    required Rabbit rabbit,
+    required int rabbitId,
     required int targetCageId,
+    String? requestId,
   }) {
-    return updateRabbit(
+    return _api.post<CageTransferResult>(
+      '/api/rabbits/$rabbitId/cage-transfer',
       houseId: houseId,
-      rabbitId: rabbit.id,
-      cageId: targetCageId,
-      motherId: rabbit.motherId,
-      breed: rabbit.breed,
-      arrivalMethod: rabbit.arrivalMethod,
-      arrivalDate: rabbit.arrivalDate,
-      weight: rabbit.weight,
-      growthStage: rabbit.growthStage,
-      reproductiveStage: rabbit.reproductiveStage,
+      body: {
+        'targetCageId': targetCageId,
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('换笼位结果格式不正确');
+        }
+        return CageTransferResult.fromJson(Map<String, dynamic>.from(data));
+      },
     );
   }
 

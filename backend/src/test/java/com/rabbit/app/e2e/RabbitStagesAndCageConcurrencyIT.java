@@ -29,14 +29,42 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "type", "0",
                 "gender", "0",
                 "growthStage", "MATURE",
-                "reproductiveStage", "PREGNANT",
+                // doe-breeding-v2：种母兔的阶段改由生产流程维护，录入时给的是生产阶段。
+                "reproStage", "AWAIT_PALPATION",
+                "matingDate", now(),
                 "arrivalMethod", "1",
                 "arrivalDate", now(),
                 "requestId", requestId("stage_create")
         ));
 
         Assertions.assertEquals("MATURE", rabbit.get("growthStage").asText());
-        Assertions.assertEquals("PREGNANT", rabbit.get("reproductiveStage").asText());
+        // 旧的繁殖阶段字段不再被写入：这只母兔的阶段以生产流程为准。
+        Assertions.assertTrue(
+                rabbit.get("reproductiveStage") == null || rabbit.get("reproductiveStage").isNull(),
+                "种母兔不应再写入旧的繁殖阶段字段"
+        );
+        long doeId = rabbit.get("id").asLong();
+        // 入轨与录入必须同事务：兔子在栏就一定有周期和待办，不存在“录进来却进不了流程”。
+        Assertions.assertEquals(
+                "AWAIT_PALPATION",
+                jdbc.queryForObject(
+                        "select stage from breeding_cycles where house_id = ? and mother_rabbit_id = ? and lifecycle = 'OPEN'",
+                        String.class, houseId, doeId
+                )
+        );
+        Assertions.assertEquals(
+                "AWAIT_PALPATION",
+                jdbc.queryForObject(
+                        "select current_stage from rabbits where id = ?", String.class, doeId
+                )
+        );
+        Assertions.assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "select count(*) from work_tasks where house_id = ? and rabbit_id = ? and status = 'PENDING'",
+                        Integer.class, houseId, doeId
+                )
+        );
         JsonNode cages = api.getOk("/api/cages", owner.token, houseId);
         Assertions.assertEquals(
                 "0",
@@ -53,22 +81,14 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 )
         );
 
-        JsonNode updated = api.putOk("/api/rabbits/" + rabbit.get("id").asLong(), owner.token, houseId, obj(
+        // 手工改种母兔的繁殖阶段会被拒：否则人手写一个、状态机写另一个，两套阶段并存，
+        // 正是 recvsrp9E2dqvB「阶段与批次不对应」的复发路径。
+        api.expectError("/api/rabbits/" + doeId, org.springframework.http.HttpMethod.PUT,
+                owner.token, houseId, obj(
                 "growthStage", "MATURE",
                 "reproductiveStage", "EMPTY",
                 "requestId", requestId("stage_update")
-        ));
-        Assertions.assertEquals("EMPTY", updated.get("reproductiveStage").asText());
-        Assertions.assertEquals(
-                1,
-                jdbc.queryForObject(
-                        "select count(*) from rabbit_status_history "
-                                + "where house_id = ? and rabbit_id = ? and reason = '更新生长/繁殖阶段'",
-                        Integer.class,
-                        houseId,
-                        rabbit.get("id").asLong()
-                )
-        );
+        ), 400, "种母兔的繁育阶段由生产流程维护");
 
         api.expectError("/api/rabbits", org.springframework.http.HttpMethod.POST, owner.token, houseId, obj(
                 "cageId", cageIds(owner, houseId).get(1),
@@ -171,7 +191,7 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "type", "0",
                 "gender", gender,
                 "growthStage", "MATURE",
-                "reproductiveStage", "EMPTY",
+                // 本用例只关心笼位并发，不再携带旧的繁殖阶段字段。
                 "arrivalMethod", "1",
                 "arrivalDate", now(),
                 "breed", suffix,

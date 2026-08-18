@@ -53,7 +53,8 @@ void main() {
       await _login(tester, _viewUser);
       await _openPrimaryHouse(tester);
       await tester.tap(find.text('进入笼位'));
-      await _waitFor(tester, find.text('R1-C1-L1'));
+      // 笼位区默认是分层地图，格子上不写笼位编号，所以认 key 不认文字。
+      await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
       expect(find.byKey(const ValueKey('house-outbound-action')), findsNothing);
       expect(find.byTooltip('整舍批量出库'), findsNothing);
       await _takeScreenshot(binding, tester, '02-view-permission');
@@ -101,7 +102,7 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('outbound-summary-early-sale')),
       );
-      final earlySaleCage = find.text('R1-C2-L1');
+      final earlySaleCage = find.text('1-2-1');
       await _waitFor(tester, earlySaleCage);
       await tester.ensureVisible(earlySaleCage);
       await tester.pumpAndSettle();
@@ -227,8 +228,24 @@ Future<void> _login(WidgetTester tester, String userName) async {
     find.byKey(const ValueKey('account-password-field')),
     _password,
   );
-  await tester.tap(find.byKey(const ValueKey('legal-consent-checkbox')));
-  await tester.tap(find.byKey(const ValueKey('account-login-button')));
+  // 登录表单是 ListView：输入后键盘顶起内容，同意行被挤出可视区就会被直接销毁
+  // （不是「看不见」，是「不在树上」），tap 于是报 Found 0 widgets。先收键盘，
+  // 万一还不在树上再滚回来——这条曾让三个真机本子随机红一次。
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pumpAndSettle();
+  final consent = find.byKey(const ValueKey('legal-consent-checkbox'));
+  for (var attempt = 0; attempt < 8 && consent.evaluate().isEmpty; attempt++) {
+    final scrollable = find.byType(Scrollable);
+    if (scrollable.evaluate().isEmpty) break;
+    await tester.drag(scrollable.first, const Offset(0, -120));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(consent);
+  await tester.tap(consent);
+  await tester.pumpAndSettle();
+  final loginButton = find.byKey(const ValueKey('account-login-button'));
+  await tester.ensureVisible(loginButton);
+  await tester.tap(loginButton);
   await _waitFor(tester, find.text('兔舍'));
 }
 

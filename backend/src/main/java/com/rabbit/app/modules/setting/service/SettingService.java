@@ -10,6 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SettingService {
+    /** 家兞妊娠期约 30 天；与 V26 的列默认值保持一致。 */
+    private static final int DEFAULT_GESTATION_DAYS = 30;
+
     private final GlobalSettingMapper globalSettingMapper;
 
     public SettingService(GlobalSettingMapper globalSettingMapper) {
@@ -107,6 +110,11 @@ public class SettingService {
     private void applyRequest(GlobalSetting setting, UpdateSettingRequest req) {
         setting.setAphrodisiacDays(req.getAphrodisiacDays());
         setting.setPalpationDays(req.getPalpationDays());
+        // 旧客户端不会提交 gestationDays，此时保留已有值，仅在从未初始化时落默认。
+        setting.setGestationDays(valueOrDefault(
+            req.getGestationDays() != null ? req.getGestationDays() : setting.getGestationDays(),
+            DEFAULT_GESTATION_DAYS
+        ));
         setting.setPrepartumDays(req.getPrepartumDays());
         setting.setWeaningDays(req.getWeaningDays());
         setting.setPostpartumDays(req.getPostpartumDays());
@@ -121,6 +129,7 @@ public class SettingService {
         setting.setUserId(userId);
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
+        setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
         setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), 3));
         setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), 25));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
@@ -138,6 +147,7 @@ public class SettingService {
         setting.setUserId(null);
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
+        setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
         setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), 3));
         setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), 25));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
@@ -155,6 +165,7 @@ public class SettingService {
         setting.setUserId(userId);
         setting.setAphrodisiacDays(2);
         setting.setPalpationDays(12);
+        setting.setGestationDays(DEFAULT_GESTATION_DAYS);
         setting.setPrepartumDays(3);
         setting.setWeaningDays(25);
         setting.setPostpartumDays(10);

@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# 浏览器验收跡象（截图、fixture 输出、数据库断言）
+build
 .env.deploy
 
 # Editor directories and files

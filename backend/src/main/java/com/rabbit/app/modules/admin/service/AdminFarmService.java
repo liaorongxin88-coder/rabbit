@@ -10,7 +10,9 @@ import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.auth.service.PhoneIdentityService;
 import com.rabbit.app.modules.auth.support.PhoneNumbers;
+import com.rabbit.app.modules.auth.support.UserCodes;
 import com.rabbit.app.modules.cage.entity.Cage;
+import com.rabbit.app.modules.cage.support.CageNumbers;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.house.dto.HouseMemberItem;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
@@ -283,6 +285,8 @@ public class AdminFarmService {
         created.setPhoneHash(phoneHash);
         created.setPhoneMasked(phoneIdentityService.mask(phone));
         created.setPhoneBoundTime(new Date());
+        // 平台后台代建的账号也得有账号，否则这批人没法被别人邀请。
+        created.setUserCode(nextUserCode());
         try {
             sysUserMapper.insert(created);
             return created;
@@ -293,6 +297,16 @@ public class AdminFarmService {
             }
             throw duplicate;
         }
+    }
+
+    private String nextUserCode() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = UserCodes.random();
+            if (sysUserMapper.selectByUserCode(candidate) == null) {
+                return candidate;
+            }
+        }
+        throw new BizException(500, "账号生成失败，请重试");
     }
 
     private AdminFarmItem verifyIdempotentCreate(
@@ -326,7 +340,7 @@ public class AdminFarmService {
                 for (int layer = 1; layer <= layers; layer++) {
                     Cage cage = new Cage();
                     cage.setHouseId(houseId);
-                    cage.setCageNumber(row + "-" + column + "-" + layer);
+                    cage.setCageNumber(CageNumbers.canonical(row, column, layer));
                     cage.setRowCode("R" + row);
                     cage.setPositionIndex(column);
                     cage.setLayerIndex(layer);

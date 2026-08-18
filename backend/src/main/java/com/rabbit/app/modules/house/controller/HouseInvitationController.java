@@ -39,7 +39,7 @@ public class HouseInvitationController {
         return ApiResponse.ok(invitationService.invite(
                 houseId,
                 userId,
-                request.getPhone(),
+                request.identifierOrPhone(),
                 request.getRole(),
                 request.getRequestId()
         ));

@@ -34,7 +34,6 @@ class EventReminderScanServiceTest {
         Date now = new Date();
 
         when(logs.insertDueBatchEventLogs(9L, now)).thenReturn(7000);
-        when(logs.insertDueBreedingCycleEventLogs(9L, now)).thenReturn(1000);
         when(logs.insertDueReplacementLogs(9L, now)).thenReturn(2020);
         when(
             batchRabbits.markDueEventsAsNotified(
@@ -44,14 +43,6 @@ class EventReminderScanServiceTest {
                 eq(1000)
             )
         ).thenReturn(1000, 1000, 1000, 1000, 1000, 1000, 1000, 0);
-        when(
-            cycles.markDueEventsAsNotified(
-                eq(9L),
-                eq(now),
-                eq("job"),
-                eq(1000)
-            )
-        ).thenReturn(1000, 0);
         when(
             replacements.markDueAsNotified(
                 eq(9L),
@@ -63,8 +54,8 @@ class EventReminderScanServiceTest {
 
         EventReminderScanResult result = service.scanHouse(9L, now);
 
-        assertEquals(8000, result.getProdLogged());
-        assertEquals(8000, result.getProdMarked());
+        assertEquals(7000, result.getProdLogged());
+        assertEquals(7000, result.getProdMarked());
         assertEquals(2020, result.getRepLogged());
         assertEquals(2020, result.getRepMarked());
         verify(batchRabbits, times(8)).markDueEventsAsNotified(
@@ -73,12 +64,8 @@ class EventReminderScanServiceTest {
             eq("job"),
             eq(1000)
         );
-        verify(cycles, times(2)).markDueEventsAsNotified(
-            eq(9L),
-            eq(now),
-            eq("job"),
-            eq(1000)
-        );
+        // 生产周期已退出这套扫表机制（改由 work_tasks 承载），
+        // breeding_cycles 上的 next_event_date / is_event_notified 已随 V28 删除。
         verify(replacements, times(3)).markDueAsNotified(
             eq(9L),
             eq(now),

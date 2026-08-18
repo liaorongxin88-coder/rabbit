@@ -3,9 +3,11 @@ import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
+import 'package:rabbit_flutter/src/domain/models/house_invitation_result.dart';
 import 'package:rabbit_flutter/src/domain/models/house_member.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/domain/models/user_code.dart';
 
 final houseRepositoryProvider = Provider<HouseRepository>((ref) {
   return HouseRepository(ref.watch(apiClientProvider));
@@ -89,20 +91,26 @@ class HouseRepository {
     );
   }
 
-  Future<void> inviteMember({
+  /// [identifier] 可以是手机号，也可以是对方的账号，服务端自己认。
+  /// phone 字段同时也发：新客户端碰上老后端时，手机号那条路还能走通。
+  Future<HouseInvitationResult> inviteMember({
     required int houseId,
-    required String phone,
+    required String identifier,
     required String role,
   }) {
-    return _api.post<void>(
+    final trimmed = identifier.trim();
+    return _api.post<HouseInvitationResult>(
       '/api/house-invitations',
       houseId: houseId,
       body: {
-        'phone': phone.trim(),
+        'identifier': trimmed,
+        if (UserCode.looksLikeMobile(trimmed)) 'phone': trimmed,
         'role': role,
         'requestId': _uuid.v4(),
       },
-      decode: (_) {},
+      decode: (data) => HouseInvitationResult.fromJson(
+        (data as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+      ),
     );
   }
 

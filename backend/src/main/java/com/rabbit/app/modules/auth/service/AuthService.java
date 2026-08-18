@@ -6,6 +6,7 @@ import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.entity.SysUser;
 import com.rabbit.app.modules.auth.mapper.SysUserMapper;
 import com.rabbit.app.modules.auth.support.PhoneNumbers;
+import com.rabbit.app.modules.auth.support.UserCodes;
 import com.rabbit.app.modules.house.service.HouseInvitationService;
 import com.rabbit.app.security.JwtUtil;
 import com.rabbit.app.security.permission.PermissionCode;
@@ -53,6 +54,7 @@ public class AuthService {
         u.setStatus("ENABLED");
         u.setPassword(passwordEncoder.encode(password));
         u.setPasswordInitialized(Boolean.TRUE);
+        u.setUserCode(nextUserCode());
         sysUserMapper.insert(u);
         return tokenResponse(u);
     }
@@ -158,6 +160,7 @@ public class AuthService {
             x.setPasswordInitialized(Boolean.FALSE);
             x.setOpenid(t);
             x.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+            x.setUserCode(nextUserCode());
             sysUserMapper.insert(x);
             u = x;
         }
@@ -285,6 +288,20 @@ public class AuthService {
         return "wx_" + suffix;
     }
 
+    /**
+     * 取一个还没被占用的账号。唯一键最终兜底，这里先查重是为了让极小概率的
+     * 碰撞在这一步就被换掉，而不是变成注册接口上一个莫名其妙的 500。
+     */
+    private String nextUserCode() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String candidate = UserCodes.random();
+            if (sysUserMapper.selectByUserCode(candidate) == null) {
+                return candidate;
+            }
+        }
+        throw new BizException(500, "账号生成失败，请重试");
+    }
+
     private String buildPhoneUserName() {
         return "mobile_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
     }
@@ -292,6 +309,7 @@ public class AuthService {
     private SysUser newPhoneUser(String phone, String phoneHash) {
         SysUser created = new SysUser();
         created.setUserName(buildPhoneUserName());
+        created.setUserCode(nextUserCode());
         created.setStatus("ENABLED");
         created.setPasswordInitialized(Boolean.FALSE);
         created.setPhoneCountryCode("+86");

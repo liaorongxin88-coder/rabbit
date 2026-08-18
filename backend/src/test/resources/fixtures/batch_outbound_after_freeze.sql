@@ -15,7 +15,7 @@ SET @actor = CONCAT('outbound_fixture_', @run_id, '_concurrent');
 SET @cage_id = (
     SELECT id
     FROM cages
-    WHERE house_id = @house_id AND cage_number = 'R2-C5-L1'
+    WHERE house_id = @house_id AND cage_number = '2-5-1'
 );
 SET @rabbit_request_id = CONCAT('fixture-rabbit-', @run_id, '-G10');
 SET @batch_request_id = CONCAT('fixture-batch-', @run_id, '-G10');

@@ -7,6 +7,8 @@ public class HouseInvitation {
     private Long houseId;
     private String phoneHash;
     private String phoneMasked;
+    private String inviteChannel;
+    private Long invitedUserId;
     private String role;
     private String status;
     private String requestId;
@@ -48,6 +50,22 @@ public class HouseInvitation {
     public void setPhoneMasked(String phoneMasked) {
         this.phoneMasked = phoneMasked;
     }
+    public String getInviteChannel() {
+        return inviteChannel;
+    }
+
+    public void setInviteChannel(String inviteChannel) {
+        this.inviteChannel = inviteChannel;
+    }
+
+    public Long getInvitedUserId() {
+        return invitedUserId;
+    }
+
+    public void setInvitedUserId(Long invitedUserId) {
+        this.invitedUserId = invitedUserId;
+    }
+
 
     public String getRole() {
         return role;

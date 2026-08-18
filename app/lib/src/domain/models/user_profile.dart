@@ -3,6 +3,7 @@ class UserProfile {
     required this.userId,
     required this.userName,
     required this.openidBound,
+    this.userCode = '',
     this.phoneBound = false,
     this.maskedPhone = '',
     this.hasPassword = true,
@@ -13,6 +14,10 @@ class UserProfile {
 
   final int userId;
   final String userName;
+
+  /// 账号：自己看得见、可以报给别人拉自己进兔舍的唯一标识。
+  /// 老后端不返回这个字段时为空串，界面需要自己兼容。
+  final String userCode;
   final bool openidBound;
   final bool phoneBound;
   final String maskedPhone;
@@ -25,6 +30,7 @@ class UserProfile {
     return UserProfile(
       userId: _intValue(json['userId']),
       userName: json['userName'] as String? ?? '',
+      userCode: json['userCode'] as String? ?? '',
       openidBound: json['openidBound'] == true,
       phoneBound: json['phoneBound'] == true,
       maskedPhone: json['maskedPhone'] as String? ?? '',

@@ -26,7 +26,7 @@ void main() {
 
     await HouseRepository(client).inviteMember(
       houseId: 8,
-      phone: '13800138000',
+      identifier: '13800138000',
       role: 'STAFF',
     );
 
@@ -44,7 +44,35 @@ void main() {
           'non-empty UUID',
           isTrue,
         ));
-    expect(body.keys, containsAll(<String>['phone', 'role', 'requestId']));
+    expect(body['identifier'], '13800138000');
+    expect(
+        body.keys,
+        containsAll(<String>['identifier', 'phone', 'role', 'requestId']));
+    expect(body.keys, hasLength(4));
+  });
+
+  test('user-code invitation carries no phone field at all', () async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 7,
+      'userName': 'owner',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'owner-token'});
+    final adapter = _CapturingAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
+      ..httpClientAdapter = adapter;
+    final client = ApiClient(SessionStore(), dio: dio);
+    addTearDown(client.dispose);
+
+    await HouseRepository(client).inviteMember(
+      houseId: 8,
+      identifier: 'R3F9A0C21B7',
+      role: 'VIEWER',
+    );
+
+    final body = Map<String, dynamic>.from(adapter.request.data as Map);
+    expect(body['identifier'], 'R3F9A0C21B7');
+    // 按账号邀请的整个意义就是不碰手机号，请求体里也不该冒出一个来。
+    expect(body.containsKey('phone'), isFalse);
     expect(body.keys, hasLength(3));
   });
 }

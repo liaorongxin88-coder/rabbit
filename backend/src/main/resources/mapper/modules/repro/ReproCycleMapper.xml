@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.ReproCycleMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.repro.entity.ReproCycle">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="mother_rabbit_id" property="motherRabbitId"/>
+        <result column="male_rabbit_id" property="maleRabbitId"/>
+        <result column="cycle_no" property="cycleNo"/>
+        <result column="stage" property="stage"/>
+        <result column="stage_entered_at" property="stageEnteredAt"/>
+        <result column="lifecycle" property="lifecycle"/>
+        <result column="result" property="result"/>
+        <result column="mating_method" property="matingMethod"/>
+        <result column="state_version" property="stateVersion"/>
+        <result column="mating_date" property="matingDate"/>
+        <result column="pregnancy_check_date" property="pregnancyCheckDate"/>
+        <result column="pregnancy_result" property="pregnancyResult"/>
+        <result column="expected_birth_date" property="expectedBirthDate"/>
+        <result column="birth_date" property="birthDate"/>
+        <result column="weaning_date" property="weaningDate"/>
+        <result column="closed_at" property="closedAt"/>
+        <result column="close_reason" property="closeReason"/>
+        <result column="request_id" property="requestId"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="total_kits" property="totalKits"/>
+        <result column="live_kits" property="liveKits"/>
+        <result column="current_nursing_kits" property="currentNursingKits"/>
+        <result column="weaned_kits" property="weanedKits"/>
+        <result column="avg_weaning_weight" property="avgWeaningWeight"/>
+    </resultMap>
+
+    <!--
+      只列本模块拥有的列。未列出的旧列（overlap_*、foster_*、lactation_days 等）
+      交给数据库默认值，V28 随 batch 模块一并删除。
+    -->
+    <sql id="cols">
+        id, tenant_id, house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
+        stage, stage_entered_at, lifecycle, result, mating_method, state_version,
+        mating_date, pregnancy_check_date, pregnancy_result, expected_birth_date,
+        birth_date, weaning_date, closed_at, close_reason, request_id, remark,
+        create_by, create_time, update_by, update_time,
+        total_kits, live_kits, current_nursing_kits, weaned_kits, avg_weaning_weight
+    </sql>
+
+    <!--
+      养养计数器（total_kits 等）不列入 INSERT：旧表将它们定义为 NOT NULL DEFAULT 0，
+      而新开的周期尚未分娩、无值可填。显式传 null 会盖掉默认值并报错，
+      交给数据库默认值才是正确做法。
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into breeding_cycles (
+            tenant_id, house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
+            stage, stage_entered_at, lifecycle, result, mating_method, state_version,
+            mating_date, pregnancy_check_date, pregnancy_result, expected_birth_date,
+            birth_date, weaning_date, request_id, remark,
+            total_kits, live_kits, current_nursing_kits,
+            create_by, create_time, update_by, update_time
+        ) values (
+            #{tenantId}, #{houseId}, #{batchId}, #{motherRabbitId}, #{maleRabbitId}, #{cycleNo},
+            #{stage}, #{stageEnteredAt}, #{lifecycle}, #{result}, #{matingMethod}, 0,
+            #{matingDate}, #{pregnancyCheckDate}, #{pregnancyResult}, #{expectedBirthDate},
+            #{birthDate}, #{weaningDate}, #{requestId}, #{remark},
+            <!-- 这几列是 NOT NULL DEFAULT 0 的遗留计数列。用 coalesce 兜底而不是
+                 干脆不写：不写的话，从「待分笼」入轨的存量母兔（已有仔兔）在旧
+                 客户端里会显示 0 只仔兔，而 openCycleAt 全程只 insert 一次周期。 -->
+            coalesce(#{totalKits}, 0), coalesce(#{liveKits}, 0), coalesce(#{currentNursingKits}, 0),
+            #{createBy}, now(), #{updateBy}, now()
+        )
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select <include refid="cols"/> from breeding_cycles
+        where house_id = #{houseId} and id = #{id}
+        limit 1
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="Map">
+        select <include refid="cols"/> from breeding_cycles
+        where house_id = #{houseId} and id = #{id}
+        limit 1 for update
+    </select>
+
+    <!--
+      stage 列表必须与 V26 pipeline_guard 生成列逐字一致（ReproStage.PIPELINE 亦然）。
+      三处任一漂移，应用层放行的写入就会在唯一键上炸掉，或反过来漏防。
+    -->
+    <select id="selectOpenPipelineForUpdate" resultMap="Map">
+        select <include refid="cols"/> from breeding_cycles
+        where house_id = #{houseId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and lifecycle = 'OPEN'
+          and stage in ('AWAIT_ESTRUS', 'AWAIT_MATING', 'AWAIT_PALPATION',
+                        'AWAIT_PREPARTUM', 'AWAIT_DELIVERY')
+        order by id desc
+        limit 1 for update
+    </select>
+
+    <select id="selectOpenByMother" resultMap="Map">
+        select <include refid="cols"/> from breeding_cycles
+        where house_id = #{houseId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and lifecycle = 'OPEN'
+        order by id
+    </select>
+
+    <!--
+      state_version 比对 + 自增：并发第二写入者影响 0 行，服务层据此抛 409。
+      刻意不用 status 做乐观锁条件（旧实现的做法）——status 是兼容列，
+      同一阶段可能对应多个旧值，拿它当版本号并不可靠。
+    -->
+    <update id="applyTransition">
+        update breeding_cycles
+        set stage = #{cycle.stage},
+            stage_entered_at = #{cycle.stageEnteredAt},
+            lifecycle = #{cycle.lifecycle},
+            result = #{cycle.result},
+            mating_method = #{cycle.matingMethod},
+            <!--
+              种公兔必须落库。漏了这一列会造成一条完全静默的血缘断链：
+              配种时选了公兔、接口也校验了公兔资格，但值只停在内存里；
+              到分笼生成仔兔时从周期读回来就是 NULL，于是每只仔兔的 father_id 都为空。
+              系统不报错，只是谱系永久丢失。
+              用 ifnull 保留原值：非配种动作（摸胎/接产/分笼）不携带公兔，不得把已有值冲掉。
+            -->
+            male_rabbit_id = ifnull(#{cycle.maleRabbitId}, male_rabbit_id),
+            mating_date = #{cycle.matingDate},
+            pregnancy_check_date = #{cycle.pregnancyCheckDate},
+            pregnancy_result = #{cycle.pregnancyResult},
+            expected_birth_date = #{cycle.expectedBirthDate},
+            birth_date = #{cycle.birthDate},
+            weaning_date = #{cycle.weaningDate},
+            closed_at = #{cycle.closedAt},
+            close_reason = #{cycle.closeReason},
+            remark = #{cycle.remark},
+            <!-- ifnull 保留原值：这些是 NOT NULL 的兼容镜像列，未涉及本次操作时不得被 null 冲掉。 -->
+            total_kits = ifnull(#{cycle.totalKits}, total_kits),
+            live_kits = ifnull(#{cycle.liveKits}, live_kits),
+            current_nursing_kits = ifnull(#{cycle.currentNursingKits}, current_nursing_kits),
+            weaned_kits = ifnull(#{cycle.weanedKits}, weaned_kits),
+            avg_weaning_weight = #{cycle.avgWeaningWeight},
+            state_version = state_version + 1,
+            update_by = #{cycle.updateBy},
+            update_time = now()
+        where house_id = #{cycle.houseId}
+          and id = #{cycle.id}
+          and state_version = #{expectedVersion}
+    </update>
+
+    <select id="selectMaxCycleNo" resultType="java.lang.Integer">
+        select max(cycle_no) from breeding_cycles
+        where house_id = #{houseId}
+          and mother_rabbit_id = #{motherRabbitId}
+          <choose>
+              <when test="batchId != null">and batch_id = #{batchId}</when>
+              <otherwise>and batch_id is null</otherwise>
+          </choose>
+    </select>
+</mapper>

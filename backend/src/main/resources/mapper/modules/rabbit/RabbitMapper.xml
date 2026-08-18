@@ -19,6 +19,10 @@
         <result column="weight" property="weight"/>
         <result column="growth_stage" property="growthStage"/>
         <result column="reproductive_stage" property="reproductiveStage"/>
+        <result column="current_stage" property="currentStage"/>
+        <result column="current_cycle_id" property="currentCycleId"/>
+        <result column="stage_entered_at" property="stageEnteredAt"/>
+        <result column="last_mating_date" property="lastMatingDate"/>
         <result column="state_version" property="stateVersion"/>
         <result column="is_active" property="isActive"/>
         <result column="is_quarantined" property="isQuarantined"/>
@@ -52,19 +56,27 @@
         </foreach>
     </insert>
 
+    <!--
+      生产阶段投影（current_stage / current_cycle_id / stage_entered_at / last_mating_date）
+      必须跟着基础字段一起出库：笼位与兔只列表就是靠这几列直接显示阶段的，
+      漏掉一处调用方就只能回退到旧的 reproductive_stage，两套词汇又会并存。
+    -->
+    <sql id="RabbitColumns">
+        id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed,
+        arrival_method, arrival_date, weight, growth_stage, reproductive_stage,
+        current_stage, current_cycle_id, stage_entered_at, last_mating_date,
+        state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id,
+        departure_date, departure_reason, create_by, create_time, update_by, update_time
+    </sql>
+
     <select id="selectById" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active,
-               is_quarantined, quarantine_time, quarantine_reason,
-               request_id,
-               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId} and id = #{id}
     </select>
 
     <select id="selectByIdsForUpdate" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage,
-               state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id,
-               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId}
         <if test="ids != null and ids.size() > 0">
@@ -76,10 +88,7 @@
     </select>
 
     <select id="selectByHouseAndRequestIds" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed,
-               arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active, is_quarantined, quarantine_time,
-               quarantine_reason, request_id, departure_date, departure_reason, create_by, create_time, update_by,
-               update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId}
           and request_id in
@@ -90,10 +99,7 @@
     </select>
 
     <select id="selectByHouse" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active,
-               is_quarantined, quarantine_time, quarantine_reason,
-               request_id,
-               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId}
         <if test="cageId != null">
@@ -109,10 +115,7 @@
     </select>
 
     <select id="selectPageByHouse" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active,
-               is_quarantined, quarantine_time, quarantine_reason,
-               request_id,
-               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId}
         <if test="cageId != null">
@@ -129,13 +132,18 @@
     </select>
 
     <select id="selectByHouseAndRequestId" resultMap="RabbitMap">
-        select id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active,
-               is_quarantined, quarantine_time, quarantine_reason,
-               request_id,
-               departure_date, departure_reason, create_by, create_time, update_by, update_time
+        select <include refid="RabbitColumns"/>
         from rabbits
         where house_id = #{houseId} and request_id = #{requestId}
         limit 1
+    </select>
+
+    <select id="selectActiveByCageForUpdate" resultMap="RabbitMap">
+        select <include refid="RabbitColumns"/>
+        from rabbits
+        where house_id = #{houseId} and cage_id = #{cageId} and is_active = true
+        order by id
+        for update
     </select>
 
     <update id="updateTypeAndCage">
@@ -220,6 +228,43 @@
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="updateCageIfActive">
+        update rabbits
+        set cage_id = #{cageId},
+            state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id} and is_active = true
+    </update>
+
+    <!--
+      对调换笼的中间态。uk_rabbits_house_active_breeding_cage 建在生成列
+      active_breeding_cage_id 上（is_active 且 type in ('0','1') 时取 cage_id），
+      InnoDB 逐行校验唯一键，因此 A→B、B→A 这种环形交换无论拆成两条 UPDATE
+      还是写成一条 CASE，都会在中间那一步撞 1062。
+      这里先把其中一只临时置为离场，使它的生成列变成 NULL 让开唯一键，
+      挪完另一只再带着新笼位复位。两条语句同事务、两行都已 FOR UPDATE 持锁，
+      中间态不会被其它会话看到；失败即整体回滚。
+      仅供 transferCage 的 SWAP 分支使用，不要拿去做别的事。
+    -->
+    <update id="parkForCageSwap">
+        update rabbits
+        set is_active = false,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id} and is_active = true
+    </update>
+
+    <update id="restoreFromCageSwap">
+        update rabbits
+        set cage_id = #{cageId},
+            is_active = true,
+            state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id} and is_active = false and departure_date is null
     </update>
 
     <select id="countActiveByCage" resultType="int">

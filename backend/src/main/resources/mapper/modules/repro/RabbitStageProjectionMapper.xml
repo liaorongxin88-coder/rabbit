@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.repro.mapper.RabbitStageProjectionMapper">
+    <!--
+      只更新投影列，绝不碰 cage_id / is_active 等笼位与在场字段：
+      阶段推进与转笼是两件事，混在一条 update 里会让 V25 的笼位唯一键出现意外冲突。
+    -->
+    <update id="projectStage">
+        update rabbits
+        set current_stage = #{currentStage},
+            current_cycle_id = #{currentCycleId},
+            stage_entered_at = #{stageEnteredAt},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{rabbitId}
+    </update>
+
+    <update id="touchLastMatingDate">
+        update rabbits
+        set last_mating_date = #{lastMatingDate},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{rabbitId}
+    </update>
+</mapper>

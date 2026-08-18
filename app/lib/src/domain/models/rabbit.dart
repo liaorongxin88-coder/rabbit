@@ -13,6 +13,8 @@ class Rabbit {
     required this.isActive,
     this.growthStage,
     this.reproductiveStage,
+    this.currentStage,
+    this.stageEnteredAt,
   });
 
   final int id;
@@ -28,6 +30,11 @@ class Rabbit {
   final bool isActive;
   final String? growthStage;
   final String? reproductiveStage;
+
+  /// 生产阶段投影。种母兔的阶段只由生产流程状态机写，展示以它为准；
+  /// [reproductiveStage] 是旧词汇，只对种公兔、后备兔仍有意义。
+  final String? currentStage;
+  final DateTime? stageEnteredAt;
 
   String get typeLabel {
     switch (type) {
@@ -82,6 +89,8 @@ class Rabbit {
       isActive: _boolValue(json['isActive'], fallback: true),
       growthStage: _optionalString(json['growthStage']),
       reproductiveStage: _optionalString(json['reproductiveStage']),
+      currentStage: _optionalString(json['currentStage']),
+      stageEnteredAt: _dateTimeValue(json['stageEnteredAt']),
     );
   }
 

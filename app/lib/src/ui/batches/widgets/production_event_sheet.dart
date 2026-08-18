@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
@@ -115,10 +117,11 @@ Future<bool> showBatchMatingSheet({
   required int houseId,
   required int batchId,
   required List<int> rabbitIds,
+  List<int> nursingRabbitIds = const [],
   String? requestId,
   BatchWriteRequestController? writeRequest,
 }) {
-  if (rabbitIds.isEmpty) {
+  if (rabbitIds.isEmpty && nursingRabbitIds.isEmpty) {
     return Future<bool>.value(false);
   }
   return showModalBottomSheet<bool>(
@@ -130,6 +133,7 @@ Future<bool> showBatchMatingSheet({
       houseId: houseId,
       batchId: batchId,
       rabbitIds: rabbitIds,
+      nursingRabbitIds: nursingRabbitIds,
       requestId: requestId,
       writeRequest: writeRequest,
     ),
@@ -141,6 +145,7 @@ class _BatchMatingSheet extends ConsumerStatefulWidget {
     required this.houseId,
     required this.batchId,
     required this.rabbitIds,
+    this.nursingRabbitIds = const [],
     this.requestId,
     this.writeRequest,
   });
@@ -148,6 +153,9 @@ class _BatchMatingSheet extends ConsumerStatefulWidget {
   final int houseId;
   final int batchId;
   final List<int> rabbitIds;
+
+  /// 哺乳中的母兔（血配）：她们没有配种待办，需要先另开新周期。
+  final List<int> nursingRabbitIds;
   final String? requestId;
   final BatchWriteRequestController? writeRequest;
 
@@ -201,7 +209,8 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
       _showMessage('请选择种公兔');
       return;
     }
-    if (widget.rabbitIds.length > 1000) {
+    final totalCount = widget.rabbitIds.length + widget.nursingRabbitIds.length;
+    if (totalCount > 1000) {
       _showMessage('单次最多批量配种 1000 只母兔，请缩小筛选范围');
       return;
     }
@@ -213,14 +222,18 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
           'houseId': widget.houseId,
           'batchId': widget.batchId,
           'femaleRabbitIds': widget.rabbitIds,
+          'nursingRabbitIds': widget.nursingRabbitIds,
           'maleRabbitId': maleId,
           'matingDate': formatBatchWriteDate(_matingDate),
         }),
       );
-      await ref.read(batchRepositoryProvider).submitMatingBulk(
+      final result = await ref
+          .read(reproRepositoryProvider)
+          .bulkMate(
             houseId: widget.houseId,
             batchId: widget.batchId,
-            rabbitIds: widget.rabbitIds,
+            matableRabbitIds: widget.rabbitIds,
+            nursingRabbitIds: widget.nursingRabbitIds,
             maleRabbitId: maleId,
             matingDate: _matingDate,
             requestId: requestId,
@@ -238,8 +251,21 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
       ref.invalidate(batchMembersProvider(detailRequest));
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop(true);
+      // 逐项报告：批量配种里个别母兔失败（公兔不合格、被人先推进）不应该
+      // 拖垮整批，也不应该被一句「已完成」盖掉。
       messenger?.showSnackBar(
-        SnackBar(content: Text('已完成批量配种，共 ${widget.rabbitIds.length} 只母兔')),
+        SnackBar(
+          content: Text(
+            switch (result) {
+              _ when result.total == 0 => '所选母兔当前没有待配种任务，可能已被处理',
+              _ when result.failed == 0 =>
+                '已完成批量配种，共 ${result.succeeded} 只母兔',
+              _ =>
+                '配种完成 ${result.succeeded} 只，${result.failed} 只未成功：'
+                    '${result.failures.first.message ?? '原因未知'}',
+            },
+          ),
+        ),
       );
     } catch (error) {
       if (mounted) {
@@ -313,7 +339,10 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                                       Theme.of(context).textTheme.titleLarge),
                               const SizedBox(height: 4),
                               Text(
-                                  '已选择 ${widget.rabbitIds.length} 只母兔 · 同一公兔、同一日期',
+                                  // 必须把血配那部分也算上：上一屏选了几只，这里就该显示几只，
+                                  // 否则操作员会以为自己选丢了。
+                                  '已选择 ${widget.rabbitIds.length + widget.nursingRabbitIds.length}'
+                                  ' 只母兔 · 同一公兔、同一日期',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis),
                             ],
@@ -440,7 +469,12 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   final _remarkController = TextEditingController();
   final _totalKitsController = TextEditingController(text: '8');
   final _liveKitsController = TextEditingController(text: '8');
-  var _pregnancyResult = '怀孕';
+  var _palpationResult = PalpationResult.pregnant;
+  var _matingMethod = MatingMethod.natural;
+
+  /// 摸胎「不确定」时的复查日期。旧实现没有这个字段，结果是结论为不确定的母兔
+  /// 停在待摸胎且再也收不到提醒，从流程里惄无声息地消失。
+  DateTime? _recheckDate;
   var _parturitionFailed = false;
   int? _selectedMaleId;
   int? _selectedBackupCageId;
@@ -502,6 +536,24 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     }
   }
 
+  /// 复查日期只能往后选：它是「下次什么时候再来摸」，与记录动作发生日的 [_pickDate] 相反。
+  Future<void> _pickRecheckDate() async {
+    final today = DateTime.now();
+    final firstDate = DateTime(today.year, today.month, today.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _recheckDate ?? firstDate.add(const Duration(days: 7)),
+      firstDate: firstDate,
+      lastDate: firstDate.add(const Duration(days: 365)),
+      helpText: '选择复查日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null && mounted) {
+      setState(() => _recheckDate = picked);
+    }
+  }
+
   List<Cage> _backupCages(List<Cage> cages) {
     return cages
         .where(
@@ -545,47 +597,71 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     try {
       final repo = ref.read(batchRepositoryProvider);
       final rabbitRepo = ref.read(rabbitRepositoryProvider);
+      final reproRepo = ref.read(reproRepositoryProvider);
+
+      // 四个生产动作已统一走 doe-breeding-v2 的单一写入口。
+      // 旧的六个 submitXxx 各拼一套 body、各自校验，同一条规则在六处漂移；
+      // 现在差异只在于传不传某个参数，而不是走不走另一条代码路径。
+      final cycleId = _breedingCycleId;
+      final needsCycle =
+          widget.kind == ProductionKind.mating ||
+          widget.kind == ProductionKind.pregnancyCheck ||
+          widget.kind == ProductionKind.prepartum ||
+          widget.kind == ProductionKind.parturition;
+      if (needsCycle && (cycleId == null || cycleId <= 0)) {
+        _showMessage('未找到对应的生产周期，请刷新后重试');
+        return;
+      }
 
       if (widget.kind == ProductionKind.mating) {
-        if (_selectedMaleId == null || _selectedMaleId! <= 0) {
+        final isAi = _matingMethod == MatingMethod.ai;
+        if (!isAi && (_selectedMaleId == null || _selectedMaleId! <= 0)) {
           _showMessage('请选择种公兔');
           return;
         }
-        await repo.submitMating(
+        await reproRepo.applyAction(
           houseId: widget.houseId,
-          batchId: batchId!,
-          femaleRabbitId: widget.rabbitId,
-          maleRabbitId: _selectedMaleId!,
-          matingDate: _actionDate,
+          cycleId: cycleId!,
+          action: ReproAction.mating,
+          occurredAt: _actionDate,
+          maleRabbitId: isAi ? null : _selectedMaleId,
+          matingMethod: _matingMethod,
           requestId: _requestIdFor({
             'maleRabbitId': _selectedMaleId,
+            'matingMethod': _matingMethod.wire,
             'matingDate': formatBatchWriteDate(_actionDate),
           }),
         );
       } else if (widget.kind == ProductionKind.pregnancyCheck) {
         final remark = _remarkController.text.trim();
-        await repo.submitPregnancyCheck(
+        final result = _palpationResult;
+        // 「不确定」必须给复查日：不给的话这只兔子会停在待摸胎且再无提醒，
+        // 正是旧实现里「兔子消失在流程中」的典型成因。
+        if (result == PalpationResult.unsure && _recheckDate == null) {
+          _showMessage('摸胎结论为不确定时，请选择复查日期');
+          return;
+        }
+        await reproRepo.applyAction(
           houseId: widget.houseId,
-          batchId: batchId!,
-          rabbitId: widget.rabbitId,
-          breedingCycleId: _breedingCycleId,
-          checkDate: _actionDate,
-          result: _pregnancyResult,
+          cycleId: cycleId!,
+          action: ReproAction.palpation,
+          occurredAt: _actionDate,
+          palpationResult: result,
+          nextRemindAt: result == PalpationResult.unsure ? _recheckDate : null,
           remark: remark,
           requestId: _requestIdFor({
             'checkDate': formatBatchWriteDate(_actionDate),
-            'result': _pregnancyResult,
+            'result': result.wire,
             'remark': remark,
           }),
         );
       } else if (widget.kind == ProductionKind.prepartum) {
         final remark = _remarkController.text.trim();
-        await repo.submitPrepartumFinish(
+        await reproRepo.applyAction(
           houseId: widget.houseId,
-          batchId: batchId!,
-          rabbitId: widget.rabbitId,
-          breedingCycleId: _breedingCycleId,
-          actionDate: _actionDate,
+          cycleId: cycleId!,
+          action: ReproAction.prepartum,
+          occurredAt: _actionDate,
           remark: remark,
           requestId: _requestIdFor({
             'actionDate': formatBatchWriteDate(_actionDate),
@@ -595,28 +671,25 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       } else if (widget.kind == ProductionKind.parturition) {
         final total = int.tryParse(_totalKitsController.text.trim()) ?? -1;
         final live = int.tryParse(_liveKitsController.text.trim()) ?? -1;
-        if (total < 0 || live < 0) {
-          _showMessage('请输入有效的产仔数量');
-          return;
-        }
-        if (_parturitionFailed && (total != 0 || live != 0)) {
-          _showMessage('失败产的总产仔数和活仔数必须为 0');
-          return;
-        }
-        if (live > total) {
-          _showMessage('活仔数不能大于总产仔数');
-          return;
+        if (!_parturitionFailed) {
+          if (total < 0 || live < 0) {
+            _showMessage('请输入有效的产仔数量');
+            return;
+          }
+          if (live > total) {
+            _showMessage('活仔数不能大于总产仔数');
+            return;
+          }
         }
         final remark = _remarkController.text.trim();
-        await repo.submitParturition(
+        await reproRepo.applyAction(
           houseId: widget.houseId,
-          batchId: batchId!,
-          rabbitId: widget.rabbitId,
-          breedingCycleId: _breedingCycleId,
-          birthDate: _actionDate,
-          totalKits: total,
-          liveKits: live,
-          failed: _parturitionFailed,
+          cycleId: cycleId!,
+          action: ReproAction.delivery,
+          outcome: _parturitionFailed ? 'FAILED' : 'BORN',
+          occurredAt: _actionDate,
+          totalKits: _parturitionFailed ? null : total,
+          liveKits: _parturitionFailed ? null : live,
           remark: remark,
           requestId: _requestIdFor({
             'birthDate': formatBatchWriteDate(_actionDate),
@@ -857,24 +930,58 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 ),
                               ),
                           ],
+                          if (widget.kind == ProductionKind.mating) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              '配种方式',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            for (final method in MatingMethod.values)
+                              RadioListTile<MatingMethod>(
+                                key: ValueKey('mating-method-${method.wire}'),
+                                value: method,
+                                groupValue: _matingMethod,
+                                onChanged: _saving
+                                    ? null
+                                    : (value) => setState(
+                                        () => _matingMethod = value ?? method,
+                                      ),
+                                title: Text(method.label),
+                                subtitle: method == MatingMethod.ai
+                                    ? const Text('混精 / 外购冻精，可不指定公兔')
+                                    : null,
+                              ),
+                          ],
                           if (widget.kind == ProductionKind.pregnancyCheck) ...[
                             const SizedBox(height: 8),
                             Text(
                               '摸胎结果',
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
-                            for (final result in const ['怀孕', '空怀', '不确定'])
-                              RadioListTile<String>(
-                                key: ValueKey('pregnancy-result-$result'),
+                            for (final result in PalpationResult.values)
+                              RadioListTile<PalpationResult>(
+                                key: ValueKey('pregnancy-result-${result.wire}'),
                                 value: result,
-                                groupValue: _pregnancyResult,
+                                groupValue: _palpationResult,
                                 onChanged: _saving
                                     ? null
                                     : (value) => setState(
-                                          () => _pregnancyResult =
-                                              value ?? result,
-                                        ),
-                                title: Text(result),
+                                        () => _palpationResult = value ?? result,
+                                      ),
+                                title: Text(result.label),
+                              ),
+                            if (_palpationResult == PalpationResult.unsure)
+                              ListTile(
+                                key: const ValueKey('palpation-recheck-date'),
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('复查日期'),
+                                subtitle: Text(
+                                  _recheckDate == null
+                                      ? '必填：不选则这只母兔不会再收到提醒'
+                                      : formatBatchWriteDate(_recheckDate!),
+                                ),
+                                trailing: const Icon(Icons.event),
+                                onTap: _saving ? null : _pickRecheckDate,
                               ),
                           ],
                           if (widget.kind == ProductionKind.parturition) ...[

@@ -4,7 +4,7 @@ import {
   workspacePostJson,
   workspacePutJson,
 } from '@/lib/request'
-import { batchActionPath, bulkMatingPath, rabbitEventPath } from '@/lib/batch-workflow'
+import { batchActionPath, rabbitEventPath } from '@/lib/batch-workflow'
 import type {
   BatchRabbit,
   BreedingCycle,
@@ -13,6 +13,7 @@ import type {
   Cage,
   DashboardSummary,
   HouseInvitationRequest,
+  HouseInvitationResult,
   HouseMember,
   HousePermission,
   OutboundSelectedItem,
@@ -22,6 +23,9 @@ import type {
   Rabbit,
   RabbitDepartureRequest,
   RabbitHouse,
+  ReproActionResult,
+  ReproBulkResult,
+  ReproTaskPage,
   WorkspaceSession,
   WorkspaceUserProfile,
   SmsCodeDelivery,
@@ -111,10 +115,11 @@ export function listCages(houseId: number) {
   return workspaceGetJson<Cage[]>('/api/cages', { houseId })
 }
 
+/** cageNumber 留空时由后端按「排-位-层」生成，与建兔舍自动铺的笼位同一套规则。 */
 export function createCage(
   houseId: number,
   data: {
-    cageNumber: string
+    cageNumber?: string
     rowCode?: string
     layerIndex?: number
     positionIndex?: number
@@ -161,7 +166,21 @@ export interface RabbitWriteInput {
   reproductiveStage?: string
 }
 
-export function createRabbit(houseId: number, data: RabbitWriteInput) {
+/**
+ * 录入时直接入轨的生产阶段。
+ *
+ * 只对种母兔成立，且只能在创建时传：建兔与开周期必须同事务，否则就会出现
+ * “存栏里有这只母兔、待办里没有”的黑洞。修改已有母兔的阶段走生产动作，不走这里。
+ */
+export interface RabbitReproEntryInput {
+  reproStage?: string
+  stageEnteredAt?: string
+  matingDate?: string
+  birthDate?: string
+  liveKits?: number
+}
+
+export function createRabbit(houseId: number, data: RabbitWriteInput & RabbitReproEntryInput) {
   return workspacePostJson<Rabbit>(
     '/api/rabbits',
     { ...data, requestId: requestId() },
@@ -174,6 +193,29 @@ export function updateRabbit(houseId: number, rabbitId: number, data: RabbitWrit
   return workspacePutJson<Rabbit>(
     `/api/rabbits/${rabbitId}`,
     { ...update, requestId: requestId() },
+    { houseId },
+  )
+}
+
+/**
+ * 换笼位结果。mode 里的三种结局对用户是完全不同的事实，提示文案必须区分。
+ */
+export interface CageTransferResult {
+  mode: 'MOVE' | 'APPEND' | 'SWAP' | 'REPLAY'
+  rabbitId: number
+  fromCageId: number | null
+  toCageId: number | null
+  swappedRabbitId: number | null
+}
+
+/**
+ * 换笼位。与在编辑表单里改笼位不同：目标笼已有种兔时这里会执行两笼对调，
+ * 而编辑路径只会报“该繁殖笼已有在栏种兔”。
+ */
+export function transferRabbitCage(houseId: number, rabbitId: number, targetCageId: number) {
+  return workspacePostJson<CageTransferResult>(
+    `/api/rabbits/${rabbitId}/cage-transfer`,
+    { targetCageId, requestId: requestId() },
     { houseId },
   )
 }
@@ -205,12 +247,42 @@ export function listBreedingCycles(houseId: number, batchId: number) {
   })
 }
 
-export function submitBulkMating(
+/**
+ * 批量配种。
+ *
+ * 界面选的是母兔，而批量接口收的是待办 id，所以这里先把母兔解析成待配种任务。
+ * 只能推进「已经处于待配种」的母兔；选中但当下没有待配种任务的会被自然跳过
+ * （比如别人已经配过了），返回的 count 是真实成功的数量而不是选中数量。
+ */
+export async function submitBulkMating(
   houseId: number,
   batchId: number,
   data: BulkMatingRequest,
-) {
-  return workspacePostJson<BulkMatingResult>(bulkMatingPath(batchId), data, { houseId })
+): Promise<BulkMatingResult> {
+  const wanted = new Set(data.femaleRabbitIds)
+  // 拉到足够远的将来，否则默认只能看到「今日及逆期」，
+  // 提前安排的配种会惄无声息地漏掉。
+  const page = await listReproTasks(houseId, {
+    batchId,
+    type: 'MATING',
+    dueBefore: Date.now() + 3650 * 24 * 3600 * 1000,
+    size: 500,
+  })
+  const taskIds = page.items
+    .filter((task) => task.rabbitId != null && wanted.has(task.rabbitId))
+    .map((task) => task.id)
+  if (taskIds.length === 0) {
+    return { requestId: data.requestId, count: 0 }
+  }
+  const result = await submitReproBulkAction(houseId, {
+    action: 'MATING',
+    occurredAt: data.matingDate,
+    maleRabbitId: data.maleRabbitId,
+    matingMethod: 'NATURAL',
+    taskIds,
+    requestId: data.requestId,
+  })
+  return { requestId: data.requestId, count: result.succeeded }
 }
 
 export function submitRabbitDeparture(
@@ -220,16 +292,103 @@ export function submitRabbitDeparture(
   return workspacePostJson<void>(rabbitEventPath(), data, { houseId })
 }
 
-export type BatchAction =
-  | 'aphrodisiac/start'
-  | 'aphrodisiac/finish'
-  | 'mating'
-  | 'pregnancy-check'
-  | 'prepartum/finish'
-  | 'parturition'
-  | 'weaning'
-  | 'sale'
-  | 'complete'
+/**
+ * 批次层面仅存的两个动作。
+ *
+ * doe-breeding-v2 之后，生产动作（催情/配种/摸胎/备产/接产/分笼）不再挂在批次上，
+ * 而是挂在生产周期上，走 {@link submitReproAction}。批次现在只是个标签。
+ */
+export type BatchAction = 'sale' | 'complete'
+
+/** 生产动作，与后端 ReproAction 一一对应。 */
+export type ReproActionName =
+  | 'ESTRUS'
+  | 'MATING'
+  | 'PALPATION'
+  | 'PREPARTUM'
+  | 'DELIVERY'
+  | 'WEANING'
+  | 'ABORTION'
+  | 'POSTPONE'
+  | 'RETIRE'
+
+/**
+ * 单头母兔的一次状态推进——六个生产动作共用的唯一写入口。
+ *
+ * 动作是否合法由服务端的转换表判定，前端不再自己判断「当前阶段能不能做这个动作」；
+ * 非法组合会返回 409 并附上可直接展示的中文原因。
+ */
+export function submitReproAction(
+  houseId: number,
+  cycleId: number,
+  data: Record<string, unknown>,
+  actionRequestId: string,
+) {
+  return workspacePostJson<ReproActionResult>(
+    `/api/repro/cycles/${cycleId}/actions`,
+    { ...data, requestId: actionRequestId },
+    { houseId },
+  )
+}
+
+/** 批量推进待办。部分成功是常态，整体仍返回 200，失败项在 items 里。 */
+export function submitReproBulkAction(
+  houseId: number,
+  data: Record<string, unknown>,
+) {
+  return workspacePostJson<ReproBulkResult>(
+    '/api/repro/tasks/bulk-actions',
+    data,
+    { houseId },
+  )
+}
+
+/**
+ * 阶段→可执行动作字典。
+ *
+ * 用于决定「流产」这类非计划入口该不该出现。规则的唯一来源是服务端
+ * 转换表；前端拄写一份日后必定漂移，用户会看到点下去就 409 的选项。
+ */
+export function listReproStageActions(houseId: number) {
+  return workspaceGetJson<
+    { stage: string; stageLabel: string; actions: { action: ReproActionName; label: string }[] }[]
+  >('/api/repro/stage-actions', { houseId })
+}
+
+/** 入轨阶段字典：每个可入轨阶段必须补录哪些事实，由服务端的 EntryPoint 表下发。 */
+export interface ReproEntryPoint {
+  stage: string
+  stageLabel: string
+  requiredFacts: { fact: string; label: string }[]
+}
+
+export function listReproEntryPoints(houseId: number) {
+  return workspaceGetJson<ReproEntryPoint[]>('/api/repro/entry-points', { houseId })
+}
+
+/** 待办清单。首页、笼位、兔卡、批次详情共用这一个接口，只是过滤条件不同。 */
+export function listReproTasks(
+  houseId: number,
+  params: {
+    batchId?: number
+    type?: string
+    cageId?: number
+    rabbitId?: number
+    dueBefore?: number
+    page?: number
+    size?: number
+  } = {},
+) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) query.set(key, String(value))
+  }
+  const suffix = query.toString()
+  return workspaceGetJson<ReproTaskPage>(
+    `/api/tasks${suffix ? `?${suffix}` : ''}`,
+    { houseId },
+  )
+}
 
 export function submitBatchAction(
   houseId: number,
@@ -312,7 +471,9 @@ export function createHouseInvitation(
   houseId: number,
   data: HouseInvitationRequest,
 ) {
-  return workspacePostJson<void>('/api/house-invitations', data, { houseId })
+  return workspacePostJson<HouseInvitationResult>('/api/house-invitations', data, {
+    houseId,
+  })
 }
 
 export function updateHouseMember(

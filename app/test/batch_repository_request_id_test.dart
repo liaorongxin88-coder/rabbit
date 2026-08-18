@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/data/services/session_store.dart';
@@ -24,6 +26,7 @@ void main() {
   test('all Batch writes forward an explicit requestId', () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
+    final repro = _repro(adapter);
 
     await repository.createBatch(
       houseId: 8,
@@ -31,33 +34,29 @@ void main() {
       femaleRabbitIds: const [102, 101, 102],
       requestId: 'create-request',
     );
-    await repository.submitMating(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      femaleRabbitId: 101,
+      cycleId: 301,
+      action: ReproAction.mating,
       maleRabbitId: 201,
-      matingDate: DateTime(2026, 8, 14),
+      matingMethod: MatingMethod.natural,
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'mating-request',
     );
-    await repository.submitMatingBulk(
+    await repro.bulkApply(
       houseId: 8,
-      batchId: 9,
-      rabbitIds: const [103, 101, 102, 101],
+      action: ReproAction.mating,
+      taskIds: const [703, 701, 702, 701],
       maleRabbitId: 201,
-      matingDate: DateTime(2026, 8, 14),
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'bulk-mating-request',
     );
-    await repository.startAphrodisiac(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      rabbitIds: const [101, 102],
-      requestId: 'aphrodisiac-start-request',
-    );
-    await repository.finishAphrodisiac(
-      houseId: 8,
-      batchId: 9,
-      rabbitIds: const [101, 102],
-      requestId: 'aphrodisiac-finish-request',
+      cycleId: 301,
+      action: ReproAction.estrus,
+      occurredAt: DateTime(2026, 8, 14),
+      requestId: 'estrus-request',
     );
     await repository.completeBatch(
       houseId: 8,
@@ -66,40 +65,37 @@ void main() {
       force: true,
       requestId: 'complete-request',
     );
-    await repository.submitPregnancyCheck(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      rabbitId: 101,
-      breedingCycleId: 301,
-      checkDate: DateTime(2026, 8, 14),
-      result: '怀孕',
+      cycleId: 301,
+      action: ReproAction.palpation,
+      palpationResult: PalpationResult.pregnant,
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'pregnancy-request',
     );
-    await repository.submitPrepartumFinish(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      rabbitId: 101,
-      breedingCycleId: 301,
-      actionDate: DateTime(2026, 8, 14),
+      cycleId: 301,
+      action: ReproAction.prepartum,
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'prepartum-request',
     );
-    await repository.submitParturition(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      rabbitId: 101,
-      breedingCycleId: 301,
-      birthDate: DateTime(2026, 8, 14),
+      cycleId: 301,
+      action: ReproAction.delivery,
+      outcome: 'BORN',
       totalKits: 8,
       liveKits: 7,
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'parturition-request',
     );
-    await repository.submitWeaning(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      rabbitId: 101,
-      breedingCycleId: 301,
-      weaningDate: DateTime(2026, 8, 14),
-      weaningCount: 7,
+      cycleId: 301,
+      action: ReproAction.weaning,
+      weanedCount: 7,
+      occurredAt: DateTime(2026, 8, 14),
       requestId: 'weaning-request',
     );
     await repository.submitSale(
@@ -116,8 +112,7 @@ void main() {
         'create-request',
         'mating-request',
         'bulk-mating-request',
-        'aphrodisiac-start-request',
-        'aphrodisiac-finish-request',
+        'estrus-request',
         'complete-request',
         'pregnancy-request',
         'prepartum-request',
@@ -130,24 +125,25 @@ void main() {
       adapter.requests.map((request) => request.path),
       [
         '/api/batches',
-        '/api/batches/9/mating',
-        '/api/batches/9/mating/bulk',
-        '/api/batches/9/aphrodisiac/start',
-        '/api/batches/9/aphrodisiac/finish',
+        // 六个生产动作共用同一个写入口：这正是 doe-breeding-v2 重构的目的。
+        // 旧实现在这里是六条不同的 URL，每条自带一套校验与状态机。
+        '/api/repro/cycles/301/actions',
+        '/api/repro/tasks/bulk-actions',
+        '/api/repro/cycles/301/actions',
         '/api/batches/9/complete',
-        '/api/batches/9/pregnancy-check',
-        '/api/batches/9/prepartum/finish',
-        '/api/batches/9/parturition',
-        '/api/batches/9/weaning',
+        '/api/repro/cycles/301/actions',
+        '/api/repro/cycles/301/actions',
+        '/api/repro/cycles/301/actions',
+        '/api/repro/cycles/301/actions',
         '/api/batches/9/sale',
       ],
     );
-    expect(adapter.requests[2].body,
-        containsPair('femaleRabbitIds', [101, 102, 103]));
     expect(adapter.requests.first.body,
         containsPair('femaleRabbitIds', [101, 102]));
-    expect(adapter.requests[2].body, containsPair('maleRabbitId', 201));
-    expect(adapter.requests[2].body, containsPair('matingDate', '2026-08-14'));
+    // 批量目标去重并排序：重复的 taskId 不能变成两次推进。
+    expect(adapter.requests[2].body, containsPair('taskIds', [701, 702, 703]));
+    expect(adapter.requests[1].body, containsPair('maleRabbitId', 201));
+    expect(adapter.requests[1].body, containsPair('action', 'MATING'));
     for (final request in adapter.requests) {
       expect(request.headers['Authorization'], 'Bearer operator-token');
       expect(request.headers['X-House-Id'], '8');
@@ -157,17 +153,17 @@ void main() {
   test('same failed payload reuses requestId and changed payload rotates it',
       () async {
     final adapter = _CapturingAdapter(failFirstRequest: true);
-    final repository = _repository(adapter);
     final controller = BatchWriteRequestController(
       requestId: 'stable-draft-request',
       requestIdFactory: () => 'changed-payload-request',
     );
 
-    Future<void> submit(int totalKits) => repository.submitParturition(
+    Future<void> submit(int totalKits) => _repro(adapter).applyAction(
           houseId: 8,
-          batchId: 9,
-          rabbitId: 101,
-          birthDate: DateTime(2026, 8, 14),
+          cycleId: 301,
+          action: ReproAction.delivery,
+          outcome: 'BORN',
+          occurredAt: DateTime(2026, 8, 14),
           totalKits: totalKits,
           liveKits: 8,
           requestId: controller.requestIdFor(
@@ -260,23 +256,23 @@ void main() {
     expect(controller.requestIdFor(fingerprint), 'request-2');
   });
 
-  test('legacy callers still receive a fresh generated requestId', () async {
+  test('callers that omit a requestId still get a fresh one each time', () async {
     final adapter = _CapturingAdapter();
-    final repository = _repository(adapter);
+    final repro = _repro(adapter);
 
-    await repository.submitMating(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      femaleRabbitId: 101,
+      cycleId: 301,
+      action: ReproAction.mating,
       maleRabbitId: 201,
-      matingDate: DateTime(2026, 8, 14),
+      occurredAt: DateTime(2026, 8, 14),
     );
-    await repository.submitMating(
+    await repro.applyAction(
       houseId: 8,
-      batchId: 9,
-      femaleRabbitId: 102,
+      cycleId: 302,
+      action: ReproAction.mating,
       maleRabbitId: 201,
-      matingDate: DateTime(2026, 8, 14),
+      occurredAt: DateTime(2026, 8, 14),
     );
 
     final requestIds = adapter.requests
@@ -294,6 +290,14 @@ BatchRepository _repository(_CapturingAdapter adapter) {
   final client = ApiClient(SessionStore(), dio: dio);
   addTearDown(client.dispose);
   return BatchRepository(client);
+}
+
+ReproRepository _repro(_CapturingAdapter adapter) {
+  final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
+    ..httpClientAdapter = adapter;
+  final client = ApiClient(SessionStore(), dio: dio);
+  addTearDown(client.dispose);
+  return ReproRepository(client);
 }
 
 class _CapturedRequest {

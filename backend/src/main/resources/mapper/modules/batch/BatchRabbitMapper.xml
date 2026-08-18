@@ -281,15 +281,9 @@
           and br.is_active = true
           and br.next_event_date is not null
           and br.next_event_date &lt;= #{today}
-          and not exists (
-              select 1 from breeding_cycles bc
-              where bc.house_id = b.house_id
-                and bc.batch_id = br.batch_id
-                and bc.mother_rabbit_id = br.rabbit_id
-                and bc.closed_at is null
-                and bc.next_event_date = br.next_event_date
-                and bc.next_event_type = br.next_event_type
-          )
+          <!-- 旧实现在这里用 not exists 跟 breeding_cycles 的提醒去重，
+                 因为当时提醒同时存在于两张表。周期侧提醒已整体迁入 work_tasks
+                 （相应列随 V28 删除），去重因此不再有对象。 -->
         order by br.next_event_date asc, br.id asc
     </select>
 
@@ -302,15 +296,9 @@
           and br.next_event_date is not null
           and br.next_event_date &lt;= #{today}
           and br.is_event_notified = false
-          and not exists (
-              select 1 from breeding_cycles bc
-              where bc.house_id = b.house_id
-                and bc.batch_id = br.batch_id
-                and bc.mother_rabbit_id = br.rabbit_id
-                and bc.closed_at is null
-                and bc.next_event_date = br.next_event_date
-                and bc.next_event_type = br.next_event_type
-          )
+          <!-- 旧实现在这里用 not exists 跟 breeding_cycles 的提醒去重，
+                 因为当时提醒同时存在于两张表。周期侧提醒已整体迁入 work_tasks
+                 （相应列随 V28 删除），去重因此不再有对象。 -->
         order by br.next_event_date asc, br.id asc
     </select>
 
@@ -331,15 +319,9 @@
                   and br.next_event_date is not null
                   and br.next_event_date &lt;= #{today}
                   and br.is_event_notified = false
-                  and not exists (
-                      select 1 from breeding_cycles bc
-                      where bc.house_id = b.house_id
-                        and bc.batch_id = br.batch_id
-                        and bc.mother_rabbit_id = br.rabbit_id
-                        and bc.closed_at is null
-                        and bc.next_event_date = br.next_event_date
-                        and bc.next_event_type = br.next_event_type
-                  )
+          <!-- 旧实现在这里用 not exists 跟 breeding_cycles 的提醒去重，
+                 因为当时提醒同时存在于两张表。周期侧提醒已整体迁入 work_tasks
+                 （相应列随 V28 删除），去重因此不再有对象。 -->
                 order by br.id
                 limit #{limit}
             ) due_batch_events
@@ -356,7 +338,13 @@
         select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.latest_cycle_id,
                br.current_nursing_kits, br.nursing_litter_count, br.join_reason, br.batch_role, br.current_status,
                br.last_event_date, br.next_event_date, br.next_event_type, br.is_active, br.join_date, br.exit_date,
-               r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id
+               r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id,
+               <!--
+                 阶段与当前周期一律取自 rabbits 上的投影列（由生产状态机在同一事务内维护），
+                 而不是 br.current_status / br.latest_cycle_id：后者是旧写路径留下的快照，
+                 旧写路径删除后已不再更新，再读就是把建批时的陈旧值当现状展示。
+               -->
+               r.current_stage, r.current_cycle_id
         from batch_rabbits br
         inner join rabbits r on r.id = br.rabbit_id
         where br.batch_id = #{batchId}

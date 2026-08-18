@@ -91,13 +91,60 @@ Use semantic Tailwind tokens in code. The hex values below are documentation anc
 | `muted-foreground` | `#64748B` | Descriptions, metadata, secondary table text |
 | `border` | `#E2E8F0` | Hairline borders and input outlines |
 | `destructive` | `#DC2828` | Errors and destructive actions only |
+| `warning` | `#B45309` | Warnings that need attention but are not failures |
 
 Rules:
 
 - Use `bg-background`, `bg-card`, `bg-secondary`, `text-muted-foreground`, `border`, `bg-primary`, and `text-destructive` before raw Tailwind color utilities.
-- Amber is reserved for warnings. Red is reserved for errors and destructive actions.
+- Amber is reserved for warnings and lives in the `warning` token; do not reach for raw amber utilities.
+- Red is reserved for errors and destructive actions.
 - Do not use broad tinted sections. If emphasis is needed, use a badge, status cell, icon, or border.
 - Avoid one-note palettes. Teal should mark intent, not flood the page.
+
+### Cage Attention Palette
+
+The cage map (`src/components/cage-map.tsx`) is the one surface that encodes state with color. It
+colors by **attention** — "which cages need me today" — not by cage usage, because usage is already
+readable as text and would spend color on something nobody acts on.
+
+| State | Meaning | Token | Icon |
+| --- | --- | --- | --- |
+| 异常 | Bookkeeping contradicts itself: empty-but-occupied, single cage over 1, commodity cage over capacity, disabled cage still holding rabbits | `destructive` | `AlertCircle` |
+| 停用 | Disabled and empty; a normal unusable cage | `secondary` / `muted-foreground` | `Ban` |
+| 待投喂 | Holds rabbits and is unfed today | `warning` | `Clock` |
+| 已满 | No room left | `border` / `foreground` | `CircleMinus` |
+| 有空位 | Can still take rabbits | `accent` | `CirclePlus` |
+
+Rules:
+
+- **Primary teal never encodes cage state.** The same map is also the transfer target picker, so teal
+  is reserved for selection; if teal meant both "state" and "chosen", the user could not tell whether
+  a click registered.
+- Every state carries an icon and a Chinese label next to the color, and the map always ships with its
+  legend. Color is never the only signal.
+- Only one state is shown per cage, in the priority order above. A cage can be several things at once;
+  showing all of them turns the map into a badge pile.
+- Fills stay at low opacity so a wall of cages does not read as a color block.
+
+### Cage Map Layout
+
+结构是「层 → 排 → 位」，和 Flutter 端同一套规则（`src/lib/cage-map.ts` 对应
+`app/lib/src/domain/models/cage_layout.dart`，两端必须一致）。
+
+- **层是切换出来的空间，不是叠在一起的格子。** 现场的多层笼是错位阶梯，人站在某一层
+  前面时眼里只有这一层的那几排；剖面图看着信息全，找笼时对不上眼前的架子。
+  地图一次只画一层；单层兔舍不显示层签（只有一个选项的切换器是纯噪音）。
+- Cage numbers are always `row-position-layer` (e.g. `2-3-1`), matching the order a worker walks
+  the barn. Leave the number field blank and the server derives it; only odd corner cages without
+  clean coordinates get a hand-written number.
+- **层号 1 是最下面那一层**（现场从地面往上数），层签按 1、2、3 顺着排。
+- 一排就是一条线：位从左往右按位号递增，缺笼的位置留空槽。窄屏下整排横向滚动，
+  不换行——换行会让「第几位」错位。
+- 切层会把别的层整个藏起来，所以层签上带该层「要处理的笼」数量（异常 + 待投喂）；
+  选中的笼在别的层时地图自动切过去，不能让人看到「已选中」却在图上找不到那一格。
+- 缺笼的坐标留空槽，不把后面的笼往前挤；筛选只压暗不命中的格子，不从图上移除。
+- 格子上写位号（排号在排头、层号在层签，三者拼起来就是一个笼位），
+  完整编号走 `title` / `aria-label`。
 
 ## Typography
 
@@ -149,6 +196,12 @@ Rules:
 - Do not style page-level sections as floating cards.
 - Responsive controls may wrap, but must not overlap.
 - Tables may scroll horizontally when needed, but primary row identity and actions must remain understandable.
+- Spatial layouts (the cage map) show one layer at a time (layer 1 is the bottom tier; layers count
+  upward), group by row, keep positions ascending, and preserve empty slots. Filters dim non-matching
+  cells instead of removing them, because collapsing a grid makes "row 2, position 5" point at the
+  wrong cage. Paginate by row.
+- A spatial layout is an addition, not a replacement: keep the table view available for lookup by
+  number and for dense scanning.
 
 ## Spacing And Shape
 
@@ -287,6 +340,12 @@ Rules:
 
 - Prefer precise verbs over promotional copy.
 - Labels name the object being edited, not the backend concept.
+- Never leak English domain nouns into the UI. The production container is 批次, never `Batch`;
+  `Batch` stays in code, types and API payloads only. Same rule for any other backend concept:
+  an operator reads Chinese, a developer reads the identifier.
+- The invite identifier (`R3F9A0C21B7` shape) is 账号 in the UI, never 兔号 — 兔号 already means
+  a rabbit's number in batch and search copy, and one word for two things gets the wrong number typed.
+  The code still calls it `userCode`.
 - A control should say exactly what happens: `新增兔场`, `添加成员`, `查询`, `编辑`, `停用兔场`, `启用兔场`.
 - Toast vocabulary should match the action vocabulary.
 - Empty copy should explain what makes data appear and provide an action only when the operator can perform it here.

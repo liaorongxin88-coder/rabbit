@@ -11,11 +11,16 @@ import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 
 enum RabbitDepartureType { cull, death }
 
+/// 登记离场（死亡 / 淘汰）。
+///
+/// [batchId] 可空：后端的 `POST /api/rabbits/events` 本来就不收批次，只需 rabbitId。
+/// 之前把它写成必填，直接的后果是笼内的商品兔根本无处登记死亡（飞书 recvrpTL16SBwu）。
+/// 传了就多刷新一份批次详情缓存，仅此而已。
 Future<void> showRabbitDepartureSheet({
   required BuildContext context,
   required int houseId,
-  required int batchId,
   required int rabbitId,
+  int? batchId,
   String? rabbitLabel,
 }) {
   return showModalBottomSheet<void>(
@@ -27,7 +32,7 @@ Future<void> showRabbitDepartureSheet({
       houseId: houseId,
       batchId: batchId,
       rabbitId: rabbitId,
-      rabbitLabel: rabbitLabel ?? '母兔 #$rabbitId',
+      rabbitLabel: rabbitLabel ?? '兔 #$rabbitId',
     ),
   );
 }
@@ -41,7 +46,7 @@ class _RabbitDepartureSheet extends ConsumerStatefulWidget {
   });
 
   final int houseId;
-  final int batchId;
+  final int? batchId;
   final int rabbitId;
   final String rabbitLabel;
 
@@ -120,7 +125,7 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
         canonicalBatchWriteFingerprint({
           'action': 'rabbitDeparture',
           'houseId': widget.houseId,
-          'batchId': widget.batchId,
+          'batchId': widget.batchId ?? 0,
           'rabbitId': widget.rabbitId,
           'eventType': _eventType,
           'actionDate': _actionDate.millisecondsSinceEpoch,
@@ -150,12 +155,15 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
       ref.invalidate(allActiveHouseRabbitsProvider(widget.houseId));
       ref.invalidate(houseCagesProvider(widget.houseId));
       ref.invalidate(houseBatchesProvider(widget.houseId));
-      final detailRequest = BatchDetailRequest(
-        houseId: widget.houseId,
-        batchId: widget.batchId,
-      );
-      ref.invalidate(batchDetailProvider(detailRequest));
-      ref.invalidate(batchMembersProvider(detailRequest));
+      final batchId = widget.batchId;
+      if (batchId != null) {
+        final detailRequest = BatchDetailRequest(
+          houseId: widget.houseId,
+          batchId: batchId,
+        );
+        ref.invalidate(batchDetailProvider(detailRequest));
+        ref.invalidate(batchMembersProvider(detailRequest));
+      }
 
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop();
@@ -207,14 +215,16 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '母兔离场',
+                            '登记离场',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${widget.rabbitLabel} · Batch #${widget.batchId}',
+                            widget.batchId == null
+                                ? widget.rabbitLabel
+                                : '${widget.rabbitLabel} · 批次 #${widget.batchId}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium,
@@ -331,7 +341,7 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                '提交后将立即退出该母兔的所有活跃 Batch 关系（包括当前 Batch），并关闭未完成的繁殖周期；离场记录不可撤销。',
+                                '提交后将立即退出该兔的所有活跃批次关系，并关闭未完成的繁殖周期；离场记录不可撤销。',
                                 style: TextStyle(color: palette.text),
                               ),
                             ),

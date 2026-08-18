@@ -191,36 +191,43 @@ class _ProductionSettingsFormState
             child: Column(
               children: [
                 _DayField(
+                  fieldKey: const ValueKey('production-aphrodisiac-days'),
                   label: '催情间隔',
                   controller: _aphrodisiacController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-palpation-days'),
                   label: '摸胎天数',
                   controller: _palpationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-prepartum-days'),
                   label: '备产提前天数',
                   controller: _prepartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-weaning-days'),
                   label: '断奶天数',
                   controller: _weaningController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-postpartum-days'),
                   label: '产后恢复天数',
                   controller: _postpartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-sale-days'),
                   label: '出售天数',
                   controller: _saleController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
+                  fieldKey: const ValueKey('production-replacement-days'),
                   label: '后备成熟天数',
                   controller: _replacementController,
                 ),
@@ -230,6 +237,7 @@ class _ProductionSettingsFormState
           const SizedBox(height: 12),
           SectionCard(
             child: TextFormField(
+              key: const ValueKey('production-remark'),
               controller: _remarkController,
               minLines: 2,
               maxLines: 4,
@@ -238,6 +246,7 @@ class _ProductionSettingsFormState
           ),
           const SizedBox(height: 18),
           ElevatedButton.icon(
+            key: const ValueKey('production-settings-save'),
             onPressed: _saving ? null : _save,
             icon: _saving
                 ? const SizedBox.square(
@@ -317,16 +326,19 @@ class _ProductionSettingsFormState
 
 class _DayField extends StatelessWidget {
   const _DayField({
+    required this.fieldKey,
     required this.label,
     required this.controller,
   });
 
+  final Key fieldKey;
   final String label;
   final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
+      key: fieldKey,
       controller: controller,
       decoration: InputDecoration(
         labelText: label,

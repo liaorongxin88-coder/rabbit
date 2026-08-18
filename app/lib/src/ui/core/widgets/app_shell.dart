@@ -36,6 +36,7 @@ class AppShell extends StatelessWidget {
               label: '兔舍',
             ),
             NavigationDestination(
+              key: ValueKey('nav-dashboard'),
               icon: Icon(Icons.grid_view_outlined),
               selectedIcon: Icon(Icons.grid_view),
               label: '数据面板',

@@ -3,11 +3,17 @@ package com.rabbit.app.e2e;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Assertions;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
 public class DashboardReportIT extends E2eTestSupport {
+
+    @Autowired
+    private JdbcTemplate jdbc;
     @Test
     void dashboardAggregatesOnlyAuthorizedHouses() {
         UserSession owner = register("dashboard_owner");
@@ -74,36 +80,26 @@ public class DashboardReportIT extends E2eTestSupport {
         ));
         long batchId = batch.get("id").asLong();
 
-        aphrodisiac(owner, houseId, batchId, activeMother, "dashboard_cycle_first");
-        mate(owner, houseId, batchId, activeMother, father, "dashboard_cycle_first_mating");
-        api.postOk("/api/batches/" + batchId + "/pregnancy-check", owner.token, houseId, obj(
-                "rabbitId", activeMother,
-                "checkDate", oneMinuteAgo(),
-                "result", "怀孕",
-                "requestId", requestId("dash_c1_preg")
-        ));
-        api.postOk("/api/batches/" + batchId + "/prepartum/finish", owner.token, houseId, obj(
-                "rabbitId", activeMother,
-                "actionDate", oneMinuteAgo(),
-                "requestId", requestId("dash_c1_prep")
-        ));
-        api.postOk("/api/batches/" + batchId + "/parturition", owner.token, houseId, obj(
-                "rabbitId", activeMother,
-                "birthDate", oneMinuteAgo(),
-                "totalKits", 6,
-                "liveKits", 6,
-                "failed", false,
-                "requestId", requestId("dash_c1_birth")
-        ));
+        // 第一轮：一路走到哺乳（AWAIT_WEANING，仍 OPEN）
+        long firstCycle = openCycleAtMating(owner, houseId, batchId, activeMother, "dash_c1");
+        act(owner, houseId, firstCycle, "dash_c1_mate", obj(
+                "action", "MATING", "occurredAt", oneMinuteAgo(),
+                "maleRabbitId", father, "matingMethod", "NATURAL"));
+        act(owner, houseId, firstCycle, "dash_c1_preg", obj(
+                "action", "PALPATION", "occurredAt", oneMinuteAgo(), "palpationResult", "PREGNANT"));
+        act(owner, houseId, firstCycle, "dash_c1_prep", obj(
+                "action", "PREPARTUM", "occurredAt", oneMinuteAgo()));
+        act(owner, houseId, firstCycle, "dash_c1_birth", obj(
+                "action", "DELIVERY", "outcome", "BORN", "occurredAt", oneMinuteAgo(),
+                "totalKits", 6, "liveKits", 6));
 
-        aphrodisiac(owner, houseId, batchId, activeMother, "dashboard_cycle_second");
-        mate(owner, houseId, batchId, activeMother, father, "dashboard_cycle_second_mating");
-        api.postOk("/api/batches/" + batchId + "/pregnancy-check", owner.token, houseId, obj(
-                "rabbitId", activeMother,
-                "checkDate", oneMinuteAgo(),
-                "result", "怀孕",
-                "requestId", requestId("dash_c2_preg")
-        ));
+        // 第二轮：血配 —— 哺乳未结束就另开一个管线周期，于是同时有两个 OPEN。
+        long secondCycle = openCycleAtMating(owner, houseId, batchId, activeMother, "dash_c2");
+        act(owner, houseId, secondCycle, "dash_c2_mate", obj(
+                "action", "MATING", "occurredAt", oneMinuteAgo(),
+                "maleRabbitId", father, "matingMethod", "NATURAL"));
+        act(owner, houseId, secondCycle, "dash_c2_preg", obj(
+                "action", "PALPATION", "occurredAt", oneMinuteAgo(), "palpationResult", "PREGNANT"));
 
         JsonNode activeCycles = api.getOk(
                 "/api/batches/" + batchId + "/breeding-cycles?motherRabbitId=" + activeMother + "&activeOnly=true",
@@ -122,23 +118,38 @@ public class DashboardReportIT extends E2eTestSupport {
         Assertions.assertEquals(1, summary.get("readyForBreeding").asInt());
     }
 
-    private void aphrodisiac(UserSession owner, long houseId, long batchId, long motherId, String prefix) {
-        api.postOk("/api/batches/" + batchId + "/aphrodisiac/start", owner.token, houseId, obj(
-                "rabbitIds", List.of(motherId),
-                "requestId", requestId(prefix + "_start")
-        ));
-        api.postOk("/api/batches/" + batchId + "/aphrodisiac/finish", owner.token, houseId, obj(
-                "rabbitIds", List.of(motherId),
-                "requestId", requestId(prefix + "_finish")
-        ));
+    /**
+     * 把一头母兔推到「待配种」。
+     *
+     * <p>建批次时她已被送进流水线（待催情），所以这里是取那条周期再催情一步，
+     * 而不是另开一条——后者会撞上「一头母兔仅一条流水线周期」不变式。
+     */
+    private long openCycleAtMating(
+            UserSession owner, long houseId, long batchId, long motherId, String prefix) {
+        List<Long> waiting = jdbc.queryForList(
+                "select id from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
+                        + " and lifecycle = 'OPEN' and stage = 'AWAIT_ESTRUS' order by id desc limit 1",
+                Long.class, houseId, motherId);
+        if (!waiting.isEmpty()) {
+            long cycleId = waiting.get(0);
+            act(owner, houseId, cycleId, prefix + "_estrus", obj(
+                    "action", "ESTRUS", "occurredAt", oneMinuteAgo()));
+            return cycleId;
+        }
+        // 没有待催情周期，说明这是血配：她正在哺乳，而哺乳周期不占流水线，
+        // 所以这里真的要另开一条新的流水线周期——两个 OPEN 周期并存正是血配的形态。
+        return api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+                "motherRabbitId", motherId,
+                "batchId", batchId,
+                "stage", "AWAIT_MATING",
+                "occurredAt", oneMinuteAgo(),
+                "requestId", requestId(prefix + "_open")
+        )).get("cycleId").asLong();
     }
 
-    private void mate(UserSession owner, long houseId, long batchId, long motherId, long fatherId, String prefix) {
-        api.postOk("/api/batches/" + batchId + "/mating", owner.token, houseId, obj(
-                "femaleRabbitId", motherId,
-                "maleRabbitId", fatherId,
-                "matingDate", oneMinuteAgo(),
-                "requestId", requestId(prefix)
-        ));
+    private void act(
+            UserSession owner, long houseId, long cycleId, String prefix, Map<String, Object> body) {
+        body.put("requestId", requestId(prefix));
+        api.postOk("/api/repro/cycles/" + cycleId + "/actions", owner.token, houseId, body);
     }
 }

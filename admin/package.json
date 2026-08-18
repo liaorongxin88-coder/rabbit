@@ -9,7 +9,8 @@
     "deploy": "bash scripts/deploy.sh",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "e2e:browser": "node scripts/admin_cage_ops_browser_e2e.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.17",
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "5.2.0",
     "oxlint": "^1.69.0",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
     "vite": "8.1.0"

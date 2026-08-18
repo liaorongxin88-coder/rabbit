@@ -57,7 +57,7 @@ final batchDetailProvider =
   (ref, request) async {
     final userId = ref.watch(authenticatedUserIdProvider);
     if (userId <= 0 || request.houseId <= 0 || request.batchId <= 0) {
-      throw ArgumentError('Batch 路径参数不正确');
+      throw ArgumentError('批次路径参数不正确');
     }
     final cancelToken = CancelToken();
     ref.onDispose(cancelToken.cancel);
@@ -74,7 +74,7 @@ final batchMembersProvider = FutureProvider.autoDispose
   (ref, request) async {
     final userId = ref.watch(authenticatedUserIdProvider);
     if (userId <= 0 || request.houseId <= 0 || request.batchId <= 0) {
-      throw ArgumentError('Batch 路径参数不正确');
+      throw ArgumentError('批次路径参数不正确');
     }
     final cancelToken = CancelToken();
     ref.onDispose(cancelToken.cancel);

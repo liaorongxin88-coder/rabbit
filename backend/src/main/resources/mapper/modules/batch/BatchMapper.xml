@@ -16,6 +16,8 @@
         <result column="create_time" property="createTime"/>
         <result column="update_by" property="updateBy"/>
         <result column="update_time" property="updateTime"/>
+        <!-- 派生列：批次内已无在册母兔，提示用户可以结束（不再自动结束） -->
+        <result column="pending_completion" property="pendingCompletion"/>
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
@@ -24,27 +26,43 @@
     </insert>
 
     <select id="selectById" resultMap="BatchMap">
-        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time,
+               (status != '已完成'
+                    and not exists (select 1 from batch_rabbits br
+                                    where br.batch_id = batches.id and br.is_active = 1)
+               ) as pending_completion
         from batches
         where house_id = #{houseId} and id = #{id}
     </select>
 
     <select id="selectByIdForUpdate" resultMap="BatchMap">
-        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time,
+               (status != '已完成'
+                    and not exists (select 1 from batch_rabbits br
+                                    where br.batch_id = batches.id and br.is_active = 1)
+               ) as pending_completion
         from batches
         where house_id = #{houseId} and id = #{id}
         for update
     </select>
 
     <select id="selectByHouse" resultMap="BatchMap">
-        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time,
+               (status != '已完成'
+                    and not exists (select 1 from batch_rabbits br
+                                    where br.batch_id = batches.id and br.is_active = 1)
+               ) as pending_completion
         from batches
         where house_id = #{houseId}
         order by id desc
     </select>
 
     <select id="selectPageByHouse" resultMap="BatchMap">
-        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time,
+               (status != '已完成'
+                    and not exists (select 1 from batch_rabbits br
+                                    where br.batch_id = batches.id and br.is_active = 1)
+               ) as pending_completion
         from batches
         where house_id = #{houseId}
         <if test="q != null and q != ''">
@@ -55,7 +73,11 @@
     </select>
 
     <select id="selectByHouseAndRequestId" resultMap="BatchMap">
-        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time
+        select id, house_id, batch_code, status, start_date, end_date, request_id, remark, create_by, create_time, update_by, update_time,
+               (status != '已完成'
+                    and not exists (select 1 from batch_rabbits br
+                                    where br.batch_id = batches.id and br.is_active = 1)
+               ) as pending_completion
         from batches
         where house_id = #{houseId} and request_id = #{requestId}
         limit 1

@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
+import 'package:rabbit_flutter/src/domain/models/house_invitation_result.dart';
 import 'package:rabbit_flutter/src/domain/models/house_member.dart';
+import 'package:rabbit_flutter/src/domain/models/user_code.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
@@ -26,14 +28,14 @@ class HouseMembersScreen extends ConsumerStatefulWidget {
 }
 
 class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
-  final _phoneController = TextEditingController();
+  final _identifierController = TextEditingController();
   var _inviteRole = 'STAFF';
   var _inviting = false;
   String? _inviteError;
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _identifierController.dispose();
     super.dispose();
   }
 
@@ -90,23 +92,21 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
               Text('邀请成员', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Text(
-                '通过对方的手机号邀请加入当前兔舍。',
+                '填对方的手机号，或对方在「我的 → 账号设置」里看到的那串号。',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               TextField(
-                key: const ValueKey('house-invitation-phone-field'),
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(11),
-                ],
+                key: const ValueKey('house-invitation-identifier-field'),
+                controller: _identifierController,
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.characters,
+                // 这里不能再限制成纯数字：账号是字母数字混排的。
+                inputFormatters: [LengthLimitingTextInputFormatter(24)],
                 decoration: const InputDecoration(
-                  labelText: '手机号',
-                  hintText: '输入11位手机号',
-                  prefixIcon: Icon(Icons.phone_android_outlined),
+                  labelText: '手机号或账号',
+                  hintText: '11位手机号，或形如 R3F9A0C21B7 的账号',
+                  prefixIcon: Icon(Icons.person_search_outlined),
                 ),
                 onChanged: (_) {
                   if (_inviteError != null) {
@@ -194,9 +194,9 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
   }
 
   Future<void> _inviteMember() async {
-    final phone = _phoneController.text.trim();
-    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
-      setState(() => _inviteError = '请输入有效手机号');
+    final identifier = _identifierController.text.trim();
+    if (!UserCode.isInvitable(identifier)) {
+      setState(() => _inviteError = '请填 11 位手机号，或对方的账号（形如 R3F9A0C21B7）');
       return;
     }
     setState(() {
@@ -204,16 +204,16 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
       _inviteError = null;
     });
     try {
-      await ref.read(houseRepositoryProvider).inviteMember(
+      final result = await ref.read(houseRepositoryProvider).inviteMember(
             houseId: widget.houseId,
-            phone: phone,
+            identifier: identifier,
             role: _inviteRole,
           );
       ref.invalidate(houseMembersProvider(widget.houseId));
       if (mounted) {
-        _phoneController.clear();
+        _identifierController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('邀请已提交')),
+          SnackBar(content: Text(_inviteOutcomeMessage(result))),
         );
       }
     } catch (error) {
@@ -229,6 +229,35 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
         setState(() => _inviting = false);
       }
     }
+  }
+
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'OWNER':
+        return '所有者';
+      case 'MANAGER':
+        return '设备管理员';
+      case 'VIEWER':
+        return '游客';
+      case 'STAFF':
+        return '生产人员';
+      default:
+        return role.isEmpty ? '成员' : role;
+    }
+  }
+
+  /// 两条通道结局不同，别都糊成一句「邀请已提交」：
+  /// 账号邀请的人当场就进来了，手机号邀请还得等对方登录。
+  String _inviteOutcomeMessage(HouseInvitationResult result) {
+    if (!result.joined) {
+      return '邀请已发出，对方登录后自动加入';
+    }
+    final label = _roleLabel(result.role);
+    if (result.role.isNotEmpty && result.role != _inviteRole) {
+      // 对方本来权限就更高，后端不会给降下去，这时候必须说清楚。
+      return '对方已在本兔舍，权限保持为$label';
+    }
+    return '已加入本兔舍，角色：$label';
   }
 
   Future<void> _showMemberActions(HouseMember member) async {

@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/batch_repository.dart'
+    show formatBatchWriteDate;
+import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/batch_sheet_async_state.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_context_line.dart';
@@ -207,17 +210,25 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           'remark': remark,
         }),
       );
-      await ref.read(batchRepositoryProvider).submitWeaning(
+      // 分笼走 doe-breeding-v2 的单一写入口：服务端在同一事务里推进周期、
+      // 结窝、分配商品兔笼位并生成仔兔，不再需要客户端分两步。
+      final cycleId = widget.breedingCycleId;
+      if (cycleId == null || cycleId <= 0) {
+        _showMessage('未找到对应的生产周期，请刷新后重试');
+        return;
+      }
+      await ref
+          .read(reproRepositoryProvider)
+          .applyAction(
             houseId: widget.houseId,
-            batchId: widget.batchId,
-            rabbitId: widget.rabbitId,
-            breedingCycleId: widget.breedingCycleId,
-            weaningDate: _weaningDate,
-            weaningCount: count,
+            cycleId: cycleId,
+            action: ReproAction.weaning,
+            occurredAt: _weaningDate,
+            weanedCount: count,
             maleCount: male,
             femaleCount: female,
             targetCageId: targetCageId,
-            avgWeight: avgWeight,
+            avgWeaningWeight: avgWeight,
             remark: remark,
             requestId: requestId,
           );

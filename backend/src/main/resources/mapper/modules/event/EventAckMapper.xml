@@ -75,19 +75,12 @@
             <if test="to != null">
                 and ea.ack_time &lt;= #{to}
             </if>
-            union all
-            select ea.action, ea.ack_time, bc.next_event_date as event_date
-            from event_acks ea
-            inner join breeding_cycles bc on bc.id = ea.record_id
-                and bc.house_id = ea.house_id
-            where ea.house_id = #{houseId}
-              and ea.category = '生产周期'
-            <if test="from != null">
-                and ea.ack_time &gt;= #{from}
-            </if>
-            <if test="to != null">
-                and ea.ack_time &lt;= #{to}
-            </if>
+            <!--
+              原本还有一段联 breeding_cycles 的 '生产周期' 分支，取 bc.next_event_date 作为到期时间。
+              那一列已随 V28 删除（提醒改由 work_tasks 承载），而新模型的待办没有 ack 态——
+              「没做完」就是推迟（改到期日 + snooze_count），任务仍为 PENDING。
+              因此该分支不再产生新数据，直接移除而不是改写成另一个近似值。
+            -->
         ) production_ack
     </select>
 

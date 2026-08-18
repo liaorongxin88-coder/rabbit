@@ -53,6 +53,7 @@ class _AppSettingsContent extends ConsumerWidget {
               Text('主题模式', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               SegmentedButton<ThemeMode>(
+                key: const ValueKey('app-theme-mode'),
                 segments: const [
                   ButtonSegment(
                     value: ThemeMode.system,
@@ -92,6 +93,7 @@ class _AppSettingsContent extends ConsumerWidget {
               const SizedBox(height: 12),
               for (final route in _startRoutes) ...[
                 RadioListTile<String>(
+                  key: ValueKey('app-start-route-${route.route}'),
                   contentPadding: EdgeInsets.zero,
                   value: route.route,
                   groupValue: settings.startRoute,
@@ -121,6 +123,7 @@ class _AppSettingsContent extends ConsumerWidget {
               ),
               const SizedBox(height: 14),
               OutlinedButton.icon(
+                key: const ValueKey('app-clear-local-button'),
                 onPressed: () => _clearLocalPreferences(context, ref),
                 icon: const Icon(Icons.cleaning_services_outlined),
                 label: const Text('清理本地设置'),
