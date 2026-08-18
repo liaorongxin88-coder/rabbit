@@ -9,12 +9,13 @@ SET @prefix = CONCAT('batch-outbound-fixture:', @run_id);
 
 START TRANSACTION;
 
-INSERT INTO sys_user (user_name, password, status)
+-- user_code 是 V30 之后的 NOT NULL 列，四个账号各给各的兔号（唯一键会挡重复）。
+INSERT INTO sys_user (user_name, user_code, password, status)
 VALUES
-    (@actor, @password_hash, 'ENABLED'),
-    (CONCAT('outbound_fixture_', @run_id, '_edit'), @password_hash, 'ENABLED'),
-    (CONCAT('outbound_fixture_', @run_id, '_view'), @password_hash, 'ENABLED'),
-    (CONCAT('outbound_fixture_', @run_id, '_concurrent'), @password_hash, 'ENABLED');
+    (@actor, CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'outbound-control'), 256), 1, 10))), @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_edit'), CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'outbound-edit'), 256), 1, 10))), @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_view'), CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'outbound-view'), 256), 1, 10))), @password_hash, 'ENABLED'),
+    (CONCAT('outbound_fixture_', @run_id, '_concurrent'), CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'outbound-concurrent'), 256), 1, 10))), @password_hash, 'ENABLED');
 
 SET @user_control = (SELECT user_id FROM sys_user WHERE user_name = @actor);
 SET @user_edit = (SELECT user_id FROM sys_user WHERE user_name = CONCAT('outbound_fixture_', @run_id, '_edit'));

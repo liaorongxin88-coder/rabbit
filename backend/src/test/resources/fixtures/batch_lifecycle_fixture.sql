@@ -9,8 +9,9 @@ SET @prefix = CONCAT('batch-lifecycle-fixture:', @run_id);
 
 START TRANSACTION;
 
-INSERT INTO sys_user (user_name, password, status)
-VALUES (@actor, @password_hash, 'ENABLED');
+-- user_code 是 V30 之后的 NOT NULL 列：兔号由建号方负责给，fixture 也不例外。
+INSERT INTO sys_user (user_name, user_code, password, status)
+VALUES (@actor, CONCAT('R', UPPER(SUBSTRING(SHA2(CONCAT(@run_id, 'lifecycle'), 256), 1, 10))), @password_hash, 'ENABLED');
 SET @user_id = (SELECT user_id FROM sys_user WHERE user_name = @actor);
 
 INSERT INTO rabbit_houses (

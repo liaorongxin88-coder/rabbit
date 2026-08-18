@@ -136,6 +136,7 @@ class _HousesContentState extends ConsumerState<_HousesContent> {
                     ),
                   ),
                   TextButton.icon(
+                    key: const ValueKey('house-create-entry'),
                     onPressed: () => _showCreateHouseSheet(context),
                     icon: const Icon(Icons.add),
                     label: const Text('创建'),
@@ -299,6 +300,7 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
               Text('创建兔舍', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
               TextFormField(
+                key: const ValueKey('house-create-name'),
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: '兔舍名称'),
                 validator: (value) {
@@ -313,6 +315,7 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
                 children: [
                   Expanded(
                     child: _NumberField(
+                      fieldKey: const ValueKey('house-create-rows'),
                       label: '排数',
                       controller: _rowsController,
                     ),
@@ -320,6 +323,7 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _NumberField(
+                      fieldKey: const ValueKey('house-create-cols'),
                       label: '列数',
                       controller: _colsController,
                     ),
@@ -327,6 +331,7 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _NumberField(
+                      fieldKey: const ValueKey('house-create-layers'),
                       label: '层数',
                       controller: _layersController,
                     ),
@@ -335,11 +340,13 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
               ),
               const SizedBox(height: 12),
               TextFormField(
+                key: const ValueKey('house-create-remark'),
                 controller: _remarkController,
                 decoration: const InputDecoration(labelText: '备注（可选）'),
               ),
               const SizedBox(height: 18),
               ElevatedButton(
+                key: const ValueKey('house-create-submit'),
                 onPressed: _saving ? null : _save,
                 child: _saving
                     ? const SizedBox.square(
@@ -396,14 +403,20 @@ class _CreateHouseSheetState extends ConsumerState<_CreateHouseSheet> {
 }
 
 class _NumberField extends StatelessWidget {
-  const _NumberField({required this.label, required this.controller});
+  const _NumberField({
+    required this.label,
+    required this.controller,
+    this.fieldKey,
+  });
 
   final String label;
   final TextEditingController controller;
+  final Key? fieldKey;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
+      key: fieldKey,
       controller: controller,
       decoration: InputDecoration(labelText: label),
       keyboardType: TextInputType.number,

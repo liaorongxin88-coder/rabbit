@@ -885,6 +885,7 @@ class _CageHeader extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         FilledButton.icon(
+          key: const ValueKey('cage-create-entry'),
           onPressed: onCreate,
           icon: const Icon(Icons.add),
           label: const Text('新增'),
@@ -1047,6 +1048,7 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
               ),
               const SizedBox(height: 14),
               _RequiredNumberField(
+                fieldKey: const ValueKey('cage-bulk-row'),
                 controller: _rowController,
                 label: '整排编号',
                 hintText: '例如 1',
@@ -1055,6 +1057,7 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
               ),
               const SizedBox(height: 14),
               _RequiredNumberField(
+                fieldKey: const ValueKey('cage-bulk-layers'),
                 controller: _layersController,
                 label: '笼子高几层',
                 hintText: '例如 3',
@@ -1066,6 +1069,7 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
               ),
               const SizedBox(height: 14),
               _RequiredNumberField(
+                fieldKey: const ValueKey('cage-bulk-positions'),
                 controller: _positionsController,
                 label: '每排几个位置',
                 hintText: '例如 3',
@@ -1101,6 +1105,7 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
+                      key: const ValueKey('cage-bulk-submit'),
                       onPressed: _saving ? null : _save,
                       child: _saving
                           ? const SizedBox.square(
@@ -1240,6 +1245,7 @@ class _RequiredNumberField extends StatelessWidget {
     required this.hintText,
     this.allowText = false,
     this.onChanged,
+    this.fieldKey,
   });
 
   final TextEditingController controller;
@@ -1247,10 +1253,12 @@ class _RequiredNumberField extends StatelessWidget {
   final String hintText;
   final bool allowText;
   final ValueChanged<String>? onChanged;
+  final Key? fieldKey;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
+      key: fieldKey,
       controller: controller,
       enabled: true,
       decoration: InputDecoration(
