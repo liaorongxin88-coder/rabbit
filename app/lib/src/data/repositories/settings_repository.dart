@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/services/api_client.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
+import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository(ref.watch(apiClientProvider));
@@ -67,6 +68,28 @@ class SettingsRepository {
       '/api/house-settings',
       houseId: houseId,
       body: setting.toUpdateJson(requestId: _uuid.v4()),
+      decode: (_) {},
+    );
+  }
+
+  Future<ReminderPreference> getReminderPreference(int houseId) {
+    return _api.get<ReminderPreference>(
+      '/api/reminder-settings',
+      houseId: houseId,
+      decode: (data) => data is Map
+          ? ReminderPreference.fromJson(Map<String, dynamic>.from(data))
+          : ReminderPreference.defaults.copyWith(),
+    );
+  }
+
+  Future<void> updateReminderPreference({
+    required int houseId,
+    required ReminderPreference preference,
+  }) {
+    return _api.put<void>(
+      '/api/reminder-settings',
+      houseId: houseId,
+      body: preference.toUpdateJson(requestId: _uuid.v4()),
       decode: (_) {},
     );
   }

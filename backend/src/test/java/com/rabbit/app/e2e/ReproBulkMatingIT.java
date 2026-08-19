@@ -138,7 +138,7 @@ public class ReproBulkMatingIT extends E2eTestSupport {
         }
         api.expectError("/api/repro/tasks/bulk-actions", HttpMethod.POST, r.owner.token, r.houseId,
             obj("requestId", requestId("cap"), "action", "MATING", "occurredAt", oneMinuteAgo(),
-                "maleRabbitId", r.buckId, "taskIds", tooMany),
+                "maleRabbitId", r.buckId, "matingMethod", "NATURAL", "taskIds", tooMany),
             400, "单次批量最多 500 项");
 
         // 去重：同一个 taskId 传两遍，不得变成两项（否则第二项会回一个假的 replayed 成功）。

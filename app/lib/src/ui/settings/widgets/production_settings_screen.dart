@@ -41,7 +41,6 @@ class ProductionSettingsScreen extends ConsumerWidget {
             setting: data.setting,
             houseId: targetHouseId,
             houseName: houseName,
-            customized: data.customized,
           ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ErrorState(
@@ -79,13 +78,11 @@ class _ProductionSettingsForm extends ConsumerStatefulWidget {
     required this.setting,
     this.houseId,
     this.houseName,
-    this.customized = false,
   });
 
   final GlobalSetting setting;
   final int? houseId;
   final String? houseName;
-  final bool customized;
 
   @override
   ConsumerState<_ProductionSettingsForm> createState() =>
@@ -97,6 +94,7 @@ class _ProductionSettingsFormState
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _aphrodisiacController;
   late final TextEditingController _palpationController;
+  late final TextEditingController _gestationController;
   late final TextEditingController _prepartumController;
   late final TextEditingController _weaningController;
   late final TextEditingController _postpartumController;
@@ -114,6 +112,8 @@ class _ProductionSettingsFormState
         TextEditingController(text: '${widget.setting.aphrodisiacDays}');
     _palpationController =
         TextEditingController(text: '${widget.setting.palpationDays}');
+    _gestationController =
+        TextEditingController(text: '${widget.setting.gestationDays}');
     _prepartumController =
         TextEditingController(text: '${widget.setting.prepartumDays}');
     _weaningController =
@@ -130,6 +130,7 @@ class _ProductionSettingsFormState
   void dispose() {
     _aphrodisiacController.dispose();
     _palpationController.dispose();
+    _gestationController.dispose();
     _prepartumController.dispose();
     _weaningController.dispose();
     _postpartumController.dispose();
@@ -168,16 +169,14 @@ class _ProductionSettingsFormState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _isHouseSetting
-                            ? (widget.customized ? '当前兔舍单独配置' : '继承默认配置')
-                            : '所有兔舍默认配置',
+                        _isHouseSetting ? '当前兔舍独立配置' : '新建兔场默认配置',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _isHouseSetting
-                            ? '${widget.houseName ?? '当前兔舍'} 的生产周期。保存后将覆盖默认配置。'
-                            : '未单独配置的兔舍会使用这些天数。',
+                            ? '仅影响 ${widget.houseName ?? '当前兔舍'}，状态转换和事件表单会用这些天数预填日期。'
+                            : '创建兔场时复制这些天数；已创建兔场不会随此处变化。',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -200,6 +199,12 @@ class _ProductionSettingsFormState
                   fieldKey: const ValueKey('production-palpation-days'),
                   label: '摸胎天数',
                   controller: _palpationController,
+                ),
+                const SizedBox(height: 12),
+                _DayField(
+                  fieldKey: const ValueKey('production-gestation-days'),
+                  label: '妊娠天数',
+                  controller: _gestationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
@@ -273,6 +278,7 @@ class _ProductionSettingsFormState
         houseId: widget.setting.houseId,
         aphrodisiacDays: _intValue(_aphrodisiacController),
         palpationDays: _intValue(_palpationController),
+        gestationDays: _intValue(_gestationController),
         prepartumDays: _intValue(_prepartumController),
         weaningDays: _intValue(_weaningController),
         postpartumDays: _intValue(_postpartumController),

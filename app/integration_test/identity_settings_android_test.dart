@@ -11,7 +11,6 @@
 //
 // 用法见 app/scripts/android_identity_e2e.sh。
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -23,7 +22,8 @@ import 'package:rabbit_flutter/main.dart' as app;
 import 'package:rabbit_flutter/src/app.dart';
 
 const _runId = String.fromEnvironment('RABBIT_E2E_RUN_ID');
-const _password = String.fromEnvironment('RABBIT_E2E_PASSWORD', defaultValue: '123456');
+const _password =
+    String.fromEnvironment('RABBIT_E2E_PASSWORD', defaultValue: '123456');
 const _ownerUser = String.fromEnvironment('RABBIT_E2E_OWNER_USER');
 const _ownerCode = String.fromEnvironment('RABBIT_E2E_OWNER_CODE');
 const _houseId = int.fromEnvironment('RABBIT_E2E_HOUSE_ID');
@@ -86,7 +86,7 @@ void main() {
       await _expectSnackBar(tester, '默认生产设置已保存');
       await _takeScreenshot(tester, binding, '05-production-default-saved');
 
-      // ---- 兔舍级生产设置：覆盖默认值这条路要单独验 ----
+      // ---- 兔舍级生产设置：创建时已快照，修改后只影响当前兔舍 ----
       await _openHouseProductionSettings(tester);
       await _enterByKey(tester, 'production-weaning-days', '$_weaningDays');
       await _tapKey(tester, 'production-settings-save');
@@ -189,7 +189,8 @@ void _assertFixtureDefines() {
     'RABBIT_E2E_OWNER_CODE': _ownerCode,
   }.entries) {
     if (entry.value.isEmpty) {
-      fail('缺少 --dart-define=${entry.key}，请通过 scripts/android_identity_e2e.sh 运行');
+      fail(
+          '缺少 --dart-define=${entry.key}，请通过 scripts/android_identity_e2e.sh 运行');
     }
   }
   if (_houseId <= 0) {
@@ -234,7 +235,8 @@ Future<void> _relaunchApp(WidgetTester tester) async {
   await tester.pumpAndSettle(const Duration(seconds: 3));
 }
 
-Future<void> _login(WidgetTester tester, String userName, String password) async {
+Future<void> _login(
+    WidgetTester tester, String userName, String password) async {
   await _waitFor(tester, find.text('登录后管理兔舍、预警和生产流程。'));
   // 登录页默认停在「手机号」页签，账号密码在另一个页签里
   await _tapText(tester, '账号');

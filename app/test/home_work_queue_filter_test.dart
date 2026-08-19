@@ -93,6 +93,19 @@ void main() {
     expect(find.text('显示 3 / 3 条任务'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
+    final flowSection = find.byKey(
+      const ValueKey('home-production-flow-section'),
+    );
+    await tester.ensureVisible(flowSection);
+    await tester.pumpAndSettle();
+    final matingTab = find.descendant(
+      of: find.byType(TabBar),
+      matching: find.text('配种'),
+    );
+    await tester.ensureVisible(matingTab);
+    await tester.tap(matingTab);
+    await tester.pumpAndSettle();
+
     final search = find.byKey(const ValueKey('production-work-search'));
     await tester.ensureVisible(search);
     await tester.enterText(search, '101');
@@ -114,6 +127,59 @@ void main() {
 
     expect(find.text('显示 1 / 3 条任务'), findsOneWidget);
     expect(find.text('母兔 #101'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('home exposes the estrus flow tab for filtered reminders',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final event = EventItem(
+      recordId: 21,
+      category: '生产周期',
+      eventType: '催情',
+      eventDate: DateTime.now(),
+      batchId: 9,
+      rabbitId: 301,
+      status: 'due',
+      sourceHouseId: 1,
+      sourceHouseName: '一号兔舍',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '一号兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => [event]),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final estrusTab = find.descendant(
+      of: find.byType(TabBar),
+      matching: find.text('催情'),
+    );
+    expect(estrusTab, findsOneWidget);
+    await tester.ensureVisible(estrusTab);
+    await tester.tap(estrusTab);
+    await tester.pumpAndSettle();
+    expect(find.text('母兔 #301'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -27,11 +27,12 @@ enum ReproAction {
   final String label;
 
   static ReproAction? tryParse(String? value) {
-    if (value == null || value.isEmpty) {
+    final normalized = value?.trim().toUpperCase();
+    if (normalized == null || normalized.isEmpty) {
       return null;
     }
     for (final action in ReproAction.values) {
-      if (action.wire == value) {
+      if (action.wire == normalized) {
         return action;
       }
     }
@@ -80,11 +81,12 @@ enum ReproStage {
   final String label;
 
   static ReproStage? tryParse(String? value) {
-    if (value == null || value.isEmpty) {
+    final normalized = value?.trim().toUpperCase();
+    if (normalized == null || normalized.isEmpty) {
       return null;
     }
     for (final stage in ReproStage.values) {
-      if (stage.wire == value) {
+      if (stage.wire == normalized) {
         return stage;
       }
     }
@@ -182,9 +184,9 @@ class ReproTaskPage {
     final raw = json['items'];
     final items = raw is List
         ? raw
-              .whereType<Map>()
-              .map((e) => ReproTask.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+            .whereType<Map>()
+            .map((e) => ReproTask.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
         : <ReproTask>[];
     return ReproTaskPage(
       items: items,
@@ -266,9 +268,9 @@ class ReproBulkResult {
       failed: _int(json['failed']) ?? 0,
       items: raw is List
           ? raw
-                .whereType<Map>()
-                .map((e) => ReproBulkItem.fromJson(Map<String, dynamic>.from(e)))
-                .toList()
+              .whereType<Map>()
+              .map((e) => ReproBulkItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
           : <ReproBulkItem>[],
     );
   }

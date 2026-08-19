@@ -33,7 +33,7 @@ void main() {
       tester.widget<SwitchListTile>(failedSwitch).value,
       isTrue,
     );
-    final failedHint = find.text('失败产的总产仔数和活仔数均固定为 0。');
+    final failedHint = find.text('失败产的总产仔数、活仔数和留仔数均固定为 0。');
     await _dragUntilBuilt(
       tester,
       target: failedHint,
@@ -57,10 +57,15 @@ void main() {
     final live = tester.widget<TextField>(
       find.byKey(const ValueKey('parturition-live-kits')),
     );
+    final kept = tester.widget<TextField>(
+      find.byKey(const ValueKey('parturition-kept-kits')),
+    );
     expect(total.controller!.text, '0');
     expect(live.controller!.text, '0');
+    expect(kept.controller!.text, '0');
     expect(total.enabled, isFalse);
     expect(live.enabled, isFalse);
+    expect(kept.enabled, isFalse);
     expect(tester.takeException(), isNull);
   });
 

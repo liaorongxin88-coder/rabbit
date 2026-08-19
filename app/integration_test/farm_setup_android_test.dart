@@ -31,6 +31,7 @@ const _founderUser = String.fromEnvironment('RABBIT_E2E_FOUNDER_USER');
 const _mateUser = String.fromEnvironment('RABBIT_E2E_MATE_USER');
 const _mateCode = String.fromEnvironment('RABBIT_E2E_MATE_CODE');
 const _apiBaseUrl = String.fromEnvironment('RABBIT_API_BASE_URL');
+const _templateSaleDays = 91;
 
 /// 新兔舍的名字带 run_id，避免和历史数据重名。
 String get _houseName => 'H-SETUP-$_runId';
@@ -46,15 +47,17 @@ void main() {
       await _bootApp(tester, binding);
       _assertPortrait(tester);
 
-      // ── 一、建兔舍：名下一个兔舍都没有的人，第一屏应该是空态
+      // ── 一、建兔舍：先设置用户模板，再确认新兔舍复制为独立配置。
       await _login(tester, _founderUser);
+      await _configureCreationTemplate(binding, tester);
       await _tapAndSettle(tester, const ValueKey('nav-houses'));
       await _waitFor(tester, find.text('尚未加入兔舍'));
       await _takeScreenshot(binding, tester, '01-empty-houses');
 
       await tester.tap(find.text('创建兔舍'));
       await tester.pumpAndSettle();
-      await _enterField(tester, const ValueKey('house-create-name'), _houseName);
+      await _enterField(
+          tester, const ValueKey('house-create-name'), _houseName);
       await _enterField(tester, const ValueKey('house-create-rows'), '1');
       await _enterField(tester, const ValueKey('house-create-cols'), '3');
       await _enterField(tester, const ValueKey('house-create-layers'), '2');
@@ -63,6 +66,27 @@ void main() {
       await _takeScreenshot(binding, tester, '02-house-created');
 
       // ── 二、笼位：建兔舍时按布局自动铺好，再用「新增」补一排
+      await tester.tap(find.text(_houseName));
+      await _waitFor(tester, find.text('兔舍详情'));
+      final productionSettings = find.byKey(
+        const ValueKey('house-production-settings-entry'),
+      );
+      await _scrollUntilPresent(tester, productionSettings);
+      await tester.tap(productionSettings);
+      await _waitFor(tester, find.text('兔舍生产设置'));
+      final houseSaleDays = find.byKey(
+        const ValueKey('production-sale-days'),
+      );
+      await _waitFor(tester, houseSaleDays);
+      expect(
+        tester.widget<TextFormField>(houseSaleDays).controller?.text,
+        '$_templateSaleDays',
+        reason: '新兔舍必须复制创建时的用户默认模板',
+      );
+      expect(find.text('当前兔舍独立配置'), findsOneWidget);
+      await _takeScreenshot(binding, tester, '02b-house-production-snapshot');
+      await _tapAndSettle(tester, const ValueKey('nav-houses'));
+      await _waitFor(tester, find.text(_houseName));
       await tester.tap(find.text(_houseName));
       await _waitFor(tester, find.text('兔舍详情'));
       await _scrollUntilPresent(tester, find.text('笼位管理'));
@@ -129,7 +153,8 @@ void main() {
       // 换笼：目标是第 2 个笼位，地图上直接点。
       // 后端铺笼是排→位→层嵌套的，所以 id 逐个差一层：第 2 个笼在 2 层。
       // 地图一次只画一层，得先切过去——这正好把切层也拉进真机验收。
-      await _scrollUntilPresent(tester, find.byKey(ValueKey('rabbit-row-move-$rabbitId')));
+      await _scrollUntilPresent(
+          tester, find.byKey(ValueKey('rabbit-row-move-$rabbitId')));
       await _tapAndSettle(tester, ValueKey('rabbit-row-move-$rabbitId'));
       await _waitFor(tester, find.text('换笼位'));
       final layerTwo = find.byKey(const ValueKey('cage-map-layer-2'));
@@ -177,7 +202,8 @@ void main() {
       );
       // 故意邀成只读：这样最后一步才能验「权限真的生效了」，
       // 而不是只验「人进来了」。
-      final roleField = find.byKey(const ValueKey('house-invitation-role-field'));
+      final roleField =
+          find.byKey(const ValueKey('house-invitation-role-field'));
       await tester.ensureVisible(roleField);
       await tester.pumpAndSettle();
       await tester.tap(roleField);
@@ -201,8 +227,7 @@ void main() {
       await _waitFor(tester, find.text('兔舍详情'));
       await _waitFor(tester, find.textContaining('我的角色：游客'));
       // 只读的人不该看到「人员管理」这类管理入口。
-      expect(find.text('人员管理'), findsNothing,
-          reason: '游客不该看到人员管理入口');
+      expect(find.text('人员管理'), findsNothing, reason: '游客不该看到人员管理入口');
       await _takeScreenshot(binding, tester, '12-mate-readonly');
 
       // 截图是挂在 reportData 上送回 driver 的，整个赋值会把它们连锅端掉
@@ -297,6 +322,34 @@ Future<void> _login(WidgetTester tester, String userName) async {
   await tester.pumpAndSettle();
   await _tapAndSettle(tester, const ValueKey('account-login-button'));
   await _waitFor(tester, find.text('兔舍'), timeout: const Duration(seconds: 40));
+}
+
+Future<void> _configureCreationTemplate(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+) async {
+  await _tapAndSettle(tester, const ValueKey('nav-profile'));
+  final production = find.byKey(const ValueKey('profile-entry-production'));
+  await _waitFor(tester, production);
+  await _scrollUntilPresent(tester, production);
+  await tester.tap(production);
+  await _waitFor(tester, find.text('默认生产设置'));
+  await _waitFor(tester, find.text('新建兔场默认配置'));
+  await _enterField(
+    tester,
+    const ValueKey('production-sale-days'),
+    '$_templateSaleDays',
+  );
+  await _enterField(
+    tester,
+    const ValueKey('production-remark'),
+    '新场创建默认模板 $_runId',
+  );
+  final save = find.byKey(const ValueKey('production-settings-save'));
+  await _scrollUntilPresent(tester, save);
+  await tester.tap(save);
+  await _waitFor(tester, find.text('默认生产设置已保存'));
+  await _takeScreenshot(binding, tester, '00-production-template');
 }
 
 Future<void> _logout(WidgetTester tester) async {
@@ -416,7 +469,9 @@ Future<int> _fetchFirstRabbitId(String userName) async {
     options: Options(headers: {'X-House-Id': '$houseId'}),
   );
   final data = response.data?['data'];
-  final list = data is Map ? (data['records'] as List? ?? const []) : (data as List? ?? const []);
+  final list = data is Map
+      ? (data['records'] as List? ?? const [])
+      : (data as List? ?? const []);
   expect(list, isNotEmpty, reason: '刚录入的兔子应该能查到');
   return ((list.first as Map).cast<String, dynamic>()['id'] as num).toInt();
 }

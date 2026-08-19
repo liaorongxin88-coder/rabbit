@@ -72,7 +72,7 @@ class _HouseBatchDetailScreenState
     super.dispose();
   }
 
-  void _refresh({bool includePermission = false}) {
+  Future<void> _refresh({bool includePermission = false}) async {
     if (_selectedRabbitIds.isNotEmpty ||
         _selectionAction != null ||
         _matingSelection) {
@@ -83,6 +83,21 @@ class _HouseBatchDetailScreenState
     ref.invalidate(houseBatchesProvider(widget.houseId));
     if (includePermission) {
       ref.invalidate(housePermissionProvider(widget.houseId));
+    }
+    if (!mounted) return;
+    try {
+      final futures = <Future<Object?>>[
+        ref.read(batchDetailProvider(_request).future),
+        ref.read(batchMembersProvider(_request).future),
+        ref.read(houseBatchesProvider(widget.houseId).future),
+      ];
+      if (includePermission) {
+        futures.add(ref.read(housePermissionProvider(widget.houseId).future));
+      }
+      await Future.wait(futures);
+    } catch (_) {
+      // The mutation has already succeeded. The screen keeps its normal error
+      // state so the user can retry the read without seeing a false write error.
     }
   }
 
@@ -169,7 +184,7 @@ class _HouseBatchDetailScreenState
             (_matingSelection
                 ? _isMatingSelectable(item)
                 : _selectionAction == _BulkMode.estrus &&
-                      _isEstrusSelectable(item)))
+                    _isEstrusSelectable(item)))
         .toList();
     if (selected.length != _selectedRabbitIds.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -193,11 +208,7 @@ class _HouseBatchDetailScreenState
 
     return RefreshIndicator(
       onRefresh: () async {
-        _refresh();
-        await Future.wait([
-          ref.read(batchDetailProvider(_request).future),
-          ref.read(batchMembersProvider(_request).future),
-        ]);
+        await _refresh();
       },
       child: ListView.builder(
         key: const ValueKey('batch-detail-member-list'),
@@ -252,9 +263,8 @@ class _HouseBatchDetailScreenState
                       saving: _saving,
                       onSelect: () => _selectVisible(filtered),
                       onSelectMating: () => _selectMatingVisible(filtered),
-                      onClear: _selectedRabbitIds.isEmpty
-                          ? null
-                          : _clearSelection,
+                      onClear:
+                          _selectedRabbitIds.isEmpty ? null : _clearSelection,
                       onSubmit: selected.isEmpty || _selectionAction == null
                           ? null
                           : () => _submitAphrodisiac(selected),
@@ -345,11 +355,12 @@ class _HouseBatchDetailScreenState
     final query = _query.trim().toLowerCase();
     final selectedStatus = status ?? _status;
     return members.where((item) {
+      final displayStatus = item.displayStatus;
+      final nextEventType = _nextEventType(item);
       if (_role != _all && item.batchRole != _role) {
         return false;
       }
-      if (selectedStatus != _all &&
-          item.currentStatus.trim() != selectedStatus) {
+      if (selectedStatus != _all && displayStatus != selectedStatus) {
         return false;
       }
       if (_activity == _active && !item.isActive) {
@@ -363,15 +374,15 @@ class _HouseBatchDetailScreenState
       }
       return item.rabbitId.toString().contains(query) ||
           (item.cageId?.toString().contains(query) ?? false) ||
-          item.currentStatus.toLowerCase().contains(query) ||
-          item.nextEventType.toLowerCase().contains(query) ||
+          displayStatus.toLowerCase().contains(query) ||
+          nextEventType.toLowerCase().contains(query) ||
           _roleLabel(item.batchRole).contains(query);
     }).toList();
   }
 
   List<String> _statuses(List<BatchRabbitItem> members) {
     final values = members
-        .map((item) => item.currentStatus.trim())
+        .map((item) => item.displayStatus)
         .where((value) => value.isNotEmpty)
         .toSet()
         .toList();
@@ -395,10 +406,8 @@ class _HouseBatchDetailScreenState
   }
 
   void _selectVisible(List<BatchRabbitItem> visible) {
-    final ids = visible
-        .where(_isEstrusSelectable)
-        .map((item) => item.rabbitId)
-        .toSet();
+    final ids =
+        visible.where(_isEstrusSelectable).map((item) => item.rabbitId).toSet();
     setState(() {
       _matingSelection = false;
       _selectionAction = ids.isEmpty ? null : _BulkMode.estrus;
@@ -474,8 +483,7 @@ class _HouseBatchDetailScreenState
     final nursing = selected
         .where(
           (item) =>
-              ReproStage.tryParse(item.currentStage) ==
-              ReproStage.awaitWeaning,
+              ReproStage.tryParse(item.currentStage) == ReproStage.awaitWeaning,
         )
         .map((item) => item.rabbitId)
         .toList();
@@ -537,17 +545,16 @@ class _HouseBatchDetailScreenState
           'rabbitIds': ids,
         }),
       );
-      final result = await ref
-          .read(reproRepositoryProvider)
-          .bulkApplyForRabbits(
-            houseId: widget.houseId,
-            batchId: widget.batchId,
-            taskType: 'ESTRUS',
-            action: ReproAction.estrus,
-            rabbitIds: ids,
-            occurredAt: DateTime.now(),
-            requestId: requestId,
-          );
+      final result =
+          await ref.read(reproRepositoryProvider).bulkApplyForRabbits(
+                houseId: widget.houseId,
+                batchId: widget.batchId,
+                taskType: 'ESTRUS',
+                action: ReproAction.estrus,
+                rabbitIds: ids,
+                occurredAt: DateTime.now(),
+                requestId: requestId,
+              );
       if (!mounted) {
         return;
       }
@@ -558,11 +565,9 @@ class _HouseBatchDetailScreenState
       // 不应该让另外九十九只白做，所以分开报告而不是抛错。
       final message = switch (result) {
         _ when result.total == 0 => '所选母兔当前没有待$label任务，可能已被处理',
-        _ when result.failed == 0 =>
-          '$label已提交，共 ${result.succeeded} 只母兔',
-        _ =>
-          '$label完成 ${result.succeeded} 只，${result.failed} 只未成功：'
-              '${result.failures.first.message ?? '原因未知'}',
+        _ when result.failed == 0 => '$label已提交，共 ${result.succeeded} 只母兔',
+        _ => '$label完成 ${result.succeeded} 只，${result.failed} 只未成功：'
+            '${result.failures.first.message ?? '原因未知'}',
       };
       ScaffoldMessenger.of(
         context,
@@ -780,12 +785,14 @@ class _HouseBatchDetailScreenState
         item.currentCycleId == null) {
       return false;
     }
-    final dictionary = ref.watch(reproStageActionsProvider(widget.houseId)).valueOrNull;
+    final dictionary =
+        ref.watch(reproStageActionsProvider(widget.houseId)).valueOrNull;
     if (dictionary == null) {
       return false;
     }
-    final stage = item.currentStage?.trim() ?? '';
-    return dictionary[stage]?.contains('ABORTION') ?? false;
+    final stage = ReproStage.tryParse(item.currentStage);
+    return stage != null &&
+        (dictionary[stage.wire]?.contains('ABORTION') ?? false);
   }
 
   Future<void> _handleMemberAbortion(BatchRabbitItem item) async {
@@ -828,12 +835,12 @@ class _HouseBatchDetailScreenState
 
   EventItem _eventFor(BatchRabbitItem item) {
     final date = item.nextEventDate;
-    // 周期 id 优先取实时投影列；latestCycleId 是旧写路径的快照，已停止维护。
+    // 周期 id 优先取实时投影列；latestCycleId 是旧写路径的快照。
     final cycleId = item.currentCycleId ?? item.latestCycleId;
     return EventItem(
       recordId: cycleId ?? item.id,
       category: cycleId == null ? '生产' : '生产周期',
-      eventType: item.nextEventType,
+      eventType: _nextEventType(item),
       eventDate: date,
       batchId: widget.batchId,
       rabbitId: item.rabbitId,
@@ -841,6 +848,8 @@ class _HouseBatchDetailScreenState
       sourceHouseId: widget.houseId,
     );
   }
+
+  String _nextEventType(BatchRabbitItem item) => _nextEventTypeFor(item);
 
   String _eventStatus(DateTime? date) {
     if (date == null) {
@@ -1277,6 +1286,26 @@ class _ReadOnlyNotice extends StatelessWidget {
   }
 }
 
+String _nextEventTypeFor(BatchRabbitItem item) {
+  if (item.batchRole == 'breeding') {
+    switch (ReproStage.tryParse(item.currentStage)) {
+      case ReproStage.awaitMating:
+        return '配种';
+      case ReproStage.awaitPalpation:
+        return '摸胎';
+      case ReproStage.awaitPrepartum:
+        return '备产';
+      case ReproStage.awaitDelivery:
+        return '分娩';
+      case ReproStage.awaitWeaning:
+        return '断奶';
+      default:
+        break;
+    }
+  }
+  return item.nextEventType;
+}
+
 class _BatchMemberCard extends StatelessWidget {
   const _BatchMemberCard({
     super.key,
@@ -1366,21 +1395,20 @@ class _BatchMemberCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _LabelChip(
-                label: item.currentStatus.trim().isEmpty
-                    ? '状态未设置'
-                    : item.currentStatus.trim(),
+                label: item.displayStatus,
               ),
               Text(_roleLabel(item.batchRole)),
               if (item.cageId != null) Text('笼 #${item.cageId}'),
               if (!item.isActive) const Text('已退出'),
             ],
           ),
-          if (item.nextEventType.isNotEmpty || item.currentNursingKits > 0) ...[
+          if (_nextEventTypeFor(item).isNotEmpty ||
+              item.currentNursingKits > 0) ...[
             const SizedBox(height: 8),
             Text(
               [
-                if (item.nextEventType.isNotEmpty)
-                  '下一步 ${item.nextEventType}${_dateSuffix(item.nextEventDate)}',
+                if (_nextEventTypeFor(item).isNotEmpty)
+                  '下一步 ${_nextEventTypeFor(item)}${_dateSuffix(item.nextEventDate)}',
                 if (item.currentNursingKits > 0)
                   '当前带仔 ${item.currentNursingKits} 只 / ${item.nursingLitterCount} 窝',
               ].join(' · '),
@@ -1394,15 +1422,17 @@ class _BatchMemberCard extends StatelessWidget {
     );
   }
 
-  static String _memberActionLabel(BatchRabbitItem item, _BulkMode? action) {
+  String _memberActionLabel(BatchRabbitItem item, _BulkMode? action) {
+    final nextEventType = _nextEventTypeFor(item);
     if (action == _BulkMode.estrus) return '催情';
-    if (item.nextEventType.contains('出售')) return '进入出库';
-    return item.nextEventType.isEmpty ? '处理生产任务' : '处理${item.nextEventType}';
+    if (nextEventType.contains('出售')) return '进入出库';
+    return nextEventType.isEmpty ? '处理生产任务' : '处理$nextEventType';
   }
 
-  static IconData _memberActionIcon(BatchRabbitItem item, _BulkMode? action) {
+  IconData _memberActionIcon(BatchRabbitItem item, _BulkMode? action) {
+    final nextEventType = _nextEventTypeFor(item);
     if (action == _BulkMode.estrus) return Icons.play_arrow;
-    if (item.nextEventType.contains('出售')) return Icons.local_shipping_outlined;
+    if (nextEventType.contains('出售')) return Icons.local_shipping_outlined;
     return Icons.chevron_right;
   }
 

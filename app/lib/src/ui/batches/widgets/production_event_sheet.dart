@@ -167,6 +167,7 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
   late final BatchWriteRequestController _writeRequest;
   DateTime _matingDate = DateTime.now();
   int? _selectedMaleId;
+  var _matingMethod = MatingMethod.natural;
   var _saving = false;
 
   @override
@@ -205,8 +206,9 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
 
   Future<void> _submit() async {
     final maleId = _selectedMaleId;
-    if (maleId == null || maleId <= 0) {
-      _showMessage('请选择种公兔');
+    if (_matingMethod == MatingMethod.natural &&
+        (maleId == null || maleId <= 0)) {
+      _showMessage('体配时请选择种公兔');
       return;
     }
     final totalCount = widget.rabbitIds.length + widget.nursingRabbitIds.length;
@@ -224,18 +226,18 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
           'femaleRabbitIds': widget.rabbitIds,
           'nursingRabbitIds': widget.nursingRabbitIds,
           'maleRabbitId': maleId,
+          'matingMethod': _matingMethod.wire,
           'matingDate': formatBatchWriteDate(_matingDate),
         }),
       );
-      final result = await ref
-          .read(reproRepositoryProvider)
-          .bulkMate(
+      final result = await ref.read(reproRepositoryProvider).bulkMate(
             houseId: widget.houseId,
             batchId: widget.batchId,
             matableRabbitIds: widget.rabbitIds,
             nursingRabbitIds: widget.nursingRabbitIds,
-            maleRabbitId: maleId,
+            maleRabbitId: _matingMethod == MatingMethod.natural ? maleId : null,
             matingDate: _matingDate,
+            matingMethod: _matingMethod,
             requestId: requestId,
           );
       if (!mounted) return;
@@ -258,11 +260,9 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
           content: Text(
             switch (result) {
               _ when result.total == 0 => '所选母兔当前没有待配种任务，可能已被处理',
-              _ when result.failed == 0 =>
-                '已完成批量配种，共 ${result.succeeded} 只母兔',
-              _ =>
-                '配种完成 ${result.succeeded} 只，${result.failed} 只未成功：'
-                    '${result.failures.first.message ?? '原因未知'}',
+              _ when result.failed == 0 => '已完成批量配种，共 ${result.succeeded} 只母兔',
+              _ => '配种完成 ${result.succeeded} 只，${result.failed} 只未成功：'
+                  '${result.failures.first.message ?? '原因未知'}',
             },
           ),
         ),
@@ -342,9 +342,8 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                                   // 必须把血配那部分也算上：上一屏选了几只，这里就该显示几只，
                                   // 否则操作员会以为自己选丢了。
                                   '已选择 ${widget.rabbitIds.length + widget.nursingRabbitIds.length}'
-                                  ' 只母兔 · 同一公兔、同一日期',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis),
+                                  ' 只母兔 · 同一配种方式、同一日期',
+                                  maxLines: 2, overflow: TextOverflow.ellipsis),
                             ],
                           ),
                         ),
@@ -372,24 +371,44 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                           onTap: _saving ? null : _pickDate,
                         ),
                         const SizedBox(height: 8),
-                        Text('种公兔',
+                        Text('配种方式',
                             style: Theme.of(context).textTheme.titleSmall),
-                        if (males.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: Text('暂无可用种公兔，请先在笼位录入种公兔。'),
-                          )
-                        else
-                          ...males.map(
-                            (male) => RadioListTile<int>(
-                              key: ValueKey('batch-mating-male-${male.id}'),
-                              value: male.id,
-                              groupValue: _selectedMaleId,
-                              onChanged: _saving ? null : _selectMale,
-                              title: Text(
-                                  '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}'),
-                            ),
+                        for (final method in MatingMethod.values)
+                          RadioListTile<MatingMethod>(
+                            key: ValueKey('batch-mating-method-${method.wire}'),
+                            value: method,
+                            groupValue: _matingMethod,
+                            onChanged: _saving
+                                ? null
+                                : (value) => setState(
+                                      () => _matingMethod = value ?? method,
+                                    ),
+                            title: Text(method.label),
+                            subtitle: method == MatingMethod.ai
+                                ? const Text('混精 / 外购冻精，可不指定公兔')
+                                : null,
                           ),
+                        if (_matingMethod == MatingMethod.natural) ...[
+                          const SizedBox(height: 8),
+                          Text('种公兔',
+                              style: Theme.of(context).textTheme.titleSmall),
+                          if (males.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 10),
+                              child: Text('暂无可用种公兔，请先在笼位录入种公兔。'),
+                            )
+                          else
+                            ...males.map(
+                              (male) => RadioListTile<int>(
+                                key: ValueKey('batch-mating-male-${male.id}'),
+                                value: male.id,
+                                groupValue: _selectedMaleId,
+                                onChanged: _saving ? null : _selectMale,
+                                title: Text(
+                                    '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}'),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ),
@@ -413,8 +432,11 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                           Expanded(
                             child: ElevatedButton(
                               key: const ValueKey('batch-mating-confirm'),
-                              onPressed:
-                                  _saving || males.isEmpty ? null : _submit,
+                              onPressed: _saving ||
+                                      (_matingMethod == MatingMethod.natural &&
+                                          males.isEmpty)
+                                  ? null
+                                  : _submit,
                               child: _saving
                                   ? const SizedBox.square(
                                       dimension: 20,
@@ -469,12 +491,15 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   final _remarkController = TextEditingController();
   final _totalKitsController = TextEditingController(text: '8');
   final _liveKitsController = TextEditingController(text: '8');
+  final _keptKitsController = TextEditingController(text: '8');
   var _palpationResult = PalpationResult.pregnant;
   var _matingMethod = MatingMethod.natural;
 
   /// 摸胎「不确定」时的复查日期。旧实现没有这个字段，结果是结论为不确定的母兔
   /// 停在待摸胎且再也收不到提醒，从流程里惄无声息地消失。
   DateTime? _recheckDate;
+  DateTime? _postponeDate;
+  var _postponed = false;
   var _parturitionFailed = false;
   int? _selectedMaleId;
   int? _selectedBackupCageId;
@@ -492,6 +517,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     _remarkController.dispose();
     _totalKitsController.dispose();
     _liveKitsController.dispose();
+    _keptKitsController.dispose();
     super.dispose();
   }
 
@@ -554,6 +580,30 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     }
   }
 
+  Future<void> _pickPostponeDate() async {
+    final today = DateTime.now();
+    final firstDate = DateTime(today.year, today.month, today.day)
+        .add(const Duration(days: 1));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _postponeDate ?? firstDate,
+      firstDate: firstDate,
+      lastDate: firstDate.add(const Duration(days: 365)),
+      helpText: '选择下次提醒日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null && mounted) {
+      setState(() => _postponeDate = picked);
+    }
+  }
+
+  bool get _canPostpone =>
+      widget.kind == ProductionKind.mating ||
+      widget.kind == ProductionKind.pregnancyCheck ||
+      widget.kind == ProductionKind.prepartum ||
+      widget.kind == ProductionKind.parturition;
+
   List<Cage> _backupCages(List<Cage> cages) {
     return cages
         .where(
@@ -603,8 +653,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       // 旧的六个 submitXxx 各拼一套 body、各自校验，同一条规则在六处漂移；
       // 现在差异只在于传不传某个参数，而不是走不走另一条代码路径。
       final cycleId = _breedingCycleId;
-      final needsCycle =
-          widget.kind == ProductionKind.mating ||
+      final needsCycle = widget.kind == ProductionKind.mating ||
           widget.kind == ProductionKind.pregnancyCheck ||
           widget.kind == ProductionKind.prepartum ||
           widget.kind == ProductionKind.parturition;
@@ -613,7 +662,23 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
         return;
       }
 
-      if (widget.kind == ProductionKind.mating) {
+      if (_postponed) {
+        final postponeDate = _postponeDate;
+        if (postponeDate == null) {
+          _showMessage('请选择下次提醒日期');
+          return;
+        }
+        await reproRepo.applyAction(
+          houseId: widget.houseId,
+          cycleId: cycleId!,
+          action: ReproAction.postpone,
+          occurredAt: _actionDate,
+          nextRemindAt: postponeDate,
+          requestId: _requestIdFor({
+            'postponeDate': formatBatchWriteDate(postponeDate),
+          }),
+        );
+      } else if (widget.kind == ProductionKind.mating) {
         final isAi = _matingMethod == MatingMethod.ai;
         if (!isAi && (_selectedMaleId == null || _selectedMaleId! <= 0)) {
           _showMessage('请选择种公兔');
@@ -671,15 +736,18 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       } else if (widget.kind == ProductionKind.parturition) {
         final total = int.tryParse(_totalKitsController.text.trim()) ?? -1;
         final live = int.tryParse(_liveKitsController.text.trim()) ?? -1;
-        if (!_parturitionFailed) {
-          if (total < 0 || live < 0) {
-            _showMessage('请输入有效的产仔数量');
-            return;
-          }
-          if (live > total) {
-            _showMessage('活仔数不能大于总产仔数');
-            return;
-          }
+        final kept = int.tryParse(_keptKitsController.text.trim()) ?? -1;
+        if (total < 0 || live < 0 || kept < 0) {
+          _showMessage('请输入有效的总产仔数、活仔数和留仔数');
+          return;
+        }
+        if (live > total) {
+          _showMessage('活仔数不能大于总产仔数');
+          return;
+        }
+        if (kept > live) {
+          _showMessage('留仔数不能大于活仔数');
+          return;
         }
         final remark = _remarkController.text.trim();
         await reproRepo.applyAction(
@@ -688,13 +756,15 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           action: ReproAction.delivery,
           outcome: _parturitionFailed ? 'FAILED' : 'BORN',
           occurredAt: _actionDate,
-          totalKits: _parturitionFailed ? null : total,
-          liveKits: _parturitionFailed ? null : live,
+          totalKits: total,
+          liveKits: live,
+          keptKits: kept,
           remark: remark,
           requestId: _requestIdFor({
             'birthDate': formatBatchWriteDate(_actionDate),
             'totalKits': total,
             'liveKits': live,
+            'keptKits': kept,
             'failed': _parturitionFailed,
             'remark': remark,
           }),
@@ -903,7 +973,36 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                             trailing: const Icon(Icons.calendar_today_outlined),
                             onTap: _saving ? null : _pickDate,
                           ),
-                          if (widget.kind == ProductionKind.mating) ...[
+                          if (_canPostpone) ...[
+                            SwitchListTile(
+                              key: const ValueKey('production-postpone-switch'),
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('本次未执行，改期提醒'),
+                              subtitle: const Text('不推进当前状态，只调整下一次提醒日期'),
+                              value: _postponed,
+                              onChanged: _saving
+                                  ? null
+                                  : (value) => setState(() {
+                                        _postponed = value;
+                                        if (!value) _postponeDate = null;
+                                      }),
+                            ),
+                            if (_postponed)
+                              ListTile(
+                                key: const ValueKey('production-postpone-date'),
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('下次提醒日期 *'),
+                                subtitle: Text(
+                                  _postponeDate == null
+                                      ? '请选择日期'
+                                      : formatBatchWriteDate(_postponeDate!),
+                                ),
+                                trailing: const Icon(Icons.event),
+                                onTap: _saving ? null : _pickPostponeDate,
+                              ),
+                          ],
+                          if (!_postponed &&
+                              widget.kind == ProductionKind.mating) ...[
                             const SizedBox(height: 8),
                             Text(
                               '种公兔',
@@ -944,15 +1043,16 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 onChanged: _saving
                                     ? null
                                     : (value) => setState(
-                                        () => _matingMethod = value ?? method,
-                                      ),
+                                          () => _matingMethod = value ?? method,
+                                        ),
                                 title: Text(method.label),
                                 subtitle: method == MatingMethod.ai
                                     ? const Text('混精 / 外购冻精，可不指定公兔')
                                     : null,
                               ),
                           ],
-                          if (widget.kind == ProductionKind.pregnancyCheck) ...[
+                          if (!_postponed &&
+                              widget.kind == ProductionKind.pregnancyCheck) ...[
                             const SizedBox(height: 8),
                             Text(
                               '摸胎结果',
@@ -960,14 +1060,16 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                             ),
                             for (final result in PalpationResult.values)
                               RadioListTile<PalpationResult>(
-                                key: ValueKey('pregnancy-result-${result.wire}'),
+                                key:
+                                    ValueKey('pregnancy-result-${result.wire}'),
                                 value: result,
                                 groupValue: _palpationResult,
                                 onChanged: _saving
                                     ? null
                                     : (value) => setState(
-                                        () => _palpationResult = value ?? result,
-                                      ),
+                                          () => _palpationResult =
+                                              value ?? result,
+                                        ),
                                 title: Text(result.label),
                               ),
                             if (_palpationResult == PalpationResult.unsure)
@@ -984,7 +1086,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 onTap: _saving ? null : _pickRecheckDate,
                               ),
                           ],
-                          if (widget.kind == ProductionKind.parturition) ...[
+                          if (!_postponed &&
+                              widget.kind == ProductionKind.parturition) ...[
                             const SizedBox(height: 8),
                             TextField(
                               key: const ValueKey('parturition-total-kits'),
@@ -1011,6 +1114,20 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 labelText: '活仔数',
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              key: const ValueKey('parturition-kept-kits'),
+                              controller: _keptKitsController,
+                              enabled: !_saving && !_parturitionFailed,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: '留仔数',
+                                helperText: '实际进入哺乳窝的活仔数',
+                              ),
+                            ),
                             SwitchListTile(
                               key: const ValueKey('parturition-failed-switch'),
                               contentPadding: EdgeInsets.zero,
@@ -1023,16 +1140,18 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                         if (value) {
                                           _totalKitsController.text = '0';
                                           _liveKitsController.text = '0';
+                                          _keptKitsController.text = '0';
                                         }
                                       }),
                             ),
                             if (_parturitionFailed)
                               Text(
-                                '失败产的总产仔数和活仔数均固定为 0。',
+                                '失败产的总产仔数、活仔数和留仔数均固定为 0。',
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
                           ],
-                          if (widget.kind == ProductionKind.replacement) ...[
+                          if (!_postponed &&
+                              widget.kind == ProductionKind.replacement) ...[
                             const SizedBox(height: 8),
                             const _InfoBox(
                               text: '将把商品兔转为后备兔，并放入后备兔笼位。',
@@ -1070,7 +1189,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 ),
                             ],
                           ],
-                          if (widget.kind != ProductionKind.mating &&
+                          if (!_postponed &&
+                              widget.kind != ProductionKind.mating &&
                               widget.kind != ProductionKind.replacement) ...[
                             const SizedBox(height: 12),
                             TextField(

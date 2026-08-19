@@ -36,6 +36,7 @@ import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -179,7 +180,11 @@ public class BatchController {
 
     @GetMapping("/events")
     @RequiresPermission(PermissionCode.RABBIT_EVENTS_LIST)
-    public ApiResponse<List<EventItem>> listEvents(@RequestHeader("X-House-Id") Long houseId, @RequestParam(value = "onlyUnnotified", required = false) Boolean onlyUnnotified) {
+    public ApiResponse<List<EventItem>> listEvents(
+        @RequestHeader("X-House-Id") Long houseId,
+        @RequestParam(value = "onlyUnnotified", required = false) Boolean onlyUnnotified,
+        @RequestParam(value = "dueBefore", required = false) Long dueBefore
+    ) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
 
@@ -198,7 +203,15 @@ public class BatchController {
         // 现在首页、笼位 NFC、兔卡、批次详情共用 work_tasks 这一个来源，不可能再分歧。
         // 后备成熟与治疗复查暂未进入待办中心，仍走各自的数据源。
         for (TaskView task : workTaskService.pendingDue(
-                houseId, null, null, null, null, null, 1, 500).items()) {
+                houseId,
+                dueBefore == null ? null : new Date(dueBefore),
+                null,
+                null,
+                null,
+                null,
+                1,
+                500
+            ).items()) {
             if (task.cycleId() == null || suppressedCycles.contains(task.cycleId())) {
                 continue;
             }

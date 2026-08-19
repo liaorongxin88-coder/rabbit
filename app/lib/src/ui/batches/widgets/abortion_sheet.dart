@@ -234,13 +234,13 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   enabled: !_saving,
                   decoration: const InputDecoration(
-                    labelText: '死胎数',
-                    hintText: '可不填；填了才能统计流产损失',
+                    labelText: '死胎数 *',
+                    hintText: '请填写本轮流产确认的死胎数量',
                   ),
                   validator: (value) {
                     final text = value?.trim() ?? '';
                     if (text.isEmpty) {
-                      return null;
+                      return '请填写流产死胎数';
                     }
                     final parsed = int.tryParse(text);
                     if (parsed == null || parsed < 0) {

@@ -143,13 +143,14 @@ if [[ "$DEVICE_API_URL" == http://10.0.2.2:* ]]; then
 fi
 
 
-# V27 carries the doe-breeding-v2 backfill and uk_bc_pipeline; without it the
-# production flow this test drives does not exist.
+# V32 includes the user/house reminder preferences exercised by this scenario.
+# Checking only the older doe-breeding-v2 migration lets a stale backend image
+# reach the settings page and then fail as a misleading missing-widget timeout.
 migration_present=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
   mysql -N -B -u"$DB_USER" -D "$DB_NAME" \
-  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '27' AND success = 1;")
+  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '32' AND success = 1;")
 if [[ "$migration_present" != "1" ]]; then
-  echo "Expected successful Flyway V27 in $DB_NAME" >&2
+  echo "Expected successful Flyway V32 in $DB_NAME; rebuild and recreate the backend container" >&2
   exit 65
 fi
 
@@ -281,6 +282,8 @@ time_accelerator_pid=""
 screenshots=(
   01-login
   02-batch-created
+  02b-reminders-disabled
+  02c-reminders-filtered
   03-bulk-mating-selection
   04-bulk-mating-confirmation
   05-pregnancy-mother-a

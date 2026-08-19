@@ -12,6 +12,7 @@ import com.rabbit.app.modules.house.entity.HouseUser;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.mapper.HouseUserMapper;
 import com.rabbit.app.modules.house.mapper.RabbitHouseMapper;
+import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.security.AccessControlService;
 import com.rabbit.app.security.permission.HouseRole;
 import com.rabbit.app.security.permission.PermissionCode;
@@ -29,6 +30,7 @@ public class HouseService {
     private final CageMapper cageMapper;
     private final RequestDedupService requestDedupService;
     private final AccessControlService accessControlService;
+    private final SettingService settingService;
 
     public HouseService(
             RabbitHouseMapper rabbitHouseMapper,
@@ -36,7 +38,8 @@ public class HouseService {
             SysUserMapper sysUserMapper,
             CageMapper cageMapper,
             RequestDedupService requestDedupService,
-            AccessControlService accessControlService
+            AccessControlService accessControlService,
+            SettingService settingService
     ) {
         this.rabbitHouseMapper = rabbitHouseMapper;
         this.houseUserMapper = houseUserMapper;
@@ -44,6 +47,7 @@ public class HouseService {
         this.cageMapper = cageMapper;
         this.requestDedupService = requestDedupService;
         this.accessControlService = accessControlService;
+        this.settingService = settingService;
     }
 
     public List<RabbitHouse> listMyHouses(Long userId) {
@@ -141,6 +145,8 @@ public class HouseService {
             owner.setCreateBy(createBy);
             owner.setUpdateBy(createBy);
             houseUserMapper.insert(owner);
+            // 建场时复制用户默认模板；之后用户默认和各兔场配置相互隔离。
+            settingService.initializeHouseSetting(userId, house.getId());
 
             List<Cage> cages = new ArrayList<Cage>();
             for (int row = 1; row <= rows; row++) {

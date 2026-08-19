@@ -316,7 +316,8 @@ class ReproRepository {
       size: 500,
     );
     final taskIds = page.items
-        .where((task) => task.rabbitId != null && wanted.contains(task.rabbitId))
+        .where(
+            (task) => task.rabbitId != null && wanted.contains(task.rabbitId))
         .map((task) => task.id)
         .toList();
     if (taskIds.isEmpty) {
@@ -359,7 +360,7 @@ class ReproRepository {
     required int batchId,
     required List<int> matableRabbitIds,
     required List<int> nursingRabbitIds,
-    required int maleRabbitId,
+    required int? maleRabbitId,
     required DateTime matingDate,
     MatingMethod matingMethod = MatingMethod.natural,
     String? requestId,

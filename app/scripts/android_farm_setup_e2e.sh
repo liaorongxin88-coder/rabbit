@@ -116,9 +116,9 @@ done
 
 migration_present=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
   mysql -N -B -u"$DB_USER" -D "$DB_NAME" \
-  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '27' AND success = 1;")
+  -e "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '32' AND success = 1;")
 if [[ "$migration_present" != "1" ]]; then
-  echo "Expected successful Flyway V27 in $DB_NAME" >&2
+  echo "Expected successful Flyway V32 in $DB_NAME" >&2
   exit 65
 fi
 
@@ -213,8 +213,10 @@ if [[ "$drive_status" != "0" ]]; then
 fi
 
 screenshots=(
+  00-production-template
   01-empty-houses
   02-house-created
+  02b-house-production-snapshot
   03-cages-auto
   04-cages-created
   05-first-rabbit
@@ -237,7 +239,7 @@ printf '%s.png\n' "${screenshots[@]}" > "$artifact_dir/screenshots.txt"
 # 界面说「建好了」和数据库里真有这些行，是两件事。
 # 这里逐条核对开张链路的落库结果：兔舍布局、笼位数量、兔只归属与改名、
 # 成员角色，以及邀请记录确实走的是兔号通道。
-read -r house_layout cage_count rabbit_breed rabbit_cage_rank mate_role invite_channel invite_status \
+read -r house_layout cage_count rabbit_breed rabbit_cage_rank mate_role invite_channel invite_status house_sale_days user_sale_days \
   <<<"$(
   docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
     mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
@@ -257,15 +259,19 @@ read -r house_layout cage_count rabbit_breed rabbit_cage_rank mate_role invite_c
         (SELECT COALESCE(MAX(invite_channel), 'none') FROM house_invitations
            WHERE house_id = @house AND invited_user_id = @mate),
         (SELECT COALESCE(MAX(status), 'none') FROM house_invitations
-           WHERE house_id = @house AND invited_user_id = @mate);
+           WHERE house_id = @house AND invited_user_id = @mate),
+        (SELECT COALESCE(MAX(sale_days), -1) FROM global_setting WHERE house_id = @house),
+        (SELECT COALESCE(MAX(sale_days), -1) FROM global_setting
+           WHERE user_id = (SELECT user_id FROM sys_user WHERE user_name = '$founder_user'));
     "
 )"
 
-actual="$house_layout $cage_count $rabbit_breed $rabbit_cage_rank $mate_role $invite_channel $invite_status"
+actual="$house_layout $cage_count $rabbit_breed $rabbit_cage_rank $mate_role $invite_channel $invite_status $house_sale_days $user_sale_days"
 # 1 排 3 列 2 层的兔舍：建舍时自动铺 6 个，再手工补一排 6 个，共 12 个；
 # 兔只改名成 SETUP-RENAMED 并换到了第 2 个笼位；同事以 VIEWER 入伙，
-# 邀请记录来自 USER_CODE 通道且当场 ACCEPTED（不是挂起的 PENDING）。
-expected="1x3x2 12 SETUP-RENAMED 1 VIEWER USER_CODE ACCEPTED"
+# 邀请记录来自 USER_CODE 通道且当场 ACCEPTED。最后两列证明建场时把用户模板
+# 的出售周期 91 天复制成了兔场独立配置，而不是仅在页面上临时回退显示。
+expected="1x3x2 12 SETUP-RENAMED 1 VIEWER USER_CODE ACCEPTED 91 91"
 printf 'expected=%s\nactual=%s\n' "$expected" "$actual" | tee "$artifact_dir/database_assertions.txt"
 if [[ "$actual" != "$expected" ]]; then
   echo "Farm-setup E2E database assertions failed" >&2

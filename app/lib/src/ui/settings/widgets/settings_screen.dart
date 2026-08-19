@@ -42,6 +42,16 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 _SettingsEntry(
+                  entryKey: const ValueKey('settings-entry-reminders'),
+                  icon: Icons.notifications_active_outlined,
+                  iconColor: palette.warning,
+                  iconBackground: palette.warningSoft,
+                  title: '我的事件提醒',
+                  subtitle: '按兔舍配置提醒类型和提前天数',
+                  onTap: () => context.go('/settings/reminders'),
+                ),
+                const Divider(height: 1),
+                _SettingsEntry(
                   entryKey: const ValueKey('settings-entry-production'),
                   icon: Icons.calendar_month_outlined,
                   iconColor: palette.warning,

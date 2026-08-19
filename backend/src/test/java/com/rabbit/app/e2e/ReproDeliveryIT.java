@@ -4,6 +4,7 @@ import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -29,6 +30,7 @@ public class ReproDeliveryIT extends E2eTestSupport {
             "occurredAt", now(),
             "totalKits", 9,
             "liveKits", 7,
+            "keptKits", 7,
             "requestId", requestId("born")
         ));
 
@@ -49,6 +51,50 @@ public class ReproDeliveryIT extends E2eTestSupport {
     }
 
     @Test
+    void deliveryFormRejectsMissingKeptKitsAndNonzeroFailedCounts() {
+        Fixture missingKept = pregnantDoe("deliv_missing_kept");
+        api.expectError(
+            "/api/repro/cycles/" + missingKept.cycleId + "/actions",
+            HttpMethod.POST,
+            missingKept.owner.token,
+            missingKept.houseId,
+            obj(
+                "action", "DELIVERY",
+                "outcome", "BORN",
+                "occurredAt", now(),
+                "totalKits", 8,
+                "liveKits", 7,
+                "requestId", requestId("missing_kept")
+            ),
+            400,
+            "留仔数"
+        );
+        Assertions.assertEquals("OPEN", str(
+            "select lifecycle from breeding_cycles where id = ?", missingKept.cycleId));
+
+        Fixture failedWithCounts = pregnantDoe("deliv_failed_counts");
+        api.expectError(
+            "/api/repro/cycles/" + failedWithCounts.cycleId + "/actions",
+            HttpMethod.POST,
+            failedWithCounts.owner.token,
+            failedWithCounts.houseId,
+            obj(
+                "action", "DELIVERY",
+                "outcome", "FAILED",
+                "occurredAt", now(),
+                "totalKits", 1,
+                "liveKits", 0,
+                "keptKits", 0,
+                "requestId", requestId("failed_counts")
+            ),
+            400,
+            "必须为 0"
+        );
+        Assertions.assertEquals("OPEN", str(
+            "select lifecycle from breeding_cycles where id = ?", failedWithCounts.cycleId));
+    }
+
+    @Test
     void failedDeliveryWarnsButDoesNotCullTheDoe() {
         Fixture f = pregnantDoe("deliv_fail");
 
@@ -56,6 +102,9 @@ public class ReproDeliveryIT extends E2eTestSupport {
             "action", "DELIVERY",
             "outcome", "FAILED",
             "occurredAt", now(),
+            "totalKits", 0,
+            "liveKits", 0,
+            "keptKits", 0,
             "remark", "全窝死胎",
             "requestId", requestId("failed")
         ));
@@ -105,6 +154,7 @@ public class ReproDeliveryIT extends E2eTestSupport {
                 "occurredAt", now(),
                 "totalKits", 8,
                 "liveKits", 6,
+                "keptKits", 6,
                 "requestId", rid
             ));
         }

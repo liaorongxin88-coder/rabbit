@@ -170,20 +170,20 @@ class _HouseDetailContent extends ConsumerWidget {
             iconColor: palette.warning,
             iconBackground: palette.warningSoft,
             title: '生产批次',
-            message: perm.canEdit
-                ? '查看全部批次，按状态筛选或创建新的生产批次。'
-                : '查看当前兔舍全部批次及其生产周期状态。',
+            message:
+                perm.canEdit ? '查看全部批次，按状态筛选或创建新的生产批次。' : '查看当前兔舍全部批次及其生产周期状态。',
             actionLabel: '查看批次',
             onTap: () => context.go('/houses/${house.id}/batches'),
           ),
           if (perm.canControl) ...[
             const SizedBox(height: 10),
             _DetailEntryCard(
+              key: const ValueKey('house-production-settings-entry'),
               icon: Icons.calendar_month_outlined,
               iconColor: palette.warning,
               iconBackground: palette.warningSoft,
               title: '生产设置',
-              message: '为当前兔舍单独配置生产周期；未保存时使用默认配置。',
+              message: '当前兔舍独立使用这组周期，用于状态转换和事件日期的默认值。',
               actionLabel: '配置',
               onTap: () => context.go(
                 '/houses/${house.id}/settings/production?name=${Uri.encodeComponent(house.name)}',

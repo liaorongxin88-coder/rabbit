@@ -62,14 +62,21 @@ void main() {
 
       // 建批即入轨：每头母兔都应落在待催情并带一条催情待办。
       // 这一条曾经不成立（建批不开周期），导致整个生产流程从界面无法开始。
-      await _assertBatchState(api, batchId, step: '建批后', expected: _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertBatchState(api, batchId,
+          step: '建批后',
+          expected: _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _exerciseReminderSettings(binding, tester);
 
       await _runAphrodisiacInBatchDetail(
         tester,
         batchId: batchId,
         count: 2,
       );
-      await _assertBatchState(api, batchId, step: '批量催情后', expected: _does(a: 'AWAIT_MATING/MATING', b: 'AWAIT_MATING/MATING'));
+      await _assertBatchState(api, batchId,
+          step: '批量催情后',
+          expected: _does(a: 'AWAIT_MATING/MATING', b: 'AWAIT_MATING/MATING'));
+      await _assertRenderedBatchState(
+          tester, _does(a: 'AWAIT_MATING/MATING', b: 'AWAIT_MATING/MATING'));
 
       await _submitBulkMating(
         binding,
@@ -79,7 +86,14 @@ void main() {
         selectionScreenshot: '03-bulk-mating-selection',
         confirmationScreenshot: '04-bulk-mating-confirmation',
       );
-      await _assertBatchState(api, batchId, step: '批量配种后', expected: _does(a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '批量配种后',
+          expected: _does(
+              a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertRenderedBatchState(
+          tester,
+          _does(
+              a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitPregnancyCheck(
         binding,
@@ -89,7 +103,10 @@ void main() {
         screenshot: '05-pregnancy-mother-a',
       );
       // 只能动 A：B 必须原地不动。旧实现里“推进一头连带刷到旁人”是真实发生过的。
-      await _assertBatchState(api, batchId, step: '母兔A摸胎怀孕后', expected: _does(a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A摸胎怀孕后',
+          expected: _does(
+              a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitPregnancyCheck(
         binding,
@@ -101,7 +118,10 @@ void main() {
       expect(await api.rabbitIsActive(_motherBId), isTrue);
       // 空怀不是终点：新模型会自动关掉这一轮并接续下一轮（回到待催情），
       // 而不是像旧模型那样把母兔直接踢出生产流程。
-      await _assertBatchState(api, batchId, step: '母兔B摸胎空怀后', expected: _does(a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertBatchState(api, batchId,
+          step: '母兔B摸胎空怀后',
+          expected:
+              _does(a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_ESTRUS/ESTRUS'));
 
       await _submitPrepartum(
         binding,
@@ -109,7 +129,10 @@ void main() {
         rabbitId: _motherAId,
         screenshot: '07-prepartum-first-cycle',
       );
-      await _assertBatchState(api, batchId, step: '母兔A备产后', expected: _does(a: 'AWAIT_DELIVERY/DELIVERY', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A备产后',
+          expected:
+              _does(a: 'AWAIT_DELIVERY/DELIVERY', b: 'AWAIT_ESTRUS/ESTRUS'));
 
       await _submitParturition(
         binding,
@@ -117,10 +140,16 @@ void main() {
         rabbitId: _motherAId,
         totalKits: 4,
         liveKits: 4,
+        keptKits: 4,
         screenshot: '08-parturition-first-cycle',
       );
       // 产仔后进入哺乳：待办主体从周期换成窝，但仍挂在这头母兔名下。
-      await _assertBatchState(api, batchId, step: '母兔A接产后', expected: _does(a: 'AWAIT_WEANING/WEANING', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A接产后',
+          expected:
+              _does(a: 'AWAIT_WEANING/WEANING', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertRenderedBatchState(
+          tester, _does(a: 'AWAIT_WEANING/WEANING', b: 'AWAIT_ESTRUS/ESTRUS'));
 
       // 此时只有母兔 B 处于待催情：她的空怀周期已自动关闭并接续了新一轮。
       await _runAphrodisiacInBatchDetail(
@@ -142,7 +171,10 @@ void main() {
       // 血配后母兔 A 同时持有哺乳周期与新怀孕周期。
       // 投影列要指向流水线那一条（待摸胎）——这里曾有过“分笼把并行周期的
       // 阶段覆盖掉”的漂移缺陷，所以这一步必须单独钉住。
-      await _assertBatchState(api, batchId, step: '血配后', expected: _does(a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '血配后',
+          expected: _does(
+              a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitWeaning(
         binding,
@@ -155,7 +187,14 @@ void main() {
       );
       // 分笼只结束哺乳周期，不得碰她并行的怀孕周期：
       // A 仍停在待摸胎，而不是被拍回待催情。
-      await _assertBatchState(api, batchId, step: '母兔A首轮分笼后', expected: _does(a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A首轮分笼后',
+          expected: _does(
+              a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertRenderedBatchState(
+          tester,
+          _does(
+              a: 'AWAIT_PALPATION/PALPATION', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitPregnancyCheck(
         binding,
@@ -164,7 +203,10 @@ void main() {
         result: 'PREGNANT',
         screenshot: '11-pregnancy-second-cycle',
       );
-      await _assertBatchState(api, batchId, step: '母兔A二轮摸胎后', expected: _does(a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A二轮摸胎后',
+          expected: _does(
+              a: 'AWAIT_PREPARTUM/PREPARTUM', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitPrepartum(
         binding,
@@ -172,7 +214,10 @@ void main() {
         rabbitId: _motherAId,
         screenshot: '12-prepartum-second-cycle',
       );
-      await _assertBatchState(api, batchId, step: '母兔A二轮备产后', expected: _does(a: 'AWAIT_DELIVERY/DELIVERY', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A二轮备产后',
+          expected: _does(
+              a: 'AWAIT_DELIVERY/DELIVERY', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitParturition(
         binding,
@@ -180,9 +225,13 @@ void main() {
         rabbitId: _motherAId,
         totalKits: 3,
         liveKits: 3,
+        keptKits: 3,
         screenshot: '13-parturition-second-cycle',
       );
-      await _assertBatchState(api, batchId, step: '母兔A二轮接产后', expected: _does(a: 'AWAIT_WEANING/WEANING', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A二轮接产后',
+          expected: _does(
+              a: 'AWAIT_WEANING/WEANING', b: 'AWAIT_PALPATION/PALPATION'));
 
       await _submitWeaning(
         binding,
@@ -194,7 +243,10 @@ void main() {
         screenshot: '14-weaning-second-cycle',
       );
       // 本轮她没有并行的流水线周期，所以分笼后自动接续下一轮（回到待催情）。
-      await _assertBatchState(api, batchId, step: '母兔A二轮分笼后', expected: _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_PALPATION/PALPATION'));
+      await _assertBatchState(api, batchId,
+          step: '母兔A二轮分笼后',
+          expected:
+              _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_PALPATION/PALPATION'));
 
       // 流产：此刻 A 在待催情、B 在待摸胎，正好一头不允许一头允许。
       // 入口显隐由服务端阶段字典驱动，这里在真机上同时钉住两面。
@@ -208,7 +260,11 @@ void main() {
         screenshot: '15-abortion-mother-b',
       );
       // 流产与空怀同理：本轮结束并自动接续下一轮，母兔不离场。
-      await _assertBatchState(api, batchId, step: '母兔B流产后', expected: _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertBatchState(api, batchId,
+          step: '母兔B流产后',
+          expected: _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_ESTRUS/ESTRUS'));
+      await _assertRenderedBatchState(
+          tester, _does(a: 'AWAIT_ESTRUS/ESTRUS', b: 'AWAIT_ESTRUS/ESTRUS'));
       expect(await api.rabbitIsActive(_motherBId), isTrue);
 
       await _openHouse(tester);
@@ -288,7 +344,8 @@ void main() {
       );
       // 收尾校验：两头都离场，且一条待办都不能残留。
       // 母兔已不存在却还在今日清单里，正是离场不结周期那个缺陷的外部表现。
-      await _assertBatchState(api, batchId, step: '两头母兔离场后', expected: _does(a: 'RETIRED/', b: 'RETIRED/'));
+      await _assertBatchState(api, batchId,
+          step: '两头母兔离场后', expected: _does(a: 'RETIRED/', b: 'RETIRED/'));
       expect(await api.activeBatchRabbitCount(batchId), 0);
 
       // doe-breeding-v2 之后批次不再自动完成（后端已删除 checkAndCompleteBatch）：
@@ -322,6 +379,222 @@ void main() {
       });
     },
   );
+}
+
+Future<void> _exerciseReminderSettings(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+) async {
+  await _openReminderSettings(tester);
+
+  final enabled = find.byKey(const ValueKey('reminder-enabled'));
+  final enabledTile = tester.widget<SwitchListTile>(enabled);
+  if (enabledTile.value) {
+    await tester.tap(enabled);
+    await tester.pumpAndSettle();
+  }
+  final saveDisabled = find.byKey(const ValueKey('reminder-save'));
+  await tester.ensureVisible(saveDisabled);
+  await tester.pumpAndSettle();
+  await tester.tap(saveDisabled);
+  await _waitFor(tester, find.text('事件提醒设置已保存'));
+  await _takeScreenshot(binding, tester, '02b-reminders-disabled');
+
+  await _refreshHome(tester);
+  expect(
+    find.byKey(const ValueKey('production-event-rabbit-$_motherAId')),
+    findsNothing,
+    reason: '关闭我的事件提醒后，首页不应继续展示生产任务',
+  );
+  expect(
+    find.byKey(const ValueKey('production-event-rabbit-$_motherBId')),
+    findsNothing,
+    reason: '关闭我的事件提醒后，首页不应继续展示其他母兔任务',
+  );
+
+  await _openReminderSettings(tester);
+  final reenabled = tester.widget<SwitchListTile>(enabled);
+  if (!reenabled.value) {
+    await tester.tap(enabled);
+    await tester.pumpAndSettle();
+  }
+
+  // 真实设备上滚到长表单底部，逐项关闭其它任务类型，只保留催情。
+  // 这会同时验证类型选择、表单滚动和保存后的服务端持久化。
+  for (final type in const [
+    'MATING',
+    'PALPATION',
+    'PREPARTUM',
+    'DELIVERY',
+    'WEANING',
+    'SALE_READY',
+    'REPLACEMENT_MATURE',
+    'CUSTOM',
+  ]) {
+    final tile = find.byKey(ValueKey('reminder-type-$type'));
+    await tester.ensureVisible(tile);
+    if (tester.widget<CheckboxListTile>(tile).value == true) {
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+    }
+  }
+  final slider = find.byKey(const ValueKey('reminder-advance-days'));
+  await tester.ensureVisible(slider);
+  final sliderRect = tester.getRect(slider);
+  await tester.tapAt(
+    Offset(sliderRect.left + sliderRect.width * 0.5, sliderRect.center.dy),
+  );
+  await tester.pumpAndSettle();
+  expect(tester.widget<Slider>(slider).value, greaterThan(0));
+
+  final saveFiltered = find.byKey(const ValueKey('reminder-save'));
+  await tester.ensureVisible(saveFiltered);
+  await tester.pumpAndSettle();
+  await tester.tap(saveFiltered);
+  await _waitFor(tester, find.text('事件提醒设置已保存'));
+  await _takeScreenshot(binding, tester, '02c-reminders-filtered');
+
+  // 离开页面再重新进入，确认不是只改了本地 State，而是 GET 能读到服务端结果。
+  await _openReminderSettings(tester);
+  expect(
+    tester.widget<SwitchListTile>(enabled).value,
+    isTrue,
+    reason: '提醒开关应从后端持久化结果恢复',
+  );
+  final estrusType = find.byKey(const ValueKey('reminder-type-ESTRUS'));
+  await tester.ensureVisible(estrusType);
+  expect(tester.widget<CheckboxListTile>(estrusType).value, isTrue);
+  final matingType = find.byKey(const ValueKey('reminder-type-MATING'));
+  await tester.ensureVisible(matingType);
+  expect(tester.widget<CheckboxListTile>(matingType).value, isFalse);
+
+  await _refreshHome(tester);
+  await _selectHomeFlow(tester, '催情');
+  await _waitFor(
+    tester,
+    find.byKey(const ValueKey('production-event-rabbit-$_motherAId')),
+  );
+  expect(
+    find.byKey(const ValueKey('production-event-rabbit-$_motherBId')),
+    findsOneWidget,
+    reason: '只保留催情类型后，两头待催情母兔仍应显示',
+  );
+  expect(
+    find.descendant(
+      of: find.byKey(const ValueKey('production-event-rabbit-$_motherAId')),
+      matching: find.text('催情'),
+    ),
+    findsOneWidget,
+  );
+
+  // 提醒过滤断言完成后恢复全类型，后续生产动作仍应从首页待办进入。
+  await _openReminderSettings(tester);
+  for (final type in const [
+    'MATING',
+    'PALPATION',
+    'PREPARTUM',
+    'DELIVERY',
+    'WEANING',
+    'SALE_READY',
+    'REPLACEMENT_MATURE',
+    'CUSTOM',
+  ]) {
+    final tile = find.byKey(ValueKey('reminder-type-$type'));
+    await tester.ensureVisible(tile);
+    if (tester.widget<CheckboxListTile>(tile).value == false) {
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+    }
+  }
+  final restoreSave = find.byKey(const ValueKey('reminder-save'));
+  await tester.ensureVisible(restoreSave);
+  await tester.pumpAndSettle();
+  await tester.tap(restoreSave);
+  await _waitFor(tester, find.text('事件提醒设置已保存'));
+}
+
+Future<void> _selectHomeFlow(WidgetTester tester, String label) async {
+  final tabBar = find.byType(TabBar);
+  await tester.scrollUntilVisible(
+    tabBar,
+    220,
+    scrollable: find
+        .descendant(
+          of: find.byKey(const ValueKey('home-scroll')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  final tab = find.descendant(
+    of: tabBar,
+    matching: find.text(label),
+  );
+  await tester.ensureVisible(tab);
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openReminderSettings(WidgetTester tester) async {
+  await _backToHomeTop(tester);
+  await tester.tap(find.byKey(const ValueKey('nav-profile')));
+  final entry = find.byKey(const ValueKey('profile-entry-reminders'));
+  await _waitFor(tester, entry);
+  await tester.ensureVisible(entry);
+  await tester.tap(entry);
+  await _waitFor(tester, find.text('我的事件提醒'));
+  final enabled = find.byKey(const ValueKey('reminder-enabled'));
+  await _waitFor(tester, enabled);
+  // 上一步动作的 SnackBar 会跨底部导航保留，真机上可能正好盖住保存按钮。
+  // 清理旧反馈后再操作当前页面，避免“控件已滚到可见但点击落在遮罩上”。
+  ScaffoldMessenger.of(tester.element(enabled)).clearSnackBars();
+  await tester.pumpAndSettle();
+}
+
+Future<void> _assertRenderedBatchState(
+  WidgetTester tester,
+  Map<int, String> expected,
+) async {
+  var list = find.byKey(const ValueKey('batch-detail-member-list'));
+  if (list.evaluate().isEmpty) {
+    await _openHouse(tester);
+    await tester.tap(find.byKey(const ValueKey('house-batches-entry')));
+    final batchCard = find.text(_batchCode);
+    await _waitFor(tester, batchCard);
+    await tester.tap(batchCard);
+    list = find.byKey(const ValueKey('batch-detail-member-list'));
+  }
+  await _waitFor(tester, list);
+  for (final entry in expected.entries) {
+    final card = find.byKey(ValueKey('batch-member-${entry.key}'));
+    await _scrollBatchDetailUntilVisible(tester, card);
+    final label = _stageLabel(entry.value.split('/').first);
+    expect(
+      find.descendant(of: card, matching: find.text(label)),
+      findsOneWidget,
+      reason: '详情卡必须渲染实时阶段 ${entry.value}（${entry.key}）',
+    );
+  }
+}
+
+String _stageLabel(String stage) {
+  switch (stage) {
+    case 'AWAIT_ESTRUS':
+      return '待催情';
+    case 'AWAIT_MATING':
+      return '待配种';
+    case 'AWAIT_PALPATION':
+      return '待摸胎';
+    case 'AWAIT_PREPARTUM':
+      return '待备产';
+    case 'AWAIT_DELIVERY':
+      return '待分娩';
+    case 'AWAIT_WEANING':
+      return '待分笼';
+    case 'RETIRED':
+      return '离场';
+    default:
+      return stage;
+  }
 }
 
 void _assertFixtureDefines() {
@@ -484,8 +757,7 @@ Future<void> _assertBatchState(
   expect(missing, isEmpty, reason: '[$step] 批次里找不到母兔 $missing');
   final unchecked =
       actual.keys.where((id) => !expected.containsKey(id)).toList();
-  expect(unchecked, isEmpty,
-      reason: '[$step] 这些母兔没有被断言到，请补全期望：$unchecked');
+  expect(unchecked, isEmpty, reason: '[$step] 这些母兔没有被断言到，请补全期望：$unchecked');
 
   final diffs = <String>[];
   expected.forEach((rabbitId, want) {
@@ -677,6 +949,7 @@ Future<void> _submitPregnancyCheck(
   IntegrationTestWidgetsFlutterBinding binding,
   WidgetTester tester, {
   required int rabbitId,
+
   /// 摸胎结论的服务端枚举名（PREGNANT / EMPTY / UNSURE）。
   /// 单选项的 key 跟着服务端词汇走，客户端不再自己维护一份中文映射。
   required String result,
@@ -721,6 +994,7 @@ Future<void> _submitParturition(
   required int rabbitId,
   required int totalKits,
   required int liveKits,
+  required int keptKits,
   required String screenshot,
 }) async {
   await _openProductionEvent(
@@ -747,6 +1021,12 @@ Future<void> _submitParturition(
     listKey: const ValueKey('production-event-form-list'),
     field: liveKitsField,
     value: '$liveKits',
+  );
+  await _enterFormField(
+    tester,
+    listKey: const ValueKey('production-event-form-list'),
+    field: find.byKey(const ValueKey('parturition-kept-kits')),
+    value: '$keptKits',
   );
   FocusManager.instance.primaryFocus?.unfocus();
   await tester.pumpAndSettle();
@@ -1068,8 +1348,7 @@ class _DoeState {
   String get signature => '$stage/$pendingTask';
 
   @override
-  String toString() =>
-      '阶段=$stage 待办=${pendingTask.isEmpty ? '无' : pendingTask}'
+  String toString() => '阶段=$stage 待办=${pendingTask.isEmpty ? '无' : pendingTask}'
       ' 周期=${cycleId ?? '-'} 在批=${activeMember ? '是' : '否'}';
 }
 

@@ -3,9 +3,13 @@ package com.rabbit.app.modules.setting.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
+import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.setting.dto.HouseSettingResponse;
+import com.rabbit.app.modules.setting.dto.ReminderPreferenceRequest;
+import com.rabbit.app.modules.setting.dto.ReminderPreferenceResponse;
 import com.rabbit.app.modules.setting.dto.UpdateSettingRequest;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
+import com.rabbit.app.modules.setting.service.ReminderPreferenceService;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.HouseContext;
@@ -16,6 +20,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,11 +31,20 @@ public class SettingController {
     private static final Long USER_SETTING_DEDUP_HOUSE_ID = 0L;
 
     private final SettingService settingService;
+    private final ReminderPreferenceService reminderPreferenceService;
     private final RequestDedupService requestDedupService;
+    private final HouseService houseService;
 
-    public SettingController(SettingService settingService, RequestDedupService requestDedupService) {
+    public SettingController(
+        SettingService settingService,
+        ReminderPreferenceService reminderPreferenceService,
+        RequestDedupService requestDedupService,
+        HouseService houseService
+    ) {
         this.settingService = settingService;
+        this.reminderPreferenceService = reminderPreferenceService;
         this.requestDedupService = requestDedupService;
+        this.houseService = houseService;
     }
 
     @GetMapping("/settings")
@@ -59,15 +73,48 @@ public class SettingController {
         }
     }
 
+    @GetMapping("/reminder-settings")
+    @RequiresPermission(PermissionCode.USER_SETTINGS_QUERY)
+    public ApiResponse<ReminderPreferenceResponse> getReminderSettings(
+        @RequestHeader("X-House-Id") Long houseId
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(ReminderPreferenceResponse.from(
+            reminderPreferenceService.getOrCreate(userId, houseId)
+        ));
+    }
+
+    @PutMapping("/reminder-settings")
+    @RequiresPermission(PermissionCode.USER_SETTINGS_EDIT)
+    public ApiResponse<Void> updateReminderSettings(
+        @RequestHeader("X-House-Id") Long houseId,
+        @Valid @RequestBody ReminderPreferenceRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        String api = "reminder-settings.update";
+        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, req.getRequestId())) {
+            return ApiResponse.ok(null);
+        }
+        requestDedupService.markProcessing(houseId, userId, api, req.getRequestId());
+        try {
+            reminderPreferenceService.update(userId, houseId, req);
+            requestDedupService.markDone(houseId, userId, api, req.getRequestId());
+            return ApiResponse.ok(null);
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(houseId, userId, api, req.getRequestId(), e.getMessage());
+            throw e;
+        }
+    }
+
     @GetMapping("/house-settings")
     @RequiresPermission(PermissionCode.RABBIT_SETTINGS_QUERY)
     public ApiResponse<HouseSettingResponse> getHouseSetting() {
         Long userId = requireLogin();
         Long houseId = requireHouse();
-        boolean customized = settingService.hasHouseSetting(houseId);
-        return ApiResponse.ok(HouseSettingResponse.of(
-                settingService.getHouseSettingOrDefault(userId, houseId),
-                customized));
+        GlobalSetting setting = settingService.getHouseSettingOrDefault(userId, houseId);
+        return ApiResponse.ok(HouseSettingResponse.of(setting, true));
     }
 
     @PutMapping("/house-settings")

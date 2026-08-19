@@ -360,9 +360,12 @@ public class ReproStateMachineService {
             case MATING -> {
                 cycle.setMatingDate(occurredAt);
                 cycle.setMaleRabbitId(command.getMaleRabbitId());
-                cycle.setMatingMethod(command.getMatingMethod() != null
-                    ? command.getMatingMethod().name()
-                    : null);
+                MatingMethod matingMethod = command.getMatingMethod();
+                // 老 APK 未发送 matingMethod；只要带有公兔即可按体配兼容回填。
+                if (matingMethod == null && command.getMaleRabbitId() != null) {
+                    matingMethod = MatingMethod.NATURAL;
+                }
+                cycle.setMatingMethod(matingMethod != null ? matingMethod.name() : null);
                 // 预产期在配种时一次算定；此后备产/接产都以它为锚，不再重复推算。
                 cycle.setExpectedBirthDate(DueDateCalculator.expectedBirthDate(occurredAt, settings));
             }
@@ -724,6 +727,10 @@ public class ReproStateMachineService {
     private void validateFacts(ReproCommand command, Transition transition, ReproCycle cycle) {
         switch (command.getAction()) {
             case MATING -> {
+                // 老 APK 未发送配种方式，但会发送公兔；这类请求按体配兼容处理。
+                if (command.getMatingMethod() == null && command.getMaleRabbitId() == null) {
+                    throw new BizException(400, "请选择配种方式");
+                }
                 // 人工授精允许不指定公兔（混精 / 外购冻精），体配必须有，否则系谱断链。
                 if (command.getMatingMethod() != MatingMethod.AI && command.getMaleRabbitId() == null) {
                     throw new BizException(400, "请选择配种公兔");
@@ -743,27 +750,64 @@ public class ReproStateMachineService {
                 if (command.getPalpationResult() == null) {
                     throw new BizException(400, "请选择摸胎结论");
                 }
-                if (command.getPalpationResult() == PalpationResult.UNSURE && command.getNextRemindAt() == null) {
-                    // 不确定必须给复查日：不给的话这只兔子会停在待摸胎且没有下一次提醒，
+                if (command.getPalpationResult() == PalpationResult.UNSURE
+                    && !isFutureReminder(command.getNextRemindAt())) {
+                    // 不确定必须给未来复查日：不给的话这只兔子会停在待摸胎且没有下一次提醒，
                     // 正是旧实现里「兔子消失在流程中」的典型成因。
-                    throw new BizException(400, "摸胎结论为不确定时，请选择复查日期");
+                    throw new BizException(400, "摸胎结论为不确定时，请选择未来复查日期");
                 }
             }
             case DELIVERY -> {
-                if (DeliveryOutcome.BORN.name().equals(command.getOutcome())) {
-                    requireNotNull(command.getTotalKits(), "总产仔数");
-                    requireNotNull(command.getLiveKits(), "活仔数");
+                if (!DeliveryOutcome.BORN.name().equals(command.getOutcome())
+                    && !DeliveryOutcome.FAILED.name().equals(command.getOutcome())) {
+                    throw new BizException(400, "接产结果必须是产仔或失败产");
+                }
+                requireNotNull(command.getTotalKits(), "总产仔数");
+                requireNotNull(command.getLiveKits(), "活仔数");
+                requireNotNull(command.getKeptKits(), "留仔数");
+                if (command.getTotalKits() < 0 || command.getLiveKits() < 0
+                    || command.getKeptKits() < 0) {
+                    throw new BizException(400, "产仔数量不能为负数");
+                }
+                if (DeliveryOutcome.FAILED.name().equals(command.getOutcome())) {
+                    if (command.getTotalKits() != 0 || command.getLiveKits() != 0
+                        || command.getKeptKits() != 0) {
+                        throw new BizException(400, "失败产的总产仔数、活仔数和留仔数必须为 0");
+                    }
+                } else {
                     if (command.getLiveKits() > command.getTotalKits()) {
                         throw new BizException(400, "活仔数不能大于总产仔数");
                     }
+                    if (command.getKeptKits() > command.getLiveKits()) {
+                        throw new BizException(400, "留仔数不能大于活仔数");
+                    }
                 }
             }
-            case WEANING -> requireNotNull(command.getWeanedCount(), "断奶只数");
-            case POSTPONE -> requireNotNull(command.getNextRemindAt(), "推迟到的日期");
+            case WEANING -> {
+                requireNotNull(command.getWeanedCount(), "断奶只数");
+                if (command.getWeanedCount() < 0) {
+                    throw new BizException(400, "断奶只数不能为负数");
+                }
+            }
+            case ABORTION -> {
+                requireNotNull(command.getStillbirthCount(), "流产死胎数");
+                if (command.getStillbirthCount() < 0) {
+                    throw new BizException(400, "流产死胎数不能为负数");
+                }
+            }
+            case POSTPONE -> {
+                if (!isFutureReminder(command.getNextRemindAt())) {
+                    throw new BizException(400, "请选择未来的下次提醒日期");
+                }
+            }
             default -> {
                 // 其余动作无附加必填项。
             }
         }
+    }
+
+    private static boolean isFutureReminder(Date value) {
+        return value != null && value.after(DateUtil.now());
     }
 
     private void validateEntryFacts(EntryPoint entry, OpenCycleCommand command) {
@@ -820,7 +864,11 @@ public class ReproStateMachineService {
     private Map<String, Object> payloadOf(ReproCommand command) {
         Map<String, Object> payload = new LinkedHashMap<>();
         putIfPresent(payload, "maleRabbitId", command.getMaleRabbitId());
-        putIfPresent(payload, "matingMethod", command.getMatingMethod());
+        MatingMethod matingMethod = command.getMatingMethod();
+        if (matingMethod == null && command.getMaleRabbitId() != null) {
+            matingMethod = MatingMethod.NATURAL;
+        }
+        putIfPresent(payload, "matingMethod", matingMethod);
         putIfPresent(payload, "palpationResult", command.getPalpationResult());
         putIfPresent(payload, "totalKits", command.getTotalKits());
         putIfPresent(payload, "liveKits", command.getLiveKits());

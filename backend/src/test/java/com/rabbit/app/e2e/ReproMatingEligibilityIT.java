@@ -78,6 +78,7 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
             "action", "MATING",
             "occurredAt", now(),
             "maleRabbitId", anotherDoe,
+            "matingMethod", "NATURAL",
             "taskIds", List.of(taskId)
         ));
 

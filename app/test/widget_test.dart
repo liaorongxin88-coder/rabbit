@@ -567,7 +567,7 @@ void main() {
     await tester.tap(find.text('兔舍生产设置'));
     await tester.pumpAndSettle();
 
-    expect(find.text('所有兔舍默认配置'), findsOneWidget);
+    expect(find.text('新建兔场默认配置'), findsOneWidget);
     expect(find.text('摸胎天数'), findsOneWidget);
     expect(find.text('请选择兔舍'), findsNothing);
   });
@@ -605,7 +605,7 @@ void main() {
     expect(find.textContaining('业务上下文'), findsNothing);
   });
 
-  testWidgets('house production settings inherits default before save',
+  testWidgets('house production settings presents an isolated snapshot',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'userId': 3,
@@ -658,8 +658,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('兔舍生产设置'), findsWidgets);
-    expect(find.text('继承默认配置'), findsOneWidget);
-    expect(find.textContaining('测试1 的生产周期'), findsOneWidget);
+    expect(find.text('当前兔舍独立配置'), findsOneWidget);
+    expect(find.textContaining('仅影响 测试1'), findsOneWidget);
     expect(find.text('摸胎天数'), findsOneWidget);
   });
 

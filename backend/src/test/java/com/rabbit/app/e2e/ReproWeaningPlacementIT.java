@@ -207,7 +207,7 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             "palpationResult", "PREGNANT"));
         act(s, cycleId, "lineage_prep", obj("action", "PREPARTUM", "occurredAt", oneMinuteAgo()));
         act(s, cycleId, "lineage_birth", obj("action", "DELIVERY", "outcome", "BORN",
-            "occurredAt", oneMinuteAgo(), "totalKits", 5, "liveKits", 4));
+            "occurredAt", oneMinuteAgo(), "totalKits", 5, "liveKits", 4, "keptKits", 4));
         act(s, cycleId, "lineage_wean", obj("action", "WEANING", "occurredAt", oneMinuteAgo(),
             "weanedCount", 4));
 

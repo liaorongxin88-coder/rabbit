@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/events_repository.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
+import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
 
 final homeEventsProvider = FutureProvider<List<EventItem>>((ref) async {
   final houses = await ref.watch(housesProvider.future);
@@ -12,8 +14,23 @@ final homeEventsProvider = FutureProvider<List<EventItem>>((ref) async {
   final repository = ref.watch(eventsRepositoryProvider);
   final grouped = await Future.wait(
     houses.map((house) async {
-      final items = await repository.listEvents(house.id);
+      ReminderPreference preference;
+      try {
+        preference =
+            await ref.read(reminderPreferenceProvider(house.id).future);
+      } catch (_) {
+        // Mixed-version rollout: an older backend has no preference endpoint.
+        preference = ReminderPreference.defaults;
+      }
+      if (!preference.enabled) {
+        return const <EventItem>[];
+      }
+      final items = await repository.listEvents(
+        house.id,
+        dueBefore: preference.dueBefore(DateTime.now()),
+      );
       return items
+          .where(preference.includes)
           .map(
             (item) => item.copyWith(
               sourceHouseId: house.id,

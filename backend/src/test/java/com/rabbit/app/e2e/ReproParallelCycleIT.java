@@ -1,5 +1,6 @@
 package com.rabbit.app.e2e;
 
+import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.repro.domain.DeliveryOutcome;
 import com.rabbit.app.modules.repro.domain.MatingMethod;
 import com.rabbit.app.modules.repro.domain.PalpationResult;
@@ -212,6 +213,14 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             Fixture f = fixture(tag);
             ReproResult cycle = openAtEstrus(f, tag + "_open");
             advanceTo(f, cycle.cycleId(), stage, tag);
+            assertStage(cycle.cycleId(), stage, "OPEN");
+
+            BizException missingCount = Assertions.assertThrows(
+                BizException.class,
+                () -> apply(f, cycle.cycleId(), ReproAction.ABORTION, tag + "_missing_count", b -> b)
+            );
+            Assertions.assertEquals(400, missingCount.getCode());
+            Assertions.assertTrue(missingCount.getMessage().contains("流产死胎数"));
             assertStage(cycle.cycleId(), stage, "OPEN");
 
             ReproResult aborted = apply(f, cycle.cycleId(), ReproAction.ABORTION, tag + "_abort",
@@ -512,7 +521,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             b -> b.outcome(PalpationResult.PREGNANT.name()).palpationResult(PalpationResult.PREGNANT));
         apply(f, cycleId, ReproAction.PREPARTUM, prefix + "_prepartum", b -> b);
         apply(f, cycleId, ReproAction.DELIVERY, prefix + "_delivery",
-            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(7));
+            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(7).keptKits(7));
     }
 
     // ---------- 断言辅助 ----------

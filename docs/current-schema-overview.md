@@ -1,7 +1,7 @@
 # 当前线上数据表结构与关联总览（现状抽象 ER）
 
-状态：现状快照（截至 Flyway V25）
-来源：`backend/src/main/resources/db/migration/` V1–V25 逐一核对；实体类交叉验证
+状态：现状快照（截至 Flyway V32）
+来源：`backend/src/main/resources/db/migration/` V1–V32 逐一核对；实体类交叉验证
 关联文档：[doe-breeding-v2-design.md](doe-breeding-v2-design.md)（V2 优化设计，含本结构的问题诊断）
 
 > 阅读约定：仅列关键字段（主键/外键/状态/守卫列），审计四列 `create_by/create_time/update_by/update_time` 与 `remark` 一律省略。`house_id` 是全局租户隔离键，除账号/平台域外所有表均携带并作为索引前缀。
@@ -16,7 +16,7 @@
 | 场舍基础设施 | `cages` `cage_nfc_tags` `nfc_tags` `global_setting` | 笼位、NFC、生产周期配置 |
 | 兔只 | `rabbits` `rabbit_status_history` `rabbit_departure_records` `rabbit_abnormal_conditions` `replacement_records` `weight_logs` `treatment_records` | 个体全生命周期 |
 | 繁育生产（核心） | `batches` `batch_rabbits` `breeding_cycles` `pregnancy_check_records` `prepartum_records` `parturition_records` `weaning_records` `weaning_record_allocations` `breeding_performance` | 生产状态机所在域 |
-| 事件提醒 | `event_acks` `event_reminder_logs` | 扫描式提醒 + 用户确认 |
+| 事件提醒 | `event_acks` `event_reminder_logs` `reminder_preferences` | 兼容确认记录、扫描日志、用户+兔舍级应用内提醒偏好 |
 | 运营（喂养/库存/销售/出栏） | `feed_logs` `feed_log_rabbits` `inventory_items` `inventory_txs` `sale_orders` `sale_order_items` `outbound_tasks` `outbound_task_items` `outbound_requests` | 日常运营与出栏交易 |
 | 平台支撑 | `platform_admins` `audit_logs` `request_dedup` | SaaS 管理台、审计、幂等 |
 
@@ -104,7 +104,7 @@ erDiagram
     }
 ```
 
-- `global_setting` 解析顺序：兔舍级(house_id) → 用户级(user_id) → 代码默认值。**注意：无 `gestation_days`，妊娠 30 天硬编码在 BatchService。**
+- `global_setting` 分为用户级创建模板和兔场级独立快照。创建兔场时会把用户模板复制成 `house_id` 配置；之后修改用户模板不影响已创建兔场，状态转换和事件日期只读取当前兔场快照。存量缺失行会在首次读取时固化一次。`gestation_days` 已在 V26 配置化，不再由 `BatchService` 硬编码。
 
 ## 3. 兔只域
 

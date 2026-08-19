@@ -76,6 +76,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   final _remarkController = TextEditingController();
 
   DateTime _weaningDate = DateTime.now();
+  DateTime? _postponeDate;
+  var _postponed = false;
   var _autoAssignCage = true;
   int? _selectedCageId;
   var _saving = false;
@@ -146,8 +148,82 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     }
   }
 
+  Future<void> _pickPostponeDate() async {
+    final today = DateTime.now();
+    final firstDate = DateTime(today.year, today.month, today.day)
+        .add(const Duration(days: 1));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _postponeDate ?? firstDate,
+      firstDate: firstDate,
+      lastDate: firstDate.add(const Duration(days: 365)),
+      helpText: '选择下次提醒日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null && mounted) {
+      setState(() => _postponeDate = picked);
+    }
+  }
+
   Future<void> _submit(List<Cage> cages) async {
     final commodityCages = _commodityCages(cages);
+    if (_postponed) {
+      final cycleId = widget.breedingCycleId;
+      final postponeDate = _postponeDate;
+      if (cycleId == null || cycleId <= 0) {
+        _showMessage('未找到对应的生产周期，请刷新后重试');
+        return;
+      }
+      if (postponeDate == null) {
+        _showMessage('请选择下次提醒日期');
+        return;
+      }
+      setState(() => _saving = true);
+      try {
+        final requestId = _writeRequest.requestIdFor(
+          canonicalBatchWriteFingerprint({
+            'action': 'weaningPostpone',
+            'houseId': widget.houseId,
+            'batchId': widget.batchId,
+            'rabbitId': widget.rabbitId,
+            'breedingCycleId': cycleId,
+            'postponeDate': formatBatchWriteDate(postponeDate),
+          }),
+        );
+        await ref.read(reproRepositoryProvider).applyAction(
+              houseId: widget.houseId,
+              cycleId: cycleId,
+              action: ReproAction.postpone,
+              occurredAt: _weaningDate,
+              nextRemindAt: postponeDate,
+              requestId: requestId,
+            );
+        if (!mounted) return;
+        ref.invalidate(homeEventsProvider);
+        ref.invalidate(houseRabbitsProvider(widget.houseId));
+        ref.invalidate(houseBatchesProvider(widget.houseId));
+        final detailRequest = BatchDetailRequest(
+          houseId: widget.houseId,
+          batchId: widget.batchId,
+        );
+        ref.invalidate(batchDetailProvider(detailRequest));
+        ref.invalidate(batchMembersProvider(detailRequest));
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        Navigator.of(context).pop();
+        messenger?.showSnackBar(
+          const SnackBar(content: Text('已推迟断奶提醒')),
+        );
+      } catch (error) {
+        if (mounted) {
+          _showMessage(
+              error is ApiException ? error.message : error.toString());
+        }
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
     final count = int.tryParse(_countController.text.trim()) ?? -1;
     if (count < 0) {
       _showMessage('请输入有效的断奶数量');
@@ -217,9 +293,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
         _showMessage('未找到对应的生产周期，请刷新后重试');
         return;
       }
-      await ref
-          .read(reproRepositoryProvider)
-          .applyAction(
+      await ref.read(reproRepositoryProvider).applyAction(
             houseId: widget.houseId,
             cycleId: cycleId,
             action: ReproAction.weaning,
@@ -377,7 +451,33 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                           trailing: const Icon(Icons.calendar_today_outlined),
                           onTap: _saving ? null : _pickDate,
                         ),
-                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          key: const ValueKey('weaning-postpone-switch'),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('本次未执行，改期提醒'),
+                          subtitle: const Text('不推进断奶状态，只调整下一次提醒日期'),
+                          value: _postponed,
+                          onChanged: _saving
+                              ? null
+                              : (value) => setState(() {
+                                    _postponed = value;
+                                    if (!value) _postponeDate = null;
+                                  }),
+                        ),
+                        if (_postponed)
+                          ListTile(
+                            key: const ValueKey('weaning-postpone-date'),
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('下次提醒日期 *'),
+                            subtitle: Text(
+                              _postponeDate == null
+                                  ? '请选择日期'
+                                  : formatBatchWriteDate(_postponeDate!),
+                            ),
+                            trailing: const Icon(Icons.event),
+                            onTap: _saving ? null : _pickPostponeDate,
+                          ),
+                        if (!_postponed) const SizedBox(height: 8),
                         TextField(
                           key: const ValueKey('weaning-count'),
                           controller: _countController,

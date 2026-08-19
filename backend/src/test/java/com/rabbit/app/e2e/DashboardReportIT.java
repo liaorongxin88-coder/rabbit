@@ -91,7 +91,7 @@ public class DashboardReportIT extends E2eTestSupport {
                 "action", "PREPARTUM", "occurredAt", oneMinuteAgo()));
         act(owner, houseId, firstCycle, "dash_c1_birth", obj(
                 "action", "DELIVERY", "outcome", "BORN", "occurredAt", oneMinuteAgo(),
-                "totalKits", 6, "liveKits", 6));
+                "totalKits", 6, "liveKits", 6, "keptKits", 6));
 
         // 第二轮：血配 —— 哺乳未结束就另开一个管线周期，于是同时有两个 OPEN。
         long secondCycle = openCycleAtMating(owner, houseId, batchId, activeMother, "dash_c2");

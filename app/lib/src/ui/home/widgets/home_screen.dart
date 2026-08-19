@@ -41,6 +41,7 @@ class HomeScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () => _refreshHome(ref),
             child: ListView(
+              key: const ValueKey('home-scroll'),
               padding: AppSpacing.pagePadding,
               children: [
                 events.when(
@@ -95,6 +96,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   var _dueFilter = _DueFilter.all;
 
   static const _tabs = [
+    _FlowTab(0, '催情', ['催情'], Icons.play_circle_outline_rounded),
     _FlowTab(1, '配种', ['配种'], Icons.favorite_border_rounded),
     _FlowTab(2, '摸胎', ['摸胎'], Icons.health_and_safety_outlined),
     _FlowTab(3, '备产', ['备产'], Icons.inventory_2_outlined),
@@ -107,7 +109,13 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    // Keep the default production flow on配种 for existing operators;催情 remains
+    // the first explicit tab so reminder filtering can still expose it directly.
+    _tabController = TabController(
+      length: _tabs.length,
+      vsync: this,
+      initialIndex: 1,
+    );
   }
 
   @override

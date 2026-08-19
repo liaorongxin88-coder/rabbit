@@ -276,7 +276,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('batch-member-status-filter')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('催情中').last);
+    await tester.tap(find.text('待配种').last);
     await tester.pumpAndSettle();
     expect(find.text('显示 1 / 1 个成员'), findsOneWidget);
 
@@ -286,7 +286,7 @@ void main() {
         batchId: 13,
         rabbitId: 1301,
         currentStatus: '待配种',
-        currentStage: 'AWAIT_MATING',
+        currentStage: 'AWAIT_PALPATION',
         nextEventType: '配种',
         batchRole: 'breeding',
       ),

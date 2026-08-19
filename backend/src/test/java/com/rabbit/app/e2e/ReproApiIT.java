@@ -116,7 +116,8 @@ public class ReproApiIT extends E2eTestSupport {
 
         api.postOk("/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, obj(
             "action", "MATING", "occurredAt", now(),
-            "maleRabbitId", f.buckId, "requestId", requestId("compat_mating")));
+            "maleRabbitId", f.buckId,
+            "requestId", requestId("compat_mating")));
         Assertions.assertEquals("PALPATION", pendingTaskType(cycleId));
 
         // 任何时刻一个开放周期只能挂一条未完成待办；旧任务必须被置 DONE

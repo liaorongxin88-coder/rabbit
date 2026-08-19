@@ -13,11 +13,17 @@ class EventsRepository {
 
   final ApiClient _api;
 
-  Future<List<EventItem>> listEvents(int houseId) {
+  Future<List<EventItem>> listEvents(
+    int houseId, {
+    DateTime? dueBefore,
+  }) {
     return _api.get<List<EventItem>>(
       '/api/events',
       houseId: houseId,
-      query: const {'onlyUnnotified': true},
+      query: {
+        'onlyUnnotified': true,
+        if (dueBefore != null) 'dueBefore': dueBefore.millisecondsSinceEpoch,
+      },
       decode: (data) {
         if (data is! List) {
           throw const ApiException('预警列表格式不正确');

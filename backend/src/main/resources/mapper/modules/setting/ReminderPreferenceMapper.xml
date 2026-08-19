@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.setting.mapper.ReminderPreferenceMapper">
+    <resultMap id="ReminderPreferenceMap" type="com.rabbit.app.modules.setting.entity.ReminderPreference">
+        <id property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="houseId" column="house_id" />
+        <result property="enabled" column="enabled" />
+        <result property="advanceDays" column="advance_days" />
+        <result property="notifyOverdue" column="notify_overdue" />
+        <result property="taskTypes" column="task_types" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <select id="selectByUserAndHouse" resultMap="ReminderPreferenceMap">
+        select id, user_id, house_id, enabled, advance_days, notify_overdue, task_types,
+               create_by, create_time, update_by, update_time
+        from reminder_preferences
+        where user_id = #{userId} and house_id = #{houseId}
+        limit 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into reminder_preferences (
+            user_id, house_id, enabled, advance_days, notify_overdue, task_types,
+            create_by, update_by
+        ) values (
+            #{userId}, #{houseId}, #{enabled}, #{advanceDays}, #{notifyOverdue}, #{taskTypes},
+            #{createBy}, #{updateBy}
+        )
+    </insert>
+
+    <update id="update">
+        update reminder_preferences
+        set enabled = #{enabled},
+            advance_days = #{advanceDays},
+            notify_overdue = #{notifyOverdue},
+            task_types = #{taskTypes},
+            update_by = #{updateBy}
+        where id = #{id} and user_id = #{userId} and house_id = #{houseId}
+    </update>
+</mapper>

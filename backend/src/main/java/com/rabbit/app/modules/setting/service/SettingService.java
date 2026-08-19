@@ -53,26 +53,17 @@ public class SettingService {
         }
     }
 
+    @Transactional
     public GlobalSetting getEffectiveSetting(Long userId, Long houseId) {
         if (houseId != null && houseId > 0) {
-            GlobalSetting houseSetting = globalSettingMapper.selectByHouseId(houseId);
-            if (houseSetting != null) {
-                return houseSetting;
-            }
+            return getOrCreateHouseSetting(userId, houseId);
         }
         return getOrCreateUserSetting(userId);
     }
 
+    @Transactional
     public GlobalSetting getHouseSettingOrDefault(Long userId, Long houseId) {
-        requireHouseId(houseId);
-        GlobalSetting houseSetting = globalSettingMapper.selectByHouseId(houseId);
-        if (houseSetting != null) {
-            return houseSetting;
-        }
-        GlobalSetting defaultSetting = getOrCreateUserSetting(userId);
-        GlobalSetting view = copyForHouse(userId, houseId, defaultSetting);
-        view.setId(null);
-        return view;
+        return getOrCreateHouseSetting(userId, houseId);
     }
 
     @Transactional
@@ -100,12 +91,34 @@ public class SettingService {
         }
     }
 
-    public boolean hasHouseSetting(Long houseId) {
-        if (houseId == null || houseId <= 0) {
-            return false;
-        }
-        return globalSettingMapper.selectByHouseId(houseId) != null;
+    /**
+     * 在建兔场事务内复制一份用户默认配置，之后该兔场与用户默认配置完全隔离。
+     * 已存在的历史配置不覆盖，便于幂等重试和存量数据兼容。
+     */
+    @Transactional
+    public void initializeHouseSetting(Long userId, Long houseId) {
+        getOrCreateHouseSetting(userId, houseId);
     }
+
+    private GlobalSetting getOrCreateHouseSetting(Long userId, Long houseId) {
+        requireHouseId(houseId);
+        GlobalSetting existing = globalSettingMapper.selectByHouseId(houseId);
+        if (existing != null) {
+            return existing;
+        }
+        GlobalSetting snapshot = copyForHouse(userId, houseId, getOrCreateUserSetting(userId));
+        try {
+            globalSettingMapper.insert(snapshot);
+        } catch (DuplicateKeyException e) {
+            GlobalSetting concurrent = globalSettingMapper.selectByHouseId(houseId);
+            if (concurrent != null) {
+                return concurrent;
+            }
+            throw e;
+        }
+        return globalSettingMapper.selectByHouseId(houseId);
+    }
+
 
     private void applyRequest(GlobalSetting setting, UpdateSettingRequest req) {
         setting.setAphrodisiacDays(req.getAphrodisiacDays());

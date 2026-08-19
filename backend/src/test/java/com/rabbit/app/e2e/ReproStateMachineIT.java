@@ -77,7 +77,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
         Assertions.assertEquals(ReproStage.AWAIT_DELIVERY, prepartum.stage());
 
         ReproResult delivery = apply(fixture, opened.cycleId(), ReproAction.DELIVERY, "full_delivery",
-            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(9).liveKits(8));
+            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(9).liveKits(8).keptKits(8));
         Assertions.assertEquals(ReproStage.AWAIT_WEANING, delivery.stage());
         Assertions.assertNotNull(delivery.litterId(), "接产必须建窝");
         // 分笼任务挂在窝上而不是周期上——血配时母兔要能同时持有两条互不干扰的待办。
@@ -183,7 +183,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
         // 待催情直接接产：跳过了配种、摸胎、备产。
         BizException error = Assertions.assertThrows(BizException.class, () -> stateMachine.apply(
             command(fixture, opened.cycleId(), ReproAction.DELIVERY, requestId("illegal_delivery"))
-                .outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(8).build()
+                .outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(8).keptKits(8).build()
         ));
 
         Assertions.assertEquals(409, error.getCode());
@@ -405,7 +405,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
             b -> b.outcome(PalpationResult.PREGNANT.name()).palpationResult(PalpationResult.PREGNANT));
         apply(fixture, cycleId, ReproAction.PREPARTUM, prefix + "_prepartum", b -> b);
         apply(fixture, cycleId, ReproAction.DELIVERY, prefix + "_delivery",
-            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(7));
+            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(8).liveKits(7).keptKits(7));
     }
 
     private void assertSinglePendingTask(long houseId, Long cycleId, String taskType) {
