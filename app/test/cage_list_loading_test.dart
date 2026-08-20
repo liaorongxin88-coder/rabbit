@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
@@ -20,6 +21,85 @@ void main() {
 
     expect(find.text('总笼位 12'), findsOneWidget);
     expect(_cageGridChildCount(tester), 12);
+  });
+
+  testWidgets('cage display uses doe production stage and defaults no status',
+      (tester) async {
+    const cages = [
+      Cage(
+        id: 1,
+        houseId: 8,
+        cageNumber: '1-1-1',
+        rowCode: 'R1',
+        layerIndex: 1,
+        positionIndex: 1,
+        status: '1',
+        rabbitCount: 1,
+        isEnabled: true,
+      ),
+      Cage(
+        id: 2,
+        houseId: 8,
+        cageNumber: '1-2-1',
+        rowCode: 'R1',
+        layerIndex: 1,
+        positionIndex: 2,
+        status: '1',
+        rabbitCount: 1,
+        isEnabled: true,
+      ),
+    ];
+    const doe = Rabbit(
+      id: 101,
+      houseId: 8,
+      cageId: 1,
+      motherId: null,
+      type: '0',
+      gender: '0',
+      breed: '新西兰白兔',
+      arrivalMethod: '0',
+      arrivalDate: null,
+      weight: null,
+      isActive: true,
+      currentStage: 'AWAIT_MATING',
+    );
+    const doeWithoutStage = Rabbit(
+      id: 102,
+      houseId: 8,
+      cageId: 2,
+      motherId: null,
+      type: '0',
+      gender: '0',
+      breed: '新西兰白兔',
+      arrivalMethod: '0',
+      arrivalDate: null,
+      weight: null,
+      isActive: true,
+    );
+
+    await tester.pumpWidget(
+      _testApp(cages, rabbits: const [doe, doeWithoutStage]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('cage-map-cell-1')),
+        matching: find.text('待配种'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('cage-map-cell-2')),
+        matching: find.text('无状态'),
+      ),
+      findsOneWidget,
+    );
+
+    await _switchToList(tester);
+    expect(find.text('待配种'), findsOneWidget);
+    expect(find.text('无状态'), findsOneWidget);
   });
 
   testWidgets('cage filters combine occupancy and known usage types',
@@ -291,6 +371,7 @@ Future<void> _expandFilters(WidgetTester tester) async {
 
 Widget _testApp(
   List<Cage> cages, {
+  List<Rabbit> rabbits = const <Rabbit>[],
   HousePermission permission =
       const HousePermission(perms: 'view', isAdmin: false),
 }) {
@@ -298,6 +379,7 @@ Widget _testApp(
     overrides: [
       housesProvider.overrideWith((_) async => const [_house]),
       houseCagesProvider(8).overrideWith((_) async => cages),
+      houseBreedingRabbitsProvider(8).overrideWith((_) async => rabbits),
       housePermissionProvider(8).overrideWith((_) async => permission),
       nfcCageWriteQueueProvider(8)
           .overrideWith((_) async => const <NfcCageQueueItem>[]),

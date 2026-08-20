@@ -88,11 +88,11 @@ public final class TransitionTable {
             DueAnchor.PALPATION_WAIT, ReproEventType.MATING_DONE
         ));
 
-        // T4a 摸胎-怀孕：→ 待备产，到期 = 预产期 − prepartum_lead_days
+        // T4a 摸胎-怀孕：→ 待备产，到期 = 摸胎确认日 + prepartum_days
         rows.add(new Transition(
             ReproStage.AWAIT_PALPATION, ReproAction.PALPATION, PalpationResult.PREGNANT.name(),
             ReproStage.AWAIT_PREPARTUM, false, null, null,
-            DueAnchor.PREPARTUM_LEAD, ReproEventType.PALPATION_PREGNANT
+            DueAnchor.PREPARTUM_DURATION, ReproEventType.PALPATION_PREGNANT
         ));
 
         // T4b 摸胎-空怀：关周期，立刻开新周期催情（不等复旧期，母兔本就没怀）
@@ -109,10 +109,10 @@ public final class TransitionTable {
             DueAnchor.USER_SPECIFIED, ReproEventType.PALPATION_UNSURE
         ));
 
-        // T5 备产：→ 待分娩，到期 = 预产期当天
+        // T5 备产：→ 待分娩，完成备产当天即提醒接产
         rows.add(advance(
             ReproStage.AWAIT_PREPARTUM, ReproAction.PREPARTUM, ReproStage.AWAIT_DELIVERY,
-            DueAnchor.EXPECTED_BIRTH, ReproEventType.PREPARTUM_DONE
+            DueAnchor.SAME_DAY, ReproEventType.PREPARTUM_DONE
         ));
 
         // T6 接产-产仔：→ 待分笼并建窝，到期 = 分娩日 + weaning_days

@@ -100,11 +100,6 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       _showMessage('请输入批次编号');
       return;
     }
-    if (_selectedFemaleIds.isEmpty) {
-      _showMessage('请至少选择一只种母兔');
-      return;
-    }
-
     if (_selectedFemaleIds.length >= 100) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -159,7 +154,11 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       Navigator.of(context).pop();
       messenger?.showSnackBar(
         SnackBar(
-          content: Text('批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）'),
+          content: Text(
+            _selectedFemaleIds.isEmpty
+                ? '批次 $code 已创建'
+                : '批次 $code 已创建（${_selectedFemaleIds.length} 只母兔）',
+          ),
         ),
       );
     } catch (error) {
@@ -202,14 +201,14 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
           child: rabbitsAsync.when(
             skipLoadingOnRefresh: false,
             loading: () => BatchSheetLoadingState(
-              sheetTitle: '创建生产批次',
-              message: '正在加载种母兔信息',
+              sheetTitle: '创建批次',
+              message: '正在加载可选种母兔',
               onClose: () => Navigator.pop(context),
             ),
             error: (error, _) => BatchSheetErrorState(
-              sheetTitle: '创建生产批次',
+              sheetTitle: '创建批次',
               error: error,
-              fallbackMessage: '无法加载种母兔信息，请检查网络后重试。',
+              fallbackMessage: '无法加载可选兔只，请检查网络后重试。',
               onRetry: () => ref.invalidate(
                 allActiveHouseRabbitsProvider(widget.houseId),
               ),
@@ -245,7 +244,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            '创建生产批次',
+                                            '创建批次',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .titleLarge,
@@ -270,8 +269,8 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                                 ),
                               ),
                               const _InfoBox(
-                                text: '批次用于驱动配种、摸胎、分娩、断奶等生产提醒。'
-                                    '请先在笼位录入种母兔，再创建批次。',
+                                text: '批次可用于母兔繁育，也可用于商品兔养育与售卖。'
+                                    '可先创建空批次，再从兔只详情绑定成员。',
                               ),
                               const SizedBox(height: 14),
                               TextField(
@@ -294,7 +293,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                '选择种母兔（已选 ${_selectedFemaleIds.length} 只）',
+                                '可选种母兔（已选 ${_selectedFemaleIds.length} 只）',
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
                               const SizedBox(height: 8),
@@ -344,7 +343,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                           const SliverPadding(
                             padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
                             sliver: SliverToBoxAdapter(
-                              child: Text('暂无种母兔，请先在笼位录入种母兔。'),
+                              child: Text('暂无可选种母兔，可直接创建空批次。'),
                             ),
                           )
                         else if (filteredFemales.isEmpty)
@@ -413,7 +412,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                         children: [
                           Text(
                             _selectedFemaleIds.isEmpty
-                                ? '尚未选择种母兔'
+                                ? '创建空批次，成员稍后从兔只详情绑定'
                                 : '将 ${_selectedFemaleIds.length} 只种母兔加入该批次',
                             key: const ValueKey('batch-selection-summary'),
                             textAlign: TextAlign.center,
@@ -434,9 +433,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                               Expanded(
                                 child: ElevatedButton(
                                   key: const ValueKey('create-batch-submit'),
-                                  onPressed: _saving || females.isEmpty
-                                      ? null
-                                      : _submit,
+                                  onPressed: _saving ? null : _submit,
                                   child: _saving
                                       ? const SizedBox.square(
                                           dimension: 20,

@@ -23,9 +23,6 @@ public interface BatchRabbitMapper {
 
     List<BatchRabbit> selectActiveByRabbitForUpdate(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId);
 
-    List<Long> selectActiveRabbitIdsForUpdate(@Param("houseId") Long houseId,
-                                              @Param("rabbitIds") List<Long> rabbitIds);
-
     int updateStatusAndEvent(@Param("houseId") Long houseId,
                              @Param("id") Long id,
                              @Param("currentStatus") String currentStatus,
@@ -93,4 +90,8 @@ public interface BatchRabbitMapper {
     int countActiveByBatch(@Param("batchId") Long batchId);
 
     List<BatchRabbitItem> selectItemsByBatch(@Param("batchId") Long batchId, @Param("role") String role, @Param("active") Boolean active);
+
+    List<BatchRabbitItem> selectItemsByRabbit(@Param("houseId") Long houseId,
+                                              @Param("rabbitId") Long rabbitId,
+                                              @Param("active") Boolean active);
 }

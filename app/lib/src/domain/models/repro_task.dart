@@ -201,6 +201,7 @@ class ReproTaskPage {
 class ReproActionResult {
   const ReproActionResult({
     required this.cycleId,
+    this.currentCycleId,
     this.eventId,
     this.litterId,
     this.nextTaskId,
@@ -212,6 +213,10 @@ class ReproActionResult {
   });
 
   final int cycleId;
+
+  /// 事务结束后 rabbits 权威投影中的活动周期，可能为空。
+  final int? currentCycleId;
+
   final int? eventId;
   final int? litterId;
   final int? nextTaskId;
@@ -228,6 +233,7 @@ class ReproActionResult {
   static ReproActionResult fromJson(Map<String, dynamic> json) {
     return ReproActionResult(
       cycleId: _int(json['cycleId']) ?? 0,
+      currentCycleId: _int(json['currentCycleId']),
       eventId: _int(json['eventId']),
       litterId: _int(json['litterId']),
       nextTaskId: _int(json['nextTaskId']),

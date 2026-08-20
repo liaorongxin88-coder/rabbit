@@ -1,0 +1,156 @@
+digraph AppWindowStates {
+  graph [
+    bgcolor="#F7F8FA",
+    color="#E5E8EC",
+    compound=true,
+    concentrate=true,
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=18,
+    label="鸿兔智管 App 窗口状态转移",
+    labelloc=t,
+    margin=0.18,
+    newrank=true,
+    nodesep=0.42,
+    pack=true,
+    packmode=cluster,
+    pad=0.22,
+    rankdir=TB,
+    ranksep=0.62,
+    splines=polyline
+  ];
+
+  node [
+    color="#CBD2D9",
+    fillcolor="#FFFFFF",
+    fontcolor="#17202A",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=11,
+    margin="0.14,0.09",
+    penwidth=1.2,
+    shape=box,
+    style="rounded,filled"
+  ];
+
+  edge [
+    arrowsize=0.72,
+    color="#1577D2",
+    fontcolor="#44546F",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=9,
+    penwidth=1.35
+  ];
+
+  start [label="应用启动", fillcolor="#17202A", fontcolor="#FFFFFF", shape=circle];
+  settings_gate [label="本地设置恢复", fillcolor="#EAF4FF", shape=diamond];
+  boot_spinner [label="启动加载窗口\n独立 MaterialApp", fillcolor="#FFF7E6"];
+  auth_restore [label="会话恢复", fillcolor="#EAF4FF", shape=diamond];
+  auth_loading [label="/auth-loading\n保留 from", fillcolor="#FFEFEF"];
+  login [label="/login\n登录窗口", fillcolor="#FFEFEF"];
+  start_route [label="安全 from 或默认启动页", fillcolor="#EAF7F1", shape=diamond];
+
+  start -> settings_gate;
+  settings_gate -> boot_spinner [label="loading 且无值", color="#F59E0B"];
+  boot_spinner -> auth_restore [label="设置恢复完成"];
+  settings_gate -> auth_restore [label="已有设置值"];
+  auth_restore -> auth_loading [label="loading + 受保护路径", color="#EF4444"];
+  auth_restore -> login [label="无会话 / 无值 error", color="#EF4444"];
+  auth_restore -> start_route [label="有效会话", color="#2F8F6B"];
+  auth_loading -> login [label="恢复后未登录", color="#EF4444"];
+  auth_loading -> start_route [label="恢复后已登录", color="#2F8F6B"];
+  login -> start_route [label="登录成功 go('/')", color="#2F8F6B", penwidth=2.0];
+
+  subgraph cluster_shell {
+    color="#B8C2CC";
+    fillcolor="#FDFEFE";
+    fontcolor="#17202A";
+    fontsize=14;
+    label="Shell Navigator · 19 个 NoTransitionPage · 保留四栏底部导航";
+    margin=18;
+    style="rounded,filled";
+
+    shell_any [label="任意 Shell 页面", fillcolor="#EEF1F4", shape=oval];
+    home [label="/\n首页", fillcolor="#EAF4FF"];
+    houses [label="/houses\n兔舍", fillcolor="#EAF4FF"];
+    dashboard [label="/dashboard\n数据面板", fillcolor="#EAF4FF"];
+    profile [label="/profile\n我的", fillcolor="#EAF4FF"];
+
+    house [label="/houses/:houseId\n兔舍详情"];
+    cages [label=".../cages\n笼位列表"];
+    cage [label=".../cages/:cageId\n笼位详情"];
+    rabbits [label=".../rabbits\n兔只管理"];
+    batches [label=".../batches\n批次列表"];
+    batch [label=".../batches/:batchId\n批次详情"];
+    members [label=".../members\n成员管理"];
+    house_production [label=".../settings/production\n兔舍生产设置"];
+    nfc_setup [label=".../nfc/write\nNFC 写入设置"];
+    nfc_error [label="/nfc/error\nNFC 错误", fillcolor="#FFEFEF"];
+
+    settings [label="/settings\n设置"];
+    account_settings [label="/settings/account\n账号设置"];
+    app_settings [label="/settings/app\n应用设置"];
+    reminder_settings [label="/settings/reminders\n提醒设置"];
+    production_settings [label="/settings/production\n全局生产设置"];
+
+    { rank=same; home; houses; dashboard; profile; }
+    shell_any -> home [label="底栏 go", style=dashed];
+    shell_any -> houses [label="底栏 go", style=dashed];
+    shell_any -> dashboard [label="底栏 go", style=dashed];
+    shell_any -> profile [label="底栏 go", style=dashed];
+
+    home -> houses [label="无兔舍 / 管理兔舍"];
+    houses -> house [label="选择或创建\nsetHouseId + go"];
+    house -> cages [label="go"];
+    cages -> cage [label="go"];
+    cages -> nfc_setup [label="NFC 标签写入"];
+    house -> rabbits [label="go"];
+    house -> batches [label="go"];
+    batches -> batch [label="push", color="#2F8F6B", penwidth=2.0];
+    house -> members [label="canManageMembers", color="#2F8F6B"];
+    house -> house_production [label="canControl", color="#2F8F6B"];
+    profile -> settings [label="go"];
+    settings -> account_settings [label="go"];
+    settings -> app_settings [label="go"];
+    settings -> reminder_settings [label="go"];
+    settings -> production_settings [label="go"];
+  }
+
+  subgraph cluster_root_flows {
+    color="#9FB7CC";
+    fillcolor="#F4F9FD";
+    fontcolor="#17202A";
+    fontsize=14;
+    label="Root Navigator · 全屏流程 · 不显示底部导航";
+    margin=18;
+    style="rounded,filled";
+
+    outbound_entry [label="出库入口汇合", fillcolor="#EAF7F1", shape=oval];
+    outbound [label="/houses/:houseId/outbound\n批量出库", fillcolor="#EAF7F1"];
+    nfc_entry [label="NFC 写入入口汇合", fillcolor="#EAF7F1", shape=oval];
+    nfc_session [label=".../nfc/write/session\n连续写标签", fillcolor="#EAF7F1"];
+
+    outbound_entry -> outbound [label="push", color="#2F8F6B", penwidth=2.0];
+    nfc_entry -> nfc_session [label="go", color="#2F8F6B", penwidth=2.0];
+  }
+
+  start_route -> shell_any [label="进入 /、/houses、/dashboard 或 /profile"];
+
+  shell_any -> outbound_entry [
+    label="首页出售事件 / 兔舍 / 笼位 / 兔只 / 批次",
+    color="#2F8F6B"
+  ];
+  outbound -> house [label="pop；无栈则 go", color="#2F8F6B"];
+
+  cage -> nfc_entry [label="单笼写入"];
+  nfc_setup -> nfc_entry [label="批量写入"];
+  nfc_session -> nfc_setup [label="暂停退出"];
+  nfc_session -> cages [label="完成"];
+
+  nfc_intent [label="Android NFC Intent", fillcolor="#17202A", fontcolor="#FFFFFF", shape=oval];
+  nfc_intent -> cage [label="解析成功\nsetHouseId + go", color="#2F8F6B", penwidth=2.0];
+  nfc_intent -> nfc_error [label="解析失败", color="#EF4444"];
+  nfc_error -> home [label="返回首页"];
+
+  protected [label="任意受保护窗口", fillcolor="#FFEFEF", shape=oval];
+  protected -> login [label="退出登录 / 401", color="#EF4444", style=dashed];
+
+}

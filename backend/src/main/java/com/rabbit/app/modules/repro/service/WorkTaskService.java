@@ -86,8 +86,28 @@ public class WorkTaskService {
         int page,
         int size
     ) {
+        return pendingDue(houseId, dueBefore, taskType, batchId, cageId, rabbitId, page, size, false);
+    }
+
+    /**
+     * 待办列表，可选择忽略到期日上限以查询全部未来待办。
+     *
+     * @param dueBefore    含当日；为空且不含未来时取今天，即「今日及逾期」
+     * @param includeFuture 为 true 时忽略 dueBefore，不应用到期日上限
+     */
+    public TaskPage pendingDue(
+        Long houseId,
+        Date dueBefore,
+        String taskType,
+        Long batchId,
+        Long cageId,
+        Long rabbitId,
+        int page,
+        int size,
+        boolean includeFuture
+    ) {
         Date today = startOfToday();
-        Date bound = dueBefore == null ? today : dueBefore;
+        Date bound = includeFuture ? null : (dueBefore == null ? today : dueBefore);
         String normalizedType = taskType == null || taskType.isBlank()
             ? null
             : TaskType.parse(taskType).name();

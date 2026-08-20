@@ -42,6 +42,11 @@ const WorkspaceLivestockPage = lazy(() =>
     default: module.WorkspaceLivestockPage,
   })),
 )
+const WorkspaceRabbitDetailPage = lazy(() =>
+  import('@/pages/workspace-rabbit-detail-page').then((module) => ({
+    default: module.WorkspaceRabbitDetailPage,
+  })),
+)
 const WorkspaceLoginPage = lazy(() =>
   import('@/pages/workspace-login-page').then((module) => ({
     default: module.WorkspaceLoginPage,
@@ -140,6 +145,7 @@ function WorkspaceShellRoutes() {
           <Route path="dashboard" element={<WorkspaceDashboardPage />} />
           <Route path="farms" element={<WorkspaceFarmsPage />} />
           <Route path="livestock" element={<WorkspaceLivestockPage />} />
+          <Route path="livestock/rabbits/:rabbitId" element={<WorkspaceRabbitDetailPage />} />
           <Route path="production" element={<WorkspaceProductionPage />} />
           <Route path="members" element={<WorkspaceMembersPage />} />
           <Route path="account" element={<WorkspaceAccountPage />} />

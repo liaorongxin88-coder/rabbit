@@ -226,6 +226,7 @@ screenshots=(
   01-cage-grid
   01b-cage-map
   02-commodity-cage-two-rabbits
+  02b-rabbit-detail
   03-departure-sheet
   04-departure-filled
   05-departure-done

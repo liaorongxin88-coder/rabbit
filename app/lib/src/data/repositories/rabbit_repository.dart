@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_transfer_result.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit_batch_membership.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
   return RabbitRepository(ref.watch(apiClientProvider));
@@ -47,6 +48,25 @@ class RabbitRepository {
   Future<List<Rabbit>> listAllActiveRabbits(
     int houseId, {
     CancelToken? cancelToken,
+  }) {
+    return _listAllActiveRabbits(houseId, cancelToken: cancelToken);
+  }
+
+  Future<List<Rabbit>> listAllActiveBreedingRabbits(
+    int houseId, {
+    CancelToken? cancelToken,
+  }) {
+    return _listAllActiveRabbits(
+      houseId,
+      rabbitType: '0',
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<List<Rabbit>> _listAllActiveRabbits(
+    int houseId, {
+    String? rabbitType,
+    CancelToken? cancelToken,
   }) async {
     const pageSize = 200;
     final rabbits = <Rabbit>[];
@@ -57,6 +77,7 @@ class RabbitRepository {
         houseId: houseId,
         page: page,
         pageSize: pageSize,
+        rabbitType: rabbitType,
         cancelToken: cancelToken,
       );
       rabbits.addAll(batch);
@@ -71,12 +92,18 @@ class RabbitRepository {
     required int houseId,
     required int page,
     required int pageSize,
+    String? rabbitType,
     CancelToken? cancelToken,
   }) {
     return _api.get<List<Rabbit>>(
       '/api/rabbits',
       houseId: houseId,
-      query: {'active': true, 'page': page, 'pageSize': pageSize},
+      query: {
+        'active': true,
+        if (rabbitType != null) 'type': rabbitType,
+        'page': page,
+        'pageSize': pageSize,
+      },
       cancelToken: cancelToken,
       decode: (data) {
         if (data is! List) {
@@ -110,6 +137,54 @@ class RabbitRepository {
         return data
             .whereType<Map>()
             .map((item) => Rabbit.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      },
+    );
+  }
+
+  Future<Rabbit> getRabbit({
+    required int houseId,
+    required int rabbitId,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<Rabbit>(
+      '/api/rabbits/$rabbitId',
+      houseId: houseId,
+      cancelToken: cancelToken,
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('兔只详情格式不正确');
+        }
+        return Rabbit.fromJson(Map<String, dynamic>.from(data));
+      },
+    );
+  }
+
+  Future<List<RabbitBatchMembership>> listRabbitBatchMemberships({
+    required int houseId,
+    required int rabbitId,
+    bool active = true,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<List<RabbitBatchMembership>>(
+      '/api/rabbits/$rabbitId/batch-memberships',
+      houseId: houseId,
+      query: {'active': active},
+      cancelToken: cancelToken,
+      decode: (data) {
+        if (data is! List) {
+          throw const ApiException('兔只批次关系格式不正确');
+        }
+        return data
+            .whereType<Map>()
+            .map(
+              (item) => RabbitBatchMembership.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .where(
+              (membership) => membership.batchId > 0 && membership.rabbitId > 0,
+            )
             .toList();
       },
     );

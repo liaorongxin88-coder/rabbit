@@ -16,14 +16,14 @@ enum RabbitDepartureType { cull, death }
 /// [batchId] 可空：后端的 `POST /api/rabbits/events` 本来就不收批次，只需 rabbitId。
 /// 之前把它写成必填，直接的后果是笼内的商品兔根本无处登记死亡（飞书 recvrpTL16SBwu）。
 /// 传了就多刷新一份批次详情缓存，仅此而已。
-Future<void> showRabbitDepartureSheet({
+Future<bool> showRabbitDepartureSheet({
   required BuildContext context,
   required int houseId,
   required int rabbitId,
   int? batchId,
   String? rabbitLabel,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  final recorded = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
@@ -35,6 +35,7 @@ Future<void> showRabbitDepartureSheet({
       rabbitLabel: rabbitLabel ?? '兔 #$rabbitId',
     ),
   );
+  return recorded ?? false;
 }
 
 class _RabbitDepartureSheet extends ConsumerStatefulWidget {
@@ -166,7 +167,7 @@ class _RabbitDepartureSheetState extends ConsumerState<_RabbitDepartureSheet> {
       }
 
       final messenger = ScaffoldMessenger.maybeOf(context);
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
       messenger?.showSnackBar(
         SnackBar(content: Text('${widget.rabbitLabel}已记录$_eventLabel离场')),
       );

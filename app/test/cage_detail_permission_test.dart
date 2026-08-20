@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit_batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/cage_providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/cage_detail_screen.dart';
@@ -63,14 +64,28 @@ void main() {
     expect(entryButton.onPressed, isNull);
   });
 
-  testWidgets('control permission enables NFC and rabbit editing',
+  testWidgets('control permission enables NFC and opens rabbit detail',
       (tester) async {
     const key = (houseId: 8, cageId: 10);
+    final router = GoRouter(
+      initialLocation: '/houses/8/cages/10',
+      routes: [
+        GoRoute(
+          path: '/houses/:houseId/cages/:cageId',
+          builder: (_, __) => const CageDetailScreen(houseId: 8, cageId: 10),
+        ),
+        GoRoute(
+          path: '/houses/:houseId/rabbits/:rabbitId',
+          builder: (_, __) => const Scaffold(body: Text('兔只详情页')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           cageSummaryProvider(key).overrideWith((_) async => _summary),
-          cageRabbitsProvider(key).overrideWith((_) async => const <Rabbit>[]),
+          cageRabbitsProvider(key).overrideWith((_) async => const [_rabbit]),
           houseCagesProvider(8).overrideWith((_) async => const [_cage]),
           housesProvider.overrideWith((_) async => const [_house]),
           housePermissionProvider(8).overrideWith(
@@ -78,6 +93,11 @@ void main() {
               perms: 'control',
               isAdmin: false,
             ),
+          ),
+          rabbitBatchMembershipsProvider(
+            const RabbitBatchMembershipRequest(houseId: 8, rabbitId: 801),
+          ).overrideWith(
+            (_) async => const <RabbitBatchMembership>[],
           ),
           nfcCageWriteQueueProvider(8).overrideWith(
             (_) async => const [
@@ -91,9 +111,9 @@ void main() {
             ],
           ),
         ],
-        child: MaterialApp(
+        child: MaterialApp.router(
           theme: buildAppTheme(),
-          home: const CageDetailScreen(houseId: 8, cageId: 10),
+          routerConfig: router,
         ),
       ),
     );
@@ -109,6 +129,14 @@ void main() {
       find.byKey(const ValueKey('cage-rabbit-entry')),
     );
     expect(entryButton.onPressed, isNotNull);
+
+    final rabbitRow = find.byKey(const ValueKey('cage-rabbit-row-801'));
+    await tester.ensureVisible(rabbitRow);
+    await tester.tap(rabbitRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('兔只详情页'), findsOneWidget);
+    expect(find.byKey(const ValueKey('cage-rabbit-menu-801')), findsNothing);
   });
 
   testWidgets('cage detail back button returns to the cage list',
@@ -187,4 +215,18 @@ const _house = RabbitHouse(
   layoutRows: 1,
   layoutCols: 1,
   layoutLayers: 1,
+);
+
+const _rabbit = Rabbit(
+  id: 801,
+  houseId: 8,
+  cageId: 10,
+  motherId: null,
+  type: '2',
+  gender: '1',
+  breed: '新西兰白兔',
+  arrivalMethod: '0',
+  arrivalDate: null,
+  weight: 2.8,
+  isActive: true,
 );

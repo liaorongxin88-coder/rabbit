@@ -14,8 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * The mother row lock in BatchService must serialize overlapping batch creates.
- * Historical (inactive) batch_rabbits rows remain valid and are not constrained.
+ * The mother row lock in BatchService serializes overlapping tag writes.
+ * One rabbit may carry several active batch tags without duplicating its pipeline.
  */
 public class BatchConcurrentCreateIT extends E2eTestSupport {
 
@@ -23,7 +23,7 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
     private JdbcTemplate jdbc;
 
     @Test
-    void concurrentCreatesCannotPutOneMotherInTwoActiveBatches() throws Exception {
+    void concurrentCreatesCanTagOneMotherInTwoActiveBatches() throws Exception {
         UserSession owner = register("batch_concurrent_create");
         long houseId = createHouse(owner, "并发建批次兔舍", 1, 2, 1);
         long motherId = createRabbit(
@@ -64,10 +64,10 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
                 codes.add(future.get(30, TimeUnit.SECONDS).path("code").asInt());
             }
             codes.sort(Integer::compareTo);
-            Assertions.assertEquals(List.of(0, 400), codes);
+            Assertions.assertEquals(List.of(0, 0), codes);
 
             Assertions.assertEquals(
-                1,
+                2,
                 jdbc.queryForObject(
                     "select count(*) from batch_rabbits where rabbit_id = ? and is_active = true",
                     Integer.class,
@@ -75,10 +75,19 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
                 )
             );
             Assertions.assertEquals(
-                1,
+                2,
                 jdbc.queryForObject(
                     "select count(distinct br.batch_id) from batch_rabbits br "
                         + "where br.rabbit_id = ? and br.is_active = true",
+                    Integer.class,
+                    motherId
+                )
+            );
+            Assertions.assertEquals(
+                1,
+                jdbc.queryForObject(
+                    "select count(*) from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN' "
+                        + "and stage <> 'AWAIT_WEANING'",
                     Integer.class,
                     motherId
                 )
@@ -87,6 +96,91 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
             start.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void batchTagsCanBeRemovedAndAddedAgain() {
+        UserSession owner = register("batch_tag_remove");
+        long houseId = createHouse(owner, "批次标签增删兔舍", 1, 2, 1);
+        long rabbitId = createRabbit(
+            owner,
+            houseId,
+            cageIds(owner, houseId).get(0),
+            "0",
+            "0",
+            "batch_tag_mother"
+        );
+        long batchA = createEmptyBatch(owner, houseId, "TAG-A");
+        long batchB = createEmptyBatch(owner, houseId, "TAG-B");
+
+        addRabbitTag(owner, houseId, batchA, rabbitId, "add-a-1");
+        addRabbitTag(owner, houseId, batchB, rabbitId, "add-b-1");
+        Assertions.assertEquals(2, activeTagCount(rabbitId));
+
+        String removeRequestId = requestId("remove-a");
+        api.deleteOk(
+            "/api/batches/" + batchA + "/members/" + rabbitId
+                + "?requestId=" + removeRequestId,
+            owner.token,
+            houseId
+        );
+        api.deleteOk(
+            "/api/batches/" + batchA + "/members/" + rabbitId
+                + "?requestId=" + removeRequestId,
+            owner.token,
+            houseId
+        );
+        Assertions.assertEquals(1, activeTagCount(rabbitId));
+
+        addRabbitTag(owner, houseId, batchA, rabbitId, "add-a-2");
+        Assertions.assertEquals(2, activeTagCount(rabbitId));
+        Assertions.assertEquals(
+            3,
+            jdbc.queryForObject(
+                "select count(*) from batch_rabbits where rabbit_id = ?",
+                Integer.class,
+                rabbitId
+            )
+        );
+    }
+
+    private long createEmptyBatch(UserSession owner, long houseId, String code) {
+        return api.postOk(
+            "/api/batches",
+            owner.token,
+            houseId,
+            obj(
+                "batchCode", code + "-" + requestId("code").substring(0, 12),
+                "femaleRabbitIds", List.of(),
+                "requestId", requestId("batch-" + code)
+            )
+        ).path("id").asLong();
+    }
+
+    private void addRabbitTag(
+        UserSession owner,
+        long houseId,
+        long batchId,
+        long rabbitId,
+        String requestSuffix
+    ) {
+        api.postOk(
+            "/api/batches/" + batchId + "/members",
+            owner.token,
+            houseId,
+            obj(
+                "rabbitIds", List.of(rabbitId),
+                "requestId", requestId(requestSuffix)
+            )
+        );
+    }
+
+    private int activeTagCount(long rabbitId) {
+        return jdbc.queryForObject(
+            "select count(*) from batch_rabbits where rabbit_id = ? and is_active = true",
+            Integer.class,
+            rabbitId
+        );
     }
 
     private JsonNode createBatchWhenReleased(

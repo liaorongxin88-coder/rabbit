@@ -1,6 +1,7 @@
 package com.rabbit.app.e2e;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.repro.domain.CycleLifecycle;
 import com.rabbit.app.modules.repro.domain.CycleResult;
 import com.rabbit.app.modules.repro.domain.DeliveryOutcome;
 import com.rabbit.app.modules.repro.domain.MatingMethod;
@@ -42,12 +43,17 @@ public class ReproStateMachineIT extends E2eTestSupport {
         Fixture fixture = fixture("repro_full");
 
         ReproResult opened = openAtEstrus(fixture, "full_open");
+        Assertions.assertEquals(opened.cycleId(), opened.currentCycleId());
         Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, opened.stage());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), opened.lifecycle());
         assertSinglePendingTask(fixture.houseId, opened.cycleId(), "ESTRUS");
         assertProjection(fixture, "AWAIT_ESTRUS", opened.cycleId());
 
         ReproResult estrus = apply(fixture, opened.cycleId(), ReproAction.ESTRUS, "full_estrus", b -> b);
+        Assertions.assertEquals(opened.cycleId(), estrus.cycleId());
+        Assertions.assertEquals(opened.cycleId(), estrus.currentCycleId());
         Assertions.assertEquals(ReproStage.AWAIT_MATING, estrus.stage());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), estrus.lifecycle());
         assertSinglePendingTask(fixture.houseId, opened.cycleId(), "MATING");
 
         ReproResult mating = apply(fixture, opened.cycleId(), ReproAction.MATING, "full_mating",
@@ -78,7 +84,19 @@ public class ReproStateMachineIT extends E2eTestSupport {
 
         ReproResult delivery = apply(fixture, opened.cycleId(), ReproAction.DELIVERY, "full_delivery",
             b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(9).liveKits(8).keptKits(8));
-        Assertions.assertEquals(ReproStage.AWAIT_WEANING, delivery.stage());
+        Assertions.assertEquals(ReproStage.READY, delivery.stage());
+        Assertions.assertNull(delivery.currentCycleId(), "分娩后母兔应退出繁育管线并回到准备态");
+        Assertions.assertEquals(CycleLifecycle.CLOSED.name(), delivery.lifecycle());
+        Assertions.assertEquals(
+            ReproStage.AWAIT_WEANING.name(),
+            jdbc.queryForObject(
+                "select stage from breeding_cycles where id = ?",
+                String.class,
+                opened.cycleId()
+            ),
+            "旧窝周期仍须保持待分笼"
+        );
+        assertProjection(fixture, "READY", null);
         Assertions.assertNotNull(delivery.litterId(), "接产必须建窝");
         // 分笼任务挂在窝上而不是周期上——血配时母兔要能同时持有两条互不干扰的待办。
         Assertions.assertEquals(
@@ -91,7 +109,9 @@ public class ReproStateMachineIT extends E2eTestSupport {
 
         ReproResult weaning = apply(fixture, opened.cycleId(), ReproAction.WEANING, "full_weaning",
             b -> b.weanedCount(8).avgWeaningWeight(0.6));
-        Assertions.assertEquals("CLOSED", weaning.lifecycle());
+        Assertions.assertEquals(opened.cycleId(), weaning.cycleId(), "动作周期仍应是刚完成的断奶周期");
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
+        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, weaning.stage());
         Assertions.assertEquals(
             CycleResult.WEANED.name(),
             jdbc.queryForObject(
@@ -100,7 +120,88 @@ public class ReproStateMachineIT extends E2eTestSupport {
         );
         // 断奶后自动接续下一轮：母兔不会掉出流程。
         Assertions.assertNotNull(weaning.followUpCycleId(), "断奶应自动开启下一轮周期");
+        Assertions.assertEquals(weaning.followUpCycleId(), weaning.currentCycleId());
         assertProjection(fixture, "AWAIT_ESTRUS", weaning.followUpCycleId());
+    }
+
+    @Test
+    void normalTransitionsUseConfiguredDueDateAndAllowReminderOverride() {
+        Fixture fixture = fixture("repro_due_override");
+        ReproResult opened = openAtEstrus(fixture, "due_override_open");
+
+        Date estrusAt = new Date();
+        ReproResult estrus = stateMachine.apply(
+            command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId("due_default"))
+                .occurredAt(estrusAt)
+                .build()
+        );
+        Integer configuredDays = jdbc.queryForObject(
+            "select aphrodisiac_days from global_setting where user_id = ? order by house_id is null desc limit 1",
+            Integer.class, fixture.userId
+        );
+        Assertions.assertNotNull(configuredDays);
+        Assertions.assertEquals(
+            configuredDays.intValue(),
+            daysBetween(estrusAt, estrus.nextDueTime()),
+            "未指定日期时应继续使用兔场配置"
+        );
+
+        Date future = new Date(System.currentTimeMillis() + 6L * 24 * 3600 * 1000);
+        ReproResult mating = apply(fixture, opened.cycleId(), ReproAction.MATING, "due_future",
+            b -> b.maleRabbitId(fixture.sireId)
+                .matingMethod(MatingMethod.NATURAL)
+                .nextRemindAt(future));
+        Assertions.assertEquals(6, daysBetween(new Date(), mating.nextDueTime()));
+
+        Date today = new Date();
+        ReproResult palpation = apply(fixture, opened.cycleId(), ReproAction.PALPATION, "due_today",
+            b -> b.outcome(PalpationResult.PREGNANT.name())
+                .palpationResult(PalpationResult.PREGNANT)
+                .nextRemindAt(today));
+        Assertions.assertEquals(0, daysBetween(new Date(), palpation.nextDueTime()));
+    }
+
+    @Test
+    void pastReminderOverrideIsRejectedWithoutAdvancing() {
+        Fixture fixture = fixture("repro_due_past");
+        ReproResult opened = openAtEstrus(fixture, "due_past_open");
+        Date yesterday = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
+
+        BizException error = Assertions.assertThrows(BizException.class, () -> stateMachine.apply(
+            command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId("due_past"))
+                .nextRemindAt(yesterday)
+                .build()
+        ));
+
+        Assertions.assertEquals(400, error.getCode());
+        Assertions.assertTrue(error.getMessage().contains("不能早于今天"), error.getMessage());
+        Assertions.assertEquals(
+            ReproStage.AWAIT_ESTRUS.name(),
+            jdbc.queryForObject("select stage from breeding_cycles where id = ?", String.class, opened.cycleId())
+        );
+        assertSinglePendingTask(fixture.houseId, opened.cycleId(), "ESTRUS");
+    }
+
+    @Test
+    void reminderOverrideIsRejectedWhenActionCreatesNoNextTask() {
+        Fixture fixture = fixture("repro_due_none");
+        ReproResult opened = openAtEstrus(fixture, "due_none_open");
+        Date tomorrow = new Date(System.currentTimeMillis() + 24L * 3600 * 1000);
+
+        BizException error = Assertions.assertThrows(BizException.class, () -> stateMachine.apply(
+            command(fixture, opened.cycleId(), ReproAction.RETIRE, requestId("due_none_retire"))
+                .reason("淘汰")
+                .nextRemindAt(tomorrow)
+                .build()
+        ));
+
+        Assertions.assertEquals(400, error.getCode());
+        Assertions.assertTrue(error.getMessage().contains("不会生成后续待办"), error.getMessage());
+        Assertions.assertEquals(
+            CycleLifecycle.OPEN.name(),
+            jdbc.queryForObject("select lifecycle from breeding_cycles where id = ?", String.class, opened.cycleId())
+        );
+        assertSinglePendingTask(fixture.houseId, opened.cycleId(), "ESTRUS");
     }
 
     @Test
@@ -109,12 +210,30 @@ public class ReproStateMachineIT extends E2eTestSupport {
         ReproResult opened = openAtEstrus(fixture, "idem_open");
 
         String requestId = requestId("idem_estrus");
-        ReproResult first = stateMachine.apply(command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId).build());
-        ReproResult second = stateMachine.apply(command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId).build());
+        Date override = new Date(System.currentTimeMillis() + 7L * 24 * 3600 * 1000);
+        ReproResult first = stateMachine.apply(
+            command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId)
+                .nextRemindAt(override)
+                .build()
+        );
+        ReproResult second = stateMachine.apply(
+            command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId)
+                .nextRemindAt(override)
+                .build()
+        );
 
         Assertions.assertFalse(first.replayed());
         Assertions.assertTrue(second.replayed(), "同 requestId 重复提交应回放而非二次推进");
         Assertions.assertEquals(first.eventId(), second.eventId());
+        Assertions.assertEquals(opened.cycleId(), second.currentCycleId());
+        Assertions.assertEquals(ReproStage.AWAIT_MATING, second.stage());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), second.lifecycle());
+        Date authoritativeDueTime = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and id = ?",
+            Date.class, fixture.houseId, first.nextTaskId()
+        );
+        Assertions.assertEquals(authoritativeDueTime.getTime(), second.nextDueTime().getTime());
+        Assertions.assertEquals(7, daysBetween(new Date(), second.nextDueTime()));
         Assertions.assertEquals(
             1,
             (int) jdbc.queryForObject(
@@ -237,12 +356,29 @@ public class ReproStateMachineIT extends E2eTestSupport {
             "血配期间应有哺乳周期与管线周期各一条"
         );
 
+        Date ignoredOverride = new Date(System.currentTimeMillis() + 4L * 24 * 3600 * 1000);
+        BizException ignored = Assertions.assertThrows(BizException.class, () -> apply(
+            fixture, opened.cycleId(), ReproAction.WEANING, "blood_weaning_override",
+            b -> b.weanedCount(7).nextRemindAt(ignoredOverride)
+        ));
+        Assertions.assertEquals(400, ignored.getCode());
+        Assertions.assertTrue(ignored.getMessage().contains("不会生成后续待办"), ignored.getMessage());
+        Assertions.assertEquals(
+            CycleLifecycle.OPEN.name(),
+            jdbc.queryForObject("select lifecycle from breeding_cycles where id = ?", String.class, opened.cycleId()),
+            "被拒绝的自定义日期不得顺带完成分笼"
+        );
+
         ReproResult weaning = apply(fixture, opened.cycleId(), ReproAction.WEANING, "blood_weaning",
             b -> b.weanedCount(7));
 
         // 关键：已有管线周期在跑时不再自动接续，否则同一母兔会出现两条管线周期，
         // V27 的 uk_bc_pipeline 会直接拒绝写入。
+        Assertions.assertEquals(opened.cycleId(), weaning.cycleId());
         Assertions.assertNull(weaning.followUpCycleId(), "已在管线上时不应再自动开新周期");
+        Assertions.assertEquals(second.cycleId(), weaning.currentCycleId(), "应返回既有血配管线周期");
+        Assertions.assertEquals(ReproStage.AWAIT_MATING, weaning.stage());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
         Assertions.assertEquals(
             1,
             (int) jdbc.queryForObject(
@@ -261,11 +397,24 @@ public class ReproStateMachineIT extends E2eTestSupport {
         apply(fixture, opened.cycleId(), ReproAction.MATING, "empty_mating",
             b -> b.maleRabbitId(fixture.sireId).matingMethod(MatingMethod.NATURAL));
 
-        ReproResult empty = apply(fixture, opened.cycleId(), ReproAction.PALPATION, "empty_palpation",
-            b -> b.outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY));
+        String emptyRequestId = requestId("empty_palpation");
+        ReproCommand emptyCommand = command(
+            fixture, opened.cycleId(), ReproAction.PALPATION, emptyRequestId
+        ).outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY).build();
+        ReproResult empty = stateMachine.apply(emptyCommand);
 
-        Assertions.assertEquals("CLOSED", empty.lifecycle());
+        Assertions.assertEquals(opened.cycleId(), empty.cycleId());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), empty.lifecycle());
         Assertions.assertNotNull(empty.followUpCycleId(), "空怀应立即接续下一轮");
+        Assertions.assertEquals(empty.followUpCycleId(), empty.currentCycleId());
+        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, empty.stage());
+
+        ReproResult replayed = stateMachine.apply(emptyCommand);
+        Assertions.assertTrue(replayed.replayed());
+        Assertions.assertEquals(opened.cycleId(), replayed.cycleId());
+        Assertions.assertEquals(empty.currentCycleId(), replayed.currentCycleId());
+        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, replayed.stage());
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), replayed.lifecycle());
         // 空怀是立即重新催情，不等子宫复旧期。
         Assertions.assertEquals(
             0,
@@ -319,7 +468,9 @@ public class ReproStateMachineIT extends E2eTestSupport {
         ReproResult retired = apply(fixture, opened.cycleId(), ReproAction.RETIRE, "retire_do",
             b -> b.reason("淘汰"));
 
-        Assertions.assertEquals("CLOSED", retired.lifecycle());
+        Assertions.assertNull(retired.currentCycleId());
+        Assertions.assertEquals(ReproStage.RETIRED, retired.stage());
+        Assertions.assertEquals(CycleLifecycle.CLOSED.name(), retired.lifecycle());
         Assertions.assertEquals(
             0,
             (int) jdbc.queryForObject(

@@ -23,6 +23,48 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({'token': 'operator-token'});
   });
 
+  test('generic batch binding sends rabbitIds for commodity members', () async {
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+
+    await repository.addBatchRabbits(
+      houseId: 8,
+      batchId: 9,
+      rabbitIds: const [402, 401, 402],
+      requestId: 'bind-rabbit-request',
+    );
+
+    expect(adapter.requests.single.path, '/api/batches/9/members');
+    expect(adapter.requests.single.headers['X-House-Id'], '8');
+    expect(adapter.requests.single.body['rabbitIds'], [401, 402]);
+    expect(
+      adapter.requests.single.body['requestId'],
+      'bind-rabbit-request',
+    );
+    expect(
+        adapter.requests.single.body.containsKey('femaleRabbitIds'), isFalse);
+  });
+
+  test('batch tag removal sends a stable request id as query', () async {
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+
+    await repository.removeBatchRabbit(
+      houseId: 8,
+      batchId: 9,
+      rabbitId: 401,
+      requestId: 'remove-tag-request',
+    );
+
+    expect(adapter.requests.single.path, '/api/batches/9/members/401');
+    expect(adapter.requests.single.headers['X-House-Id'], '8');
+    expect(
+      adapter.requests.single.query['requestId'],
+      'remove-tag-request',
+    );
+    expect(adapter.requests.single.body, isEmpty);
+  });
+
   test('all Batch writes forward an explicit requestId', () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
@@ -57,6 +99,12 @@ void main() {
       action: ReproAction.estrus,
       occurredAt: DateTime(2026, 8, 14),
       requestId: 'estrus-request',
+    );
+    await repository.addBatchMembers(
+      houseId: 8,
+      batchId: 9,
+      femaleRabbitIds: const [104, 102, 104],
+      requestId: 'add-members-request',
     );
     await repository.completeBatch(
       houseId: 8,
@@ -113,6 +161,7 @@ void main() {
         'mating-request',
         'bulk-mating-request',
         'estrus-request',
+        'add-members-request',
         'complete-request',
         'pregnancy-request',
         'prepartum-request',
@@ -130,6 +179,7 @@ void main() {
         '/api/repro/cycles/301/actions',
         '/api/repro/tasks/bulk-actions',
         '/api/repro/cycles/301/actions',
+        '/api/batches/9/members',
         '/api/batches/9/complete',
         '/api/repro/cycles/301/actions',
         '/api/repro/cycles/301/actions',
@@ -140,6 +190,8 @@ void main() {
     );
     expect(adapter.requests.first.body,
         containsPair('femaleRabbitIds', [101, 102]));
+    expect(
+        adapter.requests[4].body, containsPair('femaleRabbitIds', [102, 104]));
     // 批量目标去重并排序：重复的 taskId 不能变成两次推进。
     expect(adapter.requests[2].body, containsPair('taskIds', [701, 702, 703]));
     expect(adapter.requests[1].body, containsPair('maleRabbitId', 201));
@@ -256,7 +308,8 @@ void main() {
     expect(controller.requestIdFor(fingerprint), 'request-2');
   });
 
-  test('callers that omit a requestId still get a fresh one each time', () async {
+  test('callers that omit a requestId still get a fresh one each time',
+      () async {
     final adapter = _CapturingAdapter();
     final repro = _repro(adapter);
 
@@ -304,11 +357,13 @@ class _CapturedRequest {
   const _CapturedRequest({
     required this.path,
     required this.headers,
+    required this.query,
     required this.body,
   });
 
   final String path;
   final Map<String, dynamic> headers;
+  final Map<String, dynamic> query;
   final Map<String, dynamic> body;
 }
 
@@ -327,7 +382,10 @@ class _CapturingAdapter implements HttpClientAdapter {
     requests.add(_CapturedRequest(
       path: options.path,
       headers: Map<String, dynamic>.from(options.headers),
-      body: Map<String, dynamic>.from(options.data as Map),
+      query: Map<String, dynamic>.from(options.queryParameters),
+      body: options.data is Map
+          ? Map<String, dynamic>.from(options.data as Map)
+          : const <String, dynamic>{},
     ));
     if (failFirstRequest && requests.length == 1) {
       throw DioException.connectionError(

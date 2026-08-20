@@ -44,10 +44,11 @@ class ReproRepository {
   /// 只是过滤条件不同——旧实现里首页和笼位各查各的，两边给出的提醒并不一致。
   ///
   /// [dueBefore] 不传时服务端默认「今天及以前」，即今日待办 + 逾期。
-  /// 要看未来的待办必须显式给一个将来的时间。
+  /// [includeFuture] 为 true 时忽略到期日上限并返回未来待办。
   Future<ReproTaskPage> listTasks({
     required int houseId,
     DateTime? dueBefore,
+    bool includeFuture = false,
     String? taskType,
     int? batchId,
     int? cageId,
@@ -60,6 +61,7 @@ class ReproRepository {
       houseId: houseId,
       query: {
         if (dueBefore != null) 'dueBefore': dueBefore.millisecondsSinceEpoch,
+        'includeFuture': includeFuture,
         if (taskType != null && taskType.isNotEmpty) 'type': taskType,
         if (batchId != null) 'batchId': batchId,
         if (cageId != null) 'cageId': cageId,
@@ -306,13 +308,12 @@ class ReproRepository {
     String? requestId,
   }) async {
     final wanted = rabbitIds.toSet();
-    // 拉到足够远的将来，否则默认只能看到「今日及逆期」，
-    // 提前做的批次（比如已安排到两天后的配种）会惄无声息地漏掉。
+    // 默认只能看到今日及逾期；批量推进也要能解析已排到未来的待办。
     final page = await listTasks(
       houseId: houseId,
       batchId: batchId,
       taskType: taskType,
-      dueBefore: DateTime.now().add(const Duration(days: 3650)),
+      includeFuture: true,
       size: 500,
     );
     final taskIds = page.items

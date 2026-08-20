@@ -1,0 +1,132 @@
+digraph AppWindowOverlays {
+  graph [
+    bgcolor="#F7F8FA",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=18,
+    label="临时覆盖层与宿主窗口",
+    labelloc=t,
+    margin=0.18,
+    nodesep=0.38,
+    pack=true,
+    packmode=cluster,
+    pad=0.22,
+    rankdir=TB,
+    ranksep=0.58,
+    splines=polyline
+  ];
+
+  node [
+    color="#CBD2D9",
+    fillcolor="#FFFFFF",
+    fontcolor="#17202A",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=10.5,
+    margin="0.14,0.09",
+    penwidth=1.2,
+    shape=box,
+    style="rounded,filled"
+  ];
+
+  edge [
+    arrowsize=0.7,
+    color="#F59E0B",
+    fontcolor="#8A5A00",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=8.5,
+    penwidth=1.3,
+    style=dotted
+  ];
+
+  subgraph cluster_general {
+    color="#B8C2CC";
+    fillcolor="#FDFEFE";
+    label="通用与设备流程";
+    margin=18;
+    style="rounded,filled";
+
+    gs_login [label="登录 / 设置", fillcolor="#EAF4FF"];
+    gs_houses [label="兔舍列表", fillcolor="#EAF4FF"];
+    gs_nfc [label="NFC 写入设置", fillcolor="#EAF4FF"];
+    gs_outbound [label="批量出库", fillcolor="#EAF4FF"];
+
+    go_legal [label="法律文档\nNavigator.push", fillcolor="#FFF7E6"];
+    go_house [label="创建兔舍 Sheet", fillcolor="#FFF7E6"];
+    go_nfc [label="NFC 待同步 Sheet", fillcolor="#FFF7E6"];
+    go_outbound [label="退出 / 冲突 / 失败 Dialog", fillcolor="#FFF7E6"];
+
+    { rank=same; gs_login; gs_houses; gs_nfc; gs_outbound; }
+    { rank=same; go_legal; go_house; go_nfc; go_outbound; }
+    gs_login -> go_legal [label="push"];
+    gs_houses -> go_house;
+    gs_nfc -> go_nfc;
+    gs_outbound -> go_outbound;
+  }
+
+  subgraph cluster_production {
+    color="#F3C766";
+    fillcolor="#FFFCF3";
+    label="生产与批次流程";
+    margin=18;
+    style="rounded,filled";
+
+    ps_home [label="首页", fillcolor="#EAF4FF"];
+    ps_batches [label="批次列表", fillcolor="#EAF4FF"];
+    ps_batch [label="批次详情", fillcolor="#EAF4FF"];
+    ps_rabbits [label="兔只管理", fillcolor="#EAF4FF"];
+
+    po_event [label="生产事件 Sheet", fillcolor="#FFF7E6"];
+    po_create [label="创建批次 Sheet", fillcolor="#FFF7E6"];
+    po_members [label="添加批次成员 Sheet", fillcolor="#FFF7E6"];
+    po_mating [label="批次配种 Sheet", fillcolor="#FFF7E6"];
+    po_complete [label="完成批次 Dialog", fillcolor="#FFF7E6"];
+    po_repro [label="繁殖操作 Sheet", fillcolor="#FFF7E6"];
+
+    po_action [label="生产动作 Sheet", fillcolor="#FFEBC2"];
+    po_weaning [label="断奶 Sheet", fillcolor="#FFEBC2"];
+    po_abortion [label="流产登记 Sheet", fillcolor="#FFEBC2"];
+
+    { rank=same; ps_home; ps_batches; ps_batch; ps_rabbits; }
+    ps_home -> po_event;
+    ps_batches -> po_create;
+    ps_batch -> po_event;
+    ps_batch -> po_members;
+    ps_batch -> po_mating;
+    ps_batch -> po_complete;
+    ps_rabbits -> po_repro;
+    po_event -> po_action [label="继续派生"];
+    po_event -> po_weaning [label="继续派生"];
+    po_repro -> po_abortion [label="继续派生"];
+  }
+
+  subgraph cluster_rabbit {
+    color="#83BCA2";
+    fillcolor="#F4FBF7";
+    label="兔只操作流程";
+    margin=18;
+    style="rounded,filled";
+
+    rs_cage [label="笼位详情", fillcolor="#EAF4FF"];
+    rs_rabbits [label="兔只管理", fillcolor="#EAF4FF"];
+    rs_batch [label="批次详情", fillcolor="#EAF4FF"];
+
+    ro_detail [label="兔只详情 Sheet", fillcolor="#FFF7E6"];
+    ro_entry [label="兔只录入类型 Sheet", fillcolor="#FFF7E6"];
+    ro_edit [label="编辑兔只 Sheet", fillcolor="#FFF7E6"];
+    ro_move [label="换笼 Sheet", fillcolor="#FFF7E6"];
+    ro_departure [label="离场 Sheet", fillcolor="#FFF7E6"];
+
+    { rank=same; rs_cage; rs_rabbits; rs_batch; }
+    rs_cage -> ro_entry;
+    rs_cage -> ro_edit;
+    rs_cage -> ro_move;
+    rs_cage -> ro_departure;
+    rs_rabbits -> ro_detail;
+    rs_rabbits -> ro_edit;
+    rs_rabbits -> ro_move;
+    rs_rabbits -> ro_departure;
+    rs_batch -> ro_departure;
+    ro_detail -> ro_edit [label="继续派生"];
+    ro_detail -> ro_move [label="继续派生"];
+    ro_detail -> ro_departure [label="继续派生"];
+  }
+}

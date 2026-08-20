@@ -27,10 +27,10 @@ public enum EntryPoint {
     MATING(ReproStage.AWAIT_MATING, DueAnchor.ESTRUS_DURATION, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
     /** 待摸胎：必须补录配种日（公兔可选），否则算不出摸胎日。 */
     PALPATION(ReproStage.AWAIT_PALPATION, DueAnchor.PALPATION_WAIT, EnumSet.of(RequiredFact.MATING_DATE)),
-    /** 待备产：给配种日或直接给预产期均可。 */
-    PREPARTUM(ReproStage.AWAIT_PREPARTUM, DueAnchor.PREPARTUM_LEAD, EnumSet.of(RequiredFact.GESTATION_ANCHOR)),
-    /** 待分娩：同上，首任务落在预产期当天。 */
-    DELIVERY(ReproStage.AWAIT_DELIVERY, DueAnchor.EXPECTED_BIRTH, EnumSet.of(RequiredFact.GESTATION_ANCHOR)),
+    /** 待备产：已进入该阶段，首任务当天出现。 */
+    PREPARTUM(ReproStage.AWAIT_PREPARTUM, DueAnchor.SAME_DAY, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
+    /** 待分娩：已进入该阶段，首任务当天出现。 */
+    DELIVERY(ReproStage.AWAIT_DELIVERY, DueAnchor.SAME_DAY, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
     /** 待分笼：必须补录分娩日与活仔数，同事务建 NURSING 窝。 */
     WEANING(
         ReproStage.AWAIT_WEANING,
@@ -42,8 +42,6 @@ public enum EntryPoint {
     public enum RequiredFact {
         STAGE_ENTERED_AT("进入该阶段的日期"),
         MATING_DATE("配种日期"),
-        /** 配种日或预产期，二者给一个即可。 */
-        GESTATION_ANCHOR("配种日期或预产期"),
         BIRTH_DATE("分娩日期"),
         LIVE_KITS("活仔数");
 

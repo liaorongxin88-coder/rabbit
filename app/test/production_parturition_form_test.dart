@@ -66,6 +66,16 @@ void main() {
     expect(total.enabled, isFalse);
     expect(live.enabled, isFalse);
     expect(kept.enabled, isFalse);
+
+    final reminderLabel = find.byKey(
+      const ValueKey('next-reminder-stage-label'),
+    );
+    await _dragUntilBuilt(
+      tester,
+      target: reminderLabel,
+      scrollable: find.byType(ListView).last,
+    );
+    expect(tester.widget<Text>(reminderLabel).data, '催情提醒日期');
     expect(tester.takeException(), isNull);
   });
 

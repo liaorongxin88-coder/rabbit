@@ -49,6 +49,7 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
           onPressed: () {
             ref.invalidate(housesProvider);
             ref.invalidate(houseCagesProvider(houseId));
+            ref.invalidate(houseBreedingRabbitsProvider(houseId));
           },
           icon: const Icon(Icons.refresh),
         ),

@@ -14,6 +14,7 @@ class Rabbit {
     this.growthStage,
     this.reproductiveStage,
     this.currentStage,
+    this.currentCycleId,
     this.stageEnteredAt,
   });
 
@@ -34,6 +35,7 @@ class Rabbit {
   /// 生产阶段投影。种母兔的阶段只由生产流程状态机写，展示以它为准；
   /// [reproductiveStage] 是旧词汇，只对种公兔、后备兔仍有意义。
   final String? currentStage;
+  final int? currentCycleId;
   final DateTime? stageEnteredAt;
 
   String get typeLabel {
@@ -90,6 +92,7 @@ class Rabbit {
       growthStage: _optionalString(json['growthStage']),
       reproductiveStage: _optionalString(json['reproductiveStage']),
       currentStage: _optionalString(json['currentStage']),
+      currentCycleId: _nullableIntValue(json['currentCycleId']),
       stageEnteredAt: _dateTimeValue(json['stageEnteredAt']),
     );
   }

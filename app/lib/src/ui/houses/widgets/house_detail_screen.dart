@@ -98,46 +98,79 @@ class _HouseDetailContent extends ConsumerWidget {
         padding: AppSpacing.pagePadding,
         children: [
           SectionCard(
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  tooltip: '返回',
-                  onPressed: () => context.go('/houses'),
-                  icon: const Icon(Icons.arrow_back),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: '返回',
+                      onPressed: () => context.go('/houses'),
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            house.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${house.layoutLabel} · 我的角色：${perm.roleLabel}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (perm.canEditHouse)
+                      IconButton(
+                        key: const ValueKey('house-edit-name-entry'),
+                        tooltip: '编辑兔舍信息',
+                        onPressed: () => _showEditHouseSheet(context, house),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        house.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge,
+                const SizedBox(height: 12),
+                Divider(height: 1, color: palette.line),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.notes_outlined, size: 19, color: palette.muted),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '兔舍备注',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            house.remark.trim().isEmpty ? '暂无备注' : house.remark,
+                            key: const ValueKey('house-remark-value'),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${house.layoutLabel} · 我的角色：${perm.roleLabel}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          if (house.remark.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            SectionCard(
-              child: Text(
-                house.remark,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          ],
           const SizedBox(height: 12),
           _OverviewMetrics(cages: cages, rabbits: rabbits),
           const SizedBox(height: 12),
@@ -151,17 +184,6 @@ class _HouseDetailContent extends ConsumerWidget {
                 : '您当前为只读权限，可查看笼位但无法录入或修改。',
             actionLabel: '进入笼位',
             onTap: () => context.go('/houses/${house.id}/cages'),
-          ),
-          const SizedBox(height: 10),
-          _DetailEntryCard(
-            icon: Icons.cruelty_free,
-            iconColor: palette.success,
-            iconBackground: palette.successSoft,
-            title: '兔只管理',
-            message:
-                perm.canEdit ? '查看当前兔舍兔只档案；新增兔子请先进入笼位。' : '您当前为只读权限，仅可查看兔只档案。',
-            actionLabel: '查看兔只',
-            onTap: () => context.go('/houses/${house.id}/rabbits'),
           ),
           const SizedBox(height: 10),
           _DetailEntryCard(
@@ -183,9 +205,9 @@ class _HouseDetailContent extends ConsumerWidget {
               iconColor: palette.warning,
               iconBackground: palette.warningSoft,
               title: '生产设置',
-              message: '当前兔舍独立使用这组周期，用于状态转换和事件日期的默认值。',
+              message: '配置当前兔舍的生产周期，以及你在首页看到的事件提醒。',
               actionLabel: '配置',
-              onTap: () => context.go(
+              onTap: () => context.push(
                 '/houses/${house.id}/settings/production?name=${Uri.encodeComponent(house.name)}',
               ),
             ),
@@ -199,7 +221,7 @@ class _HouseDetailContent extends ConsumerWidget {
               title: '人员管理',
               message: '管理兔舍成员权限：添加生产人员、设备管理员、游客，或新增共同所有者。',
               actionLabel: '管理',
-              onTap: () => context.go(
+              onTap: () => context.push(
                 '/houses/${house.id}/members?name=${Uri.encodeComponent(house.name)}',
               ),
             ),
@@ -216,6 +238,168 @@ class _HouseDetailContent extends ConsumerWidget {
         onRetry: () => ref.invalidate(housePermissionProvider(house.id)),
       ),
     );
+  }
+
+  Future<void> _showEditHouseSheet(
+    BuildContext context,
+    RabbitHouse house,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      builder: (_) => _EditHouseSheet(
+        house: house,
+        hostContext: context,
+      ),
+    );
+  }
+}
+
+class _EditHouseSheet extends ConsumerStatefulWidget {
+  const _EditHouseSheet({
+    required this.house,
+    required this.hostContext,
+  });
+
+  final RabbitHouse house;
+  final BuildContext hostContext;
+
+  @override
+  ConsumerState<_EditHouseSheet> createState() => _EditHouseSheetState();
+}
+
+class _EditHouseSheetState extends ConsumerState<_EditHouseSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController =
+      TextEditingController(text: widget.house.name);
+  late final TextEditingController _remarkController =
+      TextEditingController(text: widget.house.remark);
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _remarkController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + inset),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '编辑兔舍信息',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                key: const ValueKey('house-edit-name-field'),
+                controller: _nameController,
+                autofocus: true,
+                maxLength: 100,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: '兔舍名称'),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return '请输入兔舍名称';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                key: const ValueKey('house-edit-remark-field'),
+                controller: _remarkController,
+                minLines: 3,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  labelText: '兔舍备注',
+                  hintText: '例如位置、用途或现场注意事项',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton(
+                key: const ValueKey('house-edit-name-submit'),
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('保存兔舍信息'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    final name = _nameController.text.trim();
+    final remark = _remarkController.text.trim();
+    final nameChanged = name != widget.house.name;
+    final remarkChanged = remark != widget.house.remark.trim();
+    if (!nameChanged && !remarkChanged) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await ref.read(houseRepositoryProvider).updateHouse(
+            houseId: widget.house.id,
+            name: name,
+            remark: remark,
+          );
+      ref.invalidate(housesProvider);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+      final hostContext = widget.hostContext;
+      if (hostContext.mounted) {
+        ScaffoldMessenger.of(hostContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              nameChanged && remarkChanged
+                  ? '兔舍信息已更新'
+                  : nameChanged
+                      ? '兔舍名称已更新为“$name”'
+                      : '兔舍备注已更新',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final message = error is ApiException ? error.message : error.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 }
 

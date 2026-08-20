@@ -153,6 +153,10 @@ export function listRabbits(houseId: number) {
   return workspaceGetJson<Rabbit[]>('/api/rabbits', { houseId })
 }
 
+export function getRabbit(houseId: number, rabbitId: number) {
+  return workspaceGetJson<Rabbit>(`/api/rabbits/${rabbitId}`, { houseId })
+}
+
 export interface RabbitWriteInput {
   cageId: number
   motherId?: number

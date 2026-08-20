@@ -17,9 +17,7 @@ import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_departure_sheet.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_move_cage_sheet.dart';
 
 class CageDetailScreen extends ConsumerWidget {
   const CageDetailScreen({
@@ -124,7 +122,6 @@ class _DetailBody extends ConsumerWidget {
             houseId: houseId,
             cage: cage ?? _fallbackCage(summary, houseId),
             rabbits: items,
-            allCages: cages.valueOrNull ?? [_fallbackCage(summary, houseId)],
             canEdit: permission.canEdit,
             onChanged: () {
               ref.invalidate(cageSummaryProvider(key));
@@ -398,7 +395,6 @@ class _RabbitSection extends StatelessWidget {
     required this.houseId,
     required this.cage,
     required this.rabbits,
-    required this.allCages,
     required this.canEdit,
     required this.onChanged,
   });
@@ -406,7 +402,6 @@ class _RabbitSection extends StatelessWidget {
   final int houseId;
   final Cage cage;
   final List<Rabbit> rabbits;
-  final List<Cage> allCages;
   final bool canEdit;
   final VoidCallback onChanged;
 
@@ -459,86 +454,14 @@ class _RabbitSection extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 isThreeLine: true,
-                trailing: canEdit
-                    ? _RabbitRowMenu(
-                        houseId: houseId,
-                        rabbit: rabbit,
-                        allCages: allCages,
-                        onChanged: onChanged,
-                      )
-                    : null,
-                onTap: canEdit
-                    ? () async {
-                        await showRabbitEditSheet(
-                          context: context,
-                          houseId: houseId,
-                          rabbit: rabbit,
-                          cages: allCages,
-                        );
-                        onChanged();
-                      }
-                    : null,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(
+                  '/houses/$houseId/rabbits/${rabbit.id}',
+                ),
               ),
           ],
         ],
       ),
-    );
-  }
-}
-
-/// 笼内兔只的逐只管理入口（飞书 recvsrEA6TRuK6、recvrpTL16SBwu）。
-///
-/// 现场人员是按笼子找兔的，之前这里只能“编辑”：换笼得回兔舍列表，
-/// 登记死亡更是只能从批次详情进——笼内的商品兔因此根本无处登记。
-class _RabbitRowMenu extends StatelessWidget {
-  const _RabbitRowMenu({
-    required this.houseId,
-    required this.rabbit,
-    required this.allCages,
-    required this.onChanged,
-  });
-
-  final int houseId;
-  final Rabbit rabbit;
-  final List<Cage> allCages;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      key: ValueKey('cage-rabbit-menu-${rabbit.id}'),
-      tooltip: '兔只操作',
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'edit', child: Text('编辑资料')),
-        PopupMenuItem(value: 'move', child: Text('换笼位')),
-        PopupMenuItem(value: 'departure', child: Text('登记离场')),
-      ],
-      onSelected: (value) async {
-        switch (value) {
-          case 'edit':
-            await showRabbitEditSheet(
-              context: context,
-              houseId: houseId,
-              rabbit: rabbit,
-              cages: allCages,
-            );
-          case 'move':
-            await showRabbitMoveCageSheet(
-              context: context,
-              houseId: houseId,
-              rabbit: rabbit,
-              cages: allCages,
-            );
-          case 'departure':
-            await showRabbitDepartureSheet(
-              context: context,
-              houseId: houseId,
-              rabbitId: rabbit.id,
-              rabbitLabel: '兔 #${rabbit.id} · ${rabbit.typeLabel}',
-            );
-        }
-        onChanged();
-      },
     );
   }
 }

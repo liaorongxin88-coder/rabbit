@@ -137,6 +137,59 @@ class BatchRepository {
     );
   }
 
+  /// 向已有批次追加母兔标签；服务端按需要建立尚未存在的生产管线。
+  ///
+  /// [requestId] 由调用方在表单草稿生命周期内持有，失败重试时必须复用，
+  /// 以便服务端幂等回放而不会重复建立成员关系。
+  Future<void> addBatchMembers({
+    required int houseId,
+    required int batchId,
+    required List<int> femaleRabbitIds,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/members',
+      houseId: houseId,
+      body: {
+        'femaleRabbitIds': _sortedUniqueIds(femaleRabbitIds),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  /// 向批次追加任意受支持兔只；同一兔只可以同时携带多个批次标签。
+  Future<void> addBatchRabbits({
+    required int houseId,
+    required int batchId,
+    required List<int> rabbitIds,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/members',
+      houseId: houseId,
+      body: {
+        'rabbitIds': _sortedUniqueIds(rabbitIds),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
+  Future<void> removeBatchRabbit({
+    required int houseId,
+    required int batchId,
+    required int rabbitId,
+    String? requestId,
+  }) {
+    return _api.delete<void>(
+      '/api/batches/$batchId/members/$rabbitId',
+      houseId: houseId,
+      query: {'requestId': requestId ?? _uuid.v4()},
+      decode: (_) {},
+    );
+  }
+
   Future<void> completeBatch({
     required int houseId,
     required int batchId,

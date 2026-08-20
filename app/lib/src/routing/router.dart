@@ -13,7 +13,8 @@ import 'package:rabbit_flutter/src/ui/home/widgets/home_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_cages_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/house_members_screen.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/house_rabbits_screen.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/widgets/house_rabbits_screen.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
 import 'package:rabbit_flutter/src/ui/profile/widgets/profile_screen.dart';
 import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_error_screen.dart';
@@ -30,6 +31,8 @@ import 'package:rabbit_flutter/src/ui/settings/widgets/reminder_settings_screen.
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
+const _appSettingsLoadingPath = '/app-settings-loading';
+const _appSettingsErrorPath = '/app-settings-error';
 const _authLoadingPath = '/auth-loading';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -38,11 +41,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation:
-        ref.read(localAppSettingsControllerProvider).valueOrNull?.startRoute ??
-            '/',
+    initialLocation: _appSettingsLoadingPath,
     refreshListenable: notifier,
     redirect: (context, state) {
+      final settingsState = ref.read(localAppSettingsControllerProvider);
+      final settings = settingsState.valueOrNull;
+      final isSettingsLoading = settingsState.isLoading && settings == null;
+      final isSettingsError = settingsState.hasError && settings == null;
+      final isSettingsLoadingRoute =
+          state.matchedLocation == _appSettingsLoadingPath;
+      final isSettingsErrorRoute =
+          state.matchedLocation == _appSettingsErrorPath;
+
+      if (isSettingsLoading) {
+        return isSettingsLoadingRoute ? null : _appSettingsLoadingPath;
+      }
+      if (isSettingsError) {
+        return isSettingsErrorRoute ? null : _appSettingsErrorPath;
+      }
+      if (isSettingsLoadingRoute || isSettingsErrorRoute) {
+        return settings?.startRoute ?? '/';
+      }
+
       final authState = ref.read(authControllerProvider);
       final isLoading = authState.isLoading && authState.valueOrNull == null;
       final isLoggedIn = authState.valueOrNull != null;
@@ -75,6 +95,39 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: _appSettingsLoadingPath,
+        builder: (context, state) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        },
+      ),
+      GoRoute(
+        path: _appSettingsErrorPath,
+        builder: (context, state) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('无法读取本机设置'),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => ref
+                          .read(localAppSettingsControllerProvider.notifier)
+                          .restore(),
+                      child: const Text('重试'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
       GoRoute(
         path: _authLoadingPath,
         builder: (context, state) {
@@ -207,6 +260,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/houses/:houseId/rabbits/:rabbitId',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final rabbitId =
+                  int.tryParse(state.pathParameters['rabbitId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: RabbitDetailScreen(
+                  houseId: houseId,
+                  rabbitId: rabbitId,
+                ),
+              );
+            },
+          ),
+          GoRoute(
             path: '/houses/:houseId/batches',
             pageBuilder: (context, state) {
               final houseId =
@@ -308,5 +376,9 @@ bool _isSafeProtectedLocation(String? location) {
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {
     ref.listen(authControllerProvider, (_, __) => notifyListeners());
+    ref.listen(
+      localAppSettingsControllerProvider,
+      (_, __) => notifyListeners(),
+    );
   }
 }

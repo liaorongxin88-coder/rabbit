@@ -250,10 +250,10 @@ SettingResolver                             gestation_days 接入 + Caffeine 缓
 
 | 层 | 内容 |
 | --- | --- |
-| 单测 | 转换矩阵（7 阶段 × 11 动作全组合）；到期日计算（含 gestation/prepartum_lead 新语义、血配联动校验）；**任意阶段入轨**：6 个入轨点 × 补录事实缺失拒绝 × due 折减/拉平当天 × 待分笼入轨建 litter |
+| 单测 | 转换矩阵（7 阶段 × 11 动作全组合）；到期日计算（含摸胎后待备产时长、备产当天进入待分娩、血配联动校验）；**任意阶段入轨**：6 个入轨点 × 补录事实缺失拒绝 × due 折减/拉平当天 × 待分笼入轨建 litter |
 | IT (`*IT.java`) | 并发管线守卫（双开周期/同批次重开）；幂等重放（单只+bulk 派生键）；V27 回填对账（快照库全流程）；旧端点适配回归（六操作旧请求/响应逐字段） |
 | 客户端 | `./rabbit check`；六表单三态交互；360px/200% 字号；`pnpm --dir admin lint && build` |
-| 业务验收 | 飞书 P0 逐条：recvsrp9E2dqvB（阶段一致性）、recvsrpMlvu2SC（词汇）、recvsrq7rGZHdi（SALE_READY 出现在待办）、recvsrpXPZd3Xg（备产=预产期−lead）、recvqh3EJXzmO1（标签批次）、recvsrrPUz0djZ/recvss4qXnDEIX（表单）、recvsrrTP2Rp0l（流产+照片） |
+| 业务验收 | 飞书 P0 逐条：recvsrp9E2dqvB（阶段一致性）、recvsrpMlvu2SC（词汇）、recvsrq7rGZHdi（SALE_READY 出现在待办）、recvsrpXPZd3Xg（摸胎后按待备产时长、备产当天进入待分娩）、recvqh3EJXzmO1（标签批次）、recvsrrPUz0djZ/recvss4qXnDEIX（表单）、recvsrrTP2Rp0l（流产+照片） |
 
 ## 7. 风险登记
 

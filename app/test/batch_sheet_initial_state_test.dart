@@ -40,7 +40,7 @@ void main() {
       );
       await _openSheet(tester);
 
-      _expectLoadingState(tester, '正在加载种母兔信息');
+      _expectLoadingState(tester, '正在加载可选种母兔');
       firstAttempt.completeError(
         StateError('technical rabbit payload'),
         StackTrace.current,
@@ -48,7 +48,7 @@ void main() {
       await tester.pumpAndSettle();
 
       _expectErrorActions(tester);
-      expect(find.text('无法加载种母兔信息，请检查网络后重试。'), findsOneWidget);
+      expect(find.text('无法加载可选兔只，请检查网络后重试。'), findsOneWidget);
       expect(find.textContaining('technical rabbit payload'), findsNothing);
       expect(tester.takeException(), isNull);
 
@@ -56,7 +56,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(attempts, 2);
-      _expectLoadingState(tester, '正在加载种母兔信息');
+      _expectLoadingState(tester, '正在加载可选种母兔');
       await tester.tap(
         find.byKey(const ValueKey('batch-sheet-loading-close')),
       );

@@ -57,8 +57,9 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         ReproResult nursing = openAtEstrus(f, "coexist_open");
         advanceToDelivery(f, nursing.cycleId(), "coexist");
         Long litterId = litterIdOf(nursing.cycleId());
+        assertProjection(f, ReproStage.READY, null);
 
-        // 哺乳期血配，再摸出空怀 —— 由此产生「待分笼 + 待催情」
+        // 分笼前开启下一轮，再摸出空怀 —— 由此产生「待分笼 + 待催情」
         ReproResult bloodMating = openAt(f, ReproStage.AWAIT_MATING, "coexist_blood");
         apply(f, bloodMating.cycleId(), ReproAction.MATING, "coexist_mate",
             b -> b.maleRabbitId(f.sireId).matingMethod(MatingMethod.NATURAL));
@@ -352,7 +353,8 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         );
         Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_ESTRUS"));
         Assertions.assertEquals(List.of("MATING_DATE"), factsByStage.get("AWAIT_PALPATION"));
-        Assertions.assertEquals(List.of("GESTATION_ANCHOR"), factsByStage.get("AWAIT_DELIVERY"));
+        Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_PREPARTUM"));
+        Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_DELIVERY"));
         Assertions.assertEquals(
             List.of("BIRTH_DATE", "LIVE_KITS"), factsByStage.get("AWAIT_WEANING")
         );
@@ -600,8 +602,15 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "select current_stage, current_cycle_id from rabbits where id = ?", f.doeId
         );
         Assertions.assertEquals(stage.name(), row.get("current_stage"), "母兔投影阶段");
-        Assertions.assertEquals(
-            cycleId, ((Number) row.get("current_cycle_id")).longValue(), "母兔投影指向的周期"
-        );
+        Object projectedCycleId = row.get("current_cycle_id");
+        if (cycleId == null) {
+            Assertions.assertNull(projectedCycleId, "准备态不应指向哺乳周期");
+        } else {
+            Assertions.assertEquals(
+                cycleId,
+                ((Number) projectedCycleId).longValue(),
+                "母兔投影指向的周期"
+            );
+        }
     }
 }

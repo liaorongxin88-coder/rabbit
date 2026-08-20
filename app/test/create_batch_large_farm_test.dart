@@ -25,7 +25,7 @@ void main() {
       final list = find.byKey(const ValueKey('batch-mother-list'));
       await _dragUntilBuilt(
         tester,
-        target: find.text('选择种母兔（已选 0 只）'),
+        target: find.text('可选种母兔（已选 0 只）'),
         scrollable: list,
       );
       await tester.drag(
@@ -43,7 +43,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('batch-select-filtered')));
       await tester.pump();
-      expect(find.text('选择种母兔（已选 1000 只）'), findsOneWidget);
+      expect(find.text('可选种母兔（已选 1000 只）'), findsOneWidget);
       expect(find.text('将 1000 只种母兔加入该批次'), findsOneWidget);
 
       final search = find.byKey(const ValueKey('batch-mother-search'));

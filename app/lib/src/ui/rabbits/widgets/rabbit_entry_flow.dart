@@ -10,6 +10,7 @@ import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
@@ -77,9 +78,405 @@ Future<void> showRabbitEditSheet({
     builder: (context) => _CreateRabbitSheet.edit(
       houseId: houseId,
       rabbit: rabbit,
-      cages: cages,
     ),
   );
+}
+
+/// 将尚无活动繁育管线的种母兔接入生产流程；未分笼的哺乳窝不占管线。
+///
+/// 这是生产动作，不复用兔档案编辑接口；阶段和必填事实完全来自服务端入轨字典。
+Future<ReproActionResult?> showRabbitReproEntrySheet({
+  required BuildContext context,
+  required int houseId,
+  required Rabbit rabbit,
+  String? initialStage,
+}) {
+  if (houseId <= 0 ||
+      rabbit.id <= 0 ||
+      rabbit.type != '0' ||
+      rabbit.gender != '0') {
+    return Future<ReproActionResult?>.value();
+  }
+  return showModalBottomSheet<ReproActionResult>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    useSafeArea: true,
+    builder: (context) => _ExistingRabbitReproEntrySheet(
+      houseId: houseId,
+      rabbit: rabbit,
+      initialStage: initialStage,
+    ),
+  );
+}
+
+class _ExistingRabbitReproEntrySheet extends ConsumerStatefulWidget {
+  const _ExistingRabbitReproEntrySheet({
+    required this.houseId,
+    required this.rabbit,
+    this.initialStage,
+  });
+
+  final int houseId;
+  final Rabbit rabbit;
+  final String? initialStage;
+
+  @override
+  ConsumerState<_ExistingRabbitReproEntrySheet> createState() =>
+      _ExistingRabbitReproEntrySheetState();
+}
+
+class _ExistingRabbitReproEntrySheetState
+    extends ConsumerState<_ExistingRabbitReproEntrySheet> {
+  final _liveKitsController = TextEditingController();
+  String? _stage;
+  DateTime? _stageEnteredAt;
+  DateTime? _matingDate;
+  DateTime? _birthDate;
+  var _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _stage = widget.initialStage;
+    if (_stage != null) {
+      _stageEnteredAt = _dateOnly(DateTime.now());
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveKitsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
+    final mediaQuery = MediaQuery.of(context);
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: mediaQuery.size.height - keyboardInset,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '开始繁育 / 生产阶段入轨',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '母兔 #${widget.rabbit.id} · 批次可稍后关联',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed:
+                          _saving ? null : () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  key: const ValueKey('existing-rabbit-repro-entry-list'),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                  child: entriesAsync.when(
+                    loading: () => const _ReadOnlyInfoBox(
+                      icon: Icons.hourglass_empty,
+                      text: '正在读取可入轨的生产阶段…',
+                    ),
+                    error: (error, _) => _ReadOnlyInfoBox(
+                      icon: Icons.error_outline,
+                      text: '生产阶段读取失败：$error',
+                    ),
+                    data: _buildEntryFields,
+                  ),
+                ),
+              ),
+              _buildSubmitBar(entriesAsync.valueOrNull ?? const []),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEntryFields(List<ReproEntryPoint> entries) {
+    if (entries.isEmpty) {
+      return const _ReadOnlyInfoBox(
+        icon: Icons.info_outline,
+        text: '当前没有可用的生产阶段，请刷新后重试。',
+      );
+    }
+    final selected = _selectedEntryPoint(entries);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionLabel('生产阶段入轨'),
+        const SizedBox(height: 6),
+        Text(
+          '选择母兔当前真实阶段；系统会据此创建周期和第一条待办。',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('existing-rabbit-repro-stage'),
+          value: _stage,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '生产阶段',
+            hintText: '请选择生产阶段',
+          ),
+          items: [
+            for (final entry in entries)
+              DropdownMenuItem(
+                value: entry.stage,
+                child: Text(entry.stageLabel),
+              ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) => setState(() {
+                    _stage = value;
+                    _stageEnteredAt ??= _dateOnly(DateTime.now());
+                  }),
+        ),
+        if (selected != null) ...[
+          const SizedBox(height: 12),
+          _buildDateField(
+            key: const ValueKey('existing-rabbit-stage-entered-at'),
+            label: '进入该阶段日期',
+            value: _stageEnteredAt,
+            onPicked: (value) => setState(() => _stageEnteredAt = value),
+          ),
+          if (selected.needsMatingDate) ...[
+            const SizedBox(height: 12),
+            _buildDateField(
+              key: const ValueKey('existing-rabbit-mating-date'),
+              label: '配种日期',
+              value: _matingDate,
+              onPicked: (value) => setState(() => _matingDate = value),
+            ),
+          ],
+          if (selected.requires('BIRTH_DATE')) ...[
+            const SizedBox(height: 12),
+            _buildDateField(
+              key: const ValueKey('existing-rabbit-birth-date'),
+              label: '分娩日期',
+              value: _birthDate,
+              onPicked: (value) => setState(() => _birthDate = value),
+            ),
+          ],
+          if (selected.requires('LIVE_KITS')) ...[
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('existing-rabbit-live-kits'),
+              controller: _liveKitsController,
+              enabled: !_saving,
+              decoration: const InputDecoration(labelText: '活仔数'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDateField({
+    required Key key,
+    required String label,
+    required DateTime? value,
+    required ValueChanged<DateTime> onPicked,
+  }) {
+    return InputDecorator(
+      key: key,
+      decoration: InputDecoration(labelText: label),
+      child: InkWell(
+        onTap: _saving
+            ? null
+            : () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: value ?? _dateOnly(DateTime.now()),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 1)),
+                  helpText: label,
+                  cancelText: '取消',
+                  confirmText: '确定',
+                );
+                if (picked != null) {
+                  onPicked(_dateOnly(picked));
+                }
+              },
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                value == null ? '未选择' : DateFormat('yyyy-MM-dd').format(value),
+              ),
+            ),
+            const Icon(Icons.calendar_today_outlined, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmitBar(List<ReproEntryPoint> entries) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppPalette.of(context).surface,
+        border: Border(top: BorderSide(color: AppPalette.of(context).line)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton(
+                key: const ValueKey('existing-rabbit-repro-submit'),
+                onPressed:
+                    _saving || entries.isEmpty ? null : () => _submit(entries),
+                child: _saving
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('确认入轨'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit(List<ReproEntryPoint> entries) async {
+    final selected = _selectedEntryPoint(entries);
+    final stage = ReproStage.tryParse(_stage);
+    if (selected == null || stage == null) {
+      _showMessage('请选择生产阶段');
+      return;
+    }
+    final missing = _missingEntryFact(selected);
+    if (missing != null) {
+      _showMessage(missing);
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final result = await ref.read(reproRepositoryProvider).openCycle(
+            houseId: widget.houseId,
+            motherRabbitId: widget.rabbit.id,
+            stage: stage,
+            occurredAt: _stageEnteredAt,
+            matingDate: _matingDate,
+            birthDate: _birthDate,
+            liveKits: int.tryParse(_liveKitsController.text.trim()),
+          );
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(houseRabbitsProvider(widget.houseId));
+      ref.invalidate(
+        rabbitReproTasksProvider(
+          RabbitReproTasksRequest(
+            houseId: widget.houseId,
+            rabbitId: widget.rabbit.id,
+          ),
+        ),
+      );
+      ref.invalidate(homeEventsProvider);
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      Navigator.of(context).pop(result);
+      messenger?.showSnackBar(
+        SnackBar(
+            content:
+                Text('母兔 #${widget.rabbit.id} 已从【${selected.stageLabel}】入轨')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(error is ApiException ? error.message : error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  ReproEntryPoint? _selectedEntryPoint(List<ReproEntryPoint> entries) {
+    final stage = _stage;
+    if (stage == null) {
+      return null;
+    }
+    for (final entry in entries) {
+      if (entry.stage == stage) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  String? _missingEntryFact(ReproEntryPoint selected) {
+    for (final fact in selected.requiredFacts) {
+      final filled = switch (fact.fact) {
+        'STAGE_ENTERED_AT' => _stageEnteredAt != null,
+        'MATING_DATE' || 'GESTATION_ANCHOR' => _matingDate != null,
+        'BIRTH_DATE' => _birthDate != null,
+        'LIVE_KITS' => _liveKitsController.text.trim().isNotEmpty,
+        _ => true,
+      };
+      if (!filled) {
+        return '从【${selected.stageLabel}】入轨需要补录${fact.label}';
+      }
+    }
+    return null;
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 }
 
 class _RabbitTypeSheet extends ConsumerStatefulWidget {
@@ -200,13 +597,11 @@ class _CreateRabbitSheet extends ConsumerStatefulWidget {
     required this.houseId,
     required this.cage,
     required this.initialType,
-  })  : rabbit = null,
-        cages = const <Cage>[];
+  }) : rabbit = null;
 
   const _CreateRabbitSheet.edit({
     required this.houseId,
     required this.rabbit,
-    required this.cages,
   })  : cage = null,
         initialType = '';
 
@@ -214,7 +609,6 @@ class _CreateRabbitSheet extends ConsumerStatefulWidget {
   final Cage? cage;
   final String initialType;
   final Rabbit? rabbit;
-  final List<Cage> cages;
 
   @override
   ConsumerState<_CreateRabbitSheet> createState() => _CreateRabbitSheetState();
@@ -226,11 +620,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   final _weightController = TextEditingController();
   final _liveKitsController = TextEditingController();
   late String _type;
-  late int _selectedCageId;
   var _gender = '0';
   var _arrivalMethod = '0';
   String? _growthStage;
   String? _reproductiveStage;
+
   /// 录入时直接入轨的生产阶段（飞书 recvsrnEJ8bKrk）。null 表示暂不入轨。
   String? _reproStage;
   DateTime? _stageEnteredAt;
@@ -250,13 +644,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     final rabbit = widget.rabbit;
     if (rabbit == null) {
       _type = widget.initialType;
-      _selectedCageId = _createCage.id;
       _growthStage = null;
       _reproductiveStage = _type == '1' ? 'RESERVE' : null;
     } else {
       _type = rabbit.type;
       _gender = rabbit.gender;
-      _selectedCageId = rabbit.cageId;
       _arrivalMethod =
           rabbit.arrivalMethod.isEmpty ? '0' : rabbit.arrivalMethod;
       _breedController.text = rabbit.breed;
@@ -401,24 +793,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _buildStageFields(context),
         const SizedBox(height: 18),
         if (_isEdit) ...[
-          const _RequiredLabel('笼位'),
+          const _SectionLabel('当前笼位'),
           const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            value: _selectedCageId,
-            isExpanded: true,
-            decoration: const InputDecoration(hintText: '请选择笼位'),
-            items: [
-              for (final cage in _editableCages())
-                DropdownMenuItem(
-                  value: cage.id,
-                  child: Text(cage.label),
-                ),
-            ],
-            onChanged: _saving
-                ? null
-                : (value) => setState(
-                      () => _selectedCageId = value ?? _selectedCageId,
-                    ),
+          _ReadOnlyInfoBox(
+            icon: Icons.home_work_outlined,
+            text: '笼位 #${_rabbit.cageId}（只读）',
           ),
           const SizedBox(height: 18),
         ],
@@ -488,8 +867,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     final reproductiveOptions = _reproductiveStageOptions;
     final fixedReproductiveStage = _type == '1';
     // 种母兔的选项为空（阶段由生产流程维护），不能再渲染一个空下拉给用户点。
-    final hasReproductiveStage =
-        _type != '2' && (fixedReproductiveStage || reproductiveOptions.isNotEmpty);
+    final hasReproductiveStage = _type != '2' &&
+        (fixedReproductiveStage || reproductiveOptions.isNotEmpty);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -764,7 +1143,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         await ref.read(rabbitRepositoryProvider).updateRabbit(
               houseId: widget.houseId,
               rabbitId: _rabbit.id,
-              cageId: _selectedCageId,
+              cageId: _rabbit.cageId,
               motherId: _rabbit.motherId,
               breed: _breedController.text,
               arrivalMethod: _arrivalMethod,
@@ -813,26 +1192,6 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         setState(() => _saving = false);
       }
     }
-  }
-
-  List<Cage> _editableCages() {
-    final cages = widget.cages
-        .where((cage) => cage.id == _selectedCageId || _cageFitsRabbit(cage))
-        .toList();
-    if (cages.every((cage) => cage.id != _selectedCageId)) {
-      cages.insert(
-        0,
-        Cage(
-          id: _selectedCageId,
-          houseId: widget.houseId,
-          cageNumber: '#$_selectedCageId',
-          status: '',
-          rabbitCount: 0,
-          isEnabled: true,
-        ),
-      );
-    }
-    return cages;
   }
 
   /// 可手工录入的旧繁殖阶段。
@@ -919,28 +1278,6 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       return null;
     }
     return options.any((option) => option.value == value) ? value : null;
-  }
-
-  bool _cageFitsRabbit(Cage cage) {
-    // 停用笼位现在会出现在笼位列表里（地图要按实物画），
-    // 所以录入时必须在这里自己把它挡住，不能再指望仓库层已经过滤掉。
-    if (!cage.isEnabled) {
-      return false;
-    }
-    return cage.status == '0' || cage.status == _cageStatusForType(_type);
-  }
-
-  String _cageStatusForType(String type) {
-    switch (type) {
-      case '0':
-        return '1';
-      case '1':
-        return '2';
-      case '2':
-        return '3';
-      default:
-        return '';
-    }
   }
 
   String _createCageName() {
@@ -1175,28 +1512,6 @@ class _CageCapacityWarning extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
       ),
-    );
-  }
-}
-
-class _RequiredLabel extends StatelessWidget {
-  const _RequiredLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          const TextSpan(
-            text: '* ',
-            style: TextStyle(color: AppColors.red),
-          ),
-          TextSpan(text: label),
-        ],
-      ),
-      style: Theme.of(context).textTheme.titleMedium,
     );
   }
 }

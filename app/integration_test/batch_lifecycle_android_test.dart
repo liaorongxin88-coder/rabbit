@@ -862,7 +862,7 @@ Future<void> _cullMotherThroughUi(
 }) async {
   if (fromOutboundScreen) {
     await tester.tap(find.text('返回首页'));
-    await _waitFor(tester, find.text('今日生产'));
+    await _waitFor(tester, find.text('今日提醒'));
   } else {
     await _backToHomeTop(tester);
   }
@@ -1203,7 +1203,7 @@ Future<void> _submitAbortion(
 
 /// 回首页并确保滚到顶部。
 ///
-/// 首页是惰加载 ListView，前面找待办时已经把它拖到下方；而「今日生产」在最顶部。
+/// 首页是惰加载 ListView，前面找待办时已经把它拖到下方；而「今日提醒」在最顶部。
 /// 已经停在首页时再点一次底部导航不会重置滚动位置，于是控件真存在却搜不到。
 /// 这是取景问题，不是业务状态问题，所以先拉回顶部再断言。
 Future<void> _backToHomeTop(WidgetTester tester) async {
@@ -1215,7 +1215,7 @@ Future<void> _backToHomeTop(WidgetTester tester) async {
   await tester.ensureVisible(nav);
   await tester.tap(nav);
   await tester.pumpAndSettle();
-  final target = find.text('今日生产');
+  final target = find.text('今日提醒');
   final scrollable = find.byType(Scrollable);
   for (var i = 0; i < 8 && target.evaluate().isEmpty; i++) {
     if (scrollable.evaluate().isEmpty) break;

@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -93,11 +94,7 @@ public class BatchController {
         return ApiResponse.ok(batchService.createBatch(userId, houseId, req.getBatchCode(), req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
     }
 
-    /**
-     * 向已存在的批次追加母兔。
-     *
-     * <p>批次现在可以先建空壳，母兔陆续到齐再放进来；追加的母兔与建批时一样当场入轨。
-     */
+    /** 向批次追加兔只标签；同一兔只可以同时属于多个批次。 */
     @PostMapping("/batches/{batchId}/members")
     @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
     public ApiResponse<Void> addBatchMembers(
@@ -108,7 +105,25 @@ public class BatchController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
         batchService.addMembers(
-            userId, houseId, batchId, req.getFemaleRabbitIds(), req.getRequestId());
+            userId, houseId, batchId, req.resolveRabbitIds(), req.getRequestId());
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/batches/{batchId}/members/{rabbitId}")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<Void> removeBatchMember(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @PathVariable("rabbitId") Long rabbitId,
+            @RequestParam("requestId") String requestId
+    ) {
+        if (requestId == null || requestId.trim().isEmpty()) {
+            throw new BizException(400, "requestId不能为空");
+        }
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        batchService.removeMember(
+            userId, houseId, batchId, rabbitId, requestId.trim());
         return ApiResponse.ok(null);
     }
 

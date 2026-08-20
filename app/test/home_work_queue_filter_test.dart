@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
@@ -90,7 +91,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 3 / 3 条任务'), findsOneWidget);
+    expect(find.text('3 / 3'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     final flowSection = find.byKey(
@@ -106,26 +107,64 @@ void main() {
     await tester.tap(matingTab);
     await tester.pumpAndSettle();
 
+    final countBadge = find.byKey(
+      const ValueKey('production-event-count-badge-配种'),
+    );
+    final badgeRect = tester.getRect(countBadge);
+    final tabBarRect = tester.getRect(find.byType(TabBar));
+    expect(badgeRect.height, lessThan(40));
+    expect(badgeRect.top, greaterThan(tabBarRect.top));
+    expect(badgeRect.bottom, lessThan(tabBarRect.bottom));
+
     final search = find.byKey(const ValueKey('production-work-search'));
     await tester.ensureVisible(search);
     await tester.enterText(search, '101');
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 1 / 3 条任务'), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget);
     expect(find.text('母兔 #101'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('production-filter-clear')));
+    final clearFilters = find.byKey(
+      const ValueKey('production-filter-clear'),
+    );
+    await tester.ensureVisible(clearFilters);
     await tester.pumpAndSettle();
-    expect(find.text('显示 3 / 3 条任务'), findsOneWidget);
+    await tester.tap(clearFilters);
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
 
-    final dueFilter = find.byKey(const ValueKey('production-due-filter'));
-    await tester.ensureVisible(dueFilter);
-    await tester.tap(dueFilter);
+    final alertOverdue = find.byKey(
+      const ValueKey('home-alert-filter-overdue'),
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.drag(
+      find.byKey(const ValueKey('home-scroll')),
+      const Offset(0, 1000),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('仅逾期').last);
+    await tester.ensureVisible(alertOverdue);
+    await tester.pumpAndSettle();
+    await tester.tap(alertOverdue);
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 1 / 3 条任务'), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-due-filter-all')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('production-due-filter-overdue')),
+      findsNothing,
+    );
+
+    await tester.tap(alertOverdue);
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
+
+    await tester.tap(alertOverdue);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 / 3'), findsOneWidget);
     expect(find.text('母兔 #101'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -226,9 +265,93 @@ void main() {
         findsOneWidget,
       );
     }
-    expect(find.text('今日生产'), findsOneWidget);
-    expect(find.text('任务筛选'), findsOneWidget);
-    expect(find.text('生产流程'), findsOneWidget);
+    expect(find.text('今日提醒'), findsOneWidget);
+    expect(find.text('筛选任务'), findsOneWidget);
+    expect(find.text('提醒事件'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rabbit reminder opens the matching rabbit detail route',
+      (tester) async {
+    final event = EventItem(
+      recordId: 31,
+      category: '生产周期',
+      eventType: '配种',
+      eventDate: DateTime.now(),
+      batchId: 9,
+      rabbitId: 401,
+      status: 'due',
+      sourceHouseId: 8,
+      sourceHouseName: '测试兔舍',
+    );
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(path: '/', builder: (_, __) => const HomeScreen()),
+        GoRoute(
+          path: '/houses/:houseId/rabbits/:rabbitId',
+          builder: (_, state) => Scaffold(
+            body: Text(
+              '兔只详情 ${state.pathParameters['houseId']}/'
+              '${state.pathParameters['rabbitId']}',
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => [event]),
+        ],
+        child: MaterialApp.router(
+          theme: buildAppTheme(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final detailLink = find.byKey(
+      const ValueKey('production-event-rabbit-detail-401'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('home-scroll')),
+      const Offset(0, -320),
+    );
+    await tester.pumpAndSettle();
+
+    final statusRail = find.byKey(
+      const ValueKey('production-event-status-rail-401'),
+    );
+    final eventCard = find.ancestor(
+      of: statusRail,
+      matching: find.byType(Card),
+    );
+    final railRect = tester.getRect(statusRail);
+    final cardRect = tester.getRect(eventCard);
+    expect(railRect.left, greaterThan(cardRect.left));
+    expect(railRect.top, greaterThan(cardRect.top));
+    expect(railRect.bottom, lessThan(cardRect.bottom));
+
+    await tester.tap(detailLink);
+    await tester.pumpAndSettle();
+
+    expect(find.text('兔只详情 8/401'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

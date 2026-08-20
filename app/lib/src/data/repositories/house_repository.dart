@@ -61,6 +61,27 @@ class HouseRepository {
     );
   }
 
+  Future<RabbitHouse> updateHouse({
+    required int houseId,
+    required String name,
+    required String remark,
+  }) {
+    return _api.put<RabbitHouse>(
+      '/api/houses/$houseId',
+      houseId: houseId,
+      body: {
+        'name': name,
+        'remark': remark,
+      },
+      decode: (data) {
+        if (data is! Map) {
+          throw const ApiException('更新兔舍结果格式不正确');
+        }
+        return RabbitHouse.fromJson(Map<String, dynamic>.from(data));
+      },
+    );
+  }
+
   Future<HousePermission> getMyPermission(int houseId) {
     return _api.get<HousePermission>(
       '/api/houses/permission',

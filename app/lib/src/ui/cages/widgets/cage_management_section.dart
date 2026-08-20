@@ -9,7 +9,9 @@ import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_attention.dart';
 import 'package:rabbit_flutter/src/domain/models/cage_layout.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/cage_map_view.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
@@ -221,6 +223,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   Widget build(BuildContext context) {
     final houseId = widget.house.id;
     final cages = ref.watch(houseCagesProvider(houseId));
+    final rabbits = ref.watch(houseBreedingRabbitsProvider(houseId));
     final permission = ref.watch(housePermissionProvider(houseId));
     final palette = AppPalette.of(context);
 
@@ -241,6 +244,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                     : null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
+                  ref.invalidate(houseBreedingRabbitsProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
@@ -248,7 +252,10 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 house: widget.house,
                 canManageCages: false,
                 onCreate: null,
-                onRefresh: () => ref.invalidate(houseCagesProvider(houseId)),
+                onRefresh: () {
+                  ref.invalidate(houseCagesProvider(houseId));
+                  ref.invalidate(houseBreedingRabbitsProvider(houseId));
+                },
               ),
               error: (_, __) => _CageHeader(
                 house: widget.house,
@@ -256,6 +263,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onCreate: null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
+                  ref.invalidate(houseBreedingRabbitsProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
@@ -285,7 +293,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 ),
                 const SizedBox(height: 14),
                 cages.when(
-                  data: (items) => _buildCageGrid(context, items, permission),
+                  data: (items) => _buildCageGrid(
+                    context,
+                    items,
+                    permission,
+                    _doeStatusByCage(rabbits.valueOrNull ?? const <Rabbit>[]),
+                  ),
                   loading: () => const _CageLoading(),
                   error: (error, _) => _InlineSectionError(
                     message: error.toString(),
@@ -304,6 +317,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     BuildContext context,
     List<Cage> cages,
     AsyncValue<HousePermission> permission,
+    Map<int, String> doeStatusByCage,
   ) {
     if (_lastSourceCageCount != cages.length) {
       _lastSourceCageCount = cages.length;
@@ -397,7 +411,13 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             onAction: _hasActiveFilters ? _clearFilters : null,
           )
         else if (_viewMode == _CageViewMode.map)
-          _buildCageMap(context, cages, matches, permission)
+          _buildCageMap(
+            context,
+            cages,
+            matches,
+            permission,
+            doeStatusByCage,
+          )
         else
           LayoutBuilder(
             builder: (context, constraints) {
@@ -427,6 +447,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                   final cage = filtered[index];
                   return _CageTile(
                     cage: cage,
+                    statusLabel: doeStatusByCage[cage.id] ?? '无状态',
                     onTap: () => context.go(
                       '/houses/${widget.house.id}/cages/${cage.id}',
                     ),
@@ -464,6 +485,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     List<Cage> cages,
     Set<int> matchedCageIds,
     AsyncValue<HousePermission> permission,
+    Map<int, String> doeStatusByCage,
   ) {
     final layout = CageLayout.fromCages(cages);
     final counts = <CageAttention, int>{};
@@ -485,6 +507,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             () => _visibleRowCount += _rowBatchSize,
           ),
           isMatch: (cage) => matchedCageIds.contains(cage.id),
+          statusLabel: (cage) => doeStatusByCage[cage.id] ?? '无状态',
           onTapCage: (cage) => context.go('/houses/$houseId/cages/${cage.id}'),
           rowTrailingBuilder: (row) {
             if (!canEdit || row.rowCode == 'LEGACY') {
@@ -909,20 +932,20 @@ class _CageHeader extends StatelessWidget {
 class _CageTile extends StatelessWidget {
   const _CageTile({
     required this.cage,
+    required this.statusLabel,
     required this.onTap,
     this.onRowOutbound,
   });
 
   final Cage cage;
+  final String statusLabel;
   final VoidCallback onTap;
   final VoidCallback? onRowOutbound;
 
   @override
   Widget build(BuildContext context) {
-    final occupied = cage.rabbitCount > 0;
-    final title = occupied ? '在栏 ${cage.rabbitCount} 只' : '空笼';
     final palette = AppPalette.of(context);
-    final titleColor = occupied ? palette.success : palette.text;
+    final titleColor = statusLabel == '无状态' ? palette.muted : palette.text;
 
     return Material(
       color: palette.surface,
@@ -942,7 +965,7 @@ class _CageTile extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.topLeft,
                   child: Text(
-                    title,
+                    statusLabel,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -990,6 +1013,19 @@ class _CageTile extends StatelessWidget {
       ),
     );
   }
+}
+
+Map<int, String> _doeStatusByCage(List<Rabbit> rabbits) {
+  final result = <int, String>{};
+  for (final rabbit in rabbits) {
+    if (!rabbit.isActive || rabbit.type != '0' || rabbit.gender != '0') {
+      continue;
+    }
+    final rawStage = rabbit.currentStage?.trim();
+    final label = ReproStage.tryParse(rawStage)?.label ?? '无状态';
+    result.putIfAbsent(rabbit.cageId, () => label);
+  }
+  return result;
 }
 
 class _CreateCagesSheet extends ConsumerStatefulWidget {

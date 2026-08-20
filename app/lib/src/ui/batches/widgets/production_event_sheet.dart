@@ -10,7 +10,9 @@ import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
+import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/models/reminder_date_policy.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/batch_sheet_async_state.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_context_line.dart';
@@ -18,8 +20,10 @@ import 'package:rabbit_flutter/src/ui/batches/widgets/weaning_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
 
 enum ProductionKind {
+  estrus,
   mating,
   pregnancyCheck,
   prepartum,
@@ -58,8 +62,37 @@ ProductionKind? productionKindFromEvent(EventItem event) {
 bool eventIsActionable(EventItem event) =>
     productionKindFromEvent(event) != null;
 
+ProductionKind? productionKindFromTask(ReproTask task) {
+  return switch (task.action) {
+    ReproAction.estrus => ProductionKind.estrus,
+    ReproAction.mating => ProductionKind.mating,
+    ReproAction.palpation => ProductionKind.pregnancyCheck,
+    ReproAction.prepartum => ProductionKind.prepartum,
+    ReproAction.delivery => ProductionKind.parturition,
+    ReproAction.weaning => ProductionKind.weaning,
+    _ => null,
+  };
+}
+
+bool reproTaskIsActionable(ReproTask task) =>
+    task.actionable && productionKindFromTask(task) != null;
+
+String reproTaskActionHint(ReproTask task) {
+  return switch (task.action) {
+    ReproAction.estrus => '完成催情',
+    ReproAction.mating => '记录配种',
+    ReproAction.palpation => '记录摸胎结果',
+    ReproAction.prepartum => '完成备产',
+    ReproAction.delivery => '记录分娩',
+    ReproAction.weaning => '断奶并放入笼位',
+    _ => '',
+  };
+}
+
 String productionActionHint(EventItem event) {
   switch (productionKindFromEvent(event)) {
+    case ProductionKind.estrus:
+      return '完成催情';
     case ProductionKind.mating:
       return '记录配种';
     case ProductionKind.pregnancyCheck:
@@ -79,37 +112,135 @@ String productionActionHint(EventItem event) {
   }
 }
 
+List<Rabbit> _availableBreedingMales(
+  Iterable<Rabbit> rabbits, {
+  required int houseId,
+}) {
+  return rabbits
+      .where(
+        (rabbit) =>
+            rabbit.id > 0 &&
+            rabbit.houseId == houseId &&
+            rabbit.isActive &&
+            rabbit.type == '0' &&
+            rabbit.gender == '1',
+      )
+      .toList()
+    ..sort((left, right) => left.id.compareTo(right.id));
+}
+
+bool _containsMaleId(Iterable<Rabbit> males, int? maleId) {
+  return maleId != null && males.any((male) => male.id == maleId);
+}
+
 Future<void> showProductionEventSheet({
   required BuildContext context,
   required EventItem event,
-}) {
+}) async {
   final kind = productionKindFromEvent(event);
   if (kind == null) {
-    return Future<void>.value();
+    return;
   }
   if (kind == ProductionKind.weaning) {
-    return showWeaningSheet(context: context, event: event);
+    await showWeaningSheet(context: context, event: event);
+    return;
   }
 
   final houseId = event.sourceHouseId;
   final rabbitId = event.rabbitId;
   if (houseId == null || houseId <= 0 || rabbitId == null || rabbitId <= 0) {
-    return Future<void>.value();
+    return;
   }
 
-  return showModalBottomSheet<void>(
+  await _showProductionActionSheet(
+    context: context,
+    input: _ProductionSheetInput(
+      kind: kind,
+      houseId: houseId,
+      rabbitId: rabbitId,
+      batchId: event.batchId,
+      cycleId: event.isBreedingCycle ? event.recordId : null,
+      initialDate: event.eventDate,
+      contextLabel: event.houseLabel,
+    ),
+  );
+}
+
+/// 从服务端待办打开单兔生产动作。动作、周期和日期均来自 [task]，不再从
+/// 事件中文名推断；首页和批次页仍可继续使用 [showProductionEventSheet]。
+Future<ReproActionResult?> showReproTaskActionSheet({
+  required BuildContext context,
+  required int houseId,
+  required ReproTask task,
+}) {
+  final kind = productionKindFromTask(task);
+  final rabbitId = task.rabbitId;
+  if (kind == null ||
+      houseId <= 0 ||
+      rabbitId == null ||
+      rabbitId <= 0 ||
+      task.cycleId == null ||
+      task.cycleId! <= 0) {
+    return Future<ReproActionResult?>.value();
+  }
+  if (kind == ProductionKind.weaning) {
+    final event = EventItem(
+      recordId: task.cycleId!,
+      category: '生产周期',
+      eventType: task.taskLabel,
+      eventDate: task.dueTime,
+      batchId: task.batchId,
+      rabbitId: rabbitId,
+      status: task.overdue ? 'overdue' : 'due',
+      sourceHouseId: houseId,
+    );
+    return showWeaningSheet(context: context, event: event);
+  }
+  return _showProductionActionSheet(
+    context: context,
+    input: _ProductionSheetInput(
+      kind: kind,
+      houseId: houseId,
+      rabbitId: rabbitId,
+      batchId: task.batchId,
+      cycleId: task.cycleId,
+      initialDate: null,
+      contextLabel: '生产待办 #${task.id}',
+    ),
+  );
+}
+
+Future<ReproActionResult?> _showProductionActionSheet({
+  required BuildContext context,
+  required _ProductionSheetInput input,
+}) {
+  return showModalBottomSheet<ReproActionResult>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     useSafeArea: true,
-    builder: (context) => _ProductionEventSheet(
-      event: event,
-      kind: kind,
-      houseId: houseId,
-      batchId: event.batchId,
-      rabbitId: rabbitId,
-    ),
+    builder: (context) => _ProductionEventSheet(input: input),
   );
+}
+
+class _ProductionSheetInput {
+  const _ProductionSheetInput({
+    required this.kind,
+    required this.houseId,
+    required this.rabbitId,
+    required this.contextLabel,
+    this.batchId,
+    this.cycleId,
+    this.initialDate,
+  });
+
+  final ProductionKind kind;
+  final int houseId;
+  final int rabbitId;
+  final String contextLabel;
+  final int? batchId;
+  final int? cycleId;
+  final DateTime? initialDate;
 }
 
 Future<bool> showBatchMatingSheet({
@@ -204,10 +335,20 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
     setState(() => _selectedMaleId = value);
   }
 
-  Future<void> _submit() async {
-    final maleId = _selectedMaleId;
+  void _selectMatingMethod(MatingMethod method) {
+    setState(() {
+      _matingMethod = method;
+      if (method == MatingMethod.ai) {
+        _selectedMaleId = null;
+      }
+    });
+  }
+
+  Future<void> _submit({required List<Rabbit> males}) async {
+    final maleId =
+        _matingMethod == MatingMethod.natural ? _selectedMaleId : null;
     if (_matingMethod == MatingMethod.natural &&
-        (maleId == null || maleId <= 0)) {
+        !_containsMaleId(males, maleId)) {
       _showMessage('体配时请选择种公兔');
       return;
     }
@@ -225,7 +366,7 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
           'batchId': widget.batchId,
           'femaleRabbitIds': widget.rabbitIds,
           'nursingRabbitIds': widget.nursingRabbitIds,
-          'maleRabbitId': maleId,
+          if (maleId != null) 'maleRabbitId': maleId,
           'matingMethod': _matingMethod.wire,
           'matingDate': formatBatchWriteDate(_matingDate),
         }),
@@ -235,7 +376,7 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
             batchId: widget.batchId,
             matableRabbitIds: widget.rabbitIds,
             nursingRabbitIds: widget.nursingRabbitIds,
-            maleRabbitId: _matingMethod == MatingMethod.natural ? maleId : null,
+            maleRabbitId: maleId,
             matingDate: _matingDate,
             matingMethod: _matingMethod,
             requestId: requestId,
@@ -312,13 +453,17 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
               onClose: () => Navigator.pop(context),
             ),
             data: (items) {
-              final males = items
-                  .where((rabbit) => rabbit.type == '0' && rabbit.gender == '1')
-                  .toList()
-                ..sort((a, b) => a.id.compareTo(b.id));
-              if (_selectedMaleId == null && males.isNotEmpty) {
+              final males = _availableBreedingMales(
+                items,
+                houseId: widget.houseId,
+              );
+              if (_matingMethod == MatingMethod.natural &&
+                  !_containsMaleId(males, _selectedMaleId) &&
+                  males.isNotEmpty) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _selectedMaleId == null) {
+                  if (mounted &&
+                      _matingMethod == MatingMethod.natural &&
+                      !_containsMaleId(males, _selectedMaleId)) {
                     setState(() => _selectedMaleId = males.first.id);
                   }
                 });
@@ -380,8 +525,8 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                             groupValue: _matingMethod,
                             onChanged: _saving
                                 ? null
-                                : (value) => setState(
-                                      () => _matingMethod = value ?? method,
+                                : (value) => _selectMatingMethod(
+                                      value ?? method,
                                     ),
                             title: Text(method.label),
                             subtitle: method == MatingMethod.ai
@@ -434,9 +579,12 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                               key: const ValueKey('batch-mating-confirm'),
                               onPressed: _saving ||
                                       (_matingMethod == MatingMethod.natural &&
-                                          males.isEmpty)
+                                          !_containsMaleId(
+                                            males,
+                                            _selectedMaleId,
+                                          ))
                                   ? null
-                                  : _submit,
+                                  : () => _submit(males: males),
                               child: _saving
                                   ? const SizedBox.square(
                                       dimension: 20,
@@ -466,24 +614,24 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
 }
 
 class _ProductionEventSheet extends ConsumerStatefulWidget {
-  const _ProductionEventSheet({
-    required this.event,
-    required this.kind,
-    required this.houseId,
-    required this.batchId,
-    required this.rabbitId,
-  });
+  const _ProductionEventSheet({required this.input});
 
-  final EventItem event;
-  final ProductionKind kind;
-  final int houseId;
-  final int? batchId;
-  final int rabbitId;
+  final _ProductionSheetInput input;
+
+  ProductionKind get kind => input.kind;
+  int get houseId => input.houseId;
+  int get rabbitId => input.rabbitId;
+  int? get batchId => input.batchId;
+  int? get cycleId => input.cycleId;
+  DateTime? get initialDate => input.initialDate;
+  String get contextLabel => input.contextLabel;
 
   @override
   ConsumerState<_ProductionEventSheet> createState() =>
       _ProductionEventSheetState();
 }
+
+enum _NextReminderMode { houseSetting, custom }
 
 class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   final _writeRequest = BatchWriteRequestController();
@@ -499,6 +647,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   /// 停在待摸胎且再也收不到提醒，从流程里惄无声息地消失。
   DateTime? _recheckDate;
   DateTime? _postponeDate;
+  DateTime? _customNextReminderDate;
+  var _nextReminderMode = _NextReminderMode.houseSetting;
   var _postponed = false;
   var _parturitionFailed = false;
   int? _selectedMaleId;
@@ -509,7 +659,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   @override
   void initState() {
     super.initState();
-    _actionDate = widget.event.eventDate ?? DateTime.now();
+    _actionDate = widget.initialDate ?? DateTime.now();
   }
 
   @override
@@ -523,6 +673,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
 
   String get _title {
     switch (widget.kind) {
+      case ProductionKind.estrus:
+        return '完成催情';
       case ProductionKind.mating:
         return '记录配种';
       case ProductionKind.pregnancyCheck:
@@ -562,15 +714,25 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     }
   }
 
-  /// 复查日期只能往后选：它是「下次什么时候再来摸」，与记录动作发生日的 [_pickDate] 相反。
+  /// 复查日期按兔场的待摸胎时长预填，并且只允许今天及以后。
   Future<void> _pickRecheckDate() async {
-    final today = DateTime.now();
-    final firstDate = DateTime(today.year, today.month, today.day);
+    final today = localDateOnly(DateTime.now());
+    final suggested = suggestedReminderDate(
+      stage: ReproStage.awaitPalpation,
+      setting: _reminderSetting,
+      from: today,
+    );
+    final lastDate = today.add(const Duration(days: 3650));
     final picked = await showDatePicker(
       context: context,
-      initialDate: _recheckDate ?? firstDate.add(const Duration(days: 7)),
-      firstDate: firstDate,
-      lastDate: firstDate.add(const Duration(days: 365)),
+      initialDate: reminderInitialDate(
+        suggested: suggested,
+        selected: _recheckDate,
+        now: today,
+        latest: lastDate,
+      ),
+      firstDate: today,
+      lastDate: lastDate,
       helpText: '选择复查日期',
       cancelText: '取消',
       confirmText: '确定',
@@ -581,14 +743,23 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   Future<void> _pickPostponeDate() async {
-    final today = DateTime.now();
-    final firstDate = DateTime(today.year, today.month, today.day)
-        .add(const Duration(days: 1));
+    final today = localDateOnly(DateTime.now());
+    final suggested = suggestedReminderDate(
+      stage: _currentReminderStage,
+      setting: _reminderSetting,
+      from: today,
+    );
+    final lastDate = today.add(const Duration(days: 3650));
     final picked = await showDatePicker(
       context: context,
-      initialDate: _postponeDate ?? firstDate,
-      firstDate: firstDate,
-      lastDate: firstDate.add(const Duration(days: 365)),
+      initialDate: reminderInitialDate(
+        suggested: suggested,
+        selected: _postponeDate,
+        now: today,
+        latest: lastDate,
+      ),
+      firstDate: today,
+      lastDate: lastDate,
       helpText: '选择下次提醒日期',
       cancelText: '取消',
       confirmText: '确定',
@@ -598,7 +769,108 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     }
   }
 
+  Future<void> _pickCustomNextReminderDate() async {
+    final today = localDateOnly(DateTime.now());
+    final lastDate = today.add(const Duration(days: 3650));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: reminderInitialDate(
+        suggested: _suggestedNextReminderDate,
+        selected: _customNextReminderDate,
+        now: today,
+        latest: lastDate,
+      ),
+      firstDate: today,
+      lastDate: lastDate,
+      helpText: '选择$_nextReminderDateLabel',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null && mounted) {
+      setState(() => _customNextReminderDate = localDateOnly(picked));
+    }
+  }
+
+  GlobalSetting get _reminderSetting =>
+      ref.read(houseSettingProvider(widget.houseId)).valueOrNull?.setting ??
+      GlobalSetting.defaults();
+
+  ReproStage get _currentReminderStage => switch (widget.kind) {
+        ProductionKind.estrus => ReproStage.awaitEstrus,
+        ProductionKind.mating => ReproStage.awaitMating,
+        ProductionKind.pregnancyCheck => ReproStage.awaitPalpation,
+        ProductionKind.prepartum => ReproStage.awaitPrepartum,
+        ProductionKind.parturition => ReproStage.awaitDelivery,
+        ProductionKind.weaning => ReproStage.awaitWeaning,
+        ProductionKind.sale || ProductionKind.replacement => ReproStage.ready,
+      };
+
+  ReproStage? get _nextReminderStage => switch (widget.kind) {
+        ProductionKind.estrus => ReproStage.awaitMating,
+        ProductionKind.mating => ReproStage.awaitPalpation,
+        ProductionKind.pregnancyCheck => switch (_palpationResult) {
+            PalpationResult.pregnant => ReproStage.awaitPrepartum,
+            PalpationResult.empty => ReproStage.awaitEstrus,
+            PalpationResult.unsure => ReproStage.awaitPalpation,
+          },
+        ProductionKind.prepartum => ReproStage.awaitDelivery,
+        ProductionKind.parturition =>
+          _parturitionFailed ? ReproStage.awaitEstrus : ReproStage.awaitWeaning,
+        ProductionKind.weaning ||
+        ProductionKind.sale ||
+        ProductionKind.replacement =>
+          null,
+      };
+
+  String get _nextReminderDateLabel =>
+      reminderDateLabelForStage(_nextReminderStage!);
+
+  bool get _canCustomizeNextReminder {
+    if (_postponed ||
+        (widget.kind == ProductionKind.pregnancyCheck &&
+            _palpationResult == PalpationResult.unsure)) {
+      return false;
+    }
+    return _nextReminderStage != null;
+  }
+
+  DateTime get _suggestedNextReminderDate {
+    final today = localDateOnly(DateTime.now());
+    return reminderInitialDate(
+      suggested: suggestedReminderDate(
+        stage: _nextReminderStage!,
+        setting: _reminderSetting,
+        from: _actionDate,
+      ),
+      now: today,
+      latest: today.add(const Duration(days: 3650)),
+    );
+  }
+
+  DateTime? get _ordinaryNextRemindAt {
+    if (!_canCustomizeNextReminder ||
+        _nextReminderMode == _NextReminderMode.houseSetting) {
+      return null;
+    }
+    return _customNextReminderDate ?? _suggestedNextReminderDate;
+  }
+
+  void _selectMale(int? value) {
+    if (value == null || value == _selectedMaleId) return;
+    setState(() => _selectedMaleId = value);
+  }
+
+  void _selectMatingMethod(MatingMethod method) {
+    setState(() {
+      _matingMethod = method;
+      if (method == MatingMethod.ai) {
+        _selectedMaleId = null;
+      }
+    });
+  }
+
   bool get _canPostpone =>
+      widget.kind == ProductionKind.estrus ||
       widget.kind == ProductionKind.mating ||
       widget.kind == ProductionKind.pregnancyCheck ||
       widget.kind == ProductionKind.prepartum ||
@@ -616,8 +888,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       ..sort((a, b) => a.cageNumber.compareTo(b.cageNumber));
   }
 
-  int? get _breedingCycleId =>
-      widget.event.category == '生产周期' ? widget.event.recordId : null;
+  int? get _breedingCycleId => widget.cycleId;
 
   String _requestIdFor(Map<String, Object?> fields) {
     return _writeRequest.requestIdFor(
@@ -637,7 +908,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     required List<Cage> cages,
   }) async {
     final batchId = widget.batchId;
-    if (widget.kind != ProductionKind.replacement &&
+    if (widget.kind == ProductionKind.sale &&
         (batchId == null || batchId <= 0)) {
       _showMessage('批次信息缺失，请刷新后重试');
       return;
@@ -648,12 +919,11 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       final repo = ref.read(batchRepositoryProvider);
       final rabbitRepo = ref.read(rabbitRepositoryProvider);
       final reproRepo = ref.read(reproRepositoryProvider);
+      ReproActionResult? actionResult;
 
-      // 四个生产动作已统一走 doe-breeding-v2 的单一写入口。
-      // 旧的六个 submitXxx 各拼一套 body、各自校验，同一条规则在六处漂移；
-      // 现在差异只在于传不传某个参数，而不是走不走另一条代码路径。
       final cycleId = _breedingCycleId;
-      final needsCycle = widget.kind == ProductionKind.mating ||
+      final needsCycle = widget.kind == ProductionKind.estrus ||
+          widget.kind == ProductionKind.mating ||
           widget.kind == ProductionKind.pregnancyCheck ||
           widget.kind == ProductionKind.prepartum ||
           widget.kind == ProductionKind.parturition;
@@ -668,7 +938,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           _showMessage('请选择下次提醒日期');
           return;
         }
-        await reproRepo.applyAction(
+        actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
           cycleId: cycleId!,
           action: ReproAction.postpone,
@@ -678,59 +948,92 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
             'postponeDate': formatBatchWriteDate(postponeDate),
           }),
         );
+      } else if (widget.kind == ProductionKind.estrus) {
+        final nextRemindAt = _ordinaryNextRemindAt;
+        final remark = _remarkController.text.trim();
+        actionResult = await reproRepo.applyAction(
+          houseId: widget.houseId,
+          cycleId: cycleId!,
+          action: ReproAction.estrus,
+          occurredAt: _actionDate,
+          nextRemindAt: nextRemindAt,
+          remark: remark,
+          requestId: _requestIdFor({
+            'actionDate': formatBatchWriteDate(_actionDate),
+            'remark': remark,
+            if (nextRemindAt != null)
+              'nextRemindAt': formatBatchWriteDate(nextRemindAt),
+          }),
+        );
       } else if (widget.kind == ProductionKind.mating) {
         final isAi = _matingMethod == MatingMethod.ai;
-        if (!isAi && (_selectedMaleId == null || _selectedMaleId! <= 0)) {
+        final males = _availableBreedingMales(
+          rabbits,
+          houseId: widget.houseId,
+        );
+        final maleId = isAi ? null : _selectedMaleId;
+        if (!isAi && !_containsMaleId(males, maleId)) {
           _showMessage('请选择种公兔');
           return;
         }
-        await reproRepo.applyAction(
+        final nextRemindAt = _ordinaryNextRemindAt;
+        actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
           cycleId: cycleId!,
           action: ReproAction.mating,
           occurredAt: _actionDate,
-          maleRabbitId: isAi ? null : _selectedMaleId,
+          maleRabbitId: maleId,
           matingMethod: _matingMethod,
+          nextRemindAt: nextRemindAt,
           requestId: _requestIdFor({
-            'maleRabbitId': _selectedMaleId,
+            if (maleId != null) 'maleRabbitId': maleId,
             'matingMethod': _matingMethod.wire,
             'matingDate': formatBatchWriteDate(_actionDate),
+            if (nextRemindAt != null)
+              'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
         );
       } else if (widget.kind == ProductionKind.pregnancyCheck) {
         final remark = _remarkController.text.trim();
         final result = _palpationResult;
-        // 「不确定」必须给复查日：不给的话这只兔子会停在待摸胎且再无提醒，
-        // 正是旧实现里「兔子消失在流程中」的典型成因。
         if (result == PalpationResult.unsure && _recheckDate == null) {
           _showMessage('摸胎结论为不确定时，请选择复查日期');
           return;
         }
-        await reproRepo.applyAction(
+        final nextRemindAt = result == PalpationResult.unsure
+            ? _recheckDate
+            : _ordinaryNextRemindAt;
+        actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
           cycleId: cycleId!,
           action: ReproAction.palpation,
           occurredAt: _actionDate,
           palpationResult: result,
-          nextRemindAt: result == PalpationResult.unsure ? _recheckDate : null,
+          nextRemindAt: nextRemindAt,
           remark: remark,
           requestId: _requestIdFor({
             'checkDate': formatBatchWriteDate(_actionDate),
             'result': result.wire,
             'remark': remark,
+            if (nextRemindAt != null)
+              'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
         );
       } else if (widget.kind == ProductionKind.prepartum) {
         final remark = _remarkController.text.trim();
-        await reproRepo.applyAction(
+        final nextRemindAt = _ordinaryNextRemindAt;
+        actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
           cycleId: cycleId!,
           action: ReproAction.prepartum,
           occurredAt: _actionDate,
+          nextRemindAt: nextRemindAt,
           remark: remark,
           requestId: _requestIdFor({
             'actionDate': formatBatchWriteDate(_actionDate),
             'remark': remark,
+            if (nextRemindAt != null)
+              'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
         );
       } else if (widget.kind == ProductionKind.parturition) {
@@ -750,12 +1053,14 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           return;
         }
         final remark = _remarkController.text.trim();
-        await reproRepo.applyAction(
+        final nextRemindAt = _ordinaryNextRemindAt;
+        actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
           cycleId: cycleId!,
           action: ReproAction.delivery,
           outcome: _parturitionFailed ? 'FAILED' : 'BORN',
           occurredAt: _actionDate,
+          nextRemindAt: nextRemindAt,
           totalKits: total,
           liveKits: live,
           keptKits: kept,
@@ -767,6 +1072,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
             'keptKits': kept,
             'failed': _parturitionFailed,
             'remark': remark,
+            if (nextRemindAt != null)
+              'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
         );
       } else if (widget.kind == ProductionKind.sale) {
@@ -809,6 +1116,14 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       }
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
+      ref.invalidate(
+        rabbitReproTasksProvider(
+          RabbitReproTasksRequest(
+            houseId: widget.houseId,
+            rabbitId: widget.rabbitId,
+          ),
+        ),
+      );
       ref.invalidate(houseCagesProvider(widget.houseId));
       ref.invalidate(houseBatchesProvider(widget.houseId));
       if (batchId != null && batchId > 0) {
@@ -820,8 +1135,10 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
         ref.invalidate(batchMembersProvider(detailRequest));
       }
       final messenger = ScaffoldMessenger.maybeOf(context);
-      Navigator.of(context).pop();
-      messenger?.showSnackBar(SnackBar(content: Text('$_title 已完成')));
+      Navigator.of(context).pop(actionResult);
+      messenger?.showSnackBar(
+        SnackBar(content: Text(_successMessage(actionResult))),
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -835,6 +1152,22 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     }
   }
 
+  String _successMessage(ReproActionResult? result) {
+    final parts = <String>['$_title 已完成'];
+    final stage = result?.stage;
+    if (stage != null) {
+      parts.add('下一阶段：${stage.label}');
+    }
+    final nextDueTime = result?.nextDueTime;
+    if (nextDueTime != null) {
+      final reminderTitle =
+          stage == null ? '下次提醒' : reminderTitleForStage(stage);
+      parts.add(
+          '$reminderTitle：${DateFormat('yyyy-MM-dd').format(nextDueTime)}');
+    }
+    return parts.join(' · ');
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -843,6 +1176,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(houseSettingProvider(widget.houseId));
     final rabbitsAsync =
         ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
@@ -893,14 +1227,20 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                 onClose: () => Navigator.pop(context),
               ),
               data: (cages) {
-                final males = rabbits
-                    .where((r) => r.type == '0' && r.gender == '1')
-                    .toList();
+                final males = _availableBreedingMales(
+                  rabbits,
+                  houseId: widget.houseId,
+                );
                 if (widget.kind == ProductionKind.mating &&
-                    _selectedMaleId == null &&
+                    !_postponed &&
+                    _matingMethod == MatingMethod.natural &&
+                    !_containsMaleId(males, _selectedMaleId) &&
                     males.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && _selectedMaleId == null) {
+                    if (mounted &&
+                        !_postponed &&
+                        _matingMethod == MatingMethod.natural &&
+                        !_containsMaleId(males, _selectedMaleId)) {
                       setState(() => _selectedMaleId = males.first.id);
                     }
                   });
@@ -946,13 +1286,10 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                       ),
                                       const SizedBox(height: 4),
                                       ProductionContextLine(
-                                        houseLabel: widget.event.houseLabel,
+                                        houseLabel: widget.contextLabel,
                                         rabbitId: widget.rabbitId,
                                         batchId: widget.batchId,
-                                        cycleRecordId:
-                                            widget.event.isBreedingCycle
-                                                ? widget.event.recordId
-                                                : null,
+                                        cycleRecordId: widget.cycleId,
                                       ),
                                     ],
                                   ),
@@ -1005,33 +1342,6 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                               widget.kind == ProductionKind.mating) ...[
                             const SizedBox(height: 8),
                             Text(
-                              '种公兔',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            if (males.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 8),
-                                child: Text('暂无可用种公兔，请先在笼位录入。'),
-                              )
-                            else
-                              ...males.map(
-                                (male) => RadioListTile<int>(
-                                  value: male.id,
-                                  groupValue: _selectedMaleId,
-                                  onChanged: _saving
-                                      ? null
-                                      : (value) => setState(
-                                            () => _selectedMaleId = value,
-                                          ),
-                                  title: Text(
-                                    '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
-                                  ),
-                                ),
-                              ),
-                          ],
-                          if (widget.kind == ProductionKind.mating) ...[
-                            const SizedBox(height: 8),
-                            Text(
                               '配种方式',
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
@@ -1042,14 +1352,38 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 groupValue: _matingMethod,
                                 onChanged: _saving
                                     ? null
-                                    : (value) => setState(
-                                          () => _matingMethod = value ?? method,
+                                    : (value) => _selectMatingMethod(
+                                          value ?? method,
                                         ),
                                 title: Text(method.label),
                                 subtitle: method == MatingMethod.ai
                                     ? const Text('混精 / 外购冻精，可不指定公兔')
                                     : null,
                               ),
+                            if (_matingMethod == MatingMethod.natural) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                '种公兔',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              if (males.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: Text('暂无可用种公兔，请先在笼位录入。'),
+                                )
+                              else
+                                ...males.map(
+                                  (male) => RadioListTile<int>(
+                                    key: ValueKey('mating-male-${male.id}'),
+                                    value: male.id,
+                                    groupValue: _selectedMaleId,
+                                    onChanged: _saving ? null : _selectMale,
+                                    title: Text(
+                                      '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ],
                           if (!_postponed &&
                               widget.kind == ProductionKind.pregnancyCheck) ...[
@@ -1188,6 +1522,75 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                   ),
                                 ),
                             ],
+                          ],
+                          if (_canCustomizeNextReminder) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _nextReminderDateLabel,
+                              key: const ValueKey(
+                                'next-reminder-stage-label',
+                              ),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            SegmentedButton<_NextReminderMode>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: _NextReminderMode.houseSetting,
+                                  label: Text(
+                                    '按兔场设置',
+                                    key: ValueKey(
+                                      'next-reminder-house-setting',
+                                    ),
+                                  ),
+                                ),
+                                ButtonSegment(
+                                  value: _NextReminderMode.custom,
+                                  label: Text(
+                                    '自定义日期',
+                                    key: ValueKey('next-reminder-custom'),
+                                  ),
+                                ),
+                              ],
+                              selected: {_nextReminderMode},
+                              showSelectedIcon: false,
+                              onSelectionChanged: _saving
+                                  ? null
+                                  : (selection) => setState(() {
+                                        _nextReminderMode = selection.first;
+                                        if (_nextReminderMode ==
+                                            _NextReminderMode.custom) {
+                                          _customNextReminderDate ??=
+                                              _suggestedNextReminderDate;
+                                        }
+                                      }),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _nextReminderMode ==
+                                      _NextReminderMode.houseSetting
+                                  ? '建议 ${formatBatchWriteDate(_suggestedNextReminderDate)}，由兔场规则计算'
+                                  : '覆盖本次推进后生成的$_nextReminderDateLabel',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            if (_nextReminderMode == _NextReminderMode.custom)
+                              ListTile(
+                                key: const ValueKey(
+                                  'next-reminder-custom-date',
+                                ),
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(_nextReminderDateLabel),
+                                subtitle: Text(
+                                  formatBatchWriteDate(
+                                    _customNextReminderDate ??
+                                        _suggestedNextReminderDate,
+                                  ),
+                                ),
+                                trailing: const Icon(Icons.event_outlined),
+                                onTap: _saving
+                                    ? null
+                                    : _pickCustomNextReminderDate,
+                              ),
                           ],
                           if (!_postponed &&
                               widget.kind != ProductionKind.mating &&

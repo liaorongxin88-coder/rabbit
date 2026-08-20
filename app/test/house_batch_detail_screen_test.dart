@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rabbit_flutter/src/domain/models/batch.dart';
 import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
+import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/house_batch_detail_screen.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 
 void main() {
   testWidgets(
@@ -95,6 +97,10 @@ void main() {
       find.byKey(const ValueKey('batch-member-2000')),
     );
     expect(find.byKey(const ValueKey('batch-member-2000')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('batch-member-remove-2000')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -157,6 +163,10 @@ void main() {
         of: find.byKey(const ValueKey('batch-member-1001')),
         matching: find.byKey(const ValueKey('batch-member-departure-1001')),
       ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('batch-member-remove-1001')),
       findsNothing,
     );
     expect(tester.takeException(), isNull);
@@ -467,6 +477,187 @@ void main() {
       ),
       findsNothing,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('edit permission exposes add mother entry and excludes members',
+      (tester) async {
+    const request = BatchDetailRequest(houseId: 8, batchId: 17);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          batchDetailProvider(request).overrideWith(
+            (_) async => const Batch(
+              id: 17,
+              houseId: 8,
+              batchCode: 'ADD-17',
+              status: '进行中',
+              startDate: null,
+              endDate: null,
+              remark: '',
+            ),
+          ),
+          batchMembersProvider(request).overrideWith(
+            (_) async => const [
+              BatchRabbitItem(
+                id: 1,
+                batchId: 17,
+                rabbitId: 1701,
+                currentStatus: '待配种',
+                currentStage: 'AWAIT_MATING',
+                nextEventType: '旧下一步',
+                batchRole: 'breeding',
+              ),
+            ],
+          ),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'control', isAdmin: true),
+          ),
+          allActiveHouseRabbitsProvider(8).overrideWith(
+            (_) async => const [
+              Rabbit(
+                id: 1701,
+                houseId: 8,
+                cageId: 1,
+                motherId: null,
+                type: '0',
+                gender: '0',
+                breed: '已在批次',
+                arrivalMethod: '自繁',
+                arrivalDate: null,
+                weight: null,
+                isActive: true,
+              ),
+              Rabbit(
+                id: 1702,
+                houseId: 8,
+                cageId: 2,
+                motherId: null,
+                type: '1',
+                gender: '0',
+                breed: '后备母兔',
+                arrivalMethod: '自繁',
+                arrivalDate: null,
+                weight: null,
+                isActive: true,
+              ),
+            ],
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HouseBatchDetailScreen(houseId: 8, batchId: 17),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final addButton = find.byKey(const ValueKey('batch-add-members-button'));
+    expect(addButton, findsOneWidget);
+    expect(tester.widget<OutlinedButton>(addButton).onPressed, isNotNull);
+    await tester.tap(addButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('batch-add-members-list')),
+      findsOneWidget,
+    );
+    expect(find.text('当前批次已有 1 只成员'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('batch-add-member-option-1701')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('batch-add-member-option-1702')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('batch-add-members-close')),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('next step uses every recognized currentStage mapping',
+      (tester) async {
+    const request = BatchDetailRequest(houseId: 8, batchId: 18);
+    const stages = [
+      ('AWAIT_ESTRUS', '催情'),
+      ('AWAIT_MATING', '配种'),
+      ('AWAIT_PALPATION', '摸胎'),
+      ('AWAIT_PREPARTUM', '备产'),
+      ('AWAIT_DELIVERY', '分娩'),
+      ('AWAIT_WEANING', '分笼'),
+    ];
+    final members = [
+      for (var index = 0; index < stages.length; index++)
+        BatchRabbitItem(
+          id: index + 1,
+          batchId: 18,
+          rabbitId: 1801 + index,
+          currentStatus: '旧状态',
+          currentStage: stages[index].$1,
+          nextEventType: '旧下一步',
+          batchRole: 'breeding',
+        ),
+      const BatchRabbitItem(
+        id: 98,
+        batchId: 18,
+        rabbitId: 1898,
+        currentStatus: '旧状态',
+        currentStage: 'FUTURE_SERVER_STAGE',
+        nextEventType: '未知阶段的旧下一步',
+        batchRole: 'breeding',
+      ),
+      const BatchRabbitItem(
+        id: 99,
+        batchId: 18,
+        rabbitId: 1899,
+        currentStatus: '旧状态',
+        currentStage: 'READY',
+        nextEventType: '旧下一步',
+        batchRole: 'breeding',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          batchDetailProvider(request).overrideWith(
+            (_) async => const Batch(
+              id: 18,
+              houseId: 8,
+              batchCode: 'STAGE-18',
+              status: '进行中',
+              startDate: null,
+              endDate: null,
+              remark: '',
+            ),
+          ),
+          batchMembersProvider(request).overrideWith((_) async => members),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'view', isAdmin: false),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HouseBatchDetailScreen(houseId: 8, batchId: 18),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final (_, label) in stages) {
+      final nextStep = find.text('下一步 $label');
+      await _scrollDetailUntilVisible(tester, nextStep);
+      expect(nextStep, findsOneWidget);
+    }
+    await _scrollDetailUntilVisible(
+      tester,
+      find.byKey(const ValueKey('batch-member-1899')),
+    );
+    expect(find.text('下一步 旧下一步'), findsNothing);
+    expect(find.text('下一步 未知阶段的旧下一步'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

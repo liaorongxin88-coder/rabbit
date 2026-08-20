@@ -139,7 +139,8 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   @override
   Widget build(BuildContext context) {
     final events = widget.events;
-    final visibleEvents = _visibleEvents(events);
+    final scopedEvents = _eventsMatchingQueryAndHouse(events);
+    final visibleEvents = _visibleEvents(scopedEvents);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final panelHeight =
         (MediaQuery.sizeOf(context).height * 0.52 + (textScale - 1) * 72)
@@ -148,7 +149,15 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _AlertHeader(events: events),
+        _AlertHeader(
+          events: scopedEvents,
+          scopeLabel: _selectedHouseLabel(events),
+          selectedFilter: _dueFilter,
+          onFilterChanged: (filter) => setState(
+            () => _dueFilter = _dueFilter == filter ? _DueFilter.all : filter,
+          ),
+          onShowAll: () => setState(() => _dueFilter = _DueFilter.all),
+        ),
         const SizedBox(height: 14),
         _WorkQueueFilters(
           events: events,
@@ -161,7 +170,6 @@ class _HomeContentState extends ConsumerState<_HomeContent>
           onHouseChanged: (value) => setState(
             () => _houseFilterId = value == 0 ? null : value,
           ),
-          onDueChanged: (value) => setState(() => _dueFilter = value),
           onClear: _clearFilters,
         ),
         const SizedBox(height: 14),
@@ -180,6 +188,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
                   tab: tab,
                   events: _eventsFor(tab, visibleEvents),
                   onEventTap: _handleEventTap,
+                  onRabbitTap: _openRabbitDetail,
                   onManageHouses: () => context.go('/houses'),
                   hasActiveFilters: _hasActiveFilters,
                   onClearFilters: _clearFilters,
@@ -196,13 +205,10 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       _houseFilterId != null ||
       _dueFilter != _DueFilter.all;
 
-  List<EventItem> _visibleEvents(List<EventItem> events) {
+  List<EventItem> _eventsMatchingQueryAndHouse(List<EventItem> events) {
     final query = _query.trim().toLowerCase();
     return events.where((event) {
       if (_houseFilterId != null && event.sourceHouseId != _houseFilterId) {
-        return false;
-      }
-      if (!_dueFilter.matches(event)) {
         return false;
       }
       if (query.isEmpty) {
@@ -220,6 +226,49 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       ].join(' ').toLowerCase();
       return searchable.contains(query);
     }).toList();
+  }
+
+  List<EventItem> _visibleEvents(List<EventItem> events) {
+    final filtered = events.where(_dueFilter.matches).toList();
+    filtered.sort((left, right) {
+      final urgency = _urgencyRank(left).compareTo(_urgencyRank(right));
+      if (urgency != 0) {
+        return urgency;
+      }
+      final leftDate = left.eventDate;
+      final rightDate = right.eventDate;
+      if (leftDate != null && rightDate != null) {
+        final date = leftDate.compareTo(rightDate);
+        if (date != 0) {
+          return date;
+        }
+      } else if (leftDate != null) {
+        return -1;
+      } else if (rightDate != null) {
+        return 1;
+      }
+      return left.recordId.compareTo(right.recordId);
+    });
+    return filtered;
+  }
+
+  int _urgencyRank(EventItem event) {
+    if (event.isOverdue) return 0;
+    if (event.isDue) return 1;
+    return 2;
+  }
+
+  String _selectedHouseLabel(List<EventItem> events) {
+    final selectedId = _houseFilterId;
+    if (selectedId == null) {
+      return '全部兔舍';
+    }
+    for (final event in events) {
+      if (event.sourceHouseId == selectedId) {
+        return event.houseLabel;
+      }
+    }
+    return '当前兔舍';
   }
 
   void _clearFilters() {
@@ -279,12 +328,34 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     }
     await showProductionEventSheet(context: context, event: event);
   }
+
+  Future<void> _openRabbitDetail(EventItem event) async {
+    final houseId = event.sourceHouseId;
+    final rabbitId = event.rabbitId;
+    if (houseId == null || houseId <= 0 || rabbitId == null || rabbitId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法识别兔只，请刷新后重试')),
+      );
+      return;
+    }
+    await context.push('/houses/$houseId/rabbits/$rabbitId');
+  }
 }
 
 class _AlertHeader extends StatelessWidget {
-  const _AlertHeader({required this.events});
+  const _AlertHeader({
+    required this.events,
+    required this.scopeLabel,
+    required this.selectedFilter,
+    required this.onFilterChanged,
+    required this.onShowAll,
+  });
 
   final List<EventItem> events;
+  final String scopeLabel;
+  final _DueFilter selectedFilter;
+  final ValueChanged<_DueFilter> onFilterChanged;
+  final VoidCallback onShowAll;
 
   @override
   Widget build(BuildContext context) {
@@ -308,64 +379,61 @@ class _AlertHeader extends StatelessWidget {
                   children: [
                     const _SectionHeader(
                       icon: Icons.today_outlined,
-                      title: '今日生产',
+                      title: '今日提醒',
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${today.month}月${today.day}日 · 全部兔舍',
+                      '${today.month}月${today.day}日 · $scopeLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ),
               ),
-              _WorkloadBadge(count: events.length),
+              _WorkloadBadge(
+                count: events.length,
+                selected: selectedFilter == _DueFilter.all,
+                onTap: onShowAll,
+              ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Divider(height: 1, color: palette.line),
           ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 68),
-            child: IntrinsicHeight(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _StatusMetric(
-                      label: '逾期',
-                      count: overdue,
-                      color: palette.danger,
-                    ),
-                  ),
-                  VerticalDivider(
-                    width: 1,
-                    color: palette.line,
-                    indent: 4,
-                    endIndent: 4,
-                  ),
-                  Expanded(
-                    child: _StatusMetric(
-                      label: '到期',
-                      count: due,
-                      color: palette.primary,
-                    ),
-                  ),
-                  VerticalDivider(
-                    width: 1,
-                    color: palette.line,
-                    indent: 4,
-                    endIndent: 4,
-                  ),
-                  Expanded(
-                    child: _StatusMetric(
-                      label: '未到期',
-                      count: upcoming,
-                      color: palette.success,
-                    ),
-                  ),
-                ],
+          Row(
+            children: [
+              Expanded(
+                child: _StatusMetric(
+                  filter: _DueFilter.overdue,
+                  count: overdue,
+                  color: palette.danger,
+                  selected: selectedFilter == _DueFilter.overdue,
+                  onTap: () => onFilterChanged(_DueFilter.overdue),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatusMetric(
+                  filter: _DueFilter.due,
+                  count: due,
+                  color: palette.primary,
+                  selected: selectedFilter == _DueFilter.due,
+                  onTap: () => onFilterChanged(_DueFilter.due),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatusMetric(
+                  filter: _DueFilter.upcoming,
+                  count: upcoming,
+                  color: palette.success,
+                  selected: selectedFilter == _DueFilter.upcoming,
+                  onTap: () => onFilterChanged(_DueFilter.upcoming),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -374,10 +442,10 @@ class _AlertHeader extends StatelessWidget {
 }
 
 enum _DueFilter {
-  all('全部状态'),
-  overdue('仅逾期'),
-  due('仅到期'),
-  upcoming('仅未到期');
+  all('全部'),
+  overdue('逾期'),
+  due('到期'),
+  upcoming('未到期');
 
   const _DueFilter(this.label);
 
@@ -403,7 +471,6 @@ class _WorkQueueFilters extends StatelessWidget {
     required this.resultCount,
     required this.onQueryChanged,
     required this.onHouseChanged,
-    required this.onDueChanged,
     required this.onClear,
   });
 
@@ -415,7 +482,6 @@ class _WorkQueueFilters extends StatelessWidget {
   final int resultCount;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<int> onHouseChanged;
-  final ValueChanged<_DueFilter> onDueChanged;
   final VoidCallback onClear;
 
   bool get _hasActiveFilters =>
@@ -443,18 +509,40 @@ class _WorkQueueFilters extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionHeader(
-            icon: Icons.filter_alt_outlined,
-            title: '任务筛选',
+          Row(
+            children: [
+              const Expanded(
+                child: _SectionHeader(
+                  icon: Icons.tune_rounded,
+                  title: '筛选任务',
+                ),
+              ),
+              Text(
+                '$resultCount / ${events.length}',
+                key: const ValueKey('production-filter-summary'),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppPalette.of(context).muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              if (_hasActiveFilters) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  key: const ValueKey('production-filter-clear'),
+                  tooltip: '重置筛选',
+                  onPressed: onClear,
+                  icon: const Icon(Icons.filter_alt_off_outlined),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           TextField(
             key: const ValueKey('production-work-search'),
             controller: searchController,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              labelText: '搜索生产任务',
-              hintText: '母兔、批次、兔舍或任务类型',
+              hintText: '搜索兔号、兔舍、批次或任务',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: query.isEmpty
                   ? null
@@ -470,87 +558,31 @@ class _WorkQueueFilters extends StatelessWidget {
             ),
             onChanged: onQueryChanged,
           ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final fieldWidth = constraints.maxWidth >= 560
-                  ? (constraints.maxWidth - 12) / 2
-                  : constraints.maxWidth;
-              return Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                children: [
-                  SizedBox(
-                    width: fieldWidth,
-                    child: DropdownButtonFormField<int>(
-                      key: const ValueKey('production-house-filter'),
-                      value: selectedHouseId ?? 0,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '兔舍范围',
-                        prefixIcon: Icon(Icons.home_work_outlined),
-                      ),
-                      items: [
-                        const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
-                        for (final house in houses)
-                          DropdownMenuItem(
-                            value: house.key,
-                            child: Text(
-                              house.value,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (value) => onHouseChanged(value ?? 0),
-                    ),
-                  ),
-                  SizedBox(
-                    width: fieldWidth,
-                    child: DropdownButtonFormField<_DueFilter>(
-                      key: const ValueKey('production-due-filter'),
-                      value: dueFilter,
-                      decoration: const InputDecoration(
-                        labelText: '到期状态',
-                        prefixIcon: Icon(Icons.schedule_outlined),
-                      ),
-                      items: [
-                        for (final filter in _DueFilter.values)
-                          DropdownMenuItem(
-                            value: filter,
-                            child: Text(filter.label),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          onDueChanged(value);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '显示 $resultCount / ${events.length} 条任务',
-                  key: const ValueKey('production-filter-summary'),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+          if (houses.length > 1) ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<int>(
+              key: const ValueKey('production-house-filter'),
+              value: selectedHouseId ?? 0,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '兔舍范围',
+                prefixIcon: Icon(Icons.home_work_outlined),
               ),
-              if (_hasActiveFilters)
-                TextButton.icon(
-                  key: const ValueKey('production-filter-clear'),
-                  onPressed: onClear,
-                  icon: const Icon(Icons.filter_alt_off_outlined),
-                  label: const Text('重置筛选'),
-                ),
-            ],
-          ),
+              items: [
+                const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
+                for (final house in houses)
+                  DropdownMenuItem(
+                    value: house.key,
+                    child: Text(
+                      house.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => onHouseChanged(value ?? 0),
+            ),
+          ],
         ],
       ),
     );
@@ -558,46 +590,65 @@ class _WorkQueueFilters extends StatelessWidget {
 }
 
 class _WorkloadBadge extends StatelessWidget {
-  const _WorkloadBadge({required this.count});
+  const _WorkloadBadge({
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
 
   final int count;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     final active = count > 0;
-    return Container(
-      constraints: const BoxConstraints(minWidth: 68, minHeight: 54),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: active ? palette.primarySoft : palette.successSoft,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: active
-              ? palette.primary.withOpacity(0.25)
-              : palette.success.withOpacity(0.25),
+    final color = active ? palette.primary : palette.success;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '全部提醒 $count 条',
+      child: Material(
+        color: selected ? color.withOpacity(0.12) : palette.surfaceSubtle,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: selected ? color.withOpacity(0.4) : palette.line,
+          ),
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$count',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: active ? palette.primary : palette.success,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                ),
+        child: InkWell(
+          key: const ValueKey('home-alert-filter-all'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 72, minHeight: 58),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    active ? '全部待办' : '已清',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            active ? '待处理' : '已清',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: active ? palette.primary : palette.success,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -605,40 +656,65 @@ class _WorkloadBadge extends StatelessWidget {
 
 class _StatusMetric extends StatelessWidget {
   const _StatusMetric({
-    required this.label,
+    required this.filter,
     required this.count,
     required this.color,
+    required this.selected,
+    required this.onTap,
   });
 
-  final String label;
+  final _DueFilter filter;
   final int count;
   final Color color;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
+    final contentColor = count > 0 || selected ? color : palette.muted;
     return Semantics(
-      label: '$label $count 条',
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$count',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: count > 0 ? color : palette.muted,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                ),
+      button: true,
+      selected: selected,
+      label: '${filter.label} $count 条',
+      child: Material(
+        color: selected ? color.withOpacity(0.1) : palette.surfaceSubtle,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: selected ? color.withOpacity(0.4) : Colors.transparent,
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: count > 0 ? color : palette.muted,
-                  fontWeight: FontWeight.w700,
+        ),
+        child: InkWell(
+          key: ValueKey('home-alert-filter-${filter.name}'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 68),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$count',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: contentColor,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  filter.label,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: contentColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -658,6 +734,9 @@ class _FlowTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
+    final eventCounts = [
+      for (final tab in tabs) _HomeContentState._eventsFor(tab, events).length,
+    ];
     return SectionCard(
       key: const ValueKey('home-production-flow-section'),
       padding: const EdgeInsets.fromLTRB(16, 14, 0, 0),
@@ -668,53 +747,58 @@ class _FlowTabs extends StatelessWidget {
             padding: EdgeInsets.only(right: 16),
             child: _SectionHeader(
               icon: Icons.account_tree_outlined,
-              title: '生产流程',
+              title: '提醒事件',
             ),
           ),
           const SizedBox(height: 8),
           Divider(height: 1, color: palette.line),
-          TabBar(
-            controller: tabController,
-            isScrollable: true,
-            labelColor: palette.primary,
-            unselectedLabelColor: palette.muted,
-            indicatorColor: palette.primary,
-            indicatorWeight: 3,
-            tabAlignment: TabAlignment.start,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-            labelStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-            unselectedLabelStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-            tabs: [
-              for (final tab in tabs)
-                Tab(
-                  height: 52,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        tab.stage.toString().padLeft(2, '0'),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(tab.label),
-                      if (_HomeContentState._eventsFor(tab, events)
-                          .isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        _TinyCount(
-                          count:
-                              _HomeContentState._eventsFor(tab, events).length,
+          AnimatedBuilder(
+            animation: tabController,
+            builder: (context, _) => TabBar(
+              controller: tabController,
+              isScrollable: true,
+              labelColor: palette.primary,
+              unselectedLabelColor: palette.muted,
+              indicatorColor: palette.primary,
+              indicatorWeight: 3,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+              labelStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              tabs: [
+                for (final entry in tabs.asMap().entries)
+                  Tab(
+                    height: 52,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          entry.value.stage.toString().padLeft(2, '0'),
+                          style: const TextStyle(fontSize: 11),
                         ),
+                        const SizedBox(width: 5),
+                        Text(entry.value.label),
+                        if (eventCounts[entry.key] > 0) ...[
+                          const SizedBox(width: 6),
+                          _TinyCount(
+                            key: ValueKey(
+                              'production-event-count-badge-${entry.value.label}',
+                            ),
+                            count: eventCounts[entry.key],
+                            selected: tabController.index == entry.key,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -751,27 +835,43 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _TinyCount extends StatelessWidget {
-  const _TinyCount({required this.count});
+  const _TinyCount({
+    super.key,
+    required this.count,
+    required this.selected,
+  });
 
   final int count;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    return Container(
-      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 5),
-      decoration: BoxDecoration(
-        color: palette.primarySoft,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        '$count',
-        style: TextStyle(
-          color: palette.primary,
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
+    final countLabel = count > 99 ? '99+' : '$count';
+    return Semantics(
+      excludeSemantics: true,
+      label: '$count 条提醒',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: selected ? palette.primary : palette.surfaceSubtle,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? palette.primary : palette.line,
+          ),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 12),
+          child: Text(
+            countLabel,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: selected ? palette.surface : palette.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              height: 1.15,
+            ),
+          ),
         ),
       ),
     );
@@ -783,6 +883,7 @@ class _FlowPanel extends StatelessWidget {
     required this.tab,
     required this.events,
     required this.onEventTap,
+    required this.onRabbitTap,
     required this.onManageHouses,
     required this.hasActiveFilters,
     required this.onClearFilters,
@@ -791,6 +892,7 @@ class _FlowPanel extends StatelessWidget {
   final _FlowTab tab;
   final List<EventItem> events;
   final Future<void> Function(EventItem event) onEventTap;
+  final Future<void> Function(EventItem event) onRabbitTap;
   final VoidCallback onManageHouses;
   final bool hasActiveFilters;
   final VoidCallback onClearFilters;
@@ -812,6 +914,9 @@ class _FlowPanel extends StatelessWidget {
       itemBuilder: (context, index) => _EventCard(
         event: events[index],
         onTap: () => onEventTap(events[index]),
+        onOpenRabbit: events[index].rabbitId == null
+            ? null
+            : () => onRabbitTap(events[index]),
       ),
       separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemCount: events.length,
@@ -823,10 +928,12 @@ class _EventCard extends StatelessWidget {
   const _EventCard({
     required this.event,
     required this.onTap,
+    required this.onOpenRabbit,
   });
 
   final EventItem event;
   final VoidCallback onTap;
+  final VoidCallback? onOpenRabbit;
 
   bool get _actionable => eventIsActionable(event);
   String get _actionHint => productionActionHint(event);
@@ -856,102 +963,168 @@ class _EventCard extends StatelessWidget {
 
     return SectionCard(
       padding: EdgeInsets.zero,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: color, width: 4)),
-        ),
-        child: InkWell(
-          key: ValueKey('production-event-rabbit-${event.rabbitId ?? 0}'),
-          borderRadius: BorderRadius.circular(8),
-          onTap: _actionable ? onTap : null,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 4,
+              top: 12,
+              bottom: 12,
+              child: Container(
+                key: ValueKey(
+                  'production-event-status-rail-${event.rabbitId ?? 0}',
+                ),
+                width: 4,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            InkWell(
+              key: ValueKey('production-event-rabbit-${event.rabbitId ?? 0}'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: _actionable ? onTap : null,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(_eventIcon, size: 19, color: palette.muted),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        event.eventType.isEmpty
-                            ? event.category
-                            : event.eventType,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                    Row(
+                      children: [
+                        Icon(_eventIcon, size: 19, color: palette.muted),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            event.eventType.isEmpty
+                                ? event.category
+                                : event.eventType,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        _EventStatus(label: event.statusLabel, color: color),
+                      ],
                     ),
-                    _EventStatus(label: event.statusLabel, color: color),
-                  ],
-                ),
-                const SizedBox(height: 11),
-                Text(
-                  event.operationalTargetLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 7),
-                Row(
-                  children: [
-                    Icon(Icons.home_work_outlined,
-                        size: 15, color: palette.muted),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        event.houseLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                    const SizedBox(height: 11),
+                    _RabbitDetailLink(
+                      event: event,
+                      onTap: onOpenRabbit,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 6,
-                  children: [
-                    if (event.batchLabel != null)
-                      _EventMeta(
-                        icon: Icons.inventory_2_outlined,
-                        label: event.batchLabel!,
-                      ),
-                    if (event.cycleRecordLabel != null)
-                      _EventMeta(
-                        icon: Icons.repeat_rounded,
-                        label: event.cycleRecordLabel!,
-                      ),
-                    _EventMeta(
-                      icon: Icons.calendar_today_outlined,
-                      label: event.dateLabel,
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Icon(Icons.home_work_outlined,
+                            size: 15, color: palette.muted),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            event.houseLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                if (_actionable) ...[
-                  const SizedBox(height: 11),
-                  Divider(height: 1, color: palette.line),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _actionHint,
-                          style:
-                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      children: [
+                        if (event.batchLabel != null)
+                          _EventMeta(
+                            icon: Icons.inventory_2_outlined,
+                            label: event.batchLabel!,
+                          ),
+                        if (event.cycleRecordLabel != null)
+                          _EventMeta(
+                            icon: Icons.repeat_rounded,
+                            label: event.cycleRecordLabel!,
+                          ),
+                        _EventMeta(
+                          icon: Icons.calendar_today_outlined,
+                          label: event.dateLabel,
+                        ),
+                      ],
+                    ),
+                    if (_actionable) ...[
+                      const SizedBox(height: 11),
+                      Divider(height: 1, color: palette.line),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _actionHint,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelLarge
+                                  ?.copyWith(
                                     color: palette.primary,
                                   ),
-                        ),
+                            ),
+                          ),
+                          Icon(Icons.chevron_right,
+                              size: 20, color: palette.primary),
+                        ],
                       ),
-                      Icon(Icons.chevron_right,
-                          size: 20, color: palette.primary),
                     ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RabbitDetailLink extends StatelessWidget {
+  const _RabbitDetailLink({required this.event, required this.onTap});
+
+  final EventItem event;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Semantics(
+      excludeSemantics: true,
+      link: onTap != null,
+      label: onTap == null
+          ? event.operationalTargetLabel
+          : '查看${event.operationalTargetLabel}详情',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey(
+            'production-event-rabbit-detail-${event.rabbitId ?? 0}',
+          ),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    event.operationalTargetLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: onTap == null ? palette.text : palette.primary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
+                ),
+                if (onTap != null) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.open_in_new, size: 18, color: palette.primary),
                 ],
               ],
             ),

@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.repro.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
@@ -130,13 +131,15 @@ public class ReproStateMachineService {
         // 步骤 2：查转换表。非法组合在这里被挡下，且只有这一处判定。
         Transition transition = TransitionTable.require(fromStage, command.getAction(), discriminatorOf(command));
         validateFacts(command, transition, cycle);
+        boolean hasNextTask = willHaveNextTask(command, cycle, transition);
+        validateNextReminderOutcome(command, hasNextTask);
 
         ReproSettings settings = settingResolver.resolve(command.getUserId(), command.getHouseId());
 
         // 步骤 3：把本次操作携带的事实落到周期上，随后据此算到期日。
         applyFacts(cycle, command, transition, occurredAt, settings);
 
-        Date dueTime = DueDateCalculator.compute(
+        Date calculatedDueTime = DueDateCalculator.compute(
             transition.dueAnchor(),
             DueContext.builder(occurredAt, today)
                 .stageEnteredAt(cycle.getStageEnteredAt())
@@ -147,9 +150,14 @@ public class ReproStateMachineService {
                 .build(),
             settings
         );
+        Date dueTime = command.getNextRemindAt() != null
+            ? command.getNextRemindAt()
+            : calculatedDueTime;
 
         // 步骤 4：写事件。uk_re_request 是幂等的最终防线。
-        ReproEvent event = writeEvent(command, cycle, transition, occurredAt, operator);
+        ReproEvent event = writeEvent(
+            command, cycle, transition, occurredAt, operator, hasNextTask, dueTime
+        );
 
         // 步骤 5：维护窝，并把窝的计数回写到周期的计数列。
         Long litterId = maintainLitter(command, cycle, transition, occurredAt, operator);
@@ -165,6 +173,9 @@ public class ReproStateMachineService {
         TaskOutcome taskOutcome = rotateTasks(
             command, cycle, transition, litterId, dueTime, operator, event.getId(), occurredAt
         );
+        if (taskOutcome.hasNextTask() != hasNextTask) {
+            throw new IllegalStateException("下一待办结果与事务内预判不一致");
+        }
 
         // 步骤 8：投影到 rabbits，供列表页免 join 过滤。
         projectMother(cycle, transition, occurredAt, operator);
@@ -176,14 +187,18 @@ public class ReproStateMachineService {
 
         saveAttachments(command, event.getId(), operator);
 
+        ResultProjection projection = currentProjection(
+            command.getHouseId(), cycle.getMotherRabbitId()
+        );
         return new ReproResult(
             cycle.getId(),
+            projection.currentCycleId(),
             event.getId(),
             litterId,
             taskOutcome.taskId(),
-            ReproStage.parse(cycle.getStage()),
-            cycle.getLifecycle(),
-            dueTime,
+            projection.stage(),
+            projection.lifecycle(),
+            taskOutcome.dueTime(),
             taskOutcome.followUpCycle() != null ? taskOutcome.followUpCycle().getId() : null,
             false
         );
@@ -269,13 +284,12 @@ public class ReproStateMachineService {
         }
 
         WorkTask task = scheduleFor(cycle, litterId, TaskType.forStage(entry.stage()), dueTime, operator);
-        rabbitStageProjectionMapper.projectStage(
-            command.houseId(), command.motherRabbitId(), entry.stage().name(), cycle.getId(), occurredAt, operator
-        );
+        projectCurrentMotherState(cycle, occurredAt, operator);
 
+        ResultProjection projection = currentProjection(command.houseId(), command.motherRabbitId());
         return new ReproResult(
-            cycle.getId(), event.getId(), litterId, task.getId(),
-            entry.stage(), CycleLifecycle.OPEN.name(), dueTime, null, false
+            cycle.getId(), projection.currentCycleId(), event.getId(), litterId, task.getId(),
+            projection.stage(), projection.lifecycle(), dueTime, null, false
         );
     }
 
@@ -292,25 +306,94 @@ public class ReproStateMachineService {
         ReproCycle cycle = event.getCycleId() == null
             ? null
             : reproCycleMapper.selectById(event.getHouseId(), event.getCycleId());
+        ReplayTaskMetadata taskMetadata = replayTaskMetadata(event);
+        Date nextDueTime = null;
+        if (!taskMetadata.known() || taskMetadata.hasNextTask()) {
+            nextDueTime = cycle != null ? nextDueTimeOf(cycle) : null;
+        }
+        if (nextDueTime == null && taskMetadata.hasNextTask() && cycle != null
+            && CycleLifecycle.CLOSED.name().equals(cycle.getLifecycle())) {
+            for (ReproCycle candidate : reproCycleMapper.selectOpenByMother(
+                cycle.getHouseId(), cycle.getMotherRabbitId()
+            )) {
+                nextDueTime = nextDueTimeOf(candidate);
+                if (nextDueTime != null) {
+                    break;
+                }
+            }
+        }
+        if (nextDueTime == null && taskMetadata.hasNextTask()) {
+            nextDueTime = taskMetadata.dueTime();
+        }
+        Long motherRabbitId = event.getMotherRabbitId() != null
+            ? event.getMotherRabbitId()
+            : cycle != null ? cycle.getMotherRabbitId() : null;
+        ResultProjection projection = currentProjection(event.getHouseId(), motherRabbitId);
         return new ReproResult(
             event.getCycleId(),
+            projection.currentCycleId(),
             event.getId(),
             event.getLitterId(),
             null,
-            cycle != null ? ReproStage.parse(cycle.getStage()) : ReproStage.parse(event.getToStage()),
-            cycle != null ? cycle.getLifecycle() : CycleLifecycle.OPEN.name(),
-            // 下次到期时间取自待办中心；周期上的镜像列已随 V28 删除。
-            cycle != null ? nextDueTimeOf(cycle) : null,
+            projection.stage(),
+            projection.lifecycle(),
+            nextDueTime,
             null,
             true
         );
     }
 
+    private ResultProjection currentProjection(Long houseId, Long motherRabbitId) {
+        Rabbit mother = rabbitMapper.selectById(houseId, motherRabbitId);
+        if (mother == null) {
+            throw new IllegalStateException("母兔权威投影不存在");
+        }
+        Long currentCycleId = mother.getCurrentCycleId();
+        String lifecycle = currentCycleId != null
+            ? CycleLifecycle.OPEN.name()
+            : CycleLifecycle.CLOSED.name();
+        return new ResultProjection(
+            ReproStage.parse(mother.getCurrentStage()), currentCycleId, lifecycle
+        );
+    }
+
     /** 该周期当前未完成待办的到期时间；没有则为 null。 */
-    private java.util.Date nextDueTimeOf(ReproCycle cycle) {
+    private Date nextDueTimeOf(ReproCycle cycle) {
         List<WorkTask> pending = workTaskWriter.pendingBySubject(
             cycle.getHouseId(), TaskSubjectType.CYCLE, cycle.getId());
+        if (!pending.isEmpty()) {
+            return pending.get(0).getDueTime();
+        }
+        Litter litter = litterMapper.selectByCycleId(cycle.getHouseId(), cycle.getId());
+        if (litter == null) {
+            return null;
+        }
+        pending = workTaskWriter.pendingBySubject(
+            cycle.getHouseId(), TaskSubjectType.LITTER, litter.getId());
         return pending.isEmpty() ? null : pending.get(0).getDueTime();
+    }
+
+    private ReplayTaskMetadata replayTaskMetadata(ReproEvent event) {
+        if (event.getPayload() == null || event.getPayload().isBlank()) {
+            return ReplayTaskMetadata.unknown();
+        }
+        try {
+            JsonNode payload = objectMapper.readTree(event.getPayload());
+            JsonNode hasNextTask = payload.get("resultHasNextTask");
+            if (hasNextTask == null || hasNextTask.isNull()) {
+                return ReplayTaskMetadata.unknown();
+            }
+            if (!hasNextTask.asBoolean()) {
+                return new ReplayTaskMetadata(true, false, null);
+            }
+            JsonNode dueTime = payload.get("resultNextDueTime");
+            Date value = dueTime == null || dueTime.isNull()
+                ? null
+                : objectMapper.treeToValue(dueTime, Date.class);
+            return new ReplayTaskMetadata(true, true, value);
+        } catch (JsonProcessingException e) {
+            return ReplayTaskMetadata.unknown();
+        }
     }
 
     private ReproEvent writeEvent(
@@ -318,7 +401,9 @@ public class ReproStateMachineService {
         ReproCycle cycle,
         Transition transition,
         Date occurredAt,
-        String operator
+        String operator,
+        boolean hasNextTask,
+        Date nextDueTime
     ) {
         ReproEvent event = new ReproEvent();
         event.setHouseId(command.getHouseId());
@@ -329,7 +414,7 @@ public class ReproStateMachineService {
         event.setFromStage(transition.fromStage().name());
         event.setToStage(transition.toStage() != null ? transition.toStage().name() : null);
         event.setOccurredAt(occurredAt);
-        event.setPayload(toJson(payloadOf(command)));
+        event.setPayload(toJson(payloadOf(command, hasNextTask, nextDueTime)));
         event.setOperatorId(command.getUserId());
         event.setOperatorName(operator);
         event.setRequestId(requireRequestId(command.getRequestId()));
@@ -495,16 +580,18 @@ public class ReproStateMachineService {
                 : TaskSubjectType.CYCLE;
             Long subjectId = subjectType == TaskSubjectType.LITTER ? litterId : cycle.getId();
             Long taskId = null;
+            Date actualDueTime = null;
             for (WorkTask task : pendingOf(cycle.getHouseId(), subjectType, subjectId)) {
                 workTaskWriter.postpone(cycle.getHouseId(), task.getId(), dueTime, operator);
                 taskId = task.getId();
+                actualDueTime = dueTime;
             }
-            return new TaskOutcome(taskId, null);
+            return new TaskOutcome(taskId, actualDueTime, null);
         }
 
         if (transition.cancelsAllTasks()) {
             workTaskWriter.cancelAllForRabbit(cycle.getHouseId(), cycle.getMotherRabbitId(), operator);
-            return new TaskOutcome(null, null);
+            return new TaskOutcome(null, null, null);
         }
 
         // 完成当前待办：周期主体与窝主体都要扫，血配时两条任务并存。
@@ -521,12 +608,12 @@ public class ReproStateMachineService {
             WorkTask next = scheduleFor(
                 cycle, litterId, TaskType.forStage(transition.toStage()), dueTime, operator
             );
-            return new TaskOutcome(next.getId(), null);
+            return new TaskOutcome(next.getId(), next.getDueTime(), null);
         }
 
         workTaskWriter.cancelBySubject(cycle.getHouseId(), TaskSubjectType.CYCLE, cycle.getId(), operator);
         if (transition.followUpStage() == null) {
-            return new TaskOutcome(null, null);
+            return new TaskOutcome(null, null, null);
         }
 
         // 血配：母兔在哺乳期已被重新配种，管线上已有周期在跑，这里不能再开一个，
@@ -535,14 +622,14 @@ public class ReproStateMachineService {
             cycle.getHouseId(), cycle.getMotherRabbitId()
         );
         if (running != null) {
-            return new TaskOutcome(null, null);
+            return new TaskOutcome(null, null, null);
         }
 
         ReproCycle followUp = openFollowUpCycle(cycle, transition, occurredAt, operator);
         WorkTask next = scheduleFor(
             followUp, null, TaskType.forStage(transition.followUpStage()), dueTime, operator
         );
-        return new TaskOutcome(next.getId(), followUp);
+        return new TaskOutcome(next.getId(), next.getDueTime(), followUp);
     }
 
     private ReproCycle openFollowUpCycle(
@@ -637,6 +724,20 @@ public class ReproStateMachineService {
             return;
         }
 
+        projectCurrentMotherState(cycle, occurredAt, operator);
+    }
+
+    /**
+     * 母兔投影只表达下一轮繁育管线；窝的哺乳与分笼状态留在旧周期和窝待办中。
+     * 因此分娩后即回到准备态，可在尚未分笼时开启下一轮待催情。
+     */
+    private void projectCurrentMotherState(
+        ReproCycle changedCycle,
+        Date occurredAt,
+        String operator
+    ) {
+        Long houseId = changedCycle.getHouseId();
+        Long motherId = changedCycle.getMotherRabbitId();
         ReproCycle pipeline = reproCycleMapper.selectOpenPipelineForUpdate(houseId, motherId);
         if (pipeline != null) {
             rabbitStageProjectionMapper.projectStage(
@@ -644,10 +745,17 @@ public class ReproStateMachineService {
             );
             return;
         }
-        // 无管线周期但本周期仍开着 —— 哺乳段（待分笼）就是这种情形。
-        if (CycleLifecycle.OPEN.name().equals(cycle.getLifecycle())) {
+
+        ReproStage changedStage = ReproStage.parse(changedCycle.getStage());
+        if (CycleLifecycle.OPEN.name().equals(changedCycle.getLifecycle())
+            && changedStage != ReproStage.AWAIT_WEANING) {
             rabbitStageProjectionMapper.projectStage(
-                houseId, motherId, cycle.getStage(), cycle.getId(), occurredAt, operator
+                houseId,
+                motherId,
+                changedStage.name(),
+                changedCycle.getId(),
+                occurredAt,
+                operator
             );
             return;
         }
@@ -724,7 +832,36 @@ public class ReproStateMachineService {
 
     // ------------------------------------------------------------------ 前置校验
 
+    private boolean willHaveNextTask(
+        ReproCommand command,
+        ReproCycle cycle,
+        Transition transition
+    ) {
+        if (command.getAction() == ReproAction.POSTPONE || !transition.closesCycle()) {
+            return true;
+        }
+        if (transition.cancelsAllTasks() || transition.followUpStage() == null) {
+            return false;
+        }
+        if (transition.fromStage() != ReproStage.AWAIT_WEANING) {
+            return true;
+        }
+        // 分笼是否接续新周期取决于当前是否已有血配管线，不能只看转换表的 followUpStage。
+        return reproCycleMapper.selectOpenPipelineForUpdate(
+            cycle.getHouseId(), cycle.getMotherRabbitId()
+        ) == null;
+    }
+
+    private static void validateNextReminderOutcome(ReproCommand command, boolean hasNextTask) {
+        if (command.getNextRemindAt() != null && !hasNextTask) {
+            throw new BizException(400, "本次操作不会生成后续待办，不能设置下次提醒日期");
+        }
+    }
+
     private void validateFacts(ReproCommand command, Transition transition, ReproCycle cycle) {
+        if (command.getNextRemindAt() != null && !isAllowedReminderDate(command.getNextRemindAt())) {
+            throw new BizException(400, "下次提醒日期不能早于今天");
+        }
         switch (command.getAction()) {
             case MATING -> {
                 // 老 APK 未发送配种方式，但会发送公兔；这类请求按体配兼容处理。
@@ -751,10 +888,10 @@ public class ReproStateMachineService {
                     throw new BizException(400, "请选择摸胎结论");
                 }
                 if (command.getPalpationResult() == PalpationResult.UNSURE
-                    && !isFutureReminder(command.getNextRemindAt())) {
-                    // 不确定必须给未来复查日：不给的话这只兔子会停在待摸胎且没有下一次提醒，
+                    && !isAllowedReminderDate(command.getNextRemindAt())) {
+                    // 不确定必须给今天或之后的复查日：不给的话这只兔子会停在待摸胎且没有下一次提醒，
                     // 正是旧实现里「兔子消失在流程中」的典型成因。
-                    throw new BizException(400, "摸胎结论为不确定时，请选择未来复查日期");
+                    throw new BizException(400, "摸胎结论为不确定时，请选择今天或未来的复查日期");
                 }
             }
             case DELIVERY -> {
@@ -796,8 +933,8 @@ public class ReproStateMachineService {
                 }
             }
             case POSTPONE -> {
-                if (!isFutureReminder(command.getNextRemindAt())) {
-                    throw new BizException(400, "请选择未来的下次提醒日期");
+                if (!isAllowedReminderDate(command.getNextRemindAt())) {
+                    throw new BizException(400, "请选择今天或未来的下次提醒日期");
                 }
             }
             default -> {
@@ -806,8 +943,8 @@ public class ReproStateMachineService {
         }
     }
 
-    private static boolean isFutureReminder(Date value) {
-        return value != null && value.after(DateUtil.now());
+    private static boolean isAllowedReminderDate(Date value) {
+        return value != null && DateUtil.isTodayOrFuture(value);
     }
 
     private void validateEntryFacts(EntryPoint entry, OpenCycleCommand command) {
@@ -815,7 +952,6 @@ public class ReproStateMachineService {
             boolean present = switch (fact) {
                 case STAGE_ENTERED_AT -> command.stageEnteredAt() != null || command.occurredAt() != null;
                 case MATING_DATE -> command.matingDate() != null;
-                case GESTATION_ANCHOR -> command.matingDate() != null || command.expectedBirthDate() != null;
                 case BIRTH_DATE -> command.birthDate() != null;
                 case LIVE_KITS -> command.liveKits() != null;
             };
@@ -861,8 +997,14 @@ public class ReproStateMachineService {
         return userId != null ? String.valueOf(userId) : "system";
     }
 
-    private Map<String, Object> payloadOf(ReproCommand command) {
+    private Map<String, Object> payloadOf(
+        ReproCommand command,
+        boolean hasNextTask,
+        Date nextDueTime
+    ) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("resultHasNextTask", hasNextTask);
+        putIfPresent(payload, "resultNextDueTime", hasNextTask ? nextDueTime : null);
         putIfPresent(payload, "maleRabbitId", command.getMaleRabbitId());
         MatingMethod matingMethod = command.getMatingMethod();
         if (matingMethod == null && command.getMaleRabbitId() != null) {
@@ -901,6 +1043,18 @@ public class ReproStateMachineService {
         }
     }
 
-    private record TaskOutcome(Long taskId, ReproCycle followUpCycle) {
+    private record TaskOutcome(Long taskId, Date dueTime, ReproCycle followUpCycle) {
+        private boolean hasNextTask() {
+            return dueTime != null;
+        }
+    }
+
+    private record ReplayTaskMetadata(boolean known, boolean hasNextTask, Date dueTime) {
+        private static ReplayTaskMetadata unknown() {
+            return new ReplayTaskMetadata(false, false, null);
+        }
+    }
+
+    private record ResultProjection(ReproStage stage, Long currentCycleId, String lifecycle) {
     }
 }

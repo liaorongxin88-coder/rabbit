@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
@@ -40,6 +41,51 @@ class RabbitServiceTest {
                 ));
 
         assertEquals(403, error.getCode());
+    }
+
+    @Test
+    void listsBatchMembershipsWithActiveFilterHouseIsolationAndStageProjection() {
+        RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
+        BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
+
+        Rabbit rabbit = new Rabbit();
+        rabbit.setId(31L);
+        rabbit.setHouseId(7L);
+        org.mockito.Mockito.when(rabbitMapper.selectById(7L, 31L)).thenReturn(rabbit);
+
+        BatchRabbitItem active = new BatchRabbitItem();
+        active.setBatchId(41L);
+        active.setRabbitId(31L);
+        active.setIsActive(Boolean.TRUE);
+        active.setCurrentStage("AWAIT_PALPATION");
+        active.setCurrentCycleId(51L);
+        BatchRabbitItem inactive = new BatchRabbitItem();
+        inactive.setBatchId(42L);
+        inactive.setRabbitId(31L);
+        inactive.setIsActive(Boolean.FALSE);
+
+        org.mockito.Mockito.when(batchRabbitMapper.selectItemsByRabbit(7L, 31L, Boolean.TRUE))
+            .thenReturn(List.of(active));
+        org.mockito.Mockito.when(batchRabbitMapper.selectItemsByRabbit(7L, 31L, Boolean.FALSE))
+            .thenReturn(List.of(inactive));
+
+        RabbitService service = new RabbitService(
+            rabbitMapper, null, null, null, batchRabbitMapper, null, null, null, null, null,
+            null, null, null, null, 10
+        );
+
+        List<BatchRabbitItem> activeResult = service.listBatchMemberships(7L, 31L, Boolean.TRUE);
+        List<BatchRabbitItem> inactiveResult = service.listBatchMemberships(7L, 31L, Boolean.FALSE);
+
+        assertEquals("AWAIT_PALPATION", activeResult.get(0).getCurrentStage());
+        assertEquals(51L, activeResult.get(0).getCurrentCycleId());
+        assertEquals(Boolean.FALSE, inactiveResult.get(0).getIsActive());
+        org.mockito.Mockito.verify(batchRabbitMapper)
+            .selectItemsByRabbit(7L, 31L, Boolean.TRUE);
+        org.mockito.Mockito.verify(batchRabbitMapper)
+            .selectItemsByRabbit(7L, 31L, Boolean.FALSE);
+        org.mockito.Mockito.verify(rabbitMapper, org.mockito.Mockito.times(2))
+            .selectById(7L, 31L);
     }
 
     @Test

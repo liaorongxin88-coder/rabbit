@@ -8,10 +8,9 @@ import com.rabbit.app.modules.setting.entity.GlobalSetting;
  * <p>物理表仍是 {@code global_setting}，列名仍是旧的。本记录把旧列翻译成语义明确的名字，
  * 让状态机代码只依赖新词汇；列改名推迟到 V29+，避免本期为了改名去动一大片 mapper XML。
  *
- * <p>最关键的一条：旧 {@code prepartum_days} 在旧实现里同时表达「备产提前量」和
- * 「备产后等待时长」两种含义，而预产期又是硬编码的 30 天。这里把它拆成
- * {@link #gestationDays()}（决定预产期）与 {@link #prepartumLeadDays()}（只表示提前量），
- * 一个字段一个含义——这正是飞书 recvsrpXPZd3Xg 的根因修复。
+ * <p>{@code gestation_days} 保留为预产期参考值；提醒链按现场流程使用
+ * {@code prepartum_days} 作为「摸胎确认 → 待备产」的等待时长。两者不再共同参与
+ * 同一条提醒日期计算。
  */
 public record ReproSettings(
     /** 催情 → 配种的等待天数（旧列 aphrodisiac_days）。 */
@@ -20,8 +19,8 @@ public record ReproSettings(
     int palpationWaitDays,
     /** 妊娠天数，决定预产期 = 配种日 + 本值（V26 新列 gestation_days）。 */
     int gestationDays,
-    /** 预产期前 N 天提醒备产（旧列 prepartum_days，语义唯一化后只剩这一种含义）。 */
-    int prepartumLeadDays,
+    /** 摸胎确认 → 待备产的等待天数（旧列 prepartum_days）。 */
+    int prepartumDurationDays,
     /** 分娩 → 分笼的哺乳天数（旧列 weaning_days）。 */
     int weaningDays,
     /** 分笼 / 流产 → 下一轮待催情的子宫复旧天数（旧列 postpartum_days）。 */

@@ -10,8 +10,8 @@ import java.util.Date;
  *
  * @param occurredAt        操作的业务时间（允许补录历史）
  * @param stageEnteredAt    进入目标阶段的时间；催情窗口以它为锚
- * @param matingDate        配种日，摸胎日与预产期的锚
- * @param expectedBirthDate 预产期；为空时由配种日 + gestation_days 推出
+ * @param matingDate        配种日，待摸胎提醒的锚
+ * @param expectedBirthDate 预产期参考值；由配种日 + gestation_days 推出
  * @param birthDate         分娩日，分笼日的锚
  * @param userSpecified     用户在表单里选的下次提醒时间（推迟 / 摸胎不确定复查）
  * @param today             「当天」基准，注入以便测试；到期日不得早于它

@@ -120,7 +120,8 @@ void main() {
   testWidgets('entry flow future completes only after the form closes',
       (tester) async {
     var finished = false;
-    await tester.pumpWidget(_entryTestApp(onFlowFinished: () => finished = true));
+    await tester
+        .pumpWidget(_entryTestApp(onFlowFinished: () => finished = true));
     await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确定'));
@@ -141,6 +142,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('繁殖阶段：后备（后备兔固定记录为后备阶段）'), findsOneWidget);
+    expect(find.text('笼位 #12（只读）'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('rabbit-reproductive-stage')),
       findsNothing,

@@ -48,6 +48,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
 
     return AppPage(
       title: title,
+      fallbackBackLocation: '/houses/${widget.houseId}',
       child: permission.when(
         data: (perm) {
           if (!perm.canManageMembers) {

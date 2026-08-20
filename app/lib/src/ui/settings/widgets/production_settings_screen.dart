@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/state_views.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/widgets/reminder_preference_form.dart';
 
 class ProductionSettingsScreen extends ConsumerWidget {
   const ProductionSettingsScreen({
@@ -28,11 +29,14 @@ class ProductionSettingsScreen extends ConsumerWidget {
       final setting = ref.watch(houseSettingProvider(targetHouseId));
       return AppPage(
         title: '兔舍生产设置',
+        fallbackBackLocation: '/houses/$targetHouseId',
         actions: [
           IconButton(
             tooltip: '刷新',
-            onPressed: () =>
-                ref.invalidate(houseSettingProvider(targetHouseId)),
+            onPressed: () {
+              ref.invalidate(houseSettingProvider(targetHouseId));
+              ref.invalidate(reminderPreferenceProvider(targetHouseId));
+            },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -191,37 +195,37 @@ class _ProductionSettingsFormState
               children: [
                 _DayField(
                   fieldKey: const ValueKey('production-aphrodisiac-days'),
-                  label: '催情间隔',
+                  label: '催情时长',
                   controller: _aphrodisiacController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-palpation-days'),
-                  label: '摸胎天数',
+                  label: '待摸胎时长',
                   controller: _palpationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-gestation-days'),
-                  label: '妊娠天数',
+                  label: '妊娠参考天数',
                   controller: _gestationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-prepartum-days'),
-                  label: '备产提前天数',
+                  label: '待备产时长',
                   controller: _prepartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-weaning-days'),
-                  label: '断奶天数',
+                  label: '断奶时长',
                   controller: _weaningController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-postpartum-days'),
-                  label: '产后恢复天数',
+                  label: '产后恢复时长',
                   controller: _postpartumController,
                 ),
                 const SizedBox(height: 12),
@@ -261,6 +265,13 @@ class _ProductionSettingsFormState
                 : const Icon(Icons.save_outlined),
             label: const Text('保存生产设置'),
           ),
+          if (_isHouseSetting) ...[
+            const SizedBox(height: 28),
+            _HouseReminderPreferenceSection(
+              houseId: widget.houseId!,
+              houseName: widget.houseName,
+            ),
+          ],
         ],
       ),
     );
@@ -327,6 +338,67 @@ class _ProductionSettingsFormState
       return error.message;
     }
     return error.toString();
+  }
+}
+
+class _HouseReminderPreferenceSection extends ConsumerWidget {
+  const _HouseReminderPreferenceSection({
+    required this.houseId,
+    required this.houseName,
+  });
+
+  final int houseId;
+  final String? houseName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preference = ref.watch(reminderPreferenceProvider(houseId));
+    final targetName = houseName?.trim();
+    return Column(
+      key: const ValueKey('house-production-reminders'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.notifications_active_outlined, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '当前兔舍提醒',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${targetName == null || targetName.isEmpty ? '当前兔舍' : targetName}的提醒单独配置；这些选项只影响你的首页提醒。',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        preference.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) => ErrorState(
+            message: error.toString(),
+            onRetry: () => ref.invalidate(reminderPreferenceProvider(houseId)),
+          ),
+          data: (value) => ReminderPreferenceForm(
+            key: ValueKey('house-reminder-form-$houseId-${value.id}'),
+            houseId: houseId,
+            preference: value,
+          ),
+        ),
+      ],
+    );
   }
 }
 

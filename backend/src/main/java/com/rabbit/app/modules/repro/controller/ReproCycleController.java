@@ -142,11 +142,7 @@ public class ReproCycleController {
             .nextRemindAt(request.getNextRemindAt())
             .totalKits(request.getTotalKits())
             .liveKits(request.getLiveKits())
-            // 旧客户端没有留仔数字段；缺省按全部活仔进入哺乳窝兼容，
-            // 新客户端仍必须显式提交并由服务端校验数量关系。
-            .keptKits(request.getKeptKits() != null
-                ? request.getKeptKits()
-                : request.getLiveKits())
+            .keptKits(request.getKeptKits())
             .stillbirthCount(request.getStillbirthCount())
             .weanedCount(request.getWeanedCount())
             .avgWeaningWeight(request.getAvgWeaningWeight())

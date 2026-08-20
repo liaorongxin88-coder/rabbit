@@ -69,7 +69,7 @@ public interface WorkTaskMapper {
     /**
      * 待办列表主查询，走 idx_wt_due。
      *
-     * @param dueBefore 含当日；传当天末刻即得「今日及逾期」
+     * @param dueBefore 含当日；为空时不应用到期日上限
      */
     List<WorkTask> selectPendingDue(
         @Param("houseId") Long houseId,
@@ -97,6 +97,7 @@ public interface WorkTaskMapper {
         @Param("limit") int limit
     );
 
+    /** 统计待办；dueBefore 为空时不应用到期日上限。 */
     long countPendingDue(
         @Param("houseId") Long houseId,
         @Param("dueBefore") Date dueBefore,

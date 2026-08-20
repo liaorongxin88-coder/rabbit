@@ -80,10 +80,10 @@ DoeStage（母兔繁育阶段，存储值用英文，展示映射中文）
 | T1 | 开始周期 START_CYCLE | READY | 可指定**任意入轨阶段**（默认待催情） | 指定阶段 | 按入轨阶段锚点计算（见下表）；分笼/流产后自动 T1 为待催情，due=当天+`postpartum_recovery_days` |
 | T2 | 催情 ESTRUS | AWAIT_ESTRUS | 执行 | AWAIT_MATING | 当天 + `estrus_duration_days` |
 | T3 | 配种 MATING | AWAIT_MATING | 执行 | AWAIT_PALPATION | 配种日 + `palpation_wait_days` |
-| T4a | 摸胎 PALPATION | AWAIT_PALPATION | 怀孕 | AWAIT_PREPARTUM | 预产期 − `prepartum_lead_days`；预产期 = 配种日 + `gestation_days` |
+| T4a | 摸胎 PALPATION | AWAIT_PALPATION | 怀孕 | AWAIT_PREPARTUM | 摸胎确认日 + `prepartum_days`（待备产时长） |
 | T4b | 摸胎 PALPATION | AWAIT_PALPATION | 空怀 | （周期关闭 result=EMPTY）→ AWAIT_ESTRUS | 立即（提醒员工立刻催情） |
-| T4c | 摸胎 PALPATION | AWAIT_PALPATION | 不确定 | AWAIT_PALPATION（不变） | 用户选择的复查日期 |
-| T5 | 备产 PREPARTUM | AWAIT_PREPARTUM | 执行 | AWAIT_DELIVERY | 预产期 |
+| T4c | 摸胎 PALPATION | AWAIT_PALPATION | 不确定 | AWAIT_PALPATION（不变） | 用户选择的复查日期（今天及以后） |
+| T5 | 备产 PREPARTUM | AWAIT_PREPARTUM | 执行 | AWAIT_DELIVERY | 操作当天 |
 | T6 | 接产 DELIVERY | AWAIT_DELIVERY | 产仔（产/活/留） | AWAIT_WEANING（建 Litter） | 分娩日 + `weaning_days` |
 | T6x | 接产 DELIVERY | AWAIT_DELIVERY | 分娩失败 | （周期关闭 result=FAILED）→ AWAIT_ESTRUS | 当天 + `postpartum_recovery_days` |
 | T7 | 分笼 WEANING | AWAIT_WEANING | 断奶数 | （周期关闭 result=WEANED）→ READY → 自动 T1；**若母兔已有管线周期（血配提前开启）则跳过自动 T1，仅关窝** | 当天 + `postpartum_recovery_days` |
@@ -92,7 +92,7 @@ DoeStage（母兔繁育阶段，存储值用英文，展示映射中文）
 | T10 | 取消弹窗 CANCEL | 任意 | — | 不变，任务保留 | 不变（仅客户端行为，不落事件） |
 | T11 | 离场 RETIRE（死亡/淘汰/出售） | 任意 | 关联 departure 记录 | 周期关闭 result=REMOVED；NURSING 窝需选择寄养(foster_out)或随场处置 | 级联 CANCELLED 该母兔全部 PENDING 任务 |
 
-修复备产语义（recvsrpXPZd3Xg）：`gestation_days`（默认 30，可配）决定预产期；`prepartum_lead_days` 只表示"预产期前 N 天提醒备产"，不再复用同一配置表达两种含义。
+业务流程口径：`prepartum_days` 表示摸胎确认后进入待备产前的等待时长；备产完成后当天进入待分娩。`gestation_days` 保留为预产期参考值，不参与这两步提醒推进。
 
 **任意阶段入周期（T1 泛化，业务确认口径）**：母兔可在任何阶段加入周期（存量录入/兔场初始化/后备转种母/V27 回填公用同一机制 `openCycleAt(stage, facts)`）。各入轨阶段需补录事实与首任务锚点：
 
@@ -101,8 +101,8 @@ DoeStage（母兔繁育阶段，存储值用英文，展示映射中文）
 | 待催情 | stage_entered_at（或已在阶段天数） | 用户指定，缺省当天 |
 | 待配种 | stage_entered_at | stage_entered_at + `estrus_duration_days` |
 | 待摸胎 | matingDate（可选 sire） | matingDate + `palpation_wait_days` |
-| 待备产 | matingDate 或直接给 expectedBirthDate | 预产期 − `prepartum_lead_days` |
-| 待分娩 | 同上 | 预产期 |
+| 待备产 | stage_entered_at | 进入阶段当天 |
+| 待分娩 | stage_entered_at | 进入阶段当天 |
 | 待分笼 | birthDate + 活仔数（同事务建 NURSING litter） | birthDate + `weaning_days` |
 
 计算结果早于当天时 due 拉到当天（立即提醒）。CYCLE_START 事件 payload 完整记录入轨阶段与补录事实，保持事件流可重放。入轨管线阶段受 `uk_bc_pipeline` 管线互斥约束；直接入轨待分笼不占管线（与血配规则一致）。
@@ -304,13 +304,13 @@ ALTER TABLE rabbits
 --   gestation_days        INT DEFAULT 30   -- 新增：妊娠天数（消除硬编码 30）
 --   estrus_duration_days                  -- 原 aphrodisiac_days，催情→配种
 --   palpation_wait_days                   -- 原 palpation_days，配种→摸胎
---   prepartum_lead_days                   -- 原 prepartum_days，预产期前 N 天备产（语义唯一化）
+--   prepartum_duration_days               -- 原 prepartum_days，摸胎确认后待备产时长
 --   weaning_days                          -- 分娩→分笼
 --   postpartum_recovery_days              -- 原 postpartum_days，分笼/流产→待催情
 --   sale_days / replacement_days          -- 商品出售、后备成熟（喂给 work_tasks）
 ```
 
-配置读取加进程内缓存（Caffeine，按 house 键，更新时失效广播），消除每操作一次的 `requireSetting()` 查询。
+提醒日期选择使用兔场生效配置给出本地日历默认值；服务端仍校验提醒日期不得早于当天。配置读取加进程内缓存（Caffeine，按 house 键，更新时失效广播），消除每操作一次的 `requireSetting()` 查询。
 
 ### 4.8 附件：biz_attachments（新表，通用）
 
@@ -333,6 +333,11 @@ POST /api/repro/tasks/bulk-actions            批量（分块短事务；逐项�
 body: { requestId, action, occurredAt, payload, nextRemindAt?,
         target: { taskIds[] } | { filter: { batchId, taskType } } }
       -- filter 形式服务端解析为该批次当前 PENDING 任务集（批次=批量选择集）
+
+response: { cycleId, currentCycleId?, eventId, nextTaskId?, stage, lifecycle,
+            nextDueTime?, followUpCycleId?, replayed }
+      -- cycleId 是本次被操作周期；currentCycleId / stage / lifecycle 是事务完成后
+         rabbits 的权威投影；followUpCycleId 仅表示本次新建的接续周期
 ```
 
 `ReproStateMachineService.apply()` 唯一写路径（替代 BatchService 六个 2000 行级方法）：
@@ -361,6 +366,10 @@ body: { requestId, action, occurredAt, payload, nextRemindAt?,
 | 分笼 | occurredAt, weanedCount(+ 目标笼分配沿用 allocations) | nextRemindAt |
 | 流产 | occurredAt, stillbirthCount, stageAtAbortion(自动取), photoFileIds[] | —（直接执行类操作） |
 
+执行成功并生成下一条待办的单只操作也可携带 `nextRemindAt`：不传时按兔场配置计算，
+传入时覆盖本次新待办日期；日期不得早于当天。不会生成下一条待办的结果若携带该字段，
+服务端返回 400，不能静默丢弃。`POSTPONE` 仍只改当前 PENDING 待办，不推进阶段。
+
 “取消”仅关闭弹窗，无请求；任务保持 PENDING，符合"提醒不消失"。
 
 ### 5.3 批次交互（标签模型）
@@ -373,6 +382,8 @@ body: { requestId, action, occurredAt, payload, nextRemindAt?,
 ### 5.4 首页/待办查询
 
 - 今日待办（首页）：`GET /api/tasks?dueBefore=today&status=PENDING&houseId=…&type=…&cageId=…`，单索引查询，支持兔舍/笼位/类型过滤（修复 recvsrmZKv1cqp）。
+- 兔只详情：`GET /api/tasks?rabbitId=…&includeFuture=true`，读取该兔全部未来 `PENDING` 待办；
+  默认 `includeFuture=false`，首页原有截至日期语义不变。血配时保留新周期任务与旧窝分笼任务两条结果。
 - NFC 碰笼：`idx_wt_cage` 直出该笼全部待办与可执行操作。
 - 兔笼页兔子列表管理（recvsrEA6TRuK6）：rabbits 投影列使列表页免 join 周期表。
 
@@ -420,7 +431,7 @@ body: { requestId, action, occurredAt, payload, nextRemindAt?,
 | recvsrp9E2dqvB 阶段不对应 | 单写者投影 §4.6、批次快照列删除 §4.5 |
 | recvsrpMlvu2SC 状态可选项缺少 | §3.1 统一词汇 |
 | recvsrq7rGZHdi 提醒绑定异常 | §4.4 任务中心（SALE_READY 等统一建模） |
-| recvsrpXPZd3Xg 备产提前天数 | §4.7 gestation_days + prepartum_lead_days 语义拆分 |
+| recvsrpXPZd3Xg 备产提醒口径 | §4.7 prepartum_days 作为摸胎后待备产时长；备产完成当天进入待分娩 |
 | recvsroMN5SslS / recvsrtXYAKnX1 阶段字段错误 | §4.6 类型-阶段约束 |
 | recvsrnEJ8bKrk / recvqh6N0wWVjR 录入阶段+日期 | stage_entered_at + 到期折算 |
 | recvsrmZKv1cqp 首页提醒兔舍选择 | §5.4 任务查询参数化 |

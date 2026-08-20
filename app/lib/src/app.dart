@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/nfc_capture_scope.dart';
@@ -146,22 +147,14 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
     });
     final settingsState = ref.watch(localAppSettingsControllerProvider);
     final settings = settingsState.valueOrNull;
-    if (settingsState.isLoading && settings == null) {
-      return MaterialApp(
-        title: '鸿兔智管',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        builder: (context, child) => _SystemUiFrame(child: child),
-        home: const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
       title: '鸿兔智管',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: settings?.themeMode ?? ThemeMode.system,

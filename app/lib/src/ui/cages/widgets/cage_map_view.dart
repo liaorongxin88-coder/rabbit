@@ -86,6 +86,7 @@ class CageMapView extends StatefulWidget {
     this.isMatch,
     this.selectableCage,
     this.cellNote,
+    this.statusLabel,
     this.visibleRowLimit,
     this.onShowMoreRows,
     this.rowTrailingBuilder,
@@ -107,6 +108,9 @@ class CageMapView extends StatefulWidget {
 
   /// 格子右下角的极短标注，例如换笼时的「对调」。
   final String? Function(Cage cage)? cellNote;
+
+  /// 笼位管理中的母兔生产阶段；其它选择场景仍显示在栏数。
+  final String Function(Cage cage)? statusLabel;
 
   /// 只渲染当前层的前 N 排，避免大兔舍一次铺几千个格子。
   final int? visibleRowLimit;
@@ -144,8 +148,9 @@ class _CageMapViewState extends State<CageMapView> {
     }
   }
 
-  int? _firstLayer() =>
-      widget.layout.layers.isEmpty ? null : widget.layout.layers.first.layerIndex;
+  int? _firstLayer() => widget.layout.layers.isEmpty
+      ? null
+      : widget.layout.layers.first.layerIndex;
 
   int? _layerOfSelection() {
     final selected = widget.selectedCageId;
@@ -162,8 +167,9 @@ class _CageMapViewState extends State<CageMapView> {
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     final layers = widget.layout.layers;
-    final active = layers.where((l) => l.layerIndex == _activeLayer).firstOrNull ??
-        (layers.isEmpty ? null : layers.first);
+    final active =
+        layers.where((l) => l.layerIndex == _activeLayer).firstOrNull ??
+            (layers.isEmpty ? null : layers.first);
 
     final rows = active?.rows ?? const <CageMapRow>[];
     final limit = widget.visibleRowLimit ?? rows.length;
@@ -190,6 +196,7 @@ class _CageMapViewState extends State<CageMapView> {
             isMatch: widget.isMatch,
             selectableCage: widget.selectableCage,
             cellNote: widget.cellNote,
+            statusLabel: widget.statusLabel,
             trailing: widget.rowTrailingBuilder?.call(row),
           ),
           const SizedBox(height: 12),
@@ -211,6 +218,7 @@ class _CageMapViewState extends State<CageMapView> {
             isMatch: widget.isMatch,
             selectableCage: widget.selectableCage,
             cellNote: widget.cellNote,
+            statusLabel: widget.statusLabel,
             palette: palette,
           ),
       ],
@@ -353,6 +361,7 @@ class _CageMapRowSection extends StatelessWidget {
     required this.isMatch,
     required this.selectableCage,
     required this.cellNote,
+    required this.statusLabel,
     required this.trailing,
   });
 
@@ -362,6 +371,7 @@ class _CageMapRowSection extends StatelessWidget {
   final bool Function(Cage cage)? isMatch;
   final bool Function(Cage cage)? selectableCage;
   final String? Function(Cage cage)? cellNote;
+  final String Function(Cage cage)? statusLabel;
   final Widget? trailing;
 
   @override
@@ -445,11 +455,11 @@ class _CageMapRowSection extends StatelessWidget {
                               positionIndex: cell.positionIndex,
                               onTap: onTapCage,
                               selected: selectedCageId == cell.cage!.id,
-                              dimmed:
-                                  isMatch != null && !isMatch!(cell.cage!),
+                              dimmed: isMatch != null && !isMatch!(cell.cage!),
                               selectable:
                                   selectableCage?.call(cell.cage!) ?? true,
                               note: cellNote?.call(cell.cage!),
+                              statusLabel: statusLabel?.call(cell.cage!),
                             ),
                     ),
                   ),
@@ -486,6 +496,7 @@ class _CageMapCellTile extends StatelessWidget {
     required this.dimmed,
     required this.selectable,
     required this.note,
+    required this.statusLabel,
   });
 
   final Cage cage;
@@ -495,12 +506,14 @@ class _CageMapCellTile extends StatelessWidget {
   final bool dimmed;
   final bool selectable;
   final String? note;
+  final String? statusLabel;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     final attention = cage.attention;
     final style = CageAttentionStyle.of(attention, palette);
+    final displayStatus = statusLabel ?? cage.occupancyText;
     final enabled = selectable;
     // 不可选的格子也要压暗：只把 onTap 置空的话，用户会反复点一个看起来正常的格子。
     final faded = dimmed || !enabled;
@@ -511,6 +524,7 @@ class _CageMapCellTile extends StatelessWidget {
       '第 $positionIndex 位',
       cage.usageLabel,
       cage.occupancyText,
+      if (statusLabel != null) '母兔状态 $displayStatus',
       attention.label,
       if (cage.attentionAlertReason != null) cage.attentionAlertReason!,
       if (!enabled) '不可选择',
@@ -566,7 +580,7 @@ class _CageMapCellTile extends StatelessWidget {
                   // 防住字体行高在不同机器上比算出来的高一两像素。
                   Flexible(
                     child: Text(
-                      cage.occupancyText,
+                      displayStatus,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -631,6 +645,7 @@ class _UnplacedCages extends StatelessWidget {
     required this.isMatch,
     required this.selectableCage,
     required this.cellNote,
+    required this.statusLabel,
     required this.palette,
   });
 
@@ -640,6 +655,7 @@ class _UnplacedCages extends StatelessWidget {
   final bool Function(Cage cage)? isMatch;
   final bool Function(Cage cage)? selectableCage;
   final String? Function(Cage cage)? cellNote;
+  final String Function(Cage cage)? statusLabel;
   final AppPalette palette;
 
   @override
@@ -680,6 +696,7 @@ class _UnplacedCages extends StatelessWidget {
                   dimmed: isMatch != null && !isMatch!(cage),
                   selectable: selectableCage?.call(cage) ?? true,
                   note: cellNote?.call(cage),
+                  statusLabel: statusLabel?.call(cage),
                 ),
             ],
           ),
@@ -697,6 +714,7 @@ class _UnplacedChip extends StatelessWidget {
     required this.dimmed,
     required this.selectable,
     required this.note,
+    required this.statusLabel,
   });
 
   final Cage cage;
@@ -708,6 +726,7 @@ class _UnplacedChip extends StatelessWidget {
   /// 与网格格子一致的标注（例如换笼时的「对调」）；
   /// 未编排的笼位不能因为没坐标就少一层提醒。
   final String? note;
+  final String? statusLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -756,7 +775,7 @@ class _UnplacedChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  cage.occupancyText,
+                  statusLabel ?? cage.occupancyText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: palette.muted),
@@ -820,9 +839,7 @@ class _LegendItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = CageAttentionStyle.of(attention, palette);
-    final label = count == null
-        ? attention.label
-        : '${attention.label} $count';
+    final label = count == null ? attention.label : '${attention.label} $count';
 
     return Semantics(
       label: '${attention.label}：${attention.hint}',

@@ -41,14 +41,29 @@ public class ReproApiIT extends E2eTestSupport {
         Assertions.assertEquals(cycleId, task.get("cycleId").asLong());
         Assertions.assertEquals(doeId, task.get("rabbitId").asLong());
 
+        String estrusRequestId = requestId("estrus");
+        var estrusBody = obj(
+            "action", "ESTRUS",
+            "occurredAt", now(),
+            "requestId", estrusRequestId
+        );
         JsonNode advanced = api.postOk(
-            "/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, obj(
-                "action", "ESTRUS",
-                "occurredAt", now(),
-                "requestId", requestId("estrus")
-            ));
+            "/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, estrusBody
+        );
+        Assertions.assertEquals(cycleId, advanced.get("cycleId").asLong());
+        Assertions.assertEquals(cycleId, advanced.get("currentCycleId").asLong());
         Assertions.assertEquals("AWAIT_MATING", advanced.get("stage").asText());
+        Assertions.assertEquals("OPEN", advanced.get("lifecycle").asText());
         Assertions.assertFalse(advanced.get("replayed").asBoolean());
+
+        JsonNode replayed = api.postOk(
+            "/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, estrusBody
+        );
+        Assertions.assertEquals(cycleId, replayed.get("cycleId").asLong());
+        Assertions.assertEquals(cycleId, replayed.get("currentCycleId").asLong());
+        Assertions.assertEquals("AWAIT_MATING", replayed.get("stage").asText());
+        Assertions.assertEquals("OPEN", replayed.get("lifecycle").asText());
+        Assertions.assertTrue(replayed.get("replayed").asBoolean());
 
         JsonNode cycle = api.getOk("/api/repro/cycles/" + cycleId, f.token, f.houseId);
         Assertions.assertEquals("AWAIT_MATING", cycle.get("stage").asText());
@@ -186,6 +201,71 @@ public class ReproApiIT extends E2eTestSupport {
         Assertions.assertEquals(
             f.does.get(0).longValue(), byCage.get("items").get(0).get("rabbitId").asLong()
         );
+    }
+
+    @Test
+    void taskListCanIncludeAllFuturePendingWithoutLeakingOtherRabbitsOrStatuses() {
+        Fixture f = fixture("repro_api_future_tasks", 4);
+        long overdueRabbitId = f.does.get(0);
+        long futureRabbitId = f.does.get(1);
+        long doneRabbitId = f.does.get(2);
+        long cancelledRabbitId = f.does.get(3);
+
+        jdbc.update(
+            "update work_tasks set due_date = date_sub(current_date, interval 1 day),"
+                + " due_time = date_sub(now(), interval 1 day), status = 'PENDING'"
+                + " where house_id = ? and rabbit_id = ?",
+            f.houseId, overdueRabbitId
+        );
+        jdbc.update(
+            "update work_tasks set due_date = date_add(current_date, interval 30 day),"
+                + " due_time = date_add(now(), interval 30 day), status = 'PENDING'"
+                + " where house_id = ? and rabbit_id = ?",
+            f.houseId, futureRabbitId
+        );
+        jdbc.update(
+            "update work_tasks set due_date = date_add(current_date, interval 31 day),"
+                + " due_time = date_add(now(), interval 31 day), status = 'DONE'"
+                + " where house_id = ? and rabbit_id = ?",
+            f.houseId, doneRabbitId
+        );
+        jdbc.update(
+            "update work_tasks set due_date = date_add(current_date, interval 32 day),"
+                + " due_time = date_add(now(), interval 32 day), status = 'CANCELLED'"
+                + " where house_id = ? and rabbit_id = ?",
+            f.houseId, cancelledRabbitId
+        );
+
+        JsonNode dueOnly = api.getOk("/api/tasks?batchId=" + f.batchId, f.token, f.houseId);
+        Assertions.assertEquals(1, dueOnly.get("total").asInt(),
+            "默认查询仍应只返回今日及逾期待办");
+        Assertions.assertEquals(overdueRabbitId,
+            dueOnly.get("items").get(0).get("rabbitId").asLong());
+
+        JsonNode allPending = api.getOk(
+            "/api/tasks?includeFuture=true&dueBefore=0&batchId=" + f.batchId,
+            f.token,
+            f.houseId
+        );
+        Assertions.assertEquals(2, allPending.get("total").asInt(),
+            "includeFuture 应忽略 dueBefore 上限，但仍只返回 PENDING");
+        Assertions.assertEquals(overdueRabbitId,
+            allPending.get("items").get(0).get("rabbitId").asLong());
+        Assertions.assertEquals(futureRabbitId,
+            allPending.get("items").get(1).get("rabbitId").asLong());
+        for (JsonNode task : allPending.get("items")) {
+            Assertions.assertEquals("PENDING", task.get("status").asText());
+        }
+
+        JsonNode byRabbit = api.getOk(
+            "/api/tasks?includeFuture=true&rabbitId=" + futureRabbitId,
+            f.token,
+            f.houseId
+        );
+        Assertions.assertEquals(1, byRabbit.get("total").asInt());
+        Assertions.assertEquals(futureRabbitId,
+            byRabbit.get("items").get(0).get("rabbitId").asLong(),
+            "rabbitId 过滤不得带回同舍其他兔的待办");
     }
 
     @Test

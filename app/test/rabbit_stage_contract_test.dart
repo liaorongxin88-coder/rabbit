@@ -40,6 +40,7 @@ void main() {
 
     expect(rabbit.growthStage, 'MATURE');
     expect(rabbit.reproductiveStage, 'PREGNANT');
+    expect(rabbit.currentCycleId, 901);
     expect(doeCage.isDoeBreedingCage, isTrue);
     expect(doeCage.isBuckBreedingCage, isFalse);
     expect(doeCage.usageLabel, '种母兔');
@@ -176,6 +177,7 @@ const _rabbitJson = <String, dynamic>{
   'arrivalDate': null,
   'weight': 4.2,
   'isActive': true,
+  'currentCycleId': 901,
 };
 
 const _cageJson = <String, dynamic>{

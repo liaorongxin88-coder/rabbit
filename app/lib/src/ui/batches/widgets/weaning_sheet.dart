@@ -9,6 +9,8 @@ import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
 import 'package:rabbit_flutter/src/data/services/api_exception.dart';
 import 'package:rabbit_flutter/src/domain/models/cage.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
+import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
+import 'package:rabbit_flutter/src/domain/models/reminder_date_policy.dart';
 import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/batch_sheet_async_state.dart';
@@ -16,33 +18,33 @@ import 'package:rabbit_flutter/src/ui/batches/widgets/production_context_line.da
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
 
-Future<void> showWeaningSheet({
+Future<ReproActionResult?> showWeaningSheet({
   required BuildContext context,
   required EventItem event,
 }) {
   final houseId = event.sourceHouseId;
-  final batchId = event.batchId;
   final rabbitId = event.rabbitId;
+  final cycleId = event.recordId;
   if (houseId == null ||
       houseId <= 0 ||
-      batchId == null ||
-      batchId <= 0 ||
       rabbitId == null ||
-      rabbitId <= 0) {
-    return Future<void>.value();
+      rabbitId <= 0 ||
+      cycleId <= 0) {
+    return Future<ReproActionResult?>.value();
   }
 
-  return showModalBottomSheet<void>(
+  return showModalBottomSheet<ReproActionResult>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     useSafeArea: true,
     builder: (context) => _WeaningSheet(
       houseId: houseId,
-      batchId: batchId,
+      batchId: event.batchId,
       rabbitId: rabbitId,
-      breedingCycleId: event.category == '生产周期' ? event.recordId : null,
+      breedingCycleId: cycleId,
       houseLabel: event.houseLabel,
     ),
   );
@@ -53,19 +55,21 @@ class _WeaningSheet extends ConsumerStatefulWidget {
     required this.houseId,
     required this.batchId,
     required this.rabbitId,
-    this.breedingCycleId,
+    required this.breedingCycleId,
     required this.houseLabel,
   });
 
   final int houseId;
-  final int batchId;
+  final int? batchId;
   final int rabbitId;
-  final int? breedingCycleId;
+  final int breedingCycleId;
   final String houseLabel;
 
   @override
   ConsumerState<_WeaningSheet> createState() => _WeaningSheetState();
 }
+
+enum _NextReminderMode { houseSetting, custom }
 
 class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   final _writeRequest = BatchWriteRequestController();
@@ -75,12 +79,20 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   final _weightController = TextEditingController();
   final _remarkController = TextEditingController();
 
-  DateTime _weaningDate = DateTime.now();
+  late DateTime _weaningDate;
   DateTime? _postponeDate;
+  DateTime? _customNextReminderDate;
+  var _nextReminderMode = _NextReminderMode.houseSetting;
   var _postponed = false;
   var _autoAssignCage = true;
   int? _selectedCageId;
   var _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _weaningDate = DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -149,14 +161,26 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   }
 
   Future<void> _pickPostponeDate() async {
-    final today = DateTime.now();
-    final firstDate = DateTime(today.year, today.month, today.day)
-        .add(const Duration(days: 1));
+    final today = localDateOnly(DateTime.now());
+    final setting =
+        ref.read(houseSettingProvider(widget.houseId)).valueOrNull?.setting ??
+            GlobalSetting.defaults();
+    final suggested = suggestedReminderDate(
+      stage: ReproStage.awaitWeaning,
+      setting: setting,
+      from: today,
+    );
+    final lastDate = today.add(const Duration(days: 3650));
     final picked = await showDatePicker(
       context: context,
-      initialDate: _postponeDate ?? firstDate,
-      firstDate: firstDate,
-      lastDate: firstDate.add(const Duration(days: 365)),
+      initialDate: reminderInitialDate(
+        suggested: suggested,
+        selected: _postponeDate,
+        now: today,
+        latest: lastDate,
+      ),
+      firstDate: today,
+      lastDate: lastDate,
       helpText: '选择下次提醒日期',
       cancelText: '取消',
       confirmText: '确定',
@@ -166,12 +190,73 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     }
   }
 
+  GlobalSetting get _reminderSetting =>
+      ref.read(houseSettingProvider(widget.houseId)).valueOrNull?.setting ??
+      GlobalSetting.defaults();
+
+  String get _nextReminderDateLabel =>
+      reminderDateLabelForStage(ReproStage.awaitEstrus);
+
+  DateTime get _suggestedNextReminderDate {
+    final today = localDateOnly(DateTime.now());
+    return reminderInitialDate(
+      suggested: suggestedReminderDate(
+        stage: ReproStage.awaitEstrus,
+        setting: _reminderSetting,
+        from: _weaningDate,
+      ),
+      now: today,
+      latest: today.add(const Duration(days: 3650)),
+    );
+  }
+
+  DateTime? get _ordinaryNextRemindAt =>
+      _nextReminderMode == _NextReminderMode.houseSetting
+          ? null
+          : _customNextReminderDate ?? _suggestedNextReminderDate;
+
+  Future<void> _pickCustomNextReminderDate() async {
+    final today = localDateOnly(DateTime.now());
+    final lastDate = today.add(const Duration(days: 3650));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: reminderInitialDate(
+        suggested: _suggestedNextReminderDate,
+        selected: _customNextReminderDate,
+        now: today,
+        latest: lastDate,
+      ),
+      firstDate: today,
+      lastDate: lastDate,
+      helpText: '选择$_nextReminderDateLabel',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null && mounted) {
+      setState(() => _customNextReminderDate = localDateOnly(picked));
+    }
+  }
+
+  void _invalidateBatchProviders() {
+    final batchId = widget.batchId;
+    if (batchId == null || batchId <= 0) {
+      return;
+    }
+    ref.invalidate(houseBatchesProvider(widget.houseId));
+    final detailRequest = BatchDetailRequest(
+      houseId: widget.houseId,
+      batchId: batchId,
+    );
+    ref.invalidate(batchDetailProvider(detailRequest));
+    ref.invalidate(batchMembersProvider(detailRequest));
+  }
+
   Future<void> _submit(List<Cage> cages) async {
     final commodityCages = _commodityCages(cages);
     if (_postponed) {
       final cycleId = widget.breedingCycleId;
       final postponeDate = _postponeDate;
-      if (cycleId == null || cycleId <= 0) {
+      if (cycleId <= 0) {
         _showMessage('未找到对应的生产周期，请刷新后重试');
         return;
       }
@@ -191,7 +276,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
             'postponeDate': formatBatchWriteDate(postponeDate),
           }),
         );
-        await ref.read(reproRepositoryProvider).applyAction(
+        final result = await ref.read(reproRepositoryProvider).applyAction(
               houseId: widget.houseId,
               cycleId: cycleId,
               action: ReproAction.postpone,
@@ -202,15 +287,9 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
         if (!mounted) return;
         ref.invalidate(homeEventsProvider);
         ref.invalidate(houseRabbitsProvider(widget.houseId));
-        ref.invalidate(houseBatchesProvider(widget.houseId));
-        final detailRequest = BatchDetailRequest(
-          houseId: widget.houseId,
-          batchId: widget.batchId,
-        );
-        ref.invalidate(batchDetailProvider(detailRequest));
-        ref.invalidate(batchMembersProvider(detailRequest));
+        _invalidateBatchProviders();
         final messenger = ScaffoldMessenger.maybeOf(context);
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(result);
         messenger?.showSnackBar(
           const SnackBar(content: Text('已推迟断奶提醒')),
         );
@@ -270,6 +349,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     try {
       final avgWeight = _parseOptionalDouble(_weightController);
       final remark = _remarkController.text.trim();
+      final nextRemindAt = _ordinaryNextRemindAt;
       final requestId = _writeRequest.requestIdFor(
         canonicalBatchWriteFingerprint({
           'action': 'weaning',
@@ -284,20 +364,23 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           'targetCageId': targetCageId,
           'avgWeight': avgWeight,
           'remark': remark,
+          if (nextRemindAt != null)
+            'nextRemindAt': formatBatchWriteDate(nextRemindAt),
         }),
       );
       // 分笼走 doe-breeding-v2 的单一写入口：服务端在同一事务里推进周期、
       // 结窝、分配商品兔笼位并生成仔兔，不再需要客户端分两步。
       final cycleId = widget.breedingCycleId;
-      if (cycleId == null || cycleId <= 0) {
+      if (cycleId <= 0) {
         _showMessage('未找到对应的生产周期，请刷新后重试');
         return;
       }
-      await ref.read(reproRepositoryProvider).applyAction(
+      final result = await ref.read(reproRepositoryProvider).applyAction(
             houseId: widget.houseId,
             cycleId: cycleId,
             action: ReproAction.weaning,
             occurredAt: _weaningDate,
+            nextRemindAt: nextRemindAt,
             weanedCount: count,
             maleCount: male,
             femaleCount: female,
@@ -312,15 +395,9 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
       ref.invalidate(houseCagesProvider(widget.houseId));
-      ref.invalidate(houseBatchesProvider(widget.houseId));
-      final detailRequest = BatchDetailRequest(
-        houseId: widget.houseId,
-        batchId: widget.batchId,
-      );
-      ref.invalidate(batchDetailProvider(detailRequest));
-      ref.invalidate(batchMembersProvider(detailRequest));
+      _invalidateBatchProviders();
       final messenger = ScaffoldMessenger.maybeOf(context);
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(result);
       final cageHint = count == 0
           ? ''
           : _autoAssignCage
@@ -354,6 +431,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(houseSettingProvider(widget.houseId));
     final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
@@ -477,7 +555,76 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                             trailing: const Icon(Icons.event),
                             onTap: _saving ? null : _pickPostponeDate,
                           ),
-                        if (!_postponed) const SizedBox(height: 8),
+                        if (!_postponed) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            _nextReminderDateLabel,
+                            key: const ValueKey(
+                              'weaning-next-reminder-stage-label',
+                            ),
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          SegmentedButton<_NextReminderMode>(
+                            segments: const [
+                              ButtonSegment(
+                                value: _NextReminderMode.houseSetting,
+                                label: Text(
+                                  '按兔场设置',
+                                  key: ValueKey(
+                                    'weaning-next-reminder-house-setting',
+                                  ),
+                                ),
+                              ),
+                              ButtonSegment(
+                                value: _NextReminderMode.custom,
+                                label: Text(
+                                  '自定义日期',
+                                  key: ValueKey(
+                                    'weaning-next-reminder-custom',
+                                  ),
+                                ),
+                              ),
+                            ],
+                            selected: {_nextReminderMode},
+                            showSelectedIcon: false,
+                            onSelectionChanged: _saving
+                                ? null
+                                : (selection) => setState(() {
+                                      _nextReminderMode = selection.first;
+                                      if (_nextReminderMode ==
+                                          _NextReminderMode.custom) {
+                                        _customNextReminderDate ??=
+                                            _suggestedNextReminderDate;
+                                      }
+                                    }),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _nextReminderMode == _NextReminderMode.houseSetting
+                                ? '建议 ${formatBatchWriteDate(_suggestedNextReminderDate)}，由兔场规则计算'
+                                : '覆盖断奶后生成的$_nextReminderDateLabel',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          if (_nextReminderMode == _NextReminderMode.custom)
+                            ListTile(
+                              key: const ValueKey(
+                                'weaning-next-reminder-custom-date',
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(_nextReminderDateLabel),
+                              subtitle: Text(
+                                formatBatchWriteDate(
+                                  _customNextReminderDate ??
+                                      _suggestedNextReminderDate,
+                                ),
+                              ),
+                              trailing: const Icon(Icons.event_outlined),
+                              onTap:
+                                  _saving ? null : _pickCustomNextReminderDate,
+                            ),
+                          const SizedBox(height: 8),
+                        ],
                         TextField(
                           key: const ValueKey('weaning-count'),
                           controller: _countController,

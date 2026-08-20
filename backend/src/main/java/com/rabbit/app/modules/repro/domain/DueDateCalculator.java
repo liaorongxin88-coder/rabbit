@@ -26,7 +26,7 @@ public final class DueDateCalculator {
         return notBefore(raw, context.today());
     }
 
-    /** 预产期 = 配种日 + gestation_days（配置化，取代旧实现里硬编码的 30）。 */
+    /** 预产期参考值 = 配种日 + gestation_days；提醒链不再依赖它推进。 */
     public static Date expectedBirthDate(Date matingDate, ReproSettings settings) {
         if (matingDate == null) {
             return null;
@@ -44,11 +44,11 @@ public final class DueDateCalculator {
                 require(context.matingDate(), "配种日期"),
                 settings.palpationWaitDays()
             );
-            case PREPARTUM_LEAD -> DateUtil.minusDays(
-                require(resolveExpectedBirth(context, settings), "预产期"),
-                settings.prepartumLeadDays()
+            case PREPARTUM_DURATION -> DateUtil.plusDays(
+                require(context.occurredAt(), "摸胎确认日期"),
+                settings.prepartumDurationDays()
             );
-            case EXPECTED_BIRTH -> require(resolveExpectedBirth(context, settings), "预产期");
+            case SAME_DAY -> require(context.occurredAt(), "操作日期");
             case WEANING_DUE -> DateUtil.plusDays(
                 require(context.birthDate(), "分娩日期"),
                 settings.weaningDays()
@@ -62,13 +62,6 @@ public final class DueDateCalculator {
             case USER_SPECIFIED -> context.userSpecified() != null ? context.userSpecified() : context.today();
             case NONE -> null;
         };
-    }
-
-    private static Date resolveExpectedBirth(DueContext context, ReproSettings settings) {
-        if (context.expectedBirthDate() != null) {
-            return context.expectedBirthDate();
-        }
-        return expectedBirthDate(context.matingDate(), settings);
     }
 
     private static Date require(Date value, String what) {

@@ -34,7 +34,7 @@ public final class ReproCommand {
     private Long maleRabbitId;
     private MatingMethod matingMethod;
     private PalpationResult palpationResult;
-    /** 推迟到 / 摸胎不确定的复查日。 */
+    /** 下一待办的可选覆盖日期；推迟与摸胎不确定时必填。 */
     private Date nextRemindAt;
 
     private Integer totalKits;

@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.rabbit.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
@@ -224,6 +225,11 @@ public class RabbitService {
             throw new BizException(404, "兔子不存在");
         }
         return r;
+    }
+
+    public List<BatchRabbitItem> listBatchMemberships(Long houseId, Long rabbitId, Boolean active) {
+        getRabbit(houseId, rabbitId);
+        return batchRabbitMapper.selectItemsByRabbit(houseId, rabbitId, active);
     }
 
     public List<Rabbit> listRabbitsPage(Long houseId, Long cageId, String type, Boolean active, int page, int pageSize) {

@@ -42,7 +42,7 @@ EventItem _event(String type, {required String status}) {
     recordId: 1,
     category: '生产周期',
     eventType: type,
-    eventDate: DateTime(2026, 8, 19),
+    eventDate: DateTime.now(),
     batchId: null,
     rabbitId: 1,
     status: status,

@@ -1,0 +1,132 @@
+digraph AppWindowDerivation {
+  graph [
+    bgcolor="#F7F8FA",
+    color="#E5E8EC",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=18,
+    label="当前可见窗口派生树",
+    labelloc=t,
+    margin=0.18,
+    nodesep=0.35,
+    pad=0.22,
+    rankdir=TB,
+    ranksep=0.55,
+    splines=polyline
+  ];
+
+  node [
+    color="#CBD2D9",
+    fillcolor="#FFFFFF",
+    fontcolor="#17202A",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=10.5,
+    margin="0.14,0.09",
+    penwidth=1.2,
+    shape=box,
+    style="rounded,filled"
+  ];
+
+  edge [
+    arrowsize=0.68,
+    color="#667085",
+    fontcolor="#667085",
+    fontname="PingFang SC, Microsoft YaHei, sans-serif",
+    fontsize=8.5,
+    penwidth=1.15
+  ];
+
+  visible [
+    label="VisibleWindow\n= 设置 × 鉴权 × 路由 × 数据 × 覆盖层",
+    fillcolor="#17202A",
+    fontcolor="#FFFFFF",
+    fontsize=13,
+    penwidth=0
+  ];
+
+  local_settings [label="localAppSettingsControllerProvider", fillcolor="#EAF4FF"];
+  auth [label="authControllerProvider\nAsyncValue<AuthSession?>", fillcolor="#EAF4FF"];
+  router [label="GoRouterState", fillcolor="#EAF4FF"];
+  data [label="页面 Provider 状态", fillcolor="#EAF4FF"];
+  overlays [label="Overlay Stack", fillcolor="#EAF4FF"];
+
+  visible -> local_settings;
+  visible -> auth;
+  visible -> router;
+  visible -> data;
+  visible -> overlays;
+
+  settings_loading [label="loading 且无值\n启动加载窗口", fillcolor="#FFF7E6"];
+  theme_mode [label="themeMode\n亮色 / 暗色 / 系统"];
+  start_route [label="startRoute\n首次构造 Router 时读取"];
+  local_settings -> settings_loading;
+  local_settings -> theme_mode;
+  local_settings -> start_route;
+
+  auth_loading [label="loading\n/auth-loading", fillcolor="#FFF7E6"];
+  auth_null [label="data(null)\n/login", fillcolor="#FFEFEF"];
+  auth_error [label="error 且无值\n当前按未登录处理", fillcolor="#FFEFEF"];
+  session [label="data(session)\n放行受保护窗口", fillcolor="#EAF7F1"];
+  user_id [label="session.userId"];
+  house_id [label="session.houseId\n当前兔舍上下文"];
+  auth -> auth_loading;
+  auth -> auth_null;
+  auth -> auth_error;
+  auth -> session;
+  session -> user_id;
+  session -> house_id;
+
+  authenticated_user [label="authenticatedUserIdProvider"];
+  houses_provider [label="housesProvider\n全部可访问兔舍"];
+  permissions [label="housePermissionProvider\n成员与操作权限"];
+  route_families [label="house/cage/batch family providers"];
+  user_id -> authenticated_user;
+  authenticated_user -> houses_provider;
+  authenticated_user -> permissions;
+  authenticated_user -> route_families;
+
+  reconcile [label="reconcileHouseIds", fillcolor="#FFF7E6"];
+  reconcile_empty [label="0 个兔舍 → houseId = 0"];
+  reconcile_single [label="1 个兔舍 → 自动选择"];
+  reconcile_many [label=">1 个 → 保留有效缓存\n否则 houseId = 0"];
+  houses_provider -> reconcile;
+  reconcile -> reconcile_empty;
+  reconcile -> reconcile_single;
+  reconcile -> reconcile_many;
+  reconcile -> house_id [label="幂等回写", color="#F59E0B", style=dashed];
+
+  home_events [label="homeEventsProvider\n逐兔舍偏好 + 事件合并排序"];
+  dashboard_panel [label="Dashboard 本地筛选\n默认全部兔舍 + 当前年份"];
+  houses_provider -> home_events;
+  houses_provider -> dashboard_panel;
+
+  current_batches [label="currentHouseBatchesProvider"];
+  current_report [label="currentHouseReportProvider"];
+  house_id -> current_batches;
+  house_id -> current_report;
+
+  matched_location [label="matchedLocation"];
+  tab_index [label="AppShell.selectedIndex"];
+  path_params [label="pathParameters\nhouseId / cageId / batchId"];
+  query_params [label="queryParameters\n出库入口 / 名称 / 范围"];
+  router -> matched_location;
+  router -> path_params;
+  router -> query_params;
+  matched_location -> tab_index;
+  path_params -> route_families;
+
+  loading [label="loading\nCircularProgressIndicator", fillcolor="#FFF7E6"];
+  error [label="error\nErrorState + retry", fillcolor="#FFEFEF"];
+  empty [label="empty / not found\nEmptyState", fillcolor="#EEF1F4"];
+  content [label="data\n业务内容", fillcolor="#EAF7F1"];
+  data -> loading;
+  data -> error;
+  data -> empty;
+  data -> content;
+
+  sheet [label="showModalBottomSheet\n业务临时窗口", fillcolor="#FFF7E6"];
+  dialog [label="showDialog\n确认 / 冲突", fillcolor="#FFF7E6"];
+  nav_push [label="Navigator.push\n法律文档等非 GoRouter 页面", fillcolor="#FFF7E6"];
+  overlays -> sheet;
+  overlays -> dialog;
+  overlays -> nav_push;
+}

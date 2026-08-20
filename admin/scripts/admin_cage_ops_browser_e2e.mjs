@@ -260,7 +260,7 @@ async function main() {
     dialog
       .locator('div')
       .filter({ hasText: new RegExp(`^兔 #${id}`) })
-      .filter({ has: page.getByRole('button', { name: buttonName, exact: true }) })
+      .filter({ has: page.getByRole('link', { name: buttonName, exact: true }) })
       .last()
 
   const assertNoOverflow = async (label) => {
@@ -338,9 +338,14 @@ async function main() {
     await cageDialog.getByText('在栏 2 只', { exact: false }).waitFor()
     await shot('02-cage-rabbits-two')
 
-    await rabbitCard(cageDialog, commAId, '登记离场')
-      .getByRole('button', { name: '登记离场', exact: true })
+    await rabbitCard(cageDialog, commAId, '查看详情')
+      .getByRole('link', { name: '查看详情', exact: true })
       .click()
+    await page.waitForURL((url) => url.pathname === `/workspace/livestock/rabbits/${commAId}`)
+    await page.getByRole('heading', { name: `兔 #${commAId}` }).waitFor()
+    await page.getByText('当前状态', { exact: true }).waitFor()
+    await shot('02a-rabbit-detail')
+    await page.getByRole('button', { name: '登记离场', exact: true }).click()
     const departureDialog = page.getByRole('dialog').filter({ hasText: '登记离场' })
     await departureDialog.getByText('登记离场').first().waitFor()
     await page.locator('#livestock-departure-type').click()
@@ -354,6 +359,8 @@ async function main() {
     await shot('04-departure-done')
 
     // 离场后同笼只剩一只，且是另外那只。
+    await page.getByRole('link', { name: '返回兔群' }).click()
+    await page.getByRole('tab', { name: /笼位/ }).click()
     await page.locator(`[data-testid="cage-map-cell-${c3}"]`).click()
     const afterDialog = page.getByRole('dialog')
     await afterDialog.getByText('在栏 1 只', { exact: false }).waitFor({ timeout: 15_000 })
@@ -369,7 +376,9 @@ async function main() {
     // 而不是枚举值，也不是旧的 reproductive_stage。
     await doeRow.getByText('待配种', { exact: false }).waitFor({ timeout: 15_000 })
     await shot('06-rabbit-list-with-stage')
-    await doeRow.getByRole('button', { name: '换笼' }).click()
+    await doeRow.getByRole('link', { name: '查看详情' }).click()
+    await page.waitForURL((url) => url.pathname === `/workspace/livestock/rabbits/${doeId}`)
+    await page.getByRole('button', { name: '换笼', exact: true }).click()
     const transferDialog = page.getByRole('dialog').filter({ hasText: '换笼位' })
     // 商品兔笼没有对调路径，不能出现在种母兔的候选里（否则选完才吃 400）。
     if (await transferDialog.locator(`[data-testid="cage-map-cell-${c3}"][disabled]`).count() === 0) {
@@ -385,8 +394,11 @@ async function main() {
     await shot('08-transfer-swap-done')
 
     // ---------------------------------------------------------- 场景三：并笼
+    await page.getByRole('link', { name: '返回兔群' }).click()
     const commCRow = page.getByRole('row', { name: new RegExp(`兔 #${commCId}\\b`) })
-    await commCRow.getByRole('button', { name: '换笼' }).click()
+    await commCRow.getByRole('link', { name: '查看详情' }).click()
+    await page.waitForURL((url) => url.pathname === `/workspace/livestock/rabbits/${commCId}`)
+    await page.getByRole('button', { name: '换笼', exact: true }).click()
     const appendDialog = page.getByRole('dialog').filter({ hasText: '换笼位' })
     // 这一次走“输入笼位编号”那条路：完整对上就直接选中。
     await appendDialog.locator('#transfer-cage-number').fill('1-3-1')
@@ -397,6 +409,7 @@ async function main() {
     await shot('10-transfer-append-done')
 
     // ------------------------------------------------------ 场景四：母兔入轨
+    await page.getByRole('link', { name: '返回兔群' }).click()
     await page.getByRole('button', { name: '录入兔只' }).click()
     const entryDialog = page.getByRole('dialog').filter({ hasText: '录入兔只' })
     await page.locator('#rabbit-cage').click()
@@ -450,7 +463,9 @@ async function main() {
 
     await page.getByRole('tab', { name: /兔只/ }).click()
     const narrowRow = page.getByRole('row', { name: new RegExp(`兔 #${commBId}\\b`) })
-    await narrowRow.getByRole('button', { name: '换笼' }).click()
+    await narrowRow.getByRole('link', { name: '查看详情' }).click()
+    await page.waitForURL((url) => url.pathname === `/workspace/livestock/rabbits/${commBId}`)
+    await page.getByRole('button', { name: '换笼', exact: true }).click()
     await page.getByRole('dialog').getByText('换笼位').first().waitFor()
     await assertNoOverflow('transfer dialog')
     // 窄屏下主操作必须还点得到，不能被挤出可视区。
@@ -473,7 +488,7 @@ async function main() {
   }
 
   const required = [
-    '01-cage-map', '02-cage-rabbits-two', '03-departure-dialog', '04-departure-done',
+    '01-cage-map', '02-cage-rabbits-two', '02a-rabbit-detail', '03-departure-dialog', '04-departure-done',
     '05-cage-rabbits-one', '06-rabbit-list-with-stage', '07-transfer-dialog-swap',
     '08-transfer-swap-done', '09-transfer-dialog-append', '10-transfer-append-done',
     '11-doe-entry-form', '12-doe-entry-stage-picked', '13-doe-entry-done',

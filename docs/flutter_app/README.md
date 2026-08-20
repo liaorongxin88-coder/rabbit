@@ -13,6 +13,10 @@ Flutter Android 客户端是当前移动端入口，源码位于 `app/`。
 
 - [modules/rabbit-management-flow.md](modules/rabbit-management-flow.md)：兔场、笼位、兔只的多级流程和新增兔只规则。
 - [modules/auth-phone-wechat-flow.md](modules/auth-phone-wechat-flow.md)：手机号短信、一键登录客户端边界、零兔场、精确邀请和首次设置密码，以及微信绑定规划。
+- [modules/window-state-transitions.md](modules/window-state-transitions.md)：App 窗口状态转移图、Navigator 分层和 Riverpod 状态派生树。
+- [design/app-interface-layout-board.excalidraw](design/app-interface-layout-board.excalidraw)：可编辑的 App 手机窗口、路由连线和 Sheet/Dialog 拖拽排布板。
+- [design/app-navigation-tree.excalidraw](design/app-navigation-tree.excalidraw)：页面层级、跨页面核心流程和临时覆盖层的清晰树形关系板。
+- [design/app-complete-state-machine.excalidraw](design/app-complete-state-machine.excalidraw)：首选的 App 可见窗口状态机派生全图，包含 Provider、Router、页面异步态、Outbound 和 NFC 状态机。
 
 ## 常用命令
 

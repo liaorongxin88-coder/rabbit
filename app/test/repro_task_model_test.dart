@@ -22,4 +22,27 @@ void main() {
 
     expect(item.displayStatus, '待摸胎');
   });
+
+  test('action result parses the authoritative current cycle projection', () {
+    final result = ReproActionResult.fromJson({
+      'cycleId': 301,
+      'currentCycleId': 302,
+      'followUpCycleId': 303,
+    });
+
+    expect(result.cycleId, 301);
+    expect(result.currentCycleId, 302);
+    expect(result.followUpCycleId, 303);
+  });
+
+  test('action result keeps null or missing current cycle nullable', () {
+    final explicitNull = ReproActionResult.fromJson({
+      'cycleId': 401,
+      'currentCycleId': null,
+    });
+    final missing = ReproActionResult.fromJson({'cycleId': 402});
+
+    expect(explicitNull.currentCycleId, isNull);
+    expect(missing.currentCycleId, isNull);
+  });
 }

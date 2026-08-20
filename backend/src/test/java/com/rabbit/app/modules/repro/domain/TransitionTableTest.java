@@ -160,6 +160,21 @@ class TransitionTableTest {
     }
 
     @Test
+    void pregnancyFlowUsesTheMarkedBusinessTimeAnchors() {
+        Transition palpation = TransitionTable.require(
+            ReproStage.AWAIT_PALPATION, ReproAction.PALPATION, "PREGNANT"
+        );
+        Transition prepartum = TransitionTable.require(
+            ReproStage.AWAIT_PREPARTUM, ReproAction.PREPARTUM, null
+        );
+
+        assertAll(
+            () -> assertEquals(DueAnchor.PREPARTUM_DURATION, palpation.dueAnchor()),
+            () -> assertEquals(DueAnchor.SAME_DAY, prepartum.dueAnchor())
+        );
+    }
+
+    @Test
     void postponeKeepsStageAndOnlyMovesTheReminder() {
         Transition postpone = TransitionTable.require(ReproStage.AWAIT_PALPATION, ReproAction.POSTPONE, null);
 

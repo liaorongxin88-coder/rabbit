@@ -14,7 +14,7 @@ import java.time.ZoneId;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
 
-/** 到期日计算：锚点语义、备产提前量修复、补录后拉平当天。 */
+/** 到期日计算：业务时长锚点、同日推进、补录后拉平当天。 */
 class DueDateCalculatorTest {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
@@ -33,19 +33,18 @@ class DueDateCalculatorTest {
     }
 
     @Test
-    void prepartumLeadIsOnlyALeadTimeNotAWaitDuration() {
-        // 飞书 recvsrpXPZd3Xg 的核心：备产提醒 = 预产期 − 3，而不是配种日 + 3。
-        Date mating = date(2026, 3, 1);
-        DueContext context = DueContext.builder(mating, date(2026, 3, 13))
-            .matingDate(mating)
-            .build();
+    void prepartumWaitStartsAtPalpationAndDeliveryStartsTheSameDay() {
+        Date palpationDate = date(2026, 3, 13);
+        DueContext context = DueContext.builder(palpationDate, palpationDate).build();
 
-        Date prepartumDue = DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS);
-        Date deliveryDue = DueDateCalculator.compute(DueAnchor.EXPECTED_BIRTH, context, SETTINGS);
+        Date prepartumDue = DueDateCalculator.compute(
+            DueAnchor.PREPARTUM_DURATION, context, SETTINGS
+        );
+        Date deliveryDue = DueDateCalculator.compute(DueAnchor.SAME_DAY, context, SETTINGS);
 
         assertAll(
-            () -> assertEquals(date(2026, 3, 29), prepartumDue, "备产 = 预产期 4/1 − 3 天"),
-            () -> assertEquals(date(2026, 4, 1), deliveryDue, "接产 = 预产期当天")
+            () -> assertEquals(date(2026, 3, 16), prepartumDue, "待备产 = 摸胎确认日 + 3 天"),
+            () -> assertEquals(palpationDate, deliveryDue, "备产完成后当天进入待分娩")
         );
     }
 
@@ -69,6 +68,16 @@ class DueDateCalculatorTest {
                 date(2026, 3, 13),
                 DueDateCalculator.compute(DueAnchor.PALPATION_WAIT, context, SETTINGS),
                 "配种 → 摸胎 = 配种日 + 12"
+            ),
+            () -> assertEquals(
+                date(2026, 3, 4),
+                DueDateCalculator.compute(DueAnchor.PREPARTUM_DURATION, context, SETTINGS),
+                "摸胎 → 备产 = 操作日 + 3"
+            ),
+            () -> assertEquals(
+                today,
+                DueDateCalculator.compute(DueAnchor.SAME_DAY, context, SETTINGS),
+                "备产 → 分娩 = 操作当天"
             ),
             () -> assertEquals(
                 date(2026, 3, 26),
@@ -139,18 +148,6 @@ class DueDateCalculatorTest {
             () -> assertEquals(400, error.getCode()),
             () -> assertTrue(error.getMessage().contains("配种日期"), error.getMessage())
         );
-    }
-
-    @Test
-    void explicitExpectedBirthDateOverridesTheMatingDerivedOne() {
-        // 「待备产」入轨允许直接给预产期（母兔来自其他系统、配种日不可考）。
-        Date today = date(2026, 3, 1);
-        DueContext context = DueContext.builder(today, today)
-            .matingDate(date(2026, 3, 1))
-            .expectedBirthDate(date(2026, 3, 20))
-            .build();
-
-        assertEquals(date(2026, 3, 17), DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS));
     }
 
     @Test

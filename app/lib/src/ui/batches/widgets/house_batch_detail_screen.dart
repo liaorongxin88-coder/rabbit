@@ -11,7 +11,9 @@ import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
 import 'package:rabbit_flutter/src/domain/models/event_item.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/abortion_sheet.dart';
+import 'package:rabbit_flutter/src/ui/batches/widgets/add_batch_members_sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_departure_sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/app_page.dart';
@@ -226,6 +228,7 @@ class _HouseBatchDetailScreenState
                   currentBatch,
                   allMembers,
                 ),
+                onAddMembers: () => _addBatchMembers(allMembers),
               );
             case 1:
               return const SizedBox(height: 12);
@@ -322,6 +325,9 @@ class _HouseBatchDetailScreenState
                   : null,
               onAbortion: canEdit && _memberCanAbort(item)
                   ? () => _handleMemberAbortion(item)
+                  : null,
+              onRemove: canEdit && item.isActive
+                  ? () => _removeBatchMember(item)
                   : null,
             ),
           );
@@ -475,6 +481,119 @@ class _HouseBatchDetailScreenState
         _matingSelection = false;
       }
     });
+  }
+
+  Future<void> _addBatchMembers(List<BatchRabbitItem> members) async {
+    if (_saving) {
+      return;
+    }
+    final completed = await showAddBatchMembersSheet(
+      context: context,
+      houseId: widget.houseId,
+      batchId: widget.batchId,
+      currentMemberIds: members
+          .where((item) => item.isActive)
+          .map((item) => item.rabbitId)
+          .toSet(),
+    );
+    if (!completed || !mounted) {
+      return;
+    }
+    ref.invalidate(allActiveHouseRabbitsProvider(widget.houseId));
+    ref.invalidate(houseRabbitsProvider(widget.houseId));
+    ref.invalidate(homeEventsProvider);
+    await _refresh();
+  }
+
+  Future<void> _removeBatchMember(BatchRabbitItem item) async {
+    if (_saving || !item.isActive) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('移除批次标签'),
+            content: Text(
+              '从批次 #${widget.batchId} 移除兔 #${item.rabbitId}？'
+              '此操作只解除标签关系，不会终止繁育周期或让兔离场。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                key: const ValueKey('batch-member-remove-confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('确认移除'),
+              ),
+            ],
+          ),
+        ) ==
+        true;
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    final requestId = _batchActionRequest.requestIdFor(
+      canonicalBatchWriteFingerprint({
+        'action': 'removeBatchMember',
+        'houseId': widget.houseId,
+        'batchId': widget.batchId,
+        'rabbitIds': [item.rabbitId],
+      }),
+    );
+    setState(() => _saving = true);
+    try {
+      await ref.read(batchRepositoryProvider).removeBatchRabbit(
+            houseId: widget.houseId,
+            batchId: widget.batchId,
+            rabbitId: item.rabbitId,
+            requestId: requestId,
+          );
+      _batchActionRequest.startNewDraft();
+      ref.invalidate(
+        rabbitBatchMembershipsProvider(
+          RabbitBatchMembershipRequest(
+            houseId: widget.houseId,
+            rabbitId: item.rabbitId,
+          ),
+        ),
+      );
+      ref.invalidate(
+        rabbitBatchMembershipsProvider(
+          RabbitBatchMembershipRequest(
+            houseId: widget.houseId,
+            rabbitId: item.rabbitId,
+            active: false,
+          ),
+        ),
+      );
+      ref.invalidate(
+        rabbitDetailProvider(
+          RabbitDetailRequest(
+            houseId: widget.houseId,
+            rabbitId: item.rabbitId,
+          ),
+        ),
+      );
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('批次标签已移除')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 
   Future<void> _submitMating(List<BatchRabbitItem> selected) async {
@@ -875,6 +994,7 @@ class _BatchHeader extends StatelessWidget {
     required this.canEdit,
     required this.saving,
     required this.onComplete,
+    required this.onAddMembers,
   });
 
   final Batch batch;
@@ -882,6 +1002,7 @@ class _BatchHeader extends StatelessWidget {
   final bool canEdit;
   final bool saving;
   final VoidCallback onComplete;
+  final VoidCallback onAddMembers;
 
   @override
   Widget build(BuildContext context) {
@@ -929,6 +1050,13 @@ class _BatchHeader extends StatelessWidget {
           ],
           if (canEdit && !completed) ...[
             const SizedBox(height: 14),
+            OutlinedButton.icon(
+              key: const ValueKey('batch-add-members-button'),
+              onPressed: saving ? null : onAddMembers,
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('添加兔子'),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const ValueKey('batch-complete-button'),
               onPressed: saving ? null : onComplete,
@@ -1091,11 +1219,11 @@ class _MemberFilters extends StatelessWidget {
             key: const ValueKey('batch-member-role-filter'),
             value: role,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: '成员角色'),
+            decoration: const InputDecoration(labelText: '兔子种类'),
             items: const [
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._all,
-                  child: Text('全部角色')),
+                  child: Text('全部种类')),
               DropdownMenuItem(value: 'breeding', child: Text('繁殖母兔')),
               DropdownMenuItem(value: 'fattening', child: Text('商品兔')),
             ],
@@ -1125,17 +1253,17 @@ class _MemberFilters extends StatelessWidget {
             key: const ValueKey('batch-member-activity-filter'),
             value: activity,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: '成员范围'),
+            decoration: const InputDecoration(labelText: '兔子状态'),
             items: const [
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._active,
-                  child: Text('仅活跃成员')),
+                  child: Text('活跃兔子')),
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._all,
-                  child: Text('全部成员')),
+                  child: Text('全部兔子')),
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._exited,
-                  child: Text('仅已退出成员')),
+                  child: Text('仅已退出兔子')),
             ],
             onChanged: (value) {
               if (value != null) onActivityChanged(value);
@@ -1287,8 +1415,15 @@ class _ReadOnlyNotice extends StatelessWidget {
 }
 
 String _nextEventTypeFor(BatchRabbitItem item) {
-  if (item.batchRole == 'breeding') {
-    switch (ReproStage.tryParse(item.currentStage)) {
+  final currentStage = item.currentStage?.trim() ?? '';
+  if (currentStage.isEmpty) {
+    return item.nextEventType;
+  }
+  final stage = ReproStage.tryParse(currentStage);
+  if (stage != null) {
+    switch (stage) {
+      case ReproStage.awaitEstrus:
+        return '催情';
       case ReproStage.awaitMating:
         return '配种';
       case ReproStage.awaitPalpation:
@@ -1298,12 +1433,17 @@ String _nextEventTypeFor(BatchRabbitItem item) {
       case ReproStage.awaitDelivery:
         return '分娩';
       case ReproStage.awaitWeaning:
-        return '断奶';
-      default:
-        break;
+        return '分笼';
+      case ReproStage.ready:
+      case ReproStage.suspended:
+      case ReproStage.retired:
+        // A recognized stage is authoritative even when it has no next task.
+        return '';
     }
   }
-  return item.nextEventType;
+  // A non-empty server projection is authoritative even when this client does
+  // not recognize a newly introduced stage yet.
+  return '';
 }
 
 class _BatchMemberCard extends StatelessWidget {
@@ -1319,6 +1459,7 @@ class _BatchMemberCard extends StatelessWidget {
     required this.onAction,
     required this.onDeparture,
     required this.onAbortion,
+    required this.onRemove,
   });
 
   final BatchRabbitItem item;
@@ -1333,6 +1474,7 @@ class _BatchMemberCard extends StatelessWidget {
 
   /// 为空即该母兔当前阶段不允许流产（服务端字典判定）。
   final VoidCallback? onAbortion;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -1385,6 +1527,13 @@ class _BatchMemberCard extends StatelessWidget {
                   tooltip: '登记离场',
                   onPressed: saving ? null : onDeparture,
                   icon: const Icon(Icons.exit_to_app_outlined),
+                ),
+              if (onRemove != null)
+                IconButton(
+                  key: ValueKey('batch-member-remove-${item.rabbitId}'),
+                  tooltip: '移除批次标签',
+                  onPressed: saving ? null : onRemove,
+                  icon: const Icon(Icons.remove_circle_outline),
                 ),
             ],
           ),

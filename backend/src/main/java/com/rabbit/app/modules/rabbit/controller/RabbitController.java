@@ -2,6 +2,7 @@ package com.rabbit.app.modules.rabbit.controller;
 
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.CageTransferRequest;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
@@ -92,6 +93,18 @@ public class RabbitController {
         houseService.assertHousePermission(userId, houseId, "view");
         Rabbit r = rabbitService.getRabbit(houseId, id);
         return ApiResponse.ok(r);
+    }
+
+    @GetMapping("/rabbits/{id}/batch-memberships")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_QUERY)
+    public ApiResponse<List<BatchRabbitItem>> listBatchMemberships(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("id") Long id,
+            @RequestParam(value = "active", defaultValue = "true") Boolean active
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(rabbitService.listBatchMemberships(houseId, id, active));
     }
 
     @PostMapping("/rabbits/replacement")

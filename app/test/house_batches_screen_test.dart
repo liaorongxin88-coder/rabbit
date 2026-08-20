@@ -127,8 +127,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('batch-create-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('创建生产批次'), findsOneWidget);
-    final emptyMotherMessage = find.text('暂无种母兔，请先在笼位录入种母兔。');
+    expect(find.text('创建批次'), findsWidgets);
+    final emptyMotherMessage = find.text('暂无可选种母兔，可直接创建空批次。');
     await tester.scrollUntilVisible(
       emptyMotherMessage,
       160,
@@ -140,6 +140,14 @@ void main() {
           .first,
     );
     expect(emptyMotherMessage, findsOneWidget);
+    expect(
+      find.text('创建空批次，成员稍后从兔只详情绑定'),
+      findsOneWidget,
+    );
+    final submit = tester.widget<ElevatedButton>(
+      find.byKey(const ValueKey('create-batch-submit')),
+    );
+    expect(submit.onPressed, isNotNull);
   });
 
   testWidgets('Batch list trims status values consistently', (tester) async {

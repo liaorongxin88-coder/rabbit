@@ -19,6 +19,7 @@ import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
 import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
 import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
 import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
+import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
 import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
 import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
 import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
@@ -57,6 +58,35 @@ void main() {
     expect(find.text('《隐私政策》'), findsOneWidget);
     expect(find.text('《用户协议》'), findsOneWidget);
     expect(find.textContaining('模拟器默认连接'), findsNothing);
+  });
+
+  testWidgets('keeps the router mounted while local settings are restored',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final settingsStore = _DelayedLocalAppSettingsStore();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          localAppSettingsStoreProvider.overrideWithValue(settingsStore),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final routerElement = tester.element(find.byType(Router<Object>));
+
+    settingsStore.complete(LocalAppSettings.defaultSettings);
+    await tester.pumpAndSettle();
+
+    expect(
+      identical(tester.element(find.byType(Router<Object>)), routerElement),
+      isTrue,
+    );
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('login controls share the same horizontal alignment',
@@ -190,7 +220,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('今日生产'), findsNothing);
+    expect(find.text('今日提醒'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsWidgets);
     expect(houseRepository.calls, 0);
 
@@ -336,7 +366,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('今日提醒'), findsOneWidget);
     expect(find.text('配种任务已清'), findsOneWidget);
     expect(find.text('系统使用步骤'), findsNothing);
     expect(authRepository.validationCalls, 1);
@@ -366,7 +396,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日生产'), findsNothing);
+    expect(find.text('今日提醒'), findsNothing);
     expect(houseRepository.calls, 0);
     expect(authRepository.validationCalls, 1);
     expect(
@@ -426,7 +456,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('今日提醒'), findsOneWidget);
     expect(find.text('母兔 #18'), findsOneWidget);
     expect(find.text('批次 #9'), findsOneWidget);
     expect(find.text('周期记录 #71'), findsOneWidget);
@@ -462,7 +492,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日生产'), findsNothing);
+    expect(find.text('今日提醒'), findsNothing);
     expect(houseRepository.calls, 0);
     expect(authRepository.validationCalls, 1);
     expect(
@@ -502,13 +532,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('今日生产'), findsOneWidget);
+    expect(find.text('今日提醒'), findsOneWidget);
 
     authRepository.emitUnauthorized();
     await tester.pumpAndSettle();
 
     expect(find.text('登录 / 注册'), findsOneWidget);
-    expect(find.text('今日生产'), findsNothing);
+    expect(find.text('今日提醒'), findsNothing);
     expect(
       await const FlutterSecureStorage().read(key: 'token'),
       isNull,
@@ -568,7 +598,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('新建兔场默认配置'), findsOneWidget);
-    expect(find.text('摸胎天数'), findsOneWidget);
+    expect(find.text('待摸胎时长'), findsOneWidget);
     expect(find.text('请选择兔舍'), findsNothing);
   });
 
@@ -642,6 +672,9 @@ void main() {
               customized: false,
             ),
           ),
+          reminderPreferenceProvider(8).overrideWith(
+            (_) async => ReminderPreference.defaults.copyWith(),
+          ),
         ],
       ),
     );
@@ -660,7 +693,15 @@ void main() {
     expect(find.text('兔舍生产设置'), findsWidgets);
     expect(find.text('当前兔舍独立配置'), findsOneWidget);
     expect(find.textContaining('仅影响 测试1'), findsOneWidget);
-    expect(find.text('摸胎天数'), findsOneWidget);
+    expect(find.text('待摸胎时长'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('house-production-reminders')),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('当前兔舍提醒'), findsOneWidget);
+    expect(find.textContaining('测试1的提醒单独配置'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reminder-house')), findsNothing);
   });
 
   testWidgets('dashboard defaults to all houses and filters one house',
@@ -776,6 +817,17 @@ void main() {
     expect(cleared.themeMode, LocalAppSettings.defaultSettings.themeMode);
     expect(cleared.startRoute, LocalAppSettings.defaultSettings.startRoute);
   });
+}
+
+class _DelayedLocalAppSettingsStore extends LocalAppSettingsStore {
+  final _readCompleter = Completer<LocalAppSettings>();
+
+  @override
+  Future<LocalAppSettings> read() => _readCompleter.future;
+
+  void complete(LocalAppSettings settings) {
+    _readCompleter.complete(settings);
+  }
 }
 
 class ProviderScopeWrapper extends StatelessWidget {

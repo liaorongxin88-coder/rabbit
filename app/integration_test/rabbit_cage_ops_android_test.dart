@@ -31,6 +31,7 @@ const _reserveRabbitId = int.fromEnvironment('RABBIT_E2E_RESERVE_RABBIT_ID');
 const _commodityARabbitId = int.fromEnvironment('RABBIT_E2E_COMM_A_RABBIT_ID');
 const _commodityBRabbitId = int.fromEnvironment('RABBIT_E2E_COMM_B_RABBIT_ID');
 const _commodityCRabbitId = int.fromEnvironment('RABBIT_E2E_COMM_C_RABBIT_ID');
+
 /// fixture 的六个笼位是一条 INSERT 连号插入的，第 N 列的 id = 首列 id + (N-1)。
 const _firstCageId = int.fromEnvironment('RABBIT_E2E_FIRST_CAGE_ID');
 
@@ -91,14 +92,21 @@ void main() {
           reason: '笼内两只商品兔都应列出，才谈得上「挑一只」');
       await _takeScreenshot(binding, tester, '02-commodity-cage-two-rabbits');
 
-      await _openRabbitMenu(tester, _commodityARabbitId);
-      await tester.tap(find.text('登记离场').last);
-      await _waitFor(tester, find.byKey(const ValueKey('rabbit-departure-submit')));
+      await _openRabbitDetail(tester, _commodityARabbitId);
+      await _takeScreenshot(binding, tester, '02b-rabbit-detail');
+      await tester.tap(
+        find.byKey(
+          const ValueKey('rabbit-detail-departure-$_commodityARabbitId'),
+        ),
+      );
+      await _waitFor(
+          tester, find.byKey(const ValueKey('rabbit-departure-submit')));
       // 批次详情之外也能登记，说明 batchId 已经不是必填。
       expect(find.text('登记离场'), findsWidgets);
       await _takeScreenshot(binding, tester, '03-departure-sheet');
 
-      await tester.tap(find.byKey(const ValueKey('rabbit-departure-event-death')));
+      await tester
+          .tap(find.byKey(const ValueKey('rabbit-departure-event-death')));
       await _enterField(
         tester,
         const ValueKey('rabbit-departure-reason'),
@@ -110,11 +118,13 @@ void main() {
         tester,
         find.byKey(const ValueKey('rabbit-departure-confirm-risk')),
       );
-      await tester.tap(find.byKey(const ValueKey('rabbit-departure-confirm-risk')));
+      await tester
+          .tap(find.byKey(const ValueKey('rabbit-departure-confirm-risk')));
       await tester.pumpAndSettle();
       await _takeScreenshot(binding, tester, '04-departure-filled');
       await _tapSubmit(tester, const ValueKey('rabbit-departure-submit'));
-
+      await _waitFor(tester, find.text('已离场'));
+      await _backToCageDetail(tester);
       await _waitForGone(tester, _rabbitRow(_commodityARabbitId));
       expect(_rabbitRow(_commodityBRabbitId), findsOneWidget,
           reason: '只应离场被选中的那一只');
@@ -129,13 +139,15 @@ void main() {
           reason: 'current_stage 应出现在笼内兔只行');
       await _takeScreenshot(binding, tester, '06-doe-cage-with-stage');
 
-      await _openRabbitMenu(tester, _doeRabbitId);
-      await tester.tap(find.text('换笼位').last);
-      await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
+      await _openRabbitDetail(tester, _doeRabbitId);
+      await tester.tap(
+        find.byKey(const ValueKey('rabbit-detail-move-$_doeRabbitId')),
+      );
+      await _waitFor(
+          tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
       // 被占用的后备兔笼此前会被过滤掉，现在必须作为「对调」候选出现。
       // 地图选择器把这个信息写在格子上（而不是列表行的副标题），选中后再在底部说清。
-      expect(find.text('对调'), findsWidgets,
-          reason: '占用的非商品兔笼应在地图上标出对调');
+      expect(find.text('对调'), findsWidgets, reason: '占用的非商品兔笼应在地图上标出对调');
       await _takeScreenshot(binding, tester, '07-move-sheet-swap-target');
 
       await _pickMoveTarget(tester, _cageIdAt(2));
@@ -150,18 +162,21 @@ void main() {
       await _takeScreenshot(binding, tester, '08-swap-done');
 
       // 对调后原笼里站的应该是后备兔。
+      await _backToCageDetail(tester);
       await _pumpUntilSettled(tester);
       await _waitFor(tester, _rabbitRow(_reserveRabbitId));
-      expect(_rabbitRow(_doeRabbitId), findsNothing,
-          reason: '种母兔已换到后备兔原来的笼位');
+      expect(_rabbitRow(_doeRabbitId), findsNothing, reason: '种母兔已换到后备兔原来的笼位');
 
       // ── 三、商品兔并入未满的商品兔笼（recvqh5TC8wd3y 的第二条规则）
       await _backToCageGrid(tester);
       await _openCageAt(tester, 4);
       await _waitFor(tester, _rabbitRow(_commodityCRabbitId));
-      await _openRabbitMenu(tester, _commodityCRabbitId);
-      await tester.tap(find.text('换笼位').last);
-      await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
+      await _openRabbitDetail(tester, _commodityCRabbitId);
+      await tester.tap(
+        find.byKey(const ValueKey('rabbit-detail-move-$_commodityCRabbitId')),
+      );
+      await _waitFor(
+          tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
       await _pickMoveTarget(tester, _cageIdAt(3));
       await _takeScreenshot(binding, tester, '09-move-sheet-append-target');
       await _tapSubmit(tester, const ValueKey('rabbit-move-cage-submit'));
@@ -179,7 +194,8 @@ void main() {
       await _waitFor(tester, find.byKey(const ValueKey('rabbit-entry-submit')));
 
       // 母（默认）时不得再出现旧的繁殖阶段下拉——后端本就拒收，填了必定 400。
-      expect(find.byKey(const ValueKey('rabbit-reproductive-stage')), findsNothing);
+      expect(find.byKey(const ValueKey('rabbit-reproductive-stage')),
+          findsNothing);
       // 入轨阶段字典是一次网络请求，真机上表单先渲染「正在读取」；
       // 直接 ensureVisible 会碰上还没 build 的下拉。
       final reproStage = find.byKey(const ValueKey('rabbit-repro-stage'));
@@ -195,8 +211,7 @@ void main() {
       await tester.pumpAndSettle();
       // 待摸胎要补录配种日期，字段随字典出现。
       final matingDate = find.byKey(const ValueKey('rabbit-mating-date'));
-      expect(matingDate, findsOneWidget,
-          reason: '待摸胎必须要求配种日期');
+      expect(matingDate, findsOneWidget, reason: '待摸胎必须要求配种日期');
       await tester.ensureVisible(matingDate);
       await tester.tap(matingDate);
       // 日期选择器的确定是 TextButton，表单提交按钮同样写着「确定」但是 ElevatedButton，
@@ -235,9 +250,12 @@ void main() {
       expect(find.byKey(const ValueKey('cage-rabbit-row-$_reserveRabbitId')),
           findsOneWidget,
           reason: '对调后后备兔应当在原种兔笼 1-1-1 里');
-      await _openRabbitMenu(tester, _reserveRabbitId);
-      await tester.tap(find.text('换笼位').last);
-      await _waitFor(tester, find.byKey(const ValueKey('rabbit-move-cage-nfc')));
+      await _openRabbitDetail(tester, _reserveRabbitId);
+      await tester.tap(
+        find.byKey(const ValueKey('rabbit-detail-move-$_reserveRabbitId')),
+      );
+      await _waitFor(
+          tester, find.byKey(const ValueKey('rabbit-move-cage-nfc')));
       await tester.tap(find.byKey(const ValueKey('rabbit-move-cage-nfc')));
       await _pumpUntilSettled(tester);
       await _takeScreenshot(binding, tester, '14-nfc-waiting');
@@ -270,8 +288,7 @@ void main() {
         find.byKey(const ValueKey('cage-rabbit-row-$_reserveRabbitId')),
         timeout: const Duration(seconds: 30),
       );
-      expect(find.text('1-5-1'), findsWidgets,
-          reason: '碰标签应该落在该标签绑定的笼位详情页');
+      expect(find.text('1-5-1'), findsWidgets, reason: '碰标签应该落在该标签绑定的笼位详情页');
       await _takeScreenshot(binding, tester, '17-nfc-jump-to-cage');
 
       binding.reportData ??= <String, dynamic>{};
@@ -334,9 +351,10 @@ Future<void> _assertEntryPointDictionaryIsServed() async {
       '/api/auth/login',
       data: {'userName': _controlUser, 'password': _password},
     );
-    expect(login.data?['code'], 0, reason: 'fixture user must be able to log in');
-    final token =
-        Map<String, dynamic>.from(login.data!['data'] as Map)['token'] as String;
+    expect(login.data?['code'], 0,
+        reason: 'fixture user must be able to log in');
+    final token = Map<String, dynamic>.from(login.data!['data'] as Map)['token']
+        as String;
     final response = await dio.get<Map<String, dynamic>>(
       '/api/repro/entry-points',
       options: Options(headers: {
@@ -347,7 +365,8 @@ Future<void> _assertEntryPointDictionaryIsServed() async {
     expect(response.data?['code'], 0,
         reason: 'GET /api/repro/entry-points must be served by the backend');
     final rows = List<Map<String, dynamic>>.from(
-      (response.data!['data'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
+      (response.data!['data'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map)),
     );
     expect(
       rows.map((row) => row['stage']),
@@ -418,7 +437,20 @@ Future<void> _enterCages(WidgetTester tester) async {
   await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
 }
 
+Future<void> _backToCageDetail(WidgetTester tester) async {
+  final rabbitBack = find.byKey(const ValueKey('page-back-button'));
+  expect(rabbitBack, findsOneWidget, reason: '兔只详情应提供返回入口');
+  await tester.tap(rabbitBack);
+  await _waitFor(
+    tester,
+    find.byKey(const ValueKey('cage-detail-back-button')),
+  );
+}
+
 Future<void> _backToCageGrid(WidgetTester tester) async {
+  if (find.byKey(const ValueKey('page-back-button')).evaluate().isNotEmpty) {
+    await _backToCageDetail(tester);
+  }
   final back = find.byKey(const ValueKey('cage-detail-back-button'));
   if (back.evaluate().isNotEmpty) {
     await tester.tap(back);
@@ -429,7 +461,8 @@ Future<void> _backToCageGrid(WidgetTester tester) async {
 /// 笼位区默认是分层地图，格子上只写在栏数与关注状态，不再写笼位编号，
 /// 所以按 id 点格子（比认文字更稳）。position 从 1 开始，fixture 笼位 id 连号。
 Future<void> _openCageAt(WidgetTester tester, int positionIndex) async {
-  final cell = find.byKey(ValueKey('cage-map-cell-${_cageIdAt(positionIndex)}'));
+  final cell =
+      find.byKey(ValueKey('cage-map-cell-${_cageIdAt(positionIndex)}'));
   await _scrollUntilPresent(
     tester,
     cell,
@@ -487,8 +520,8 @@ Future<String> _fetchSignedCagePayload(int cageId) async {
       '/api/auth/login',
       data: {'userName': _controlUser, 'password': _password},
     );
-    final token =
-        Map<String, dynamic>.from(login.data!['data'] as Map)['token'] as String;
+    final token = Map<String, dynamic>.from(login.data!['data'] as Map)['token']
+        as String;
     final response = await dio.get<Map<String, dynamic>>(
       '/api/nfc/cages/write-queue',
       options: Options(headers: {
@@ -527,12 +560,16 @@ String _foreignHousePayload(String payload) {
   return [parts[0], otherHouse, parts[2], parts[3], parts[4]].join('.');
 }
 
-Future<void> _openRabbitMenu(WidgetTester tester, int rabbitId) async {
-  final menu = find.byKey(ValueKey('cage-rabbit-menu-$rabbitId'));
-  await tester.ensureVisible(menu);
+Future<void> _openRabbitDetail(WidgetTester tester, int rabbitId) async {
+  final row = _rabbitRow(rabbitId);
+  await tester.ensureVisible(row);
   await tester.pumpAndSettle();
-  await tester.tap(menu);
-  await tester.pumpAndSettle();
+  await tester.tap(row);
+  await _waitFor(
+    tester,
+    find.byKey(const ValueKey('rabbit-detail-page-content')),
+  );
+  expect(find.text('兔 #$rabbitId'), findsOneWidget);
 }
 
 /// 在换笼弹窗的地图上选中目标笼（默认就是地图选择）。

@@ -55,9 +55,10 @@ public class WorkTaskController {
     /**
      * 待办列表。
      *
-     * @param dueBefore 时间戳（毫秒，沿用 ReportController 的日期参数约定）；
-     *                  含当日，缺省为今天，即「今日及逾期」
-     * @param type      任务类型过滤（ESTRUS/MATING/...）
+     * @param dueBefore    时间戳（毫秒，沿用 ReportController 的日期参数约定）；
+     *                     含当日，缺省为今天，即「今日及逾期」
+     * @param includeFuture 是否忽略到期日上限并返回全部未来待办；缺省为 false
+     * @param type         任务类型过滤（ESTRUS/MATING/...）
      * @param cageId    NFC 碰笼直查该笼待办
      */
     @GetMapping("/tasks")
@@ -65,6 +66,7 @@ public class WorkTaskController {
     public ApiResponse<TaskPage> listTasks(
         @RequestHeader("X-House-Id") Long houseId,
         @RequestParam(value = "dueBefore", required = false) Long dueBefore,
+        @RequestParam(value = "includeFuture", defaultValue = "false") boolean includeFuture,
         @RequestParam(value = "type", required = false) String type,
         @RequestParam(value = "batchId", required = false) Long batchId,
         @RequestParam(value = "cageId", required = false) Long cageId,
@@ -83,7 +85,8 @@ public class WorkTaskController {
             cageId,
             rabbitId,
             page,
-            size
+            size,
+            includeFuture
         ));
     }
 

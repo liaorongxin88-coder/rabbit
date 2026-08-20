@@ -1,6 +1,7 @@
 package com.rabbit.app.util;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
@@ -23,6 +24,16 @@ public class DateUtil {
 
     public static Date minusDays(Date date, int days) {
         return plusDays(date, -days);
+    }
+
+    /** 业务日期按中国时区判断；今天可选，只有早于今天才算过去。 */
+    public static boolean isTodayOrFuture(Date date) {
+        if (date == null) {
+            return false;
+        }
+        LocalDate selected = Instant.ofEpochMilli(date.getTime()).atZone(ZONE_ID).toLocalDate();
+        LocalDate today = Instant.now().atZone(ZONE_ID).toLocalDate();
+        return !selected.isBefore(today);
     }
 
     public static int daysBetween(Date from, Date to) {

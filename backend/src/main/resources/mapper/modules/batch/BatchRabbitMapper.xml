@@ -95,20 +95,6 @@
         for update
     </select>
 
-    <select id="selectActiveRabbitIdsForUpdate" resultType="long">
-        select br.rabbit_id
-        from batch_rabbits br
-        inner join batches b on b.id = br.batch_id
-        where b.house_id = #{houseId}
-          and br.is_active = true
-          and br.rabbit_id in
-          <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
-              #{rabbitId}
-          </foreach>
-        order by br.rabbit_id, br.id
-        for update
-    </select>
-
     <update id="updateStatusAndEvent">
         update batch_rabbits br
         inner join batches b on b.id = br.batch_id
@@ -351,6 +337,24 @@
         <if test="role != null and role != ''">
             and br.batch_role = #{role}
         </if>
+        <if test="active != null">
+            and br.is_active = #{active}
+        </if>
+        order by br.id asc
+    </select>
+
+    <select id="selectItemsByRabbit" resultType="com.rabbit.app.modules.batch.dto.BatchRabbitItem">
+        select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.latest_cycle_id,
+               br.current_nursing_kits, br.nursing_litter_count, br.join_reason, br.batch_role, br.current_status,
+               br.last_event_date, br.next_event_date, br.next_event_type, br.is_active, br.join_date, br.exit_date,
+               r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id,
+               r.current_stage, r.current_cycle_id
+        from batch_rabbits br
+        inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id
+        where b.house_id = #{houseId}
+          and r.house_id = #{houseId}
+          and br.rabbit_id = #{rabbitId}
         <if test="active != null">
             and br.is_active = #{active}
         </if>
