@@ -6,9 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
+import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
 
 void main() {
   test('phone invitation sends scoped request without account discovery',
@@ -45,8 +45,7 @@ void main() {
           isTrue,
         ));
     expect(body['identifier'], '13800138000');
-    expect(
-        body.keys,
+    expect(body.keys,
         containsAll(<String>['identifier', 'phone', 'role', 'requestId']));
     expect(body.keys, hasLength(4));
   });

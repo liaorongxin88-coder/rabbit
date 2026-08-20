@@ -1,15 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
-import 'package:rabbit_flutter/src/domain/models/house_member.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/session.dart';
+import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/houses/member.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 void main() {
   test('house permission reloads when the authenticated user changes',

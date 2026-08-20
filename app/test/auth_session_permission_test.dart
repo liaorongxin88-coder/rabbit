@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
+import 'package:rabbit_flutter/src/domain/auth/session.dart';
 
 void main() {
   test('parses business permission codes from login response', () {

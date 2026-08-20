@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
-import 'package:rabbit_flutter/src/ui/dashboard/widgets/dashboard_screen.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/screens/overview.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 void main() {
   for (final size in const [Size(360, 800), Size(412, 915)]) {

@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/settings_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
-import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
-import 'package:rabbit_flutter/src/ui/settings/widgets/production_settings_screen.dart';
+import 'package:rabbit_flutter/src/data/repositories/settings/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/settings/production.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/screens/production.dart';
 
 void main() {
   testWidgets('house production settings saves reminders for that house',

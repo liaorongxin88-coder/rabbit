@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/outbound_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/storage/outbound_local_store.dart';
-import 'package:rabbit_flutter/src/domain/models/outbound.dart';
-import 'package:rabbit_flutter/src/ui/outbound/view_models/outbound_controller.dart';
+import 'package:rabbit_flutter/src/data/repositories/outbound/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/storage/outbound.dart';
+import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
+import 'package:rabbit_flutter/src/ui/outbound/view_models/controller.dart';
 
 void main() {
   test(

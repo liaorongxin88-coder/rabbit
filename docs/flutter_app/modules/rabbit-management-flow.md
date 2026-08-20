@@ -54,13 +54,15 @@
 
 - 正常兔只交互使用主蓝、田野绿和辅助 amber。
 - 红色只用于错误或破坏性状态。
-- 视觉 token 放在 `app/lib/src/ui/core/themes/app_theme.dart`。
+- 视觉 token 放在 `app/lib/src/ui/core/theme.dart`。
 - 长兔场名、用户名和事件名称必须做省略或换行约束，不能撑破移动端布局。
 
 ## 代码落点
 
-- 路由：`app/lib/src/routing/router.dart`
-- 兔场页面：`app/lib/src/ui/houses/widgets/`
-- 笼位管理：`app/lib/src/ui/cages/widgets/cage_management_section.dart`
-- 兔只录入：`app/lib/src/ui/rabbits/widgets/rabbit_entry_flow.dart`
-- 后端访问：`app/lib/src/data/repositories/`
+- 路由：`app/lib/src/routing/routes.dart`
+- 兔场页面：`app/lib/src/ui/houses/screens/`
+- 笼位页面：`app/lib/src/ui/cages/screens/`
+- 兔只页面：`app/lib/src/ui/rabbits/screens/`
+- 笼位管理：`app/lib/src/ui/cages/widgets/management.dart`
+- 兔只录入：`app/lib/src/ui/rabbits/sheets/entry.dart`
+- 后端访问：`app/lib/src/data/repositories/<business>/`

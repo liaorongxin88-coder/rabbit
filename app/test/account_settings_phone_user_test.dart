@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/account_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/user_profile.dart';
-import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/profile/view_models/profile_providers.dart';
-import 'package:rabbit_flutter/src/ui/settings/widgets/account_settings_screen.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/account.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/session.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/profile/profile.dart';
+import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/profile/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/screens/account.dart';
 
 void main() {
   testWidgets('phone-only user sets a password without an old password',

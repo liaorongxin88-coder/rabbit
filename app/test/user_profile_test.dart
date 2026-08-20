@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/user_profile.dart';
+import 'package:rabbit_flutter/src/domain/profile/profile.dart';
 
 void main() {
   test('parses bound phone details from the account profile', () {

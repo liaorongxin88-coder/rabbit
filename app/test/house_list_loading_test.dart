@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/houses_screen.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/houses/screens/list.dart';
 
 void main() {
   testWidgets('empty house list explains creation and phone invitation',

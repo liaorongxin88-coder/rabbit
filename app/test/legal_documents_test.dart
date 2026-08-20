@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/config/legal_documents.dart';
+import 'package:rabbit_flutter/src/config/legal.dart';
 
 void main() {
   test('privacy policy discloses carrier authentication', () {

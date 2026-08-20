@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/cage_attention.dart';
-import 'package:rabbit_flutter/src/domain/models/cage_layout.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/cages/attention.dart';
+import 'package:rabbit_flutter/src/domain/cages/layout.dart';
 
 Cage _cage({
   required int id,
@@ -103,7 +103,9 @@ void main() {
       final cells = layout.layers.single.rows.single.cells;
       expect(cells.map((cell) => cell.positionIndex), [1, 2, 3, 4]);
       expect(
-        cells.where((cell) => cell.isEmptySlot).map((cell) => cell.positionIndex),
+        cells
+            .where((cell) => cell.isEmptySlot)
+            .map((cell) => cell.positionIndex),
         [2, 3],
       );
     });
@@ -117,7 +119,8 @@ void main() {
         _cage(id: 5, row: '', layer: 1, position: 1, number: '无排号'),
       ]);
 
-      expect(layout.layers.single.rows.single.cages.map((cage) => cage.id), [1]);
+      expect(
+          layout.layers.single.rows.single.cages.map((cage) => cage.id), [1]);
       expect(layout.unplaced.map((cage) => cage.id).toSet(), {2, 3, 4, 5});
       expect(layout.placedCount, 1);
     });

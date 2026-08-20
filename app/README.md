@@ -152,11 +152,11 @@ cd flutter_app
 ## 目录
 
 - `lib/src/config/`：应用配置和静态应用文案。
-- `lib/src/data/services/`：HTTP、会话、设备能力和本地存储等底层服务。
-- `lib/src/data/repositories/`：面向功能的后端数据访问。
-- `lib/src/domain/models/`：纯数据模型。
+- `lib/src/data/services/<capability>/`：按网络、认证、NFC、本地存储等技术能力归档的底层服务。
+- `lib/src/data/repositories/<business>/`：按认证、兔舍、笼位、兔只、批次、繁育等业务归档的后端数据访问。
+- `lib/src/domain/<business>/`：按业务归档的纯数据模型。
 - `lib/src/routing/`：go_router 路由和守卫。
-- `lib/src/ui/`：按功能归档的页面、组件、主题、Provider 和 view model。
+- `lib/src/ui/<feature>/`：按功能归档，并用 `screens/`、`sheets/`、`widgets/`、`view_models/` 区分界面职责。
 
 更详细的架构说明见 `lib/src/README.md`。
 
@@ -164,12 +164,12 @@ cd flutter_app
 
 - Android package id 保持 `com.rabbit.app.flutter`。
 - Dev/Staging flavor 使用 `.dev` / `.test` 后缀，正式 `prod` flavor 保持 `com.rabbit.app.flutter`。
-- 路由集中在 `lib/src/routing/router.dart`。
-- API 请求通过 repository 和 `data/services/api_client.dart`，页面不直接创建 `Dio`。
+- 路由集中在 `lib/src/routing/routes.dart`。
+- API 请求通过 repository 和 `data/services/network/client.dart`，页面不直接创建 `Dio`。
 - 登录后请求带 `Authorization: Bearer <token>`。
 - 兔舍域请求带 `X-House-Id: <houseId>`。
 - `ApiResponse.code != 0` 必须作为业务失败展示。
-- 视觉 token 集中在 `lib/src/ui/core/themes/app_theme.dart`。
+- 视觉 token 集中在 `lib/src/ui/core/theme.dart`。
 - 新增兔只必须从具体笼位入口发起，不能做全局无上下文新增。
 
 ## 规则入口

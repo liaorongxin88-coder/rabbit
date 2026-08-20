@@ -8,11 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/rabbit_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_departure_sheet.dart';
+import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/departure.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

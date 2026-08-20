@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_entry_flow.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

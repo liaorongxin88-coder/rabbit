@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
+import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
 
 void main() {
   test('dashboard summary normalizes month arrays to twelve values', () {

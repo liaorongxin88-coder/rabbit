@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 
 void main() {
   test('parses action permissions returned by the backend', () {

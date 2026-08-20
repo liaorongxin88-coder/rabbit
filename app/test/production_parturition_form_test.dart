@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/event_item.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
   testWidgets('failed parturition clears defaults and fixes live kits at zero',

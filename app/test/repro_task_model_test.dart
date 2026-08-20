@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
-import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
+import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 
 void main() {
   test('wire enums normalize server whitespace and case', () {

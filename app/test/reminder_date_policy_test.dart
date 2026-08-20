@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
-import 'package:rabbit_flutter/src/domain/models/reminder_date_policy.dart';
-import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
+import 'package:rabbit_flutter/src/domain/settings/production.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 
 void main() {
   const setting = GlobalSetting(

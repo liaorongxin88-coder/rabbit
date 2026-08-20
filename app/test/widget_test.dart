@@ -7,27 +7,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/app.dart';
-import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/storage/local_app_settings_store.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
-import 'package:rabbit_flutter/src/domain/models/event_item.dart';
-import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/domain/models/local_app_settings.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
-import 'package:rabbit_flutter/src/domain/models/report_summary.dart';
-import 'package:rabbit_flutter/src/domain/models/sms_code_delivery.dart';
-import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/dashboard/view_models/dashboard_providers.dart';
-import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/session.dart';
+import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/storage/app_settings.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
+import 'package:rabbit_flutter/src/domain/settings/production.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/settings/local.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
+import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
+import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
+import 'package:rabbit_flutter/src/ui/auth/screens/login.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
 
 void main() {
   testWidgets('shows login screen before session is restored', (tester) async {

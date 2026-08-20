@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
+import 'package:rabbit_flutter/src/ui/auth/screens/login.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
 
 void main() {
   for (final size in const [Size(360, 800), Size(412, 915)]) {

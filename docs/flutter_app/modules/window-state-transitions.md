@@ -60,11 +60,11 @@ VisibleWindow = LocalSettings × AuthState × RouterLocation × PageData × Over
 ## 关键源码
 
 - 启动、设置门和 NFC Intent：`app/lib/src/app.dart`
-- 路由、Navigator 分层和鉴权重定向：`app/lib/src/routing/router.dart`
-- 会话与当前兔舍派生：`app/lib/src/ui/auth/view_models/auth_controller.dart`
-- 底部导航映射：`app/lib/src/ui/core/widgets/app_shell.dart`
-- 出库内部状态机：`app/lib/src/ui/outbound/view_models/outbound_controller.dart`
-- NFC 写入内部状态机：`app/lib/src/ui/nfc/view_models/nfc_write_controller.dart`
+- 路由、Navigator 分层和鉴权重定向：`app/lib/src/routing/routes.dart`
+- 会话与当前兔舍派生：`app/lib/src/ui/auth/view_models/controller.dart`
+- 底部导航映射：`app/lib/src/ui/core/widgets/shell.dart`
+- 出库内部状态机：`app/lib/src/ui/outbound/view_models/controller.dart`
+- NFC 写入内部状态机：`app/lib/src/ui/nfc/view_models/writer.dart`
 
 ## 重新渲染
 

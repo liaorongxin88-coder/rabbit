@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
-import 'package:rabbit_flutter/src/data/services/nfc/nfc_hardware_service.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/ntag21x_ndef_writer.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/ntag21x_writer.dart';
 
 void main() {
   test('identifies only supported NXP NTAG21x version responses', () {

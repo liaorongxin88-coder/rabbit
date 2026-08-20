@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/ui/batches/widgets/abortion_sheet.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/abortion.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
 
 void main() {
   testWidgets('abortion requires the stillbirth count from the form contract',

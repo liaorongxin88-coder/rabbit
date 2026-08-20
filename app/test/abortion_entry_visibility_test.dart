@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
-import 'package:rabbit_flutter/src/domain/models/batch.dart';
-import 'package:rabbit_flutter/src/domain/models/batch_rabbit.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/ui/batches/view_models/batch_providers.dart';
-import 'package:rabbit_flutter/src/ui/batches/widgets/house_batch_detail_screen.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
+import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/screens/detail.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 /// 流产入口按阶段显隐。
 ///
@@ -36,13 +36,15 @@ void main() {
     // 用一块足够高的画布让全部成员一次性构建：这个用例关心的是「按钮在不在」，
     // 而不是列表怎么滚。懒构建列表反复滚动时会在重建瞬间丢失 Scrollable，
     // 那种失败与被测行为无关。
-    final view = TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
     view.physicalSize = const Size(1200, 6000);
     view.devicePixelRatio = 1.0;
   });
 
   tearDown(() {
-    final view = TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
     view.resetPhysicalSize();
     view.resetDevicePixelRatio();
   });
@@ -70,11 +72,13 @@ void main() {
           housePermissionProvider(houseId).overrideWith(
             (_) async => const HousePermission(perms: 'control', isAdmin: true),
           ),
-          reproStageActionsProvider(houseId).overrideWith((_) async => dictionary),
+          reproStageActionsProvider(houseId)
+              .overrideWith((_) async => dictionary),
         ],
         child: MaterialApp(
           theme: buildAppTheme(),
-          home: const HouseBatchDetailScreen(houseId: houseId, batchId: batchId),
+          home:
+              const HouseBatchDetailScreen(houseId: houseId, batchId: batchId),
         ),
       ),
     );
@@ -123,10 +127,12 @@ void main() {
   });
 
   testWidgets('没有周期的母兔不给流产入口', (tester) async {
-    await pumpWithMembers(tester, [doe(2201, 'AWAIT_PALPATION', cycleId: null)]);
+    await pumpWithMembers(
+        tester, [doe(2201, 'AWAIT_PALPATION', cycleId: null)]);
 
     // 阶段允许，但没有可写入的周期——入口只会导向一个必然失败的提交。
-    expect(find.byKey(const ValueKey('batch-member-abortion-2201')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('batch-member-abortion-2201')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -138,8 +144,8 @@ void main() {
     );
 
     // 少给一个入口只是不便；给一个点下去必定 409 的按钮是欺骗。
-    expect(find.byKey(const ValueKey('batch-member-abortion-2301')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('batch-member-abortion-2301')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
-

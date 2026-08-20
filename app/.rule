@@ -28,13 +28,13 @@
 
 ## 技术栈与目录职责
 
-- 路由使用 `MaterialApp.router` + `go_router`，路由定义集中在 `lib/src/routing/router.dart`。
+- 路由使用 `MaterialApp.router` + `go_router`，路由定义集中在 `lib/src/routing/routes.dart`。
 - 状态管理使用 `flutter_riverpod`。异步状态放在 provider/controller/view model，不放在深层 widget 的临时状态里。
-- API 访问统一通过 `lib/src/data/services/api_client.dart` 的 `dio` 封装，不在页面局部创建新的 `Dio`。
-- 会话持久化逻辑放在 `lib/src/data/services/session_store.dart`。
+- API 访问统一通过 `lib/src/data/services/network/client.dart` 的 `dio` 封装，不在页面局部创建新的 `Dio`。
+- 会话持久化逻辑放在 `lib/src/data/services/auth/session.dart`。
 - token 使用 `flutter_secure_storage` 保存。
 - `userName`、`userId`、`currentHouseId`、`baseUrl` 等非敏感信息使用 `shared_preferences`。
-- 视觉 token 和主题集中在 `lib/src/ui/core/themes/app_theme.dart`，不要在业务 widget 里散落一次性 hex color。
+- 视觉 token 和主题集中在 `lib/src/ui/core/theme.dart`，不要在业务 widget 里散落一次性 hex color。
 
 ## Flutter 官方架构组织方式
 
@@ -43,23 +43,39 @@
 目录职责：
 
 - `lib/src/config/`：应用级配置和运行时常量。
-- `lib/src/data/repositories/`：面向功能的 Repository，负责组织后端数据、请求参数和 DTO 转换。
-- `lib/src/data/services/`：底层服务，例如 HTTP client、本地会话、设备能力封装；页面不得直接绕过 repository 调用 service。
-- `lib/src/domain/models/`：跨 UI 和 Data 层复用的数据模型。保持纯数据和轻量解析逻辑，不放 UI 或网络请求。
+- `lib/src/data/repositories/<business>/`：按业务归档的 Repository，负责组织后端数据、请求参数和 DTO 转换。
+- `lib/src/data/services/<capability>/`：按技术能力归档的底层服务，例如 `network/`、`auth/`、`nfc/` 和 `storage/`；页面不得直接绕过 repository 调用 service。
+- `lib/src/domain/<business>/`：按业务归档、跨 UI 和 Data 层复用的数据模型。保持纯数据和轻量解析逻辑，不放 UI 或网络请求。
 - `lib/src/routing/`：路由表、导航守卫、ShellRoute 等导航结构。
-- `lib/src/ui/<feature>/widgets/`：某个业务功能的页面和组件，例如 `ui/houses/widgets/houses_screen.dart`。
-- `lib/src/ui/<feature>/view_models/`：该功能需要显式 UI 状态协调时放 ViewModel / Controller，例如 `ui/auth/view_models/auth_controller.dart`。
+- `lib/src/ui/<feature>/screens/`：可由路由或 Navigator 打开的完整页面，例如 `ui/houses/screens/list.dart`。
+- `lib/src/ui/<feature>/sheets/`：通过 bottom sheet 或 dialog 呈现的业务表单与流程。
+- `lib/src/ui/<feature>/widgets/`：只放该业务内部复用、不能独立导航的界面组件。
+- `lib/src/ui/<feature>/view_models/`：该功能需要显式 UI 状态协调时放 ViewModel / Controller，例如 `ui/auth/view_models/controller.dart`。
 - `lib/src/ui/core/widgets/`：跨功能复用的页面壳、空态、错误态、加载态等 UI 组件。
-- `lib/src/ui/core/themes/`：主题、颜色和视觉 token。
+- `lib/src/ui/core/theme.dart`：主题、颜色和视觉 token。
+
+Data 和 Domain 层使用业务能力命名；`home`、`dashboard` 这类界面名称只属于 UI 层，
+对应的底层业务分别归入 `reproduction`、`reports` 等实际业务命名空间。
+
+共享代码放在最近的职责边界：网络响应校验归 `data/services/network/`，跨业务 UI
+原语归 `ui/core/widgets/`。只有两个以上真实调用方且契约稳定时才提取；不要新增
+`shared/`、`common/`、`utils/` 这类无法表达所有权的杂物目录。
 
 新增功能时的默认落点：
 
-- 后端接口封装放到 `data/repositories/<feature>_repository.dart`。
-- 后端返回结构或请求展示所需模型放到 `domain/models/`。
-- 页面放到 `ui/<feature>/widgets/`。
+- 单 Repository 业务的后端接口封装放到 `data/repositories/<business>/repository.dart`；同一业务有多个 Repository 时用 `account.dart`、`session.dart` 等职责名区分。
+- 后端返回结构或请求展示所需模型放到 `domain/<business>/`。
+- 完整页面放到 `ui/<feature>/screens/`，临时业务窗口放到 `sheets/`，页面片段才放到 `widgets/`。
 - 复杂 UI 状态放到 `ui/<feature>/view_models/`；简单页面可以只用 provider 和局部表单状态。
-- 路由只在 `routing/router.dart` 增加。
+- 路由只在 `routing/routes.dart` 增加。
 - 只有当业务规则明显复杂到 repository/view model 难以承载时，才引入额外 domain service/use case；不要提前空转抽象。
+
+文件命名将父目录视为命名空间：
+
+- 文件名只表达父目录内的区分语义，例如 `ui/rabbits/screens/detail.dart`、`ui/rabbits/sheets/move.dart`。
+- 不重复父目录已经表达的角色，禁止 `_screen.dart`、`_sheet.dart`、`_repository.dart`、`_service.dart`、`_store.dart`、`_provider.dart`、`_providers.dart`、`_controller.dart`、`_config.dart`、`_theme.dart`、`_model.dart` 和 `_models.dart`。
+- 列表入口用 `list.dart`，模块总览用 `overview.dart`，不要使用无法表达用途的 `index.dart`。
+- 领域主实体保留自然名称，例如 `domain/rabbits/rabbit.dart`；不要为了消除业务词而改成含义模糊的 `model.dart`。
 
 ## API 规则
 
@@ -108,8 +124,8 @@
 - 边线：`#E5E8EC`
 - 浅底色（依次对应蓝/绿/琥/红）：`#EAF4FF`、`#EAF7F1`、`#FFF7E6`、`#FFEFEF`
 
-笼位关注度色板（分层地图专用，代码位于 `ui/cages/widgets/cage_map_view.dart` 的
-`CageAttentionStyle`，语义定义在 `domain/models/cage_attention.dart`）：
+笼位关注度色板（分层地图专用，代码位于 `ui/cages/widgets/map.dart`，
+`CageAttentionStyle` 的语义定义在 `domain/cages/attention.dart`）：
 
 | 状态 | 含义 | 颜色 | 图标 |
 | --- | --- | --- | --- |

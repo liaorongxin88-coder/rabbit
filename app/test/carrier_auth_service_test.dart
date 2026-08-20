@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/services/device/carrier_auth_service.dart';
-import 'package:rabbit_flutter/src/domain/models/carrier_auth.dart';
+import 'package:rabbit_flutter/src/data/services/auth/carrier.dart';
+import 'package:rabbit_flutter/src/domain/auth/carrier.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

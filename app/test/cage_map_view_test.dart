@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/house_cages_screen.dart';
-import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/cages/screens/list.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
 
 void main() {
   testWidgets('cage section opens on the layered map, not the flat grid',
@@ -48,8 +48,10 @@ void main() {
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
 
-    final first = tester.getCenter(find.byKey(const ValueKey('cage-map-layer-1')));
-    final second = tester.getCenter(find.byKey(const ValueKey('cage-map-layer-2')));
+    final first =
+        tester.getCenter(find.byKey(const ValueKey('cage-map-layer-1')));
+    final second =
+        tester.getCenter(find.byKey(const ValueKey('cage-map-layer-2')));
 
     // 层号从下往上递增，切换器也照这个顺序排。倒过来排的话，
     // 人按「1 层」找的是最底层，界面却把它摆在最右边，读起来是拧的。
@@ -60,8 +62,7 @@ void main() {
     );
   });
 
-  testWidgets('层是切出来的空间：默认停在 1 层，二层的笼要切过去才看得见',
-      (tester) async {
+  testWidgets('层是切出来的空间：默认停在 1 层，二层的笼要切过去才看得见', (tester) async {
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
 
@@ -83,8 +84,7 @@ void main() {
     expect(find.byKey(const ValueKey('cage-map-cell-1')), findsNothing);
   });
 
-  testWidgets('层签上带该层要处理的笼数，切走了也知道那边有活',
-      (tester) async {
+  testWidgets('层签上带该层要处理的笼数，切走了也知道那边有活', (tester) async {
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
 
@@ -101,7 +101,8 @@ void main() {
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
 
-    final first = tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
+    final first =
+        tester.getCenter(find.byKey(const ValueKey('cage-map-cell-1')));
     final second =
         tester.getCenter(find.byKey(const ValueKey('cage-map-cell-2')));
     expect(first.dx, lessThan(second.dx));
@@ -264,8 +265,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final outbound =
-            find.byKey(const ValueKey('cage-map-row-outbound-R1'));
+        final outbound = find.byKey(const ValueKey('cage-map-row-outbound-R1'));
         expect(tester.getSize(outbound), const Size(48, 48));
         expect(find.byTooltip('R1 排批量出库'), findsOneWidget);
         expect(
@@ -285,12 +285,14 @@ void main() {
 
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
-    final normal = tester.getSize(find.byKey(const ValueKey('cage-map-cell-1')));
+    final normal =
+        tester.getSize(find.byKey(const ValueKey('cage-map-cell-1')));
 
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     await tester.pumpWidget(_testApp(_rack));
     await tester.pumpAndSettle();
-    final scaled = tester.getSize(find.byKey(const ValueKey('cage-map-cell-1')));
+    final scaled =
+        tester.getSize(find.byKey(const ValueKey('cage-map-cell-1')));
 
     expect(scaled.width, greaterThan(normal.width));
     expect(scaled.height, greaterThanOrEqualTo(normal.height));

@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
-import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_setup_screen.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
+import 'package:rabbit_flutter/src/ui/nfc/screens/setup.dart';
 
 void main() {
   for (final size in [const Size(360, 800), const Size(412, 915)]) {

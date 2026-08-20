@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rabbit_flutter/src/data/services/device/phone_number_detector.dart';
+import 'package:rabbit_flutter/src/data/services/auth/phone_number.dart';
 
 void main() {
   test('manual detector normalizes and validates mainland mobile numbers', () {

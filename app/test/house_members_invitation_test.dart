@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/house_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/house_invitation_result.dart';
-import 'package:rabbit_flutter/src/domain/models/house_member.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/house_detail_screen.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/house_members_screen.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/houses/invitation.dart';
+import 'package:rabbit_flutter/src/domain/houses/member.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/houses/screens/detail.dart';
+import 'package:rabbit_flutter/src/ui/houses/screens/members.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
   testWidgets('invites an exact phone without searching platform accounts',
@@ -88,8 +89,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('submit-house-invitation')));
     await tester.pumpAndSettle();
 
-    expect(repository.invitedIdentifier, isNull,
-        reason: '本地就该拦下，不该发请求');
+    expect(repository.invitedIdentifier, isNull, reason: '本地就该拦下，不该发请求');
     expect(
       find.textContaining('请填 11 位手机号'),
       findsOneWidget,

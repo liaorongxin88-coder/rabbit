@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/event_item.dart';
-import 'package:rabbit_flutter/src/domain/models/reminder_preference.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
 
 void main() {
   test('reminder preference filters event types and overdue events', () {

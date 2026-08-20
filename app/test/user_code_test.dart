@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/user_code.dart';
+import 'package:rabbit_flutter/src/domain/profile/code.dart';
 
 void main() {
   test('accepts a code however the farmer copies it down', () {
@@ -26,10 +26,10 @@ void main() {
 
   test('does not mistake other strings for a code', () {
     for (final input in <String>[
-      'R3F9A0C21',      // 少一位
-      'R3F9A0C21B77',   // 多一位
-      'X3F9A0C21B7',    // 前缀不对
-      'R3F9A0C21BZ',    // Z 不是十六进制
+      'R3F9A0C21', // 少一位
+      'R3F9A0C21B77', // 多一位
+      'X3F9A0C21B7', // 前缀不对
+      'R3F9A0C21BZ', // Z 不是十六进制
       '隔壁老王',
       '',
     ]) {

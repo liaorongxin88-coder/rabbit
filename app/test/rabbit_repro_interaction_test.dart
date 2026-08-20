@@ -8,20 +8,22 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/repro_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/global_setting.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_batch_membership.dart';
-import 'package:rabbit_flutter/src/domain/models/repro_entry_point.dart';
-import 'package:rabbit_flutter/src/domain/models/repro_task.dart';
-import 'package:rabbit_flutter/src/ui/batches/widgets/production_event_sheet.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/widgets/house_rabbits_screen.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
-import 'package:rabbit_flutter/src/ui/settings/view_models/settings_providers.dart';
+import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/settings/production.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/screens/list.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
 
 void main() {
   setUp(() {

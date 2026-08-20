@@ -3,19 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/cage_summary.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_batch_membership.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/cages/view_models/cage_providers.dart';
-import 'package:rabbit_flutter/src/ui/cages/widgets/cage_detail_screen.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_queue_provider.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/view_models/rabbit_providers.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/cages/summary.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/cages/screens/detail.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
   testWidgets('view-only cage detail hides all editing actions',

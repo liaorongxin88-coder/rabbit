@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/data/services/nfc/nfc_hardware_service.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_write_controller.dart';
-import 'package:rabbit_flutter/src/ui/nfc/widgets/nfc_write_screen.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/writer.dart';
+import 'package:rabbit_flutter/src/ui/nfc/screens/write.dart';
 
 void main() {
   const item = NfcWriteSessionItem(

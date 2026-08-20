@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:rabbit_flutter/src/domain/models/event_item.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit_house.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/home/view_models/home_events_provider.dart';
-import 'package:rabbit_flutter/src/ui/home/widgets/home_screen.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
+import 'package:rabbit_flutter/src/ui/home/screens/overview.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 void main() {
   testWidgets('production queue filters remain usable at true 200 percent text',

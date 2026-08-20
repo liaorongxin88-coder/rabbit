@@ -5,13 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/outbound_repository.dart';
-import 'package:rabbit_flutter/src/domain/models/house_permission.dart';
-import 'package:rabbit_flutter/src/domain/models/outbound.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/outbound/view_models/outbound_controller.dart';
-import 'package:rabbit_flutter/src/ui/outbound/widgets/outbound_flow_screen.dart';
+import 'package:rabbit_flutter/src/data/repositories/outbound/repository.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/outbound/view_models/controller.dart';
+import 'package:rabbit_flutter/src/ui/outbound/screens/flow.dart';
 
 import 'outbound_controller_test.dart' show FakeOutboundGateway;
 

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:rabbit_flutter/src/domain/models/cage.dart';
-import 'package:rabbit_flutter/src/domain/models/rabbit.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/rabbits/widgets/rabbit_move_cage_sheet.dart';
+import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/move.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -136,9 +136,11 @@ void main() {
     );
     expect(find.textContaining('不能接收该兔'), findsOneWidget);
     expect(
-      tester.widget<ElevatedButton>(
-        find.byKey(const ValueKey('rabbit-move-cage-submit')),
-      ).onPressed,
+      tester
+          .widget<ElevatedButton>(
+            find.byKey(const ValueKey('rabbit-move-cage-submit')),
+          )
+          .onPressed,
       isNull,
     );
   });

@@ -5,17 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/nfc_repository.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/nfc_capture_scope.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/nfc_intent_service.dart';
-import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
-import 'package:rabbit_flutter/src/routing/router.dart';
-import 'package:rabbit_flutter/src/ui/auth/view_models/auth_controller.dart';
-import 'package:rabbit_flutter/src/ui/core/themes/app_theme.dart';
-import 'package:rabbit_flutter/src/ui/houses/view_models/house_providers.dart';
-import 'package:rabbit_flutter/src/ui/nfc/view_models/nfc_pending_sync_controller.dart';
-import 'package:rabbit_flutter/src/ui/settings/view_models/local_app_settings_controller.dart';
+import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/routing/routes.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/nfc/view_models/pending_sync.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/local.dart';
 
 class RabbitManagerApp extends ConsumerStatefulWidget {
   const RabbitManagerApp({super.key});

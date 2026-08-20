@@ -20,8 +20,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/app.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
 
 void main() {
   setUp(() {
@@ -94,10 +94,13 @@ void main() {
     // 不能用 pumpAndSettle：跳转中间会出现转圈动画，它永远不会停，
     // settle 会一直等到超时（第一版就是这么卡死的）。固定 pump 几帧就够了。
     unawaited(
-      container.read(apiClientProvider).get<void>(
-        '/api/anything',
-        decode: (_) {},
-      ).catchError((_) {}),
+      container
+          .read(apiClientProvider)
+          .get<void>(
+            '/api/anything',
+            decode: (_) {},
+          )
+          .catchError((_) {}),
     );
     for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 100));

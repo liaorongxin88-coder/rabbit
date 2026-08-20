@@ -7,14 +7,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/auth_repository.dart';
-import 'package:rabbit_flutter/src/data/services/api_client.dart';
-import 'package:rabbit_flutter/src/data/services/api_exception.dart';
-import 'package:rabbit_flutter/src/data/services/device/carrier_auth_service.dart';
-import 'package:rabbit_flutter/src/data/services/session_store.dart';
-import 'package:rabbit_flutter/src/domain/models/auth_session.dart';
-import 'package:rabbit_flutter/src/domain/models/carrier_auth.dart';
-import 'package:rabbit_flutter/src/ui/auth/widgets/login_screen.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/session.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/auth/carrier.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/carrier.dart';
+import 'package:rabbit_flutter/src/ui/auth/screens/login.dart';
 
 void main() {
   setUp(() {

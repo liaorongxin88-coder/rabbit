@@ -5,9 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:rabbit_flutter/src/data/services/nfc/nfc_hardware_service.dart';
-import 'package:rabbit_flutter/src/data/services/storage/nfc_local_store.dart';
-import 'package:rabbit_flutter/src/domain/models/nfc_models.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
+import 'package:rabbit_flutter/src/data/services/storage/nfc.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 
 void main() {
   test('parses versioned house and cage payload', () {
