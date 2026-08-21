@@ -13,6 +13,9 @@
         <result column="prepartum_days" property="prepartumDays"/>
         <result column="weaning_days" property="weaningDays"/>
         <result column="postpartum_days" property="postpartumDays"/>
+        <result column="adaptation_days" property="adaptationDays"/>
+        <result column="growing_days" property="growingDays"/>
+        <result column="fattening_days" property="fatteningDays"/>
         <result column="sale_days" property="saleDays"/>
         <result column="replacement_days" property="replacementDays"/>
         <result column="remark" property="remark"/>
@@ -23,12 +26,12 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into global_setting (house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days, remark, create_by, update_by)
-        values (#{houseId}, #{userId}, #{aphrodisiacDays}, #{palpationDays}, #{gestationDays}, #{prepartumDays}, #{weaningDays}, #{postpartumDays}, #{saleDays}, #{replacementDays}, #{remark}, #{createBy}, #{updateBy})
+        insert into global_setting (house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days, remark, create_by, update_by)
+        values (#{houseId}, #{userId}, #{aphrodisiacDays}, #{palpationDays}, #{gestationDays}, #{prepartumDays}, #{weaningDays}, #{postpartumDays}, #{adaptationDays}, #{growingDays}, #{fatteningDays}, #{saleDays}, #{replacementDays}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByUserId" resultMap="GlobalSettingMap">
-        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days,
+        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
                remark, create_by, create_time, update_by, update_time
         from global_setting
         where user_id = #{userId}
@@ -37,6 +40,7 @@
 
     <select id="selectFirstByUserHouse" resultMap="GlobalSettingMap">
         select gs.id, gs.house_id, gs.user_id, gs.aphrodisiac_days, gs.palpation_days, gs.gestation_days, gs.prepartum_days, gs.weaning_days, gs.postpartum_days,
+               gs.adaptation_days, gs.growing_days, gs.fattening_days,
                gs.sale_days, gs.replacement_days, gs.remark, gs.create_by, gs.create_time, gs.update_by, gs.update_time
         from house_users hu
         join rabbit_houses h on h.id = hu.house_id and h.is_deleted = false
@@ -47,7 +51,7 @@
     </select>
 
     <select id="selectByHouseId" resultMap="GlobalSettingMap">
-        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days,
+        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
                remark, create_by, create_time, update_by, update_time
         from global_setting
         where house_id = #{houseId}
@@ -61,6 +65,9 @@
             prepartum_days = #{prepartumDays},
             weaning_days = #{weaningDays},
             postpartum_days = #{postpartumDays},
+            adaptation_days = #{adaptationDays},
+            growing_days = #{growingDays},
+            fattening_days = #{fatteningDays},
             sale_days = #{saleDays},
             replacement_days = #{replacementDays},
             remark = #{remark},
@@ -77,6 +84,9 @@
             prepartum_days = #{prepartumDays},
             weaning_days = #{weaningDays},
             postpartum_days = #{postpartumDays},
+            adaptation_days = #{adaptationDays},
+            growing_days = #{growingDays},
+            fattening_days = #{fatteningDays},
             sale_days = #{saleDays},
             replacement_days = #{replacementDays},
             remark = #{remark},

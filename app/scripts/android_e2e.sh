@@ -266,7 +266,7 @@ export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
 cd "$PROJECT_DIR"
 "$RABBIT_FLUTTER_BIN" drive \
   --driver=test_driver/android_e2e_driver.dart \
-  --target=integration_test/batch_outbound_android_test.dart \
+  --target=integration_test/outbound/batch_android_test.dart \
   --device-id="$DEVICE_ID" \
   --flavor=dev \
   --dart-define=RABBIT_BUILD_ENV=dev \

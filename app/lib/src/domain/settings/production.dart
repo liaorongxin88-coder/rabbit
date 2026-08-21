@@ -9,6 +9,9 @@ class GlobalSetting {
     required this.prepartumDays,
     required this.weaningDays,
     required this.postpartumDays,
+    required this.adaptationDays,
+    required this.growingDays,
+    required this.fatteningDays,
     required this.saleDays,
     required this.replacementDays,
     required this.remark,
@@ -23,6 +26,9 @@ class GlobalSetting {
   final int prepartumDays;
   final int weaningDays;
   final int postpartumDays;
+  final int adaptationDays;
+  final int growingDays;
+  final int fatteningDays;
   final int saleDays;
   final int replacementDays;
   final String remark;
@@ -35,11 +41,14 @@ class GlobalSetting {
       aphrodisiacDays: 2,
       palpationDays: 12,
       gestationDays: 30,
-      prepartumDays: 3,
-      weaningDays: 25,
+      prepartumDays: 15,
+      weaningDays: 30,
       postpartumDays: 10,
-      saleDays: 30,
-      replacementDays: 45,
+      adaptationDays: 3,
+      growingDays: 18,
+      fatteningDays: 12,
+      saleDays: 33,
+      replacementDays: 90,
       remark: '',
     );
   }
@@ -52,11 +61,14 @@ class GlobalSetting {
       aphrodisiacDays: _intValue(json['aphrodisiacDays'], fallback: 2),
       palpationDays: _intValue(json['palpationDays'], fallback: 12),
       gestationDays: _intValue(json['gestationDays'], fallback: 30),
-      prepartumDays: _intValue(json['prepartumDays'], fallback: 3),
-      weaningDays: _intValue(json['weaningDays'], fallback: 25),
+      prepartumDays: _intValue(json['prepartumDays'], fallback: 15),
+      weaningDays: _intValue(json['weaningDays'], fallback: 30),
       postpartumDays: _intValue(json['postpartumDays'], fallback: 10),
-      saleDays: _intValue(json['saleDays'], fallback: 30),
-      replacementDays: _intValue(json['replacementDays'], fallback: 45),
+      adaptationDays: _intValue(json['adaptationDays'], fallback: 3),
+      growingDays: _intValue(json['growingDays'], fallback: 18),
+      fatteningDays: _intValue(json['fatteningDays'], fallback: 12),
+      saleDays: _intValue(json['saleDays'], fallback: 33),
+      replacementDays: _intValue(json['replacementDays'], fallback: 90),
       remark: json['remark'] as String? ?? '',
     );
   }
@@ -69,12 +81,17 @@ class GlobalSetting {
       'prepartumDays': prepartumDays,
       'weaningDays': weaningDays,
       'postpartumDays': postpartumDays,
-      'saleDays': saleDays,
+      'adaptationDays': adaptationDays,
+      'growingDays': growingDays,
+      'fatteningDays': fatteningDays,
+      'saleDays': commodityMaturityDays,
       'replacementDays': replacementDays,
       'remark': remark,
       'requestId': requestId,
     };
   }
+
+  int get commodityMaturityDays => adaptationDays + growingDays + fatteningDays;
 
   static int _intValue(Object? value, {int fallback = 0}) {
     if (value is int) {

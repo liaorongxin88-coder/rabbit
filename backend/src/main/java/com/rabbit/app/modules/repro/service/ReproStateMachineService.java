@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.file.service.BusinessFileService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.repro.compat.LegacyEventType;
@@ -71,6 +72,7 @@ public class ReproStateMachineService {
     private final ReproSettingResolver settingResolver;
     private final BreedingEligibilityValidator eligibilityValidator;
     private final ObjectMapper objectMapper;
+    private final BusinessFileService businessFileService;
 
     public ReproStateMachineService(
         ReproCycleMapper reproCycleMapper,
@@ -82,7 +84,8 @@ public class ReproStateMachineService {
         WorkTaskWriter workTaskWriter,
         ReproSettingResolver settingResolver,
         BreedingEligibilityValidator eligibilityValidator,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        BusinessFileService businessFileService
     ) {
         this.eligibilityValidator = eligibilityValidator;
         this.reproCycleMapper = reproCycleMapper;
@@ -94,6 +97,7 @@ public class ReproStateMachineService {
         this.workTaskWriter = workTaskWriter;
         this.settingResolver = settingResolver;
         this.objectMapper = objectMapper;
+        this.businessFileService = businessFileService;
     }
 
     /**
@@ -641,9 +645,11 @@ public class ReproStateMachineService {
         ReproCycle followUp = new ReproCycle();
         followUp.setHouseId(closed.getHouseId());
         followUp.setTenantId(closed.getTenantId());
-        followUp.setBatchId(closed.getBatchId());
+        // 当前批次只记录已经结束的这一轮。空怀、流产、分娩失败或分笼后的下一轮
+        // 仍会自动产生待办，但默认不继承旧批次，避免批次详情看起来永远没有结束。
+        followUp.setBatchId(null);
         followUp.setMotherRabbitId(closed.getMotherRabbitId());
-        followUp.setCycleNo(nextCycleNo(closed.getHouseId(), closed.getBatchId(), closed.getMotherRabbitId()));
+        followUp.setCycleNo(nextCycleNo(closed.getHouseId(), null, closed.getMotherRabbitId()));
         followUp.setStage(transition.followUpStage().name());
         followUp.setStageEnteredAt(occurredAt);
         followUp.setLifecycle(CycleLifecycle.OPEN.name());
@@ -859,17 +865,25 @@ public class ReproStateMachineService {
     }
 
     private void validateFacts(ReproCommand command, Transition transition, ReproCycle cycle) {
+        requireNotNull(command.getOccurredAt(), "执行时间");
+        if (command.getOccurredAt().after(new Date(DateUtil.now().getTime() + 5L * 60L * 1000L))) {
+            throw new BizException(400, "执行时间不能晚于当前时间");
+        }
+        command.setAttachmentFileIds(
+            businessFileService.requireImages(
+                command.getHouseId(), command.getAttachmentFileIds(), false
+            )
+        );
         if (command.getNextRemindAt() != null && !isAllowedReminderDate(command.getNextRemindAt())) {
             throw new BizException(400, "下次提醒日期不能早于今天");
         }
         switch (command.getAction()) {
             case MATING -> {
-                // 老 APK 未发送配种方式，但会发送公兔；这类请求按体配兼容处理。
-                if (command.getMatingMethod() == null && command.getMaleRabbitId() == null) {
+                if (command.getMatingMethod() == null) {
                     throw new BizException(400, "请选择配种方式");
                 }
-                // 人工授精允许不指定公兔（混精 / 外购冻精），体配必须有，否则系谱断链。
-                if (command.getMatingMethod() != MatingMethod.AI && command.getMaleRabbitId() == null) {
+                if (command.getMatingMethod() != MatingMethod.AI
+                    && command.getMaleRabbitId() == null) {
                     throw new BizException(400, "请选择配种公兔");
                 }
                 // 放在这里而不是编排层：批量待办直连状态机，
@@ -911,6 +925,12 @@ public class ReproStateMachineService {
                         || command.getKeptKits() != 0) {
                         throw new BizException(400, "失败产的总产仔数、活仔数和留仔数必须为 0");
                     }
+                    requireText(command.getRemark(), "难产详情");
+                    command.setAttachmentFileIds(
+                        businessFileService.requireImages(
+                            command.getHouseId(), command.getAttachmentFileIds(), true
+                        )
+                    );
                 } else {
                     if (command.getLiveKits() > command.getTotalKits()) {
                         throw new BizException(400, "活仔数不能大于总产仔数");
@@ -927,6 +947,12 @@ public class ReproStateMachineService {
                 }
             }
             case ABORTION -> {
+                requireText(command.getRemark(), "流产详情");
+                command.setAttachmentFileIds(
+                    businessFileService.requireImages(
+                        command.getHouseId(), command.getAttachmentFileIds(), true
+                    )
+                );
                 requireNotNull(command.getStillbirthCount(), "流产死胎数");
                 if (command.getStillbirthCount() < 0) {
                     throw new BizException(400, "流产死胎数不能为负数");
@@ -979,6 +1005,12 @@ public class ReproStateMachineService {
 
     private static void requireNotNull(Object value, String what) {
         if (value == null) {
+            throw new BizException(400, "请填写" + what);
+        }
+    }
+
+    private static void requireText(String value, String what) {
+        if (value == null || value.isBlank()) {
             throw new BizException(400, "请填写" + what);
         }
     }

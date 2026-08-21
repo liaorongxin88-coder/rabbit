@@ -30,6 +30,7 @@ public class BatchOutboundIT extends E2eTestSupport {
         long normalBatch = attachSaleStage(houseId, normalRabbit, -1);
         long earlyBatch = attachSaleStage(houseId, earlyRabbit, 7);
         long quarantinedBatch = attachSaleStage(houseId, quarantinedRabbit, -1);
+        insertCustomTask(houseId, normalRabbit, "legacy-sale");
         jdbc.update("update rabbits set is_quarantined = true where id = ?", quarantinedRabbit);
 
         api.expectError("/api/batches/" + earlyBatch + "/sale", HttpMethod.POST, owner.token, houseId, obj(
@@ -53,6 +54,10 @@ public class BatchOutboundIT extends E2eTestSupport {
         Assertions.assertEquals(2, jdbc.queryForObject(
                 "select count(*) from rabbits where id in (?, ?) and is_active = true", Integer.class,
                 earlyRabbit, quarantinedRabbit));
+        Assertions.assertEquals(0, jdbc.queryForObject(
+                "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
+                    + " and status = 'PENDING'",
+                Integer.class, houseId, normalRabbit));
     }
 
     @Test
@@ -64,6 +69,8 @@ public class BatchOutboundIT extends E2eTestSupport {
         long earlyRabbit = createRabbit(owner, houseId, cages.get(1), "2", "1", "early");
         attachSaleStage(houseId, normalRabbit, -1);
         attachSaleStage(houseId, earlyRabbit, 7);
+        insertCustomTask(houseId, normalRabbit, "safe-normal");
+        insertCustomTask(houseId, earlyRabbit, "safe-early");
 
         JsonNode task = api.postOk("/api/outbound/tasks", owner.token, houseId, obj(
                 "entryType", "HOUSE",
@@ -136,6 +143,10 @@ public class BatchOutboundIT extends E2eTestSupport {
         Assertions.assertEquals(1, jdbc.queryForObject("select count(*) from sale_orders where house_id = ?", Integer.class, houseId));
         Assertions.assertEquals(2, jdbc.queryForObject("select count(*) from sale_order_items where sale_order_id = ?", Integer.class, first.get("saleOrderId").asLong()));
         Assertions.assertEquals(0, jdbc.queryForObject("select count(*) from rabbits where id in (?, ?) and is_active = true", Integer.class, normalRabbit, earlyRabbit));
+        Assertions.assertEquals(0, jdbc.queryForObject(
+                "select count(*) from work_tasks where house_id = ? and rabbit_id in (?, ?)"
+                    + " and status = 'PENDING'",
+                Integer.class, houseId, normalRabbit, earlyRabbit));
         Assertions.assertEquals(2, jdbc.queryForObject("select count(*) from sale_order_items where sale_order_id = ? and cage_id_snapshot is not null and state_version_snapshot is not null and parallel_status_snapshot is not null", Integer.class, first.get("saleOrderId").asLong()));
     }
 
@@ -527,6 +538,19 @@ public class BatchOutboundIT extends E2eTestSupport {
         jdbc.update("insert into batch_rabbits (batch_id, rabbit_id, join_reason, batch_role, current_status, next_event_date, next_event_type, is_active, join_date, create_by, update_by) values (?, ?, '断奶', 'fattening', '成长期', timestampadd(day, ?, now()), '出售', true, now(), 'e2e', 'e2e')",
                 batchId, rabbitId, daysFromNow);
         return batchId;
+    }
+
+    private void insertCustomTask(long houseId, long rabbitId, String suffix) {
+        jdbc.update(
+            "insert into work_tasks (house_id, task_type, subject_type, subject_id, rabbit_id,"
+                + " due_date, due_time, status, dedup_key, create_by, update_by)"
+                + " values (?, 'CUSTOM', 'RABBIT', ?, ?, curdate(), now(), 'PENDING', ?,"
+                + " 'e2e', 'e2e')",
+            houseId,
+            rabbitId,
+            rabbitId,
+            "rabbit:" + rabbitId + ":custom:" + suffix
+        );
     }
 
     private long version(JsonNode task, long rabbitId) {

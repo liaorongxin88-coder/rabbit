@@ -23,6 +23,13 @@ class BatchRabbitItem {
     this.cageId,
     this.currentStage,
     this.currentCycleId,
+    this.batchCycleCount = 0,
+    this.batchOperationCount = 0,
+    this.batchLitterCount = 0,
+    this.batchTotalKits = 0,
+    this.batchLiveKits = 0,
+    this.batchWeanedKits = 0,
+    this.batchLastOperationAt,
   });
 
   final int id;
@@ -45,12 +52,19 @@ class BatchRabbitItem {
   final String rabbitGender;
   final int? cageId;
 
-  /// 当前生产阶段（服务端枚举名）。权威现状，来自 rabbits 投影列；
-  /// [currentStatus] 是旧写路径的中文快照，已不再更新，仅作降级显示。
+  /// 该批次标签下当前最先要处理的开放周期阶段。
   final String? currentStage;
 
-  /// 当前进行中的周期 id，提交生产动作时需要。
+  /// 与 [currentStage] 对应、且属于当前批次标签的开放周期 id。
   final int? currentCycleId;
+
+  final int batchCycleCount;
+  final int batchOperationCount;
+  final int batchLitterCount;
+  final int batchTotalKits;
+  final int batchLiveKits;
+  final int batchWeanedKits;
+  final DateTime? batchLastOperationAt;
 
   /// 界面上该显示的状态文字：优先用实时阶段，没有才回退到旧快照。
   String get displayStatus {
@@ -58,10 +72,18 @@ class BatchRabbitItem {
     if (stage != null) {
       return stage.label;
     }
+    if (batchRole == 'breeding' && batchCycleCount > 0) {
+      return '周期已结束';
+    }
     return currentStatus.isEmpty ? '未入轨' : currentStatus;
   }
 
   bool get isNursing => currentNursingKits > 0;
+
+  /// 繁殖标签的活动性由该批次是否仍有开放周期决定；商品兔沿用在栏标签状态。
+  bool get isActivityActive => batchRole == 'breeding'
+      ? isActive && (currentStage?.trim().isNotEmpty ?? false)
+      : isActive;
 
   static BatchRabbitItem fromJson(Map<String, dynamic> json) {
     return BatchRabbitItem(
@@ -86,6 +108,13 @@ class BatchRabbitItem {
       cageId: _nullableInt(json['cageId']),
       currentStage: json['currentStage'] as String?,
       currentCycleId: _nullableInt(json['currentCycleId']),
+      batchCycleCount: _intValue(json['batchCycleCount']),
+      batchOperationCount: _intValue(json['batchOperationCount']),
+      batchLitterCount: _intValue(json['batchLitterCount']),
+      batchTotalKits: _intValue(json['batchTotalKits']),
+      batchLiveKits: _intValue(json['batchLiveKits']),
+      batchWeanedKits: _intValue(json['batchWeanedKits']),
+      batchLastOperationAt: _parseDate(json['batchLastOperationAt']),
     );
   }
 

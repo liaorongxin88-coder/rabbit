@@ -123,6 +123,15 @@
     <sql id="dueFilter">
         house_id = #{houseId}
         and status = 'PENDING'
+        and (
+          work_tasks.rabbit_id is null
+          or exists (
+            select 1 from rabbits active_rabbit
+            where active_rabbit.house_id = work_tasks.house_id
+              and active_rabbit.id = work_tasks.rabbit_id
+              and active_rabbit.is_active = true
+          )
+        )
         <if test="dueBefore != null">and due_date &lt;= #{dueBefore}</if>
         <if test="taskType != null">and task_type = #{taskType}</if>
         <if test="batchId != null">and batch_id = #{batchId}</if>
@@ -141,6 +150,15 @@
         select * from work_tasks
         where house_id = #{houseId}
           and status = 'PENDING'
+          and (
+            work_tasks.rabbit_id is null
+            or exists (
+              select 1 from rabbits active_rabbit
+              where active_rabbit.house_id = work_tasks.house_id
+                and active_rabbit.id = work_tasks.rabbit_id
+                and active_rabbit.is_active = true
+            )
+          )
         <if test="taskType != null">and task_type = #{taskType}</if>
         <if test="batchId != null">and batch_id = #{batchId}</if>
         <if test="cageId != null">and cage_id = #{cageId}</if>

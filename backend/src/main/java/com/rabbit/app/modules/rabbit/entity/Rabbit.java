@@ -17,6 +17,7 @@ public class Rabbit {
     private Date arrivalDate;
     private Double weight;
     private String growthStage;
+    private Date growthStageEnteredAt;
     /** 旧繁育阶段列；V26 起由 {@link #currentStage} 取代，V28 删除。 */
     private String reproductiveStage;
     /**
@@ -186,6 +187,14 @@ public class Rabbit {
 
     public void setGrowthStage(String growthStage) {
         this.growthStage = growthStage;
+    }
+
+    public Date getGrowthStageEnteredAt() {
+        return growthStageEnteredAt;
+    }
+
+    public void setGrowthStageEnteredAt(Date growthStageEnteredAt) {
+        this.growthStageEnteredAt = growthStageEnteredAt;
     }
 
     public String getReproductiveStage() {

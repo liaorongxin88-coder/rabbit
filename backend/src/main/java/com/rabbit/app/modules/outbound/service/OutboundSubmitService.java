@@ -21,6 +21,8 @@ import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.repro.domain.TaskType;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.sale.entity.SaleOrder;
 import com.rabbit.app.modules.sale.entity.SaleOrderItem;
 import com.rabbit.app.modules.sale.mapper.SaleOrderItemMapper;
@@ -64,6 +66,7 @@ public class OutboundSubmitService {
     private final CageMapper cageMapper;
     private final HouseService houseService;
     private final ObjectMapper objectMapper;
+    private final WorkTaskWriter workTaskWriter;
 
     public OutboundSubmitService(OutboundTaskMapper taskMapper, OutboundTaskItemMapper taskItemMapper,
                                  OutboundEligibilityService eligibilityService,
@@ -71,7 +74,7 @@ public class OutboundSubmitService {
                                  RabbitMapper rabbitMapper, RabbitDepartureRecordMapper departureMapper,
                                  RabbitStatusHistoryMapper historyMapper, BatchRabbitMapper batchRabbitMapper,
                                  BatchMapper batchMapper, CageMapper cageMapper, HouseService houseService,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper, WorkTaskWriter workTaskWriter) {
         this.taskMapper = taskMapper;
         this.taskItemMapper = taskItemMapper;
         this.eligibilityService = eligibilityService;
@@ -85,6 +88,7 @@ public class OutboundSubmitService {
         this.cageMapper = cageMapper;
         this.houseService = houseService;
         this.objectMapper = objectMapper;
+        this.workTaskWriter = workTaskWriter;
     }
 
     @Transactional
@@ -196,6 +200,8 @@ public class OutboundSubmitService {
             }
             cageDeltas.merge(frozen.getCageIdSnapshot(), 1, Integer::sum);
             insertDepartureAndHistory(houseId, rabbitId, frozen, order.getId(), now, operator, input.requestId());
+            workTaskWriter.completeForRabbit(houseId, rabbitId, TaskType.SALE_READY, operator);
+            workTaskWriter.cancelAllForRabbit(houseId, rabbitId, operator);
         }
         for (Map.Entry<Long, Integer> entry : cageDeltas.entrySet()) {
             if (cageMapper.decrementRabbitCount(houseId, entry.getKey(), entry.getValue(), operator) == 0) {

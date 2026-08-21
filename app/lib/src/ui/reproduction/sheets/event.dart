@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
@@ -20,6 +21,8 @@ import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/required_images.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/weaning.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
@@ -110,7 +113,7 @@ String productionActionHint(EventItem event) {
     case ProductionKind.sale:
       return '记录出售';
     case ProductionKind.replacement:
-      return '转后备兔并分配笼位';
+      return '转为种兔';
     case null:
       return '';
   }
@@ -307,30 +310,20 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
   }
 
   Future<void> _pickDate() async {
-    final firstDate = DateTime(2020);
-    final lastDate = DateTime.now().add(const Duration(days: 1));
-    final initialDate = _matingDate.isBefore(firstDate)
-        ? firstDate
-        : _matingDate.isAfter(lastDate)
-            ? lastDate
-            : _matingDate;
-    final picked = await showDatePicker(
+    final picked = await pickActionTime(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
+      current: _matingDate,
       helpText: '选择配种日期',
-      cancelText: '取消',
-      confirmText: '确定',
     );
-    if (picked != null && mounted && !_sameDate(picked, _matingDate)) {
+    if (picked != null && mounted) {
       setState(() => _matingDate = picked);
     }
   }
 
   void _selectMale(int? value) {
-    if (value == null || value == _selectedMaleId) return;
-    setState(() => _selectedMaleId = value);
+    final selected = value == null || value <= 0 ? null : value;
+    if (selected == _selectedMaleId) return;
+    setState(() => _selectedMaleId = selected);
   }
 
   void _selectMatingMethod(MatingMethod method) {
@@ -343,11 +336,10 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
   }
 
   Future<void> _submit({required List<Rabbit> males}) async {
-    final maleId =
-        _matingMethod == MatingMethod.natural ? _selectedMaleId : null;
+    final maleId = _selectedMaleId;
     if (_matingMethod == MatingMethod.natural &&
         !_containsMaleId(males, maleId)) {
-      _showMessage('体配时请选择种公兔');
+      _showMessage('请选择种公兔');
       return;
     }
     final totalCount = widget.rabbitIds.length + widget.nursingRabbitIds.length;
@@ -364,9 +356,9 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
           'batchId': widget.batchId,
           'femaleRabbitIds': widget.rabbitIds,
           'nursingRabbitIds': widget.nursingRabbitIds,
-          if (maleId != null) 'maleRabbitId': maleId,
+          'maleRabbitId': maleId,
           'matingMethod': _matingMethod.wire,
-          'matingDate': formatBatchWriteDate(_matingDate),
+          'matingDate': formatBatchWriteDateTime(_matingDate),
         }),
       );
       final result = await ref.read(reproRepositoryProvider).bulkMate(
@@ -424,7 +416,7 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
   @override
   Widget build(BuildContext context) {
     final rabbits = ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
-    final dateLabel = DateFormat('yyyy-MM-dd').format(_matingDate);
+    final dateLabel = formatActionTime(_matingDate);
     final mediaQuery = MediaQuery.of(context);
     final availableHeight =
         mediaQuery.size.height - mediaQuery.viewInsets.bottom;
@@ -508,7 +500,7 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                         ListTile(
                           key: const ValueKey('batch-mating-date'),
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('配种日期'),
+                          title: const Text('执行时间 *'),
                           subtitle: Text(dateLabel),
                           trailing: const Icon(Icons.calendar_today_outlined),
                           onTap: _saving ? null : _pickDate,
@@ -527,31 +519,39 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
                                       value ?? method,
                                     ),
                             title: Text(method.label),
-                            subtitle: method == MatingMethod.ai
-                                ? const Text('混精 / 外购冻精，可不指定公兔')
-                                : null,
                           ),
-                        if (_matingMethod == MatingMethod.natural) ...[
-                          const SizedBox(height: 8),
-                          Text('种公兔',
-                              style: Theme.of(context).textTheme.titleSmall),
-                          if (males.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 10),
-                              child: Text('暂无可用种公兔，请先在笼位录入种公兔。'),
-                            )
-                          else
-                            ...males.map(
-                              (male) => RadioListTile<int>(
-                                key: ValueKey('batch-mating-male-${male.id}'),
-                                value: male.id,
-                                groupValue: _selectedMaleId,
-                                onChanged: _saving ? null : _selectMale,
-                                title: Text(
-                                    '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}'),
-                              ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _matingMethod == MatingMethod.natural
+                              ? '种公兔 *'
+                              : '种公兔（可选）',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (_matingMethod == MatingMethod.ai)
+                          RadioListTile<int>(
+                            key: const ValueKey('batch-mating-male-none'),
+                            value: 0,
+                            groupValue: _selectedMaleId ?? 0,
+                            onChanged: _saving ? null : _selectMale,
+                            title: const Text('不关联具体公兔'),
+                            subtitle: const Text('混精或外购精源'),
+                          ),
+                        if (males.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 10),
+                            child: Text('暂无可用种公兔，请先在笼位录入种公兔。'),
+                          )
+                        else
+                          ...males.map(
+                            (male) => RadioListTile<int>(
+                              key: ValueKey('batch-mating-male-${male.id}'),
+                              value: male.id,
+                              groupValue: _selectedMaleId,
+                              onChanged: _saving ? null : _selectMale,
+                              title: Text(
+                                  '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}'),
                             ),
-                        ],
+                          ),
                       ],
                     ),
                   ),
@@ -603,12 +603,6 @@ class _BatchMatingSheetState extends ConsumerState<_BatchMatingSheet> {
       ),
     );
   }
-
-  static bool _sameDate(DateTime left, DateTime right) {
-    return left.year == right.year &&
-        left.month == right.month &&
-        left.day == right.day;
-  }
 }
 
 class _ProductionEventSheet extends ConsumerStatefulWidget {
@@ -650,14 +644,15 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   var _postponed = false;
   var _parturitionFailed = false;
   int? _selectedMaleId;
-  int? _selectedBackupCageId;
-  var _autoAssignBackupCage = true;
+  List<XFile> _images = const [];
   var _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _actionDate = widget.initialDate ?? DateTime.now();
+    final now = DateTime.now();
+    final initial = widget.initialDate;
+    _actionDate = initial == null || initial.isAfter(now) ? now : initial;
   }
 
   @override
@@ -684,35 +679,24 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       case ProductionKind.sale:
         return '记录出售';
       case ProductionKind.replacement:
-        return '转后备兔';
+        return '转为种兔';
       case ProductionKind.weaning:
         return '断奶';
     }
   }
 
   Future<void> _pickDate() async {
-    final firstDate = DateTime(2020);
-    final lastDate = DateTime.now().add(const Duration(days: 1));
-    final initialDate = _actionDate.isBefore(firstDate)
-        ? firstDate
-        : _actionDate.isAfter(lastDate)
-            ? lastDate
-            : _actionDate;
-    final picked = await showDatePicker(
+    final picked = await pickActionTime(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
+      current: _actionDate,
       helpText: '选择$_title日期',
-      cancelText: '取消',
-      confirmText: '确定',
     );
     if (picked != null && mounted) {
       setState(() => _actionDate = picked);
     }
   }
 
-  /// 复查日期按兔场的待摸胎时长预填，并且只允许今天及以后。
+  /// 复查日期按兔场的配种至摸胎时长预填，并且只允许今天及以后。
   Future<void> _pickRecheckDate() async {
     final today = localDateOnly(DateTime.now());
     final suggested = suggestedReminderDate(
@@ -854,8 +838,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   void _selectMale(int? value) {
-    if (value == null || value == _selectedMaleId) return;
-    setState(() => _selectedMaleId = value);
+    final selected = value == null || value <= 0 ? null : value;
+    if (selected == _selectedMaleId) return;
+    setState(() => _selectedMaleId = selected);
   }
 
   void _selectMatingMethod(MatingMethod method) {
@@ -873,18 +858,6 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       widget.kind == ProductionKind.pregnancyCheck ||
       widget.kind == ProductionKind.prepartum ||
       widget.kind == ProductionKind.parturition;
-
-  List<Cage> _backupCages(List<Cage> cages) {
-    return cages
-        .where(
-          (cage) =>
-              cage.isEnabled &&
-              (cage.status == '0' || cage.status == '2') &&
-              cage.rabbitCount < 1,
-        )
-        .toList()
-      ..sort((a, b) => a.cageNumber.compareTo(b.cageNumber));
-  }
 
   int? get _breedingCycleId => widget.cycleId;
 
@@ -957,20 +930,20 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           nextRemindAt: nextRemindAt,
           remark: remark,
           requestId: _requestIdFor({
-            'actionDate': formatBatchWriteDate(_actionDate),
+            'actionDate': formatBatchWriteDateTime(_actionDate),
             'remark': remark,
             if (nextRemindAt != null)
               'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
         );
       } else if (widget.kind == ProductionKind.mating) {
-        final isAi = _matingMethod == MatingMethod.ai;
         final males = _availableBreedingMales(
           rabbits,
           houseId: widget.houseId,
         );
-        final maleId = isAi ? null : _selectedMaleId;
-        if (!isAi && !_containsMaleId(males, maleId)) {
+        final maleId = _selectedMaleId;
+        if (_matingMethod == MatingMethod.natural &&
+            !_containsMaleId(males, maleId)) {
           _showMessage('请选择种公兔');
           return;
         }
@@ -984,9 +957,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           matingMethod: _matingMethod,
           nextRemindAt: nextRemindAt,
           requestId: _requestIdFor({
-            if (maleId != null) 'maleRabbitId': maleId,
+            'maleRabbitId': maleId,
             'matingMethod': _matingMethod.wire,
-            'matingDate': formatBatchWriteDate(_actionDate),
+            'matingDate': formatBatchWriteDateTime(_actionDate),
             if (nextRemindAt != null)
               'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
@@ -1010,7 +983,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           nextRemindAt: nextRemindAt,
           remark: remark,
           requestId: _requestIdFor({
-            'checkDate': formatBatchWriteDate(_actionDate),
+            'checkDate': formatBatchWriteDateTime(_actionDate),
             'result': result.wire,
             'remark': remark,
             if (nextRemindAt != null)
@@ -1028,7 +1001,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           nextRemindAt: nextRemindAt,
           remark: remark,
           requestId: _requestIdFor({
-            'actionDate': formatBatchWriteDate(_actionDate),
+            'actionDate': formatBatchWriteDateTime(_actionDate),
             'remark': remark,
             if (nextRemindAt != null)
               'nextRemindAt': formatBatchWriteDate(nextRemindAt),
@@ -1051,6 +1024,24 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           return;
         }
         final remark = _remarkController.text.trim();
+        if (_parturitionFailed && remark.isEmpty) {
+          _showMessage('请填写难产详情');
+          return;
+        }
+        if (_parturitionFailed && _images.isEmpty) {
+          _showMessage('请至少上传一张难产相关图片');
+          return;
+        }
+        final attachmentFileIds = <String>[];
+        for (final image in _parturitionFailed ? _images : const <XFile>[]) {
+          attachmentFileIds.add(
+            await reproRepo.uploadImage(
+              houseId: widget.houseId,
+              filePath: image.path,
+              fileName: image.name,
+            ),
+          );
+        }
         final nextRemindAt = _ordinaryNextRemindAt;
         actionResult = await reproRepo.applyAction(
           houseId: widget.houseId,
@@ -1063,13 +1054,15 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           liveKits: live,
           keptKits: kept,
           remark: remark,
+          attachmentFileIds: attachmentFileIds,
           requestId: _requestIdFor({
-            'birthDate': formatBatchWriteDate(_actionDate),
+            'birthDate': formatBatchWriteDateTime(_actionDate),
             'totalKits': total,
             'liveKits': live,
             'keptKits': kept,
             'failed': _parturitionFailed,
             'remark': remark,
+            'imageNames': _images.map((image) => image.name).toList(),
             if (nextRemindAt != null)
               'nextRemindAt': formatBatchWriteDate(nextRemindAt),
           }),
@@ -1084,27 +1077,17 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           remark: remark,
           requestId: _requestIdFor({
             'rabbitIds': [widget.rabbitId],
-            'saleDate': formatBatchWriteDate(_actionDate),
+            'saleDate': formatBatchWriteDateTime(_actionDate),
             'remark': remark,
           }),
         );
       } else if (widget.kind == ProductionKind.replacement) {
-        int? targetCageId;
-        if (!_autoAssignBackupCage) {
-          targetCageId = _selectedBackupCageId;
-          if (targetCageId == null || targetCageId <= 0) {
-            _showMessage('请选择后备兔笼位');
-            return;
-          }
-        }
-        await rabbitRepo.convertToReplacement(
+        await rabbitRepo.promoteReplacement(
           houseId: widget.houseId,
-          rabbitIds: [widget.rabbitId],
-          targetCageId: targetCageId,
+          rabbitId: widget.rabbitId,
           requestId: _requestIdFor({
-            'rabbitIds': [widget.rabbitId],
-            'targetCageId': targetCageId,
-            'forceExitBatch': true,
+            'rabbitId': widget.rabbitId,
+            'action': 'promote-breeder',
           }),
         );
       }
@@ -1181,7 +1164,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final availableHeight = mediaQuery.size.height - keyboardInset;
-    final dateLabel = DateFormat('yyyy-MM-dd').format(_actionDate);
+    final dateLabel = formatActionTime(_actionDate);
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -1244,19 +1227,6 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                   });
                 }
 
-                final backupCages = _backupCages(cages);
-                if (widget.kind == ProductionKind.replacement &&
-                    !_autoAssignBackupCage &&
-                    _selectedBackupCageId == null &&
-                    backupCages.isNotEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && _selectedBackupCageId == null) {
-                      setState(
-                          () => _selectedBackupCageId = backupCages.first.id);
-                    }
-                  });
-                }
-
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1303,7 +1273,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                           ),
                           ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: const Text('日期'),
+                            title: const Text('执行时间 *'),
                             subtitle: Text(dateLabel),
                             trailing: const Icon(Icons.calendar_today_outlined),
                             onTap: _saving ? null : _pickDate,
@@ -1354,34 +1324,40 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                           value ?? method,
                                         ),
                                 title: Text(method.label),
-                                subtitle: method == MatingMethod.ai
-                                    ? const Text('混精 / 外购冻精，可不指定公兔')
-                                    : null,
                               ),
-                            if (_matingMethod == MatingMethod.natural) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                '种公兔',
-                                style: Theme.of(context).textTheme.titleSmall,
+                            const SizedBox(height: 8),
+                            Text(
+                              _matingMethod == MatingMethod.natural
+                                  ? '种公兔 *'
+                                  : '种公兔（可选）',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            if (_matingMethod == MatingMethod.ai)
+                              RadioListTile<int>(
+                                key: const ValueKey('mating-male-none'),
+                                value: 0,
+                                groupValue: _selectedMaleId ?? 0,
+                                onChanged: _saving ? null : _selectMale,
+                                title: const Text('不关联具体公兔'),
+                                subtitle: const Text('混精或外购精源'),
                               ),
-                              if (males.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 8),
-                                  child: Text('暂无可用种公兔，请先在笼位录入。'),
-                                )
-                              else
-                                ...males.map(
-                                  (male) => RadioListTile<int>(
-                                    key: ValueKey('mating-male-${male.id}'),
-                                    value: male.id,
-                                    groupValue: _selectedMaleId,
-                                    onChanged: _saving ? null : _selectMale,
-                                    title: Text(
-                                      '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
-                                    ),
+                            if (males.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text('暂无可用种公兔，请先在笼位录入。'),
+                              )
+                            else
+                              ...males.map(
+                                (male) => RadioListTile<int>(
+                                  key: ValueKey('mating-male-${male.id}'),
+                                  value: male.id,
+                                  groupValue: _selectedMaleId,
+                                  onChanged: _saving ? null : _selectMale,
+                                  title: Text(
+                                    '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
                                   ),
                                 ),
-                            ],
+                              ),
                           ],
                           if (!_postponed &&
                               widget.kind == ProductionKind.pregnancyCheck) ...[
@@ -1476,50 +1452,26 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                         }
                                       }),
                             ),
-                            if (_parturitionFailed)
+                            if (_parturitionFailed) ...[
                               Text(
-                                '失败产的总产仔数、活仔数和留仔数均固定为 0。',
+                                '难产的总产仔数、活仔数和留仔数均固定为 0。',
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
+                              const SizedBox(height: 12),
+                              RequiredImagesField(
+                                files: _images,
+                                enabled: !_saving,
+                                onChanged: (files) =>
+                                    setState(() => _images = files),
+                              ),
+                            ],
                           ],
                           if (!_postponed &&
                               widget.kind == ProductionKind.replacement) ...[
                             const SizedBox(height: 8),
                             const InfoNotice(
-                              text: '将把商品兔转为后备兔，并放入后备兔笼位。',
+                              text: '成熟后备兔会在当前笼位转为种兔；种母兔同时进入待催情流程。',
                             ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('自动分配后备兔笼'),
-                              value: _autoAssignBackupCage,
-                              onChanged: _saving
-                                  ? null
-                                  : (value) => setState(
-                                        () => _autoAssignBackupCage = value,
-                                      ),
-                            ),
-                            if (!_autoAssignBackupCage) ...[
-                              if (backupCages.isEmpty)
-                                const Text('暂无空的后备兔笼位')
-                              else
-                                ...backupCages.map(
-                                  (cage) => RadioListTile<int>(
-                                    value: cage.id,
-                                    groupValue: _selectedBackupCageId,
-                                    onChanged: _saving
-                                        ? null
-                                        : (value) => setState(
-                                              () =>
-                                                  _selectedBackupCageId = value,
-                                            ),
-                                    title: Text(
-                                      cage.cageNumber.isEmpty
-                                          ? '#${cage.id}'
-                                          : cage.cageNumber,
-                                    ),
-                                  ),
-                                ),
-                            ],
                           ],
                           if (_canCustomizeNextReminder) ...[
                             const SizedBox(height: 12),
@@ -1599,8 +1551,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                               controller: _remarkController,
                               enabled: !_saving,
                               maxLines: 2,
-                              decoration: const InputDecoration(
-                                labelText: '备注（可选）',
+                              decoration: InputDecoration(
+                                labelText:
+                                    _parturitionFailed ? '难产详情 *' : '备注（可选）',
                               ),
                             ),
                           ],

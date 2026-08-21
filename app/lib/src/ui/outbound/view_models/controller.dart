@@ -86,6 +86,7 @@ class OutboundState {
     this.earlySaleReasons = const {},
     this.mode = OutboundSelectionMode.cage,
     this.filter,
+    this.selectedOnly = false,
     this.saleTime,
     this.totalWeight = '',
     this.unitPrice = '',
@@ -106,6 +107,7 @@ class OutboundState {
   final Map<int, String> earlySaleReasons;
   final OutboundSelectionMode mode;
   final OutboundEligibility? filter;
+  final bool selectedOnly;
   final DateTime? saleTime;
   final String totalWeight;
   final String unitPrice;
@@ -119,6 +121,11 @@ class OutboundState {
 
   List<OutboundRabbit> get rabbits => task?.rabbits ?? const [];
   List<OutboundRabbit> get visibleRabbits {
+    if (selectedOnly) {
+      return rabbits
+          .where((rabbit) => selectedRabbitIds.contains(rabbit.rabbitId))
+          .toList();
+    }
     if (filter == null) return rabbits;
     if (filter == OutboundEligibility.needsAction) {
       return rabbits
@@ -175,6 +182,7 @@ class OutboundState {
     OutboundSelectionMode? mode,
     OutboundEligibility? filter,
     bool clearFilter = false,
+    bool? selectedOnly,
     DateTime? saleTime,
     String? totalWeight,
     String? unitPrice,
@@ -199,6 +207,7 @@ class OutboundState {
       earlySaleReasons: earlySaleReasons ?? this.earlySaleReasons,
       mode: mode ?? this.mode,
       filter: clearFilter ? null : filter ?? this.filter,
+      selectedOnly: selectedOnly ?? this.selectedOnly,
       saleTime: saleTime ?? this.saleTime,
       totalWeight: totalWeight ?? this.totalWeight,
       unitPrice: unitPrice ?? this.unitPrice,
@@ -222,7 +231,10 @@ class OutboundController extends StateNotifier<OutboundState> {
   })  : _repository = repository,
         _store = store,
         _onCompleted = onCompleted,
-        super(OutboundState(saleTime: DateTime.now())) {
+        super(OutboundState(
+          saleTime: DateTime.now(),
+          mode: _selectionModeForEntry(entry.entryType),
+        )) {
     initialize();
   }
 
@@ -341,10 +353,25 @@ class OutboundController extends StateNotifier<OutboundState> {
     }
   }
 
-  void setMode(OutboundSelectionMode mode) => _emit(state.copyWith(mode: mode));
-  void setFilter(OutboundEligibility? filter) => _emit(filter == null
-      ? state.copyWith(clearFilter: true)
-      : state.copyWith(filter: filter));
+  void setMode(OutboundSelectionMode mode) {
+    _emit(state.copyWith(mode: mode));
+    unawaited(_enqueueLocalSnapshot());
+  }
+
+  void setFilter(OutboundEligibility? filter) {
+    _emit(filter == null
+        ? state.copyWith(clearFilter: true, selectedOnly: false)
+        : state.copyWith(filter: filter, selectedOnly: false));
+    unawaited(_enqueueLocalSnapshot());
+  }
+
+  void setSelectedOnly(bool selectedOnly) {
+    _emit(state.copyWith(
+      selectedOnly: selectedOnly,
+      clearFilter: selectedOnly,
+    ));
+    unawaited(_enqueueLocalSnapshot());
+  }
 
   Future<void> continueResumedDraft() async {
     final task = state.task;
@@ -748,6 +775,15 @@ class OutboundController extends StateNotifier<OutboundState> {
         task: task,
         selectedRabbitIds: selected,
         earlySaleReasons: early,
+        mode: preserveLocalForm
+            ? state.mode
+            : _selectionModeFromSnapshot(
+                localSnapshot?.selectionMode,
+                state.mode,
+              ),
+        selectedOnly: preserveLocalForm
+            ? state.selectedOnly
+            : localSnapshot?.selectedOnly ?? state.selectedOnly,
         saleTime: preserveLocalForm
             ? state.saleTime
             : localSnapshot?.saleTime ??
@@ -856,6 +892,8 @@ class OutboundController extends StateNotifier<OutboundState> {
       unitPrice: state.unitPrice,
       customer: state.customer,
       remark: state.remark,
+      selectionMode: state.mode.name,
+      selectedOnly: state.selectedOnly,
     );
     return _store.saveSnapshot(entry.userId, snapshot);
   }
@@ -909,4 +947,22 @@ class OutboundController extends StateNotifier<OutboundState> {
     _statusSequence++;
     super.dispose();
   }
+}
+
+OutboundSelectionMode _selectionModeForEntry(String entryType) {
+  return switch (entryType.trim().toUpperCase()) {
+    'HOUSE' => OutboundSelectionMode.house,
+    'ROW' => OutboundSelectionMode.row,
+    _ => OutboundSelectionMode.cage,
+  };
+}
+
+OutboundSelectionMode _selectionModeFromSnapshot(
+  String? value,
+  OutboundSelectionMode fallback,
+) {
+  for (final mode in OutboundSelectionMode.values) {
+    if (mode.name == value) return mode;
+  }
+  return fallback;
 }

@@ -13,7 +13,7 @@
 | # | 问题 | 处置 |
 | --- | --- | --- |
 | A1 | 批次标签化后 §2/§4.4 仍残留 `BATCH_CLOSE` 任务、`subject=BATCH`、计数器表述 | 已删除；空批次角标为查询派生 |
-| A2 | `uk_bc_batch_mother` 普通唯一键会禁止"空怀/流产后同批次重配" | 改为 `batch_member_guard` 生成列（仅 OPEN 周期占名额，关闭后可重开）；"终身唯一"口径留作待确认项 §9-1 |
+| A2 | `uk_bc_batch_mother` 普通唯一键会禁止关闭后重新打标 | 改为 `batch_member_guard` 生成列（仅 OPEN 周期占名额）；空怀/流产/分笼的自动接续不继承旧批次，显式重新打标仍可重开 |
 | A3 | `stage NOT NULL` 直接 ADD COLUMN 对存量数据不可执行 | V26 先可空，V27 回填后收紧 |
 | A4 | `tenant_id NOT NULL` 但当前无租户表 | 全部改为可空预留列，租户模型独立立项 |
 | A5 | `operator_id NOT NULL` 无法承载历史回填（旧数据只有 create_by 字符串） | operator_id 可空 + operator_name 快照列 |
@@ -206,8 +206,8 @@ SettingResolver                             gestation_days 接入 + Caffeine 缓
 
 四层各守一边：`TransitionTableTest.dictionaryMatchesWhatRequireActuallyAccepts`
 钉住字典与转换表不得分家；`ReproParallelCycleIT` 验证字典端点本身与「绕过界面
-直接调接口仍被 409 拒绝」；`abortion_entry_visibility_test.dart` 钉住界面显隐；真机用例
-`batch_lifecycle_android_test.dart` 在同一屏上同时断言「孕期母兔有入口」与「非孕期母兔没有入口」，
+直接调接口仍被 409 拒绝」；`test/ui/batches/screens/detail_abortion_test.dart` 钉住界面显隐；真机用例
+`integration_test/batches/lifecycle_android_test.dart` 在同一屏上同时断言「孕期母兔有入口」与「非孕期母兔没有入口」，
 并以 `aborted_cycles` 计数器确认流产真的落库（run `20260817181356093836`）。
 
 ### 4.1 旧端点适配矩阵（已作废，仅供追溯）
@@ -273,8 +273,16 @@ P1 0.5d ｜ P2 4–5d（含测试）｜ P3 1d（含演练）｜ P4 后端 2d + A
 
 ## 9. 业务口径（已全部确认，2026-08-16）
 
-1. 同批次同母兔：**同时唯一**——`batch_member_guard` 仅约束 OPEN 周期，空怀/流产关闭后可同批次重开。
+1. 同批次同母兔：**同时唯一**——`batch_member_guard` 仅约束 OPEN 周期；历史标签保留，空怀/流产/分笼后的自动接续周期默认无批次，用户显式重新打标时仍可重开。
 2. 散养母兔**开放**（batch_id 可空）；批次不与母兔管理直接挂钩，定位为**批量选择集 + 流转追踪标记**（bulk filter 已入设计 §5.1）。
 3. repro_events 历史回填：**近 6 个月**，更早历史留只读旧表。
 4. 血配节奏（remating_mode）：**本期不实装**，保持默认断奶后配；设计预留不变。
 5. 总口径重申：批次只做标记追踪，状态追踪主体始终是母兔（周期/任务）与商品兔（生长/出栏）本身；标签链路：周期 → 窝 → birth_batch_id → 出栏快照（设计 §4.5）。
+
+## 10. V34 补齐项（2026-08-21）
+
+- `work_tasks` 正式支持 `subject_type=RABBIT`：分笼或录入商品兔生成 `SALE_READY`，转后备或直接录入后备兔生成 `REPLACEMENT_MATURE`。
+- 商品兔转后备时完成旧出售任务；出售、出库、后备转种时完成对应兔只任务。
+- `replacement_records` 增加 `PENDING/PROMOTED` 状态和转种时间；转种母兔在原笼进入无批次待催情周期，种公兔进入 `READY`。
+- 商品兔生长参数拆为适应期、生长期、育肥期，成熟日取三段之和；夜间任务按兔舍设置推进 `JUVENILE → GROWING → FATTENING → MATURE`。
+- 迁移从存量在栏商品兔和后备兔幂等回填任务，首页兼容接口不再遗漏无 `cycle_id` 的兔只任务。

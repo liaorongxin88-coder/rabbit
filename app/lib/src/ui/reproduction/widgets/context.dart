@@ -42,6 +42,10 @@ class ProductionContextLine extends StatelessWidget {
               icon: Icons.pets_outlined,
               label: '母兔 #$rabbitId',
             ),
+            const _ContextItem(
+              icon: Icons.person_outline,
+              label: '执行人 当前账号',
+            ),
             if (batchId != null && batchId! > 0)
               _ContextItem(
                 icon: Icons.inventory_2_outlined,

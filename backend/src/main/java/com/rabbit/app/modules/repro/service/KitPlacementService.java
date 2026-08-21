@@ -13,6 +13,7 @@ import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
@@ -54,6 +55,7 @@ public class KitPlacementService {
     private final WeaningRecordAllocationMapper weaningRecordAllocationMapper;
     private final BreedingPerformanceRecorder performanceRecorder;
     private final SettingService settingService;
+    private final WorkTaskWriter workTaskWriter;
     private final int commodityCageCapacity;
 
     public KitPlacementService(
@@ -65,6 +67,7 @@ public class KitPlacementService {
         WeaningRecordAllocationMapper weaningRecordAllocationMapper,
         BreedingPerformanceRecorder performanceRecorder,
         SettingService settingService,
+        WorkTaskWriter workTaskWriter,
         @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
         this.cageMapper = cageMapper;
@@ -75,6 +78,7 @@ public class KitPlacementService {
         this.weaningRecordAllocationMapper = weaningRecordAllocationMapper;
         this.performanceRecorder = performanceRecorder;
         this.settingService = settingService;
+        this.workTaskWriter = workTaskWriter;
         this.commodityCageCapacity = commodityCageCapacity;
     }
 
@@ -251,7 +255,8 @@ public class KitPlacementService {
         kit.setArrivalMethod("1");
         kit.setArrivalDate(command.weaningDate());
         kit.setWeight(command.avgWeight());
-        kit.setGrowthStage("GROWING");
+        kit.setGrowthStage("JUVENILE");
+        kit.setGrowthStageEnteredAt(command.weaningDate());
         kit.setIsActive(Boolean.TRUE);
         kit.setIsQuarantined(Boolean.FALSE);
         kit.setRequestId(ReproRequestIds.derive(command.requestId(), "kit-" + index));
@@ -309,38 +314,38 @@ public class KitPlacementService {
         WeaningRecord record,
         List<Rabbit> kits
     ) {
-        if (command.batchId() == null) {
-            // 散养母兔的仔兔不进批次；批次是标签，没有标签也能养。
-            return;
-        }
         GlobalSetting setting =
             settingService.getEffectiveSetting(command.userId(), command.houseId());
-        Date saleDate = DateUtil.plusDays(command.weaningDate(), setting.getSaleDays());
+        Date saleDate = DateUtil.plusDays(
+            command.weaningDate(), setting.commodityMaturityDays()
+        );
 
         List<BatchRabbit> links = new ArrayList<>(kits.size());
         List<RabbitStatusHistory> histories = new ArrayList<>(kits.size());
         for (Rabbit kit : kits) {
-            BatchRabbit link = new BatchRabbit();
-            link.setBatchId(command.batchId());
-            link.setRabbitId(kit.getId());
-            link.setJoinReason("断奶");
-            link.setBatchRole("fattening");
-            link.setCurrentStatus("成长期");
-            link.setLastEventDate(command.weaningDate());
-            link.setNextEventDate(saleDate);
-            link.setNextEventType("出售");
-            link.setIsActive(Boolean.TRUE);
-            link.setJoinDate(command.weaningDate());
-            link.setCreateBy(command.operator());
-            link.setUpdateBy(command.operator());
-            links.add(link);
+            if (command.batchId() != null) {
+                BatchRabbit link = new BatchRabbit();
+                link.setBatchId(command.batchId());
+                link.setRabbitId(kit.getId());
+                link.setJoinReason("断奶");
+                link.setBatchRole("fattening");
+                link.setCurrentStatus("幼兔适应期");
+                link.setLastEventDate(command.weaningDate());
+                link.setNextEventDate(saleDate);
+                link.setNextEventType("出售");
+                link.setIsActive(Boolean.TRUE);
+                link.setJoinDate(command.weaningDate());
+                link.setCreateBy(command.operator());
+                link.setUpdateBy(command.operator());
+                links.add(link);
+            }
 
             RabbitStatusHistory history = new RabbitStatusHistory();
             history.setHouseId(command.houseId());
             history.setRabbitId(kit.getId());
             history.setBatchId(command.batchId());
             history.setFromStatus(null);
-            history.setToStatus("成长期");
+            history.setToStatus("幼兔适应期");
             history.setChangeTime(DateUtil.now());
             history.setReason("断奶生成仔兔");
             history.setRelatedRecordId(record.getId());
@@ -348,6 +353,17 @@ public class KitPlacementService {
             history.setCreateBy(command.operator());
             history.setUpdateBy(command.operator());
             histories.add(history);
+
+            workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
+                command.houseId(),
+                TaskType.SALE_READY,
+                kit.getId(),
+                command.batchId(),
+                kit.getCageId(),
+                saleDate,
+                "商品兔成熟后可进入出售流程",
+                command.operator()
+            ));
         }
         for (int from = 0; from < links.size(); from += BULK_WRITE_SIZE) {
             int to = Math.min(from + BULK_WRITE_SIZE, links.size());

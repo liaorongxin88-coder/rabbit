@@ -52,4 +52,13 @@
         order by occurred_at desc, id desc
         limit #{limit}
     </select>
+
+    <select id="selectByBatchAndMother" resultMap="Map">
+        select * from repro_events
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+        order by occurred_at desc, id desc
+        limit #{limit}
+    </select>
 </mapper>

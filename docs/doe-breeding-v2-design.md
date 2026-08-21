@@ -77,7 +77,7 @@ DoeStage（母兔繁育阶段，存储值用英文，展示映射中文）
 
 | # | 触发操作 | 前置阶段 | 结果 | 目标阶段 | 下一任务到期 = |
 |---|---|---|---|---|---|
-| T1 | 开始周期 START_CYCLE | READY | 可指定**任意入轨阶段**（默认待催情） | 指定阶段 | 按入轨阶段锚点计算（见下表）；分笼/流产后自动 T1 为待催情，due=当天+`postpartum_recovery_days` |
+| T1 | 开始周期 START_CYCLE | READY | 可指定**任意入轨阶段**（默认待催情） | 指定阶段 | 按入轨阶段锚点计算（见下表）；分笼/流产后的自动 T1 为无批次待催情，due=当天+`postpartum_recovery_days` |
 | T2 | 催情 ESTRUS | AWAIT_ESTRUS | 执行 | AWAIT_MATING | 当天 + `estrus_duration_days` |
 | T3 | 配种 MATING | AWAIT_MATING | 执行 | AWAIT_PALPATION | 配种日 + `palpation_wait_days` |
 | T4a | 摸胎 PALPATION | AWAIT_PALPATION | 怀孕 | AWAIT_PREPARTUM | 摸胎确认日 + `prepartum_days`（待备产时长） |
@@ -183,8 +183,8 @@ ALTER TABLE breeding_cycles
                         'AWAIT_PREPARTUM','AWAIT_DELIVERY')
          THEN mother_rabbit_id END) STORED,
   ADD UNIQUE KEY uk_bc_pipeline (house_id, pipeline_guard),
-  -- 标签口径（业务已确认：**同时唯一**）：同批次同母兔同时只能有一个 OPEN 周期，
-  -- 关闭后可重开，覆盖空怀/流产后同批次重配场景：
+  -- 标签口径：同批次同母兔同时只能有一个 OPEN 周期。关闭后仍可由用户显式
+  -- 重新打入该批次；自动接续周期默认 batch_id=NULL，不让旧批次活动无限延续：
   ADD COLUMN batch_member_guard VARCHAR(64) GENERATED ALWAYS AS (
     CASE WHEN lifecycle = 'OPEN' AND batch_id IS NOT NULL
          THEN CONCAT(batch_id, ':', mother_rabbit_id) END) STORED,
@@ -307,7 +307,11 @@ ALTER TABLE rabbits
 --   prepartum_duration_days               -- 原 prepartum_days，摸胎确认后待备产时长
 --   weaning_days                          -- 分娩→分笼
 --   postpartum_recovery_days              -- 原 postpartum_days，分笼/流产→待催情
---   sale_days / replacement_days          -- 商品出售、后备成熟（喂给 work_tasks）
+--   adaptation_days                       -- 幼兔适应期，允许 2–3 天
+--   growing_days                          -- 生长期，允许 15–18 天
+--   fattening_days                        -- 育肥期，允许 12–15 天
+--   sale_days                             -- 旧客户端兼容镜像；新出售日取上述三段之和
+--   replacement_days                      -- 后备成熟，默认 90 天（喂给 work_tasks）
 ```
 
 提醒日期选择使用兔场生效配置给出本地日历默认值；服务端仍校验提醒日期不得早于当天。配置读取加进程内缓存（Caffeine，按 house 键，更新时失效广播），消除每操作一次的 `requireSetting()` 查询。
@@ -359,12 +363,14 @@ response: { cycleId, currentCycleId?, eventId, nextTaskId?, stage, lifecycle,
 | 操作 | 执行 payload（必填） | 未执行（POSTPONE） |
 |---|---|---|
 | 催情 | occurredAt（操作母兔/人员/批次由路径与登录态确定） | nextRemindAt |
-| 配种 | occurredAt, sireRabbitId?（NFC 碰笼可查，可选）, matingMethod(NATURAL/AI) | nextRemindAt |
+| 配种 | occurredAt, matingMethod(NATURAL/AI)；体配必填 sireRabbitId，人工授精可选 | nextRemindAt |
 | 摸胎 | occurredAt, result(PREGNANT/EMPTY/UNSURE)；UNSURE 必带 nextRemindAt | nextRemindAt |
 | 备产 | occurredAt | nextRemindAt |
 | 接产 | occurredAt, totalKits, liveKits, keptKits | nextRemindAt |
 | 分笼 | occurredAt, weanedCount(+ 目标笼分配沿用 allocations) | nextRemindAt |
-| 流产 | occurredAt, stillbirthCount, stageAtAbortion(自动取), photoFileIds[] | —（直接执行类操作） |
+| 难产 | occurredAt, detail, photoFileIds[]；仔数三项固定为 0 | nextRemindAt |
+| 留崽调整 | occurredAt, keptKits；增加时 sourceMotherRabbitId | —（阶段与待办不变） |
+| 流产 | occurredAt, stillbirthCount, detail, stageAtAbortion(自动取), photoFileIds[] | —（直接执行类操作） |
 
 执行成功并生成下一条待办的单只操作也可携带 `nextRemindAt`：不传时按兔场配置计算，
 传入时覆盖本次新待办日期；日期不得早于当天。不会生成下一条待办的结果若携带该字段，

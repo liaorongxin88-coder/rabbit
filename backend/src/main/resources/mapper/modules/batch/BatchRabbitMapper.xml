@@ -321,18 +321,91 @@
     </select>
 
     <select id="selectItemsByBatch" resultType="com.rabbit.app.modules.batch.dto.BatchRabbitItem">
-        select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.latest_cycle_id,
-               br.current_nursing_kits, br.nursing_litter_count, br.join_reason, br.batch_role, br.current_status,
-               br.last_event_date, br.next_event_date, br.next_event_type, br.is_active, br.join_date, br.exit_date,
+        with pending_by_cycle as (
+            select wt.cycle_id, min(wt.due_time) as next_due_at
+            from work_tasks wt
+            where wt.batch_id = #{batchId}
+              and wt.status = 'PENDING'
+              and wt.cycle_id is not null
+            group by wt.cycle_id
+        ),
+        ranked_open_cycles as (
+            select c.id, c.batch_id, c.mother_rabbit_id, c.male_rabbit_id,
+                   c.stage, p.next_due_at,
+                   row_number() over (
+                       partition by c.batch_id, c.mother_rabbit_id
+                       order by case when p.next_due_at is null then 1 else 0 end,
+                                p.next_due_at,
+                                case when c.stage = 'AWAIT_WEANING' then 1 else 0 end,
+                                c.cycle_no desc,
+                                c.id desc
+                   ) as row_no
+            from breeding_cycles c
+            left join pending_by_cycle p on p.cycle_id = c.id
+            where c.batch_id = #{batchId}
+              and c.lifecycle = 'OPEN'
+        ),
+        current_cycles as (
+            select * from ranked_open_cycles where row_no = 1
+        ),
+        cycle_stats as (
+            select c.batch_id, c.mother_rabbit_id,
+                   count(*) as cycle_count,
+                   max(c.id) as latest_cycle_id
+            from breeding_cycles c
+            where c.batch_id = #{batchId}
+            group by c.batch_id, c.mother_rabbit_id
+        ),
+        event_stats as (
+            select e.batch_id, e.mother_rabbit_id,
+                   count(*) as operation_count,
+                   max(e.occurred_at) as last_operation_at
+            from repro_events e
+            where e.batch_id = #{batchId}
+            group by e.batch_id, e.mother_rabbit_id
+        ),
+        litter_stats as (
+            select l.batch_id, l.mother_rabbit_id,
+                   count(*) as litter_count,
+                   coalesce(sum(l.total_kits), 0) as total_kits,
+                   coalesce(sum(l.live_kits), 0) as live_kits,
+                   coalesce(sum(l.weaned_count), 0) as weaned_kits,
+                   coalesce(sum(l.current_nursing), 0) as current_nursing_kits,
+                   sum(case when l.status = 'NURSING' then 1 else 0 end) as nursing_litter_count
+            from litters l
+            where l.batch_id = #{batchId}
+            group by l.batch_id, l.mother_rabbit_id
+        )
+        select br.id, br.batch_id, br.rabbit_id,
+               coalesce(cc.male_rabbit_id, br.male_rabbit_id) as male_rabbit_id,
+               cs.latest_cycle_id,
+               coalesce(ls.current_nursing_kits, 0) as current_nursing_kits,
+               coalesce(ls.nursing_litter_count, 0) as nursing_litter_count,
+               br.join_reason, br.batch_role, br.current_status,
+               es.last_operation_at as last_event_date,
+               case when br.batch_role = 'breeding' then cc.next_due_at else br.next_event_date end as next_event_date,
+               case when br.batch_role = 'breeding' then null else br.next_event_type end as next_event_type,
+               br.is_active, br.join_date, br.exit_date,
                r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id,
-               <!--
-                 阶段与当前周期一律取自 rabbits 上的投影列（由生产状态机在同一事务内维护），
-                 而不是 br.current_status / br.latest_cycle_id：后者是旧写路径留下的快照，
-                 旧写路径删除后已不再更新，再读就是把建批时的陈旧值当现状展示。
-               -->
-               r.current_stage, r.current_cycle_id
+               cc.stage as current_stage, cc.id as current_cycle_id,
+               coalesce(cs.cycle_count, 0) as batch_cycle_count,
+               coalesce(es.operation_count, 0) as batch_operation_count,
+               coalesce(ls.litter_count, 0) as batch_litter_count,
+               coalesce(ls.total_kits, 0) as batch_total_kits,
+               coalesce(ls.live_kits, 0) as batch_live_kits,
+               coalesce(ls.weaned_kits, 0) as batch_weaned_kits,
+               es.last_operation_at as batch_last_operation_at
         from batch_rabbits br
-        inner join rabbits r on r.id = br.rabbit_id
+        inner join batches b on b.id = br.batch_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
+        left join current_cycles cc
+          on cc.batch_id = br.batch_id and cc.mother_rabbit_id = br.rabbit_id
+        left join cycle_stats cs
+          on cs.batch_id = br.batch_id and cs.mother_rabbit_id = br.rabbit_id
+        left join event_stats es
+          on es.batch_id = br.batch_id and es.mother_rabbit_id = br.rabbit_id
+        left join litter_stats ls
+          on ls.batch_id = br.batch_id and ls.mother_rabbit_id = br.rabbit_id
         where br.batch_id = #{batchId}
         <if test="role != null and role != ''">
             and br.batch_role = #{role}
@@ -344,14 +417,98 @@
     </select>
 
     <select id="selectItemsByRabbit" resultType="com.rabbit.app.modules.batch.dto.BatchRabbitItem">
-        select br.id, br.batch_id, br.rabbit_id, br.male_rabbit_id, br.latest_cycle_id,
-               br.current_nursing_kits, br.nursing_litter_count, br.join_reason, br.batch_role, br.current_status,
-               br.last_event_date, br.next_event_date, br.next_event_type, br.is_active, br.join_date, br.exit_date,
+        with pending_by_cycle as (
+            select wt.cycle_id, min(wt.due_time) as next_due_at
+            from work_tasks wt
+            where wt.house_id = #{houseId}
+              and wt.rabbit_id = #{rabbitId}
+              and wt.status = 'PENDING'
+              and wt.cycle_id is not null
+            group by wt.cycle_id
+        ),
+        ranked_open_cycles as (
+            select c.id, c.batch_id, c.mother_rabbit_id, c.male_rabbit_id,
+                   c.stage, p.next_due_at,
+                   row_number() over (
+                       partition by c.batch_id, c.mother_rabbit_id
+                       order by case when p.next_due_at is null then 1 else 0 end,
+                                p.next_due_at,
+                                case when c.stage = 'AWAIT_WEANING' then 1 else 0 end,
+                                c.cycle_no desc,
+                                c.id desc
+                   ) as row_no
+            from breeding_cycles c
+            left join pending_by_cycle p on p.cycle_id = c.id
+            where c.house_id = #{houseId}
+              and c.mother_rabbit_id = #{rabbitId}
+              and c.lifecycle = 'OPEN'
+        ),
+        current_cycles as (
+            select * from ranked_open_cycles where row_no = 1
+        ),
+        cycle_stats as (
+            select c.batch_id, c.mother_rabbit_id,
+                   count(*) as cycle_count,
+                   max(c.id) as latest_cycle_id
+            from breeding_cycles c
+            where c.house_id = #{houseId}
+              and c.mother_rabbit_id = #{rabbitId}
+            group by c.batch_id, c.mother_rabbit_id
+        ),
+        event_stats as (
+            select e.batch_id, e.mother_rabbit_id,
+                   count(*) as operation_count,
+                   max(e.occurred_at) as last_operation_at
+            from repro_events e
+            where e.house_id = #{houseId}
+              and e.mother_rabbit_id = #{rabbitId}
+              and e.batch_id is not null
+            group by e.batch_id, e.mother_rabbit_id
+        ),
+        litter_stats as (
+            select l.batch_id, l.mother_rabbit_id,
+                   count(*) as litter_count,
+                   coalesce(sum(l.total_kits), 0) as total_kits,
+                   coalesce(sum(l.live_kits), 0) as live_kits,
+                   coalesce(sum(l.weaned_count), 0) as weaned_kits,
+                   coalesce(sum(l.current_nursing), 0) as current_nursing_kits,
+                   sum(case when l.status = 'NURSING' then 1 else 0 end) as nursing_litter_count
+            from litters l
+            where l.house_id = #{houseId}
+              and l.mother_rabbit_id = #{rabbitId}
+              and l.batch_id is not null
+            group by l.batch_id, l.mother_rabbit_id
+        )
+        select br.id, br.batch_id, br.rabbit_id,
+               coalesce(cc.male_rabbit_id, br.male_rabbit_id) as male_rabbit_id,
+               cs.latest_cycle_id,
+               coalesce(ls.current_nursing_kits, 0) as current_nursing_kits,
+               coalesce(ls.nursing_litter_count, 0) as nursing_litter_count,
+               br.join_reason, br.batch_role, br.current_status,
+               es.last_operation_at as last_event_date,
+               case when br.batch_role = 'breeding' then cc.next_due_at else br.next_event_date end as next_event_date,
+               case when br.batch_role = 'breeding' then null else br.next_event_type end as next_event_type,
+               br.is_active, br.join_date, br.exit_date,
                r.type as rabbit_type, r.gender as rabbit_gender, r.cage_id,
-               r.current_stage, r.current_cycle_id
+               cc.stage as current_stage, cc.id as current_cycle_id,
+               coalesce(cs.cycle_count, 0) as batch_cycle_count,
+               coalesce(es.operation_count, 0) as batch_operation_count,
+               coalesce(ls.litter_count, 0) as batch_litter_count,
+               coalesce(ls.total_kits, 0) as batch_total_kits,
+               coalesce(ls.live_kits, 0) as batch_live_kits,
+               coalesce(ls.weaned_kits, 0) as batch_weaned_kits,
+               es.last_operation_at as batch_last_operation_at
         from batch_rabbits br
         inner join batches b on b.id = br.batch_id
-        inner join rabbits r on r.id = br.rabbit_id
+        inner join rabbits r on r.id = br.rabbit_id and r.house_id = b.house_id
+        left join current_cycles cc
+          on cc.batch_id = br.batch_id and cc.mother_rabbit_id = br.rabbit_id
+        left join cycle_stats cs
+          on cs.batch_id = br.batch_id and cs.mother_rabbit_id = br.rabbit_id
+        left join event_stats es
+          on es.batch_id = br.batch_id and es.mother_rabbit_id = br.rabbit_id
+        left join litter_stats ls
+          on ls.batch_id = br.batch_id and ls.mother_rabbit_id = br.rabbit_id
         where b.house_id = #{houseId}
           and r.house_id = #{houseId}
           and br.rabbit_id = #{rabbitId}

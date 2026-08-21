@@ -241,9 +241,9 @@ docker exec -i rabbit-e2e-mysql \
 | `OutboundEligibilityServiceTest` | 到期、提前出售、治疗和异常等资格规则 |
 | `OutboundSubmitServiceTest` | requestId、提前出售权限、冲突快照、日期/重量/金额/文本长度边界 |
 | `OutboundSubmitCoordinatorTest` | 已知业务失败持久化、未知事务结果保持 PROCESSING |
-| `outbound_controller_test.dart` | 选择/提前出售/确认/提交、筛选不丢选择、异常兔不被批量选中、冲突保留、草稿恢复、乱序保护、双击、UNKNOWN 和重启查询 |
-| `outbound_flow_screen_test.dart` | 常见屏幕、确认页可达和 200% 字体基本布局 |
-| `batch_outbound_android_test.dart` | Android 真实渲染与真实后端：只读入口、触控尺寸、提前出售、表单、冻结后并发隔离、冲突恢复和成功提交 |
+| `test/ui/outbound/view_models/controller_test.dart` | 选择/提前出售/确认/提交、筛选不丢选择、异常兔不被批量选中、冲突保留、草稿恢复、乱序保护、双击、UNKNOWN 和重启查询 |
+| `test/ui/outbound/screens/flow_test.dart` | 常见屏幕、确认页可达和 200% 字体基本布局 |
+| `integration_test/outbound/batch_android_test.dart` | Android 真实渲染与真实后端：只读入口、触控尺寸、提前出售、表单、冻结后并发隔离、冲突恢复和成功提交 |
 
 仍需新增或接入发布门禁的自动化：四入口逐一 API E2E、多任务真实并发、任务过期、多设备 revision 冲突、缓存刷新失败、1000 只性能基线、TalkBack 真机检查。未完成项必须作为测试报告中的显式风险，不能以“主流程已通过”代替。
 
@@ -268,7 +268,7 @@ Flutter 定向测试：
 
 ```bash
 cd app
-./scripts/test_flutter.sh test test/outbound_controller_test.dart test/outbound_flow_screen_test.dart
+./scripts/test_flutter.sh test test/ui/outbound/view_models/controller_test.dart test/ui/outbound/screens/flow_test.dart
 ```
 
 Android 设备级黄金流程（使用 `rabbit_app`，每轮追加隔离 fixture）：
@@ -316,4 +316,4 @@ cd ../app && ./rabbit check
 
 ## 10. 当前发布风险
 
-当前实现已经具备专用出库 list/query/edit 权限，并对提前出售继续校验兔场 `control` 能力；功能开关、产品埋点、独立审计事件流、自动对账、大兔舍分页/虚拟化以及可靠 outbox 仍未完成。因此现阶段可以用本方案验收核心原子出库链路，但不能据此宣称 PRD 的全部上线检查项已经完成。灰度发布前至少还需要：功能开关、可查询的对账结果、关键指标与告警、1000 只规模基线、最低 Android 版本，以及 ERG-01 至 ERG-10 的真机人体工学证据。
+当前实现已经具备专用出库 list/query/edit 权限，并对提前出售继续校验兔场 `control` 能力。选择页会显示候选范围，按入口初始化笼、排或兔舍模式，将模式和“只看已选”状态随本地草稿恢复，并保持已选兔只集合不变。功能开关、产品埋点、独立审计事件流、自动对账、大兔舍分页/虚拟化以及可靠 outbox 仍未完成。因此现阶段可以用本方案验收核心原子出库链路，但不能据此宣称 PRD 的全部上线检查项已经完成。灰度发布前至少还需要：功能开关、可查询的对账结果、关键指标与告警、1000 只规模基线、最低 Android 版本，以及 ERG-01 至 ERG-10 的真机人体工学证据。

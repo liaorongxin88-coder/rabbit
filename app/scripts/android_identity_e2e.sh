@@ -196,7 +196,7 @@ cd "$PROJECT_DIR"
 set +e
 "$RABBIT_FLUTTER_BIN" drive \
   --driver=test_driver/android_e2e_driver.dart \
-  --target=integration_test/identity_settings_android_test.dart \
+  --target=integration_test/settings/identity_android_test.dart \
   --device-id="$DEVICE_ID" \
   --flavor=dev \
   --dart-define=RABBIT_BUILD_ENV=dev \

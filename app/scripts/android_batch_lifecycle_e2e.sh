@@ -260,7 +260,7 @@ time_accelerator_pid=$!
 cd "$PROJECT_DIR"
 "$RABBIT_FLUTTER_BIN" drive \
   --driver=test_driver/android_e2e_driver.dart \
-  --target=integration_test/batch_lifecycle_android_test.dart \
+  --target=integration_test/batches/lifecycle_android_test.dart \
   --device-id="$DEVICE_ID" \
   --flavor=dev \
   --dart-define=RABBIT_BUILD_ENV=dev \

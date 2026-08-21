@@ -8,6 +8,9 @@ model mapping and rollout boundaries explicit.
 
 - A PRD rabbitry scope maps to one existing `rabbit_houses.id`. All task, request, candidate, and
   final-submit queries are constrained by that house and existing `view`/`edit` house permissions.
+- The Flutter selection page shows the task's source scope, chooses its initial cage/row/house mode
+  from the entry type, persists later mode changes with the local draft, and can filter the list to
+  the exact selected rabbit set without changing that set.
 - Existing rabbit `type = "2"` is the commodity-rabbit discriminator. The active
   `batch_rabbits.current_status` and its next event supply the commodity stage.
 - Stages containing `可出售` or `待出售`, or an already-due `出售` event, are normal outbound.

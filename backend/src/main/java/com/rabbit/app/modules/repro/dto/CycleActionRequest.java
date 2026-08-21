@@ -1,6 +1,8 @@
 package com.rabbit.app.modules.repro.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.Date;
 import java.util.List;
 
@@ -22,6 +24,7 @@ public class CycleActionRequest {
     /** 接产用：BORN / FAILED。 */
     private String outcome;
 
+    @NotNull(message = "执行时间不能为空")
     private Date occurredAt;
 
     @NotBlank(message = "requestId不能为空")
@@ -66,6 +69,7 @@ public class CycleActionRequest {
     private Integer femaleCount;
 
     /** 附件只传 file_id 引用，事件 payload 不内联文件内容。 */
+    @Size(max = 6, message = "单次最多上传6张图片")
     private List<String> attachmentFileIds;
 
     public String getAction() {

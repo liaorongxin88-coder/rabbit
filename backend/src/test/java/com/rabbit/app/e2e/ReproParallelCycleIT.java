@@ -156,9 +156,9 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Assertions.assertEquals("RETIRED", projectedStage(f));
     }
 
-    /** 接续周期必须继承批次绑定：批次成员关系是由 breeding_cycles.batch_id 推导的。 */
+    /** 旧批次保留历史，但自动接续的新周期默认不再占用它。 */
     @Test
-    void followUpCycleInheritsTheBatchBinding() {
+    void followUpCycleLeavesTheClosedBatchBinding() {
         Fixture f = batchFixture("par_batch");
         Long firstCycle = openCycleIdInBatch(f);
         Assertions.assertEquals(f.batchId, batchIdOf(firstCycle), "建批入轨的周期应绑在该批次上");
@@ -172,9 +172,8 @@ public class ReproParallelCycleIT extends E2eTestSupport {
 
         Long followUp = empty.followUpCycleId();
         Assertions.assertNotNull(followUp);
-        Assertions.assertEquals(f.batchId, batchIdOf(followUp),
-            "接续周期丢了 batch_id 会让母兔悄悄从批次里消失");
-        // 批次里仍是同一头母兔，只是换了一轮周期。
+        Assertions.assertNull(batchIdOf(followUp),
+            "接续周期默认不应继续占用已经结束活动的批次标签");
         Assertions.assertEquals(1, openCycles(f));
     }
 
@@ -215,17 +214,26 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             ReproResult cycle = openAtEstrus(f, tag + "_open");
             advanceTo(f, cycle.cycleId(), stage, tag);
             assertStage(cycle.cycleId(), stage, "OPEN");
+            String imageId = uploadTestImage(f.owner, f.houseId, tag + "_abortion");
 
             BizException missingCount = Assertions.assertThrows(
                 BizException.class,
-                () -> apply(f, cycle.cycleId(), ReproAction.ABORTION, tag + "_missing_count", b -> b)
+                () -> apply(
+                    f,
+                    cycle.cycleId(),
+                    ReproAction.ABORTION,
+                    tag + "_missing_count",
+                    b -> b.remark("流产详情").attachmentFileIds(List.of(imageId))
+                )
             );
             Assertions.assertEquals(400, missingCount.getCode());
             Assertions.assertTrue(missingCount.getMessage().contains("流产死胎数"));
             assertStage(cycle.cycleId(), stage, "OPEN");
 
             ReproResult aborted = apply(f, cycle.cycleId(), ReproAction.ABORTION, tag + "_abort",
-                b -> b.stillbirthCount(2));
+                b -> b.stillbirthCount(2)
+                    .remark("流产详情")
+                    .attachmentFileIds(List.of(imageId)));
             // 死胎数是设计 §5.2 明列的字段，不能在写入时静默丢失。
             // 用 JSON 取值而不是子串匹配：MySQL 的 JSON 列会重排版（冒号后补空格）。
             Assertions.assertEquals("2", eventPayloadField(cycle.cycleId(), "ABORTION", "stillbirthCount"),
@@ -240,6 +248,52 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             Assertions.assertEquals(1, openCycles(f));
             Assertions.assertEquals("ESTRUS", pendingTaskTypeOnCycle(aborted.followUpCycleId()));
         }
+    }
+
+    @Test
+    void emptyAndAbortionFollowUpsDoNotReuseTheClosedBatchTag() {
+        Fixture emptyFixture = batchFixture("batch_empty_close");
+        Long emptyCycle = openCycleIdInBatch(emptyFixture);
+        apply(emptyFixture, emptyCycle, ReproAction.ESTRUS, "batch_empty_estrus", b -> b);
+        apply(emptyFixture, emptyCycle, ReproAction.MATING, "batch_empty_mating",
+            b -> b.maleRabbitId(emptyFixture.sireId).matingMethod(MatingMethod.NATURAL));
+        ReproResult empty = apply(
+            emptyFixture,
+            emptyCycle,
+            ReproAction.PALPATION,
+            "batch_empty",
+            b -> b.outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY)
+        );
+        assertFollowUpLeftBatch(emptyFixture, empty.followUpCycleId());
+
+        Fixture abortionFixture = batchFixture("batch_abort_close");
+        Long abortionCycle = openCycleIdInBatch(abortionFixture);
+        advanceTo(abortionFixture, abortionCycle, ReproStage.AWAIT_PREPARTUM, "batch_abort");
+        String abortionImage = uploadTestImage(
+            abortionFixture.owner, abortionFixture.houseId, "batch_abort"
+        );
+        ReproResult aborted = apply(
+            abortionFixture,
+            abortionCycle,
+            ReproAction.ABORTION,
+            "batch_abort_do",
+            b -> b.stillbirthCount(2)
+                .remark("流产详情")
+                .attachmentFileIds(List.of(abortionImage))
+        );
+        assertFollowUpLeftBatch(abortionFixture, aborted.followUpCycleId());
+    }
+
+    private void assertFollowUpLeftBatch(Fixture fixture, Long followUpCycleId) {
+        Assertions.assertNotNull(followUpCycleId);
+        Assertions.assertEquals(0, (int) jdbc.queryForObject(
+            "select count(*) from breeding_cycles where house_id = ? and batch_id = ? and lifecycle = 'OPEN'",
+            Integer.class, fixture.houseId, fixture.batchId
+        ));
+        Assertions.assertNull(jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?",
+            Long.class, followUpCycleId
+        ));
     }
 
     /** 哺乳段不是孕期，对待分笼周期发流产必须被拒。 */

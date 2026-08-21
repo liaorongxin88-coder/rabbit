@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.setting.dto;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -31,6 +32,18 @@ public class UpdateSettingRequest {
     @NotNull
     @Min(0)
     private Integer postpartumDays;
+
+    @Min(2)
+    @Max(3)
+    private Integer adaptationDays;
+
+    @Min(15)
+    @Max(18)
+    private Integer growingDays;
+
+    @Min(12)
+    @Max(15)
+    private Integer fatteningDays;
 
     @NotNull
     @Min(0)
@@ -91,6 +104,30 @@ public class UpdateSettingRequest {
 
     public void setPostpartumDays(Integer postpartumDays) {
         this.postpartumDays = postpartumDays;
+    }
+
+    public Integer getAdaptationDays() {
+        return adaptationDays;
+    }
+
+    public void setAdaptationDays(Integer adaptationDays) {
+        this.adaptationDays = adaptationDays;
+    }
+
+    public Integer getGrowingDays() {
+        return growingDays;
+    }
+
+    public void setGrowingDays(Integer growingDays) {
+        this.growingDays = growingDays;
+    }
+
+    public Integer getFatteningDays() {
+        return fatteningDays;
+    }
+
+    public void setFatteningDays(Integer fatteningDays) {
+        this.fatteningDays = fatteningDays;
     }
 
     public Integer getSaleDays() {

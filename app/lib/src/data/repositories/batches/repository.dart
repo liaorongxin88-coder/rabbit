@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
 
 final batchRepositoryProvider = Provider<BatchRepository>((ref) {
   return BatchRepository(ref.watch(apiClientProvider));
@@ -117,6 +118,29 @@ class BatchRepository {
     );
   }
 
+  Future<List<BatchTrackingEvent>> listBatchTrackingEvents({
+    required int houseId,
+    required int batchId,
+    required int motherRabbitId,
+    int limit = 50,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<List<BatchTrackingEvent>>(
+      '/api/repro/events',
+      houseId: houseId,
+      query: {
+        'batchId': batchId,
+        'motherRabbitId': motherRabbitId,
+        'limit': limit.clamp(1, 200),
+      },
+      cancelToken: cancelToken,
+      decode: (data) => requireJsonObjectList(
+        data,
+        message: '批次操作记录格式不正确',
+      ).map(BatchTrackingEvent.fromJson).toList(),
+    );
+  }
+
   /// 向已有批次追加母兔标签；服务端按需要建立尚未存在的生产管线。
   ///
   /// [requestId] 由调用方在表单草稿生命周期内持有，失败重试时必须复用，
@@ -219,6 +243,9 @@ String formatBatchWriteDate(DateTime date) {
   final d = date.day.toString().padLeft(2, '0');
   return '$y-$m-$d';
 }
+
+String formatBatchWriteDateTime(DateTime date) =>
+    date.toUtc().toIso8601String();
 
 List<int> _sortedUniqueIds(Iterable<int> ids) {
   return ids.toSet().toList()..sort();

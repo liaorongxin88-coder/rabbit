@@ -102,7 +102,9 @@ class _ProductionSettingsFormState
   late final TextEditingController _prepartumController;
   late final TextEditingController _weaningController;
   late final TextEditingController _postpartumController;
-  late final TextEditingController _saleController;
+  late final TextEditingController _adaptationController;
+  late final TextEditingController _growingController;
+  late final TextEditingController _fatteningController;
   late final TextEditingController _replacementController;
   late final TextEditingController _remarkController;
   var _saving = false;
@@ -124,7 +126,12 @@ class _ProductionSettingsFormState
         TextEditingController(text: '${widget.setting.weaningDays}');
     _postpartumController =
         TextEditingController(text: '${widget.setting.postpartumDays}');
-    _saleController = TextEditingController(text: '${widget.setting.saleDays}');
+    _adaptationController =
+        TextEditingController(text: '${widget.setting.adaptationDays}');
+    _growingController =
+        TextEditingController(text: '${widget.setting.growingDays}');
+    _fatteningController =
+        TextEditingController(text: '${widget.setting.fatteningDays}');
     _replacementController =
         TextEditingController(text: '${widget.setting.replacementDays}');
     _remarkController = TextEditingController(text: widget.setting.remark);
@@ -138,7 +145,9 @@ class _ProductionSettingsFormState
     _prepartumController.dispose();
     _weaningController.dispose();
     _postpartumController.dispose();
-    _saleController.dispose();
+    _adaptationController.dispose();
+    _growingController.dispose();
+    _fatteningController.dispose();
     _replacementController.dispose();
     _remarkController.dispose();
     super.dispose();
@@ -192,16 +201,19 @@ class _ProductionSettingsFormState
           const SizedBox(height: 12),
           SectionCard(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Text('母兔繁育参数', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-aphrodisiac-days'),
-                  label: '催情时长',
+                  label: '催情至配种时长',
                   controller: _aphrodisiacController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-palpation-days'),
-                  label: '待摸胎时长',
+                  label: '配种至摸胎时长',
                   controller: _palpationController,
                 ),
                 const SizedBox(height: 12),
@@ -213,32 +225,52 @@ class _ProductionSettingsFormState
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-prepartum-days'),
-                  label: '待备产时长',
+                  label: '摸胎至备产时长',
                   controller: _prepartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-weaning-days'),
-                  label: '断奶时长',
+                  label: '分娩至分笼时长',
                   controller: _weaningController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-postpartum-days'),
-                  label: '产后恢复时长',
+                  label: '流产或分笼至催情时长',
                   controller: _postpartumController,
-                ),
-                const SizedBox(height: 12),
-                _DayField(
-                  fieldKey: const ValueKey('production-sale-days'),
-                  label: '出售天数',
-                  controller: _saleController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-replacement-days'),
                   label: '后备成熟天数',
                   controller: _replacementController,
+                ),
+                const SizedBox(height: 20),
+                Text('商品兔生长参数', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                _DayField(
+                  fieldKey: const ValueKey('production-adaptation-days'),
+                  label: '幼兔适应期时长',
+                  controller: _adaptationController,
+                  min: 2,
+                  max: 3,
+                ),
+                const SizedBox(height: 12),
+                _DayField(
+                  fieldKey: const ValueKey('production-growing-days'),
+                  label: '生长期时长',
+                  controller: _growingController,
+                  min: 15,
+                  max: 18,
+                ),
+                const SizedBox(height: 12),
+                _DayField(
+                  fieldKey: const ValueKey('production-fattening-days'),
+                  label: '育肥期时长',
+                  controller: _fatteningController,
+                  min: 12,
+                  max: 15,
                 ),
               ],
             ),
@@ -293,7 +325,12 @@ class _ProductionSettingsFormState
         prepartumDays: _intValue(_prepartumController),
         weaningDays: _intValue(_weaningController),
         postpartumDays: _intValue(_postpartumController),
-        saleDays: _intValue(_saleController),
+        adaptationDays: _intValue(_adaptationController),
+        growingDays: _intValue(_growingController),
+        fatteningDays: _intValue(_fatteningController),
+        saleDays: _intValue(_adaptationController) +
+            _intValue(_growingController) +
+            _intValue(_fatteningController),
         replacementDays: _intValue(_replacementController),
         remark: _remarkController.text.trim(),
       );
@@ -407,11 +444,15 @@ class _DayField extends StatelessWidget {
     required this.fieldKey,
     required this.label,
     required this.controller,
+    this.min,
+    this.max,
   });
 
   final Key fieldKey;
   final String label;
   final TextEditingController controller;
+  final int? min;
+  final int? max;
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +468,16 @@ class _DayField extends StatelessWidget {
       validator: (value) {
         if (value == null || value.isEmpty) {
           return '请输入天数';
+        }
+        final parsed = int.tryParse(value);
+        if (parsed == null) {
+          return '请输入有效天数';
+        }
+        if (min != null && parsed < min!) {
+          return '不能少于 $min 天';
+        }
+        if (max != null && parsed > max!) {
+          return '不能多于 $max 天';
         }
         return null;
       },

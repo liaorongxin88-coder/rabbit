@@ -154,8 +154,9 @@ public class ReproBulkMatingIT extends E2eTestSupport {
     @Test
     void oneIneligibleDoeDoesNotAbortTheRound() {
         Round r = roundAwaitingMating("bulk_partial", 3);
-        // 把一头母兔弄成离场：她那一项应失败，其余照常。
-        jdbc.update("update rabbits set is_active = 0 where id = ?", r.doeIds.get(0));
+        // 保持兔只在场，但把一头的性别改成公兔：她仍在筛选范围内，
+        // 状态机应拒绝这一项，其余两项照常推进。
+        jdbc.update("update rabbits set gender = '1' where id = ?", r.doeIds.get(0));
 
         JsonNode res = api.postOk("/api/repro/tasks/bulk-actions", r.owner.token, r.houseId, obj(
             "requestId", requestId("partial"),

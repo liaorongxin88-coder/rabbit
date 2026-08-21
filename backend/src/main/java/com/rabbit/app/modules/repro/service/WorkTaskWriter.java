@@ -57,6 +57,35 @@ public class WorkTaskWriter {
         return task;
     }
 
+    /**
+     * 建立兔只级待办，例如商品兔待出售、后备兔成熟。
+     *
+     * <p>这类待办没有生产周期，不能伪造 cycleId。独立入口也防止以后新增非繁育任务时
+     * 再次被 {@link #subjectTypeOf(TaskType)} 默认归到 CYCLE。
+     */
+    public WorkTask scheduleForRabbit(RabbitTaskScheduleRequest request) {
+        if (request.rabbitId() == null) {
+            throw new IllegalArgumentException("兔只任务的 rabbitId 不能为空: " + request.taskType());
+        }
+        WorkTask task = new WorkTask();
+        task.setHouseId(request.houseId());
+        task.setTaskType(request.taskType().name());
+        task.setSubjectType(TaskSubjectType.RABBIT.name());
+        task.setSubjectId(request.rabbitId());
+        task.setRabbitId(request.rabbitId());
+        task.setBatchId(request.batchId());
+        task.setCageId(request.cageId());
+        task.setDueDate(request.dueTime());
+        task.setDueTime(request.dueTime());
+        task.setStatus(TaskStatus.PENDING.name());
+        task.setDedupKey(dedupKey(TaskSubjectType.RABBIT, request.rabbitId(), request.taskType()));
+        task.setRemark(request.remark());
+        task.setCreateBy(request.operator());
+        task.setUpdateBy(request.operator());
+        workTaskMapper.upsert(task);
+        return task;
+    }
+
     /** 完成任务并回链事件。返回 false 表示任务已被他人处理（并发或重复提交）。 */
     public boolean complete(Long houseId, Long taskId, Long eventId, String operator) {
         return workTaskMapper.complete(houseId, taskId, eventId, operator) > 0;
@@ -97,6 +126,20 @@ public class WorkTaskWriter {
         workTaskMapper.cancelPendingByRabbit(houseId, rabbitId, operator);
     }
 
+    /** 完成兔只名下指定类型的待办；幂等重放时已完成任务不会再次更新。 */
+    public void completeForRabbit(
+        Long houseId,
+        Long rabbitId,
+        TaskType taskType,
+        String operator
+    ) {
+        for (WorkTask task : pendingBySubject(houseId, TaskSubjectType.RABBIT, rabbitId)) {
+            if (taskType.name().equals(task.getTaskType())) {
+                workTaskMapper.complete(houseId, task.getId(), null, operator);
+            }
+        }
+    }
+
     private static TaskSubjectType subjectTypeOf(TaskType taskType) {
         return taskType == TaskType.WEANING ? TaskSubjectType.LITTER : TaskSubjectType.CYCLE;
     }
@@ -118,6 +161,18 @@ public class WorkTaskWriter {
         Long batchId,
         Long cageId,
         Date dueTime,
+        String operator
+    ) {
+    }
+
+    public record RabbitTaskScheduleRequest(
+        Long houseId,
+        TaskType taskType,
+        Long rabbitId,
+        Long batchId,
+        Long cageId,
+        Date dueTime,
+        String remark,
         String operator
     ) {
     }

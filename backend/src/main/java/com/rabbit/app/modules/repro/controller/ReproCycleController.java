@@ -4,16 +4,22 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.repro.config.ReproFeatureFlags;
+import com.rabbit.app.modules.repro.dto.AdjustKeptKitsRequest;
 import com.rabbit.app.modules.repro.domain.MatingMethod;
 import com.rabbit.app.modules.repro.domain.PalpationResult;
 import com.rabbit.app.modules.repro.domain.ReproAction;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.dto.CycleActionRequest;
 import com.rabbit.app.modules.repro.dto.CycleView;
+import com.rabbit.app.modules.repro.dto.KeptKitsAdjustmentResponse;
+import com.rabbit.app.modules.repro.dto.LitterView;
 import com.rabbit.app.modules.repro.dto.OpenCycleRequest;
+import com.rabbit.app.modules.repro.dto.ReproEventView;
 import com.rabbit.app.modules.repro.entity.ReproCycle;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
+import com.rabbit.app.modules.repro.mapper.ReproEventMapper;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
+import com.rabbit.app.modules.repro.service.LitterAdjustmentService;
 import com.rabbit.app.modules.repro.service.OperatorNameResolver;
 import com.rabbit.app.modules.repro.service.ReproActionService;
 import com.rabbit.app.modules.repro.service.ReproCommand;
@@ -25,6 +31,7 @@ import com.rabbit.app.security.permission.RequiresPermission;
 import com.rabbit.app.util.DateUtil;
 import jakarta.validation.Valid;
 import java.util.Date;
+import java.util.List;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +39,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -50,22 +58,28 @@ public class ReproCycleController {
     private final HouseService houseService;
     private final ReproStateMachineService stateMachine;
     private final ReproCycleMapper reproCycleMapper;
+    private final ReproEventMapper reproEventMapper;
     private final ReproFeatureFlags featureFlags;
     private final OperatorNameResolver operatorNames;
     private final ReproActionService reproActionService;
+    private final LitterAdjustmentService litterAdjustmentService;
 
     public ReproCycleController(
         HouseService houseService,
         ReproStateMachineService stateMachine,
         ReproCycleMapper reproCycleMapper,
+        ReproEventMapper reproEventMapper,
         ReproFeatureFlags featureFlags,
         OperatorNameResolver operatorNames,
-        ReproActionService reproActionService
+        ReproActionService reproActionService,
+        LitterAdjustmentService litterAdjustmentService
     ) {
         this.reproActionService = reproActionService;
+        this.litterAdjustmentService = litterAdjustmentService;
         this.houseService = houseService;
         this.stateMachine = stateMachine;
         this.reproCycleMapper = reproCycleMapper;
+        this.reproEventMapper = reproEventMapper;
         this.featureFlags = featureFlags;
         this.operatorNames = operatorNames;
     }
@@ -132,7 +146,7 @@ public class ReproCycleController {
             .cycleId(cycleId)
             .action(ReproAction.parse(request.getAction()))
             .outcome(request.getOutcome())
-            .occurredAt(request.getOccurredAt() == null ? DateUtil.now() : request.getOccurredAt())
+            .occurredAt(request.getOccurredAt())
             .requestId(request.getRequestId())
             .remark(request.getRemark())
             .reason(request.getReason())
@@ -175,6 +189,59 @@ public class ReproCycleController {
             throw new BizException(404, "生产周期不存在");
         }
         return ApiResponse.ok(CycleView.of(cycle));
+    }
+
+    @GetMapping("/cycles/{cycleId}/litter")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<LitterView> getCycleLitter(
+        @RequestHeader("X-House-Id") Long houseId,
+        @PathVariable Long cycleId
+    ) {
+        featureFlags.assertV2Enabled();
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(litterAdjustmentService.getByCycle(houseId, cycleId));
+    }
+
+    @PostMapping("/cycles/{cycleId}/kept-kits-adjustments")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<KeptKitsAdjustmentResponse> adjustKeptKits(
+        @RequestHeader("X-House-Id") Long houseId,
+        @PathVariable Long cycleId,
+        @Valid @RequestBody AdjustKeptKitsRequest request
+    ) {
+        featureFlags.assertV2Enabled();
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(litterAdjustmentService.adjust(
+            houseId,
+            userId,
+            operatorNames.resolve(userId),
+            cycleId,
+            request
+        ));
+    }
+
+    @GetMapping("/events")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<List<ReproEventView>> listBatchMotherEvents(
+        @RequestHeader("X-House-Id") Long houseId,
+        @RequestParam Long batchId,
+        @RequestParam Long motherRabbitId,
+        @RequestParam(required = false) Integer limit
+    ) {
+        featureFlags.assertV2Enabled();
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        if (batchId == null || batchId <= 0 || motherRabbitId == null || motherRabbitId <= 0) {
+            throw new BizException(400, "batchId和motherRabbitId必须为正整数");
+        }
+        int rowLimit = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
+        return ApiResponse.ok(
+            reproEventMapper.selectByBatchAndMother(
+                houseId, batchId, motherRabbitId, rowLimit
+            ).stream().map(ReproEventView::of).toList()
+        );
     }
 
     /**

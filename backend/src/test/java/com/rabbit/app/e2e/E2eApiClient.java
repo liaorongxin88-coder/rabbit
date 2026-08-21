@@ -9,6 +9,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -46,6 +49,31 @@ public class E2eApiClient {
         HttpHeaders headers = headers(token, houseId);
         extraHeaders.forEach(headers::set);
         return root(exchange(path, HttpMethod.POST, headers, body));
+    }
+
+    public JsonNode uploadImage(
+            String path,
+            String token,
+            Long houseId,
+            String fileName,
+            byte[] bytes
+    ) {
+        HttpHeaders headers = headers(token, houseId);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new ByteArrayResource(bytes) {
+            @Override
+            public String getFilename() {
+                return fileName;
+            }
+        });
+        ResponseEntity<String> response = restTemplate.exchange(
+                baseUrl + path,
+                HttpMethod.POST,
+                new HttpEntity<MultiValueMap<String, Object>>(body, headers),
+                String.class
+        );
+        return expectOk(response);
     }
 
     public JsonNode putOk(String path, String token, Long houseId, Object body) {

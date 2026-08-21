@@ -1,0 +1,938 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:rabbit_flutter/src/app.dart';
+import 'package:rabbit_flutter/src/data/repositories/auth/session.dart';
+import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/storage/app_settings.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
+import 'package:rabbit_flutter/src/domain/settings/production.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/settings/local.dart';
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
+import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
+import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
+import 'package:rabbit_flutter/src/ui/auth/screens/login.dart';
+import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
+import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
+
+void main() {
+  testWidgets('shows login screen before session is restored', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    expect(find.text('鸿兔智管'), findsOneWidget);
+    expect(find.byKey(const ValueKey('hongtu-logo')), findsOneWidget);
+    final logo = tester.widget<Image>(
+      find.byKey(const ValueKey('hongtu-logo')),
+    );
+    expect(
+      (logo.image as AssetImage).assetName,
+      'assets/branding/hongtu_logo.png',
+    );
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('获取验证码'), findsOneWidget);
+    expect(find.byTooltip('检测手机号'), findsOneWidget);
+    expect(find.text('账号'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('《隐私政策》'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('《隐私政策》'), findsOneWidget);
+    expect(find.text('《用户协议》'), findsOneWidget);
+    expect(find.textContaining('模拟器默认连接'), findsNothing);
+  });
+
+  testWidgets('keeps the router mounted while local settings are restored',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final settingsStore = _DelayedLocalAppSettingsStore();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          localAppSettingsStoreProvider.overrideWithValue(settingsStore),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final routerElement = tester.element(find.byType(Router<Object>));
+
+    settingsStore.complete(LocalAppSettings.defaultSettings);
+    await tester.pumpAndSettle();
+
+    expect(
+      identical(tester.element(find.byType(Router<Object>)), routerElement),
+      isTrue,
+    );
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('login controls share the same horizontal alignment',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    final alignedKeys = [
+      'login-mode-selector',
+      'phone-number-input',
+      'phone-code-input',
+      'phone-login-button',
+      'legal-consent-row',
+    ];
+    final reference = tester.getRect(find.byKey(ValueKey(alignedKeys.first)));
+    for (final key in alignedKeys.skip(1)) {
+      final rect = tester.getRect(find.byKey(ValueKey(key)));
+      expect(rect.left, closeTo(reference.left, 0.1), reason: key);
+      expect(rect.right, closeTo(reference.right, 0.1), reason: key);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in const [Size(360, 800), Size(412, 915)]) {
+    testWidgets(
+      'legal consent wraps with 48dp links at true 200 percent on '
+      '${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        FlutterSecureStorage.setMockInitialValues({});
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(_rawScaleLoginApp());
+        await tester.pumpAndSettle();
+        final consent = find.byKey(const ValueKey('legal-consent-row'));
+        await tester.ensureVisible(consent);
+        await tester.pumpAndSettle();
+
+        final consentContext = tester.element(consent);
+        expect(MediaQuery.textScalerOf(consentContext).scale(10), 20);
+        expect(
+          find.descendant(of: consent, matching: find.byType(FittedBox)),
+          findsNothing,
+        );
+        expect(tester.getSize(consent).height, greaterThan(48));
+
+        for (final key in const [
+          ValueKey('privacy-policy-link'),
+          ValueKey('user-agreement-link'),
+        ]) {
+          final link = find.byKey(key);
+          final linkSize = tester.getSize(link);
+          expect(linkSize.width, greaterThanOrEqualTo(48), reason: '$key');
+          expect(linkSize.height, greaterThanOrEqualTo(48), reason: '$key');
+        }
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byKey(const ValueKey('privacy-policy-link')));
+        await tester.pumpAndSettle();
+        expect(find.text('隐私政策'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('login flow remains usable with 200 percent text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    final loginContext = tester.element(
+      find.byKey(const ValueKey('login-mode-selector')),
+    );
+    expect(MediaQuery.textScalerOf(loginContext).scale(10), 20);
+    expect(find.byTooltip('检测手机号'), findsOneWidget);
+    expect(find.text('6位验证码'), findsOneWidget);
+    expect(find.text('获取验证码'), findsOneWidget);
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('phone-login-button')));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('phone-login-button'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('account-username-field')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('account-login-button')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('does not load protected home while auth restore is pending',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final pendingSession = Completer<SessionSnapshot>();
+    final houseRepository = _RecordingHouseRepository();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          sessionStoreProvider.overrideWithValue(
+            _PendingSessionStore(pendingSession.future),
+          ),
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('今日提醒'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(houseRepository.calls, 0);
+
+    pendingSession.complete(
+      const SessionSnapshot(
+        token: null,
+        userId: null,
+        userName: null,
+        houseId: 0,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(houseRepository.calls, 0);
+  });
+
+  testWidgets('login methods switch by horizontal swipe', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('用户名'), findsNothing);
+
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('用户名'), findsOneWidget);
+    expect(find.text('密码'), findsOneWidget);
+    expect(find.text('创建新账号'), findsNothing);
+    expect(find.text('登录'), findsOneWidget);
+  });
+
+  testWidgets('sends an SMS code and starts the resend countdown',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final authRepository = _FakeAuthRepository();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(authRepository: authRepository),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('phone-number-input')),
+        matching: find.byType(TextField),
+      ),
+      '13800138000',
+    );
+    await tester.tap(find.byKey(const ValueKey('legal-consent-checkbox')));
+    await tester.tap(find.byKey(const ValueKey('send-sms-code-button')));
+    await tester.pump();
+
+    expect(authRepository.sentPhones, ['13800138000']);
+    expect(find.text('60秒后重发'), findsOneWidget);
+    expect(find.text('验证码已发送'), findsOneWidget);
+  });
+
+  testWidgets('account password can be shown and hidden', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    final passwordField = find.byKey(
+      const ValueKey('account-password-field'),
+    );
+    final visibilityToggle = find.byKey(
+      const ValueKey('password-visibility-toggle'),
+    );
+    final passwordEditor = find.descendant(
+      of: passwordField,
+      matching: find.byType(EditableText),
+    );
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isTrue);
+    expect(find.byTooltip('显示密码'), findsOneWidget);
+
+    await tester.enterText(passwordField, 'secret123');
+    await tester.tap(visibilityToggle);
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isFalse);
+    expect(find.byTooltip('隐藏密码'), findsOneWidget);
+    expect(
+      tester.widget<EditableText>(passwordEditor).controller.text,
+      'secret123',
+    );
+
+    await tester.tap(visibilityToggle);
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(passwordEditor).obscureText, isTrue);
+    expect(find.byTooltip('显示密码'), findsOneWidget);
+  });
+
+  testWidgets('validates restored session and opens the protected shell',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260623',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    final authRepository = _FakeAuthRepository();
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 3,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith(
+            (_) async => const <EventItem>[],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('今日提醒'), findsOneWidget);
+    expect(find.text('配种任务已清'), findsOneWidget);
+    expect(find.text('系统使用步骤'), findsNothing);
+    expect(authRepository.validationCalls, 1);
+  });
+
+  testWidgets('invalid restored session is cleared and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'expired_user',
+      'houseId.3': 8,
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'expired-token'});
+    final houseRepository = _RecordingHouseRepository();
+    final authRepository = _FakeAuthRepository(
+      validationError: const ApiException('未登录', businessCode: 401),
+    );
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('今日提醒'), findsNothing);
+    expect(houseRepository.calls, 0);
+    expect(authRepository.validationCalls, 1);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
+  });
+
+  testWidgets('home event shows mother, Batch and breeding cycle context',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'production_operator',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+    final today = DateTime.now();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: _FakeAuthRepository(),
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 3,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith(
+            (_) async => [
+              EventItem(
+                recordId: 71,
+                category: '生产周期',
+                eventType: '配种',
+                eventDate: today,
+                batchId: 9,
+                rabbitId: 18,
+                status: 'due',
+                sourceHouseId: 1,
+                sourceHouseName: '一号繁育兔舍长名称布局验证',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('今日提醒'), findsOneWidget);
+    expect(find.text('母兔 #18'), findsOneWidget);
+    expect(find.text('批次 #9'), findsOneWidget);
+    expect(find.text('周期记录 #71'), findsOneWidget);
+    expect(find.text('记录配种'), findsOneWidget);
+    expect(find.text('分娩'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabled restored account is cleared and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'disabled_user',
+      'houseId.3': 8,
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'disabled-token'});
+    final houseRepository = _RecordingHouseRepository();
+    final authRepository = _FakeAuthRepository(
+      validationError: const ApiException(
+        '账号已停用',
+        businessCode: 403,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          houseRepositoryProvider.overrideWithValue(houseRepository),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('今日提醒'), findsNothing);
+    expect(houseRepository.calls, 0);
+    expect(authRepository.validationCalls, 1);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
+  });
+
+  testWidgets(
+      'unauthorized event clears an active session and returns to login',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'active_user',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'active-token'});
+    final authRepository = _FakeAuthRepository();
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        authRepository: authRepository,
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('今日提醒'), findsOneWidget);
+
+    authRepository.emitUnauthorized();
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('今日提醒'), findsNothing);
+    expect(
+      await const FlutterSecureStorage().read(key: 'token'),
+      isNull,
+    );
+  });
+
+  testWidgets('opens profile with settings entries after session restore',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/profile',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('我的'), findsWidgets);
+    expect(find.text('账号设置'), findsOneWidget);
+    expect(find.text('应用设置'), findsOneWidget);
+    expect(find.text('兔舍生产设置'), findsOneWidget);
+    expect(find.text('所有兔舍共用的周期配置'), findsOneWidget);
+    expect(find.textContaining('当前兔舍'), findsNothing);
+    expect(find.text('后端地址'), findsNothing);
+  });
+
+  testWidgets('production settings opens without selected house',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/profile',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          userSettingProvider
+              .overrideWith((_) async => GlobalSetting.defaults()),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('兔舍生产设置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新建兔场默认配置'), findsOneWidget);
+    expect(find.text('配种至摸胎时长'), findsOneWidget);
+    expect(find.text('请选择兔舍'), findsNothing);
+  });
+
+  testWidgets('house list summary avoids context wording', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/houses',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试1',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('共 1 个兔舍，点击兔舍进入管理。'), findsOneWidget);
+    expect(find.textContaining('业务上下文'), findsNothing);
+  });
+
+  testWidgets('house production settings presents an isolated snapshot',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/houses',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试1',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(
+              perms: 'control',
+              isAdmin: true,
+            ),
+          ),
+          houseSettingProvider.overrideWith(
+            (_, __) async => HouseSettingState(
+              setting: GlobalSetting.defaults(),
+              customized: false,
+            ),
+          ),
+          reminderPreferenceProvider(8).overrideWith(
+            (_) async => ReminderPreference.defaults.copyWith(),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('测试1'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('生产设置'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('生产设置'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('兔舍生产设置'), findsWidgets);
+    expect(find.text('当前兔舍独立配置'), findsOneWidget);
+    expect(find.textContaining('仅影响 测试1'), findsOneWidget);
+    expect(find.text('配种至摸胎时长'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('house-production-reminders')),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('当前兔舍提醒'), findsOneWidget);
+    expect(find.textContaining('测试1的提醒单独配置'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reminder-house')), findsNothing);
+  });
+
+  testWidgets('dashboard defaults to all houses and filters one house',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/dashboard',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试1',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+              RabbitHouse(
+                id: 9,
+                name: '测试2',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          dashboardSummaryProvider.overrideWith((_, query) async {
+            final selected = query.houseId;
+            return DashboardSummary(
+              selectedHouseId: selected,
+              houseCount: selected == null ? 2 : 1,
+              year: query.year,
+              totalRabbits: selected == 8 ? 2 : 3,
+              seedRabbits: selected == 8 ? 1 : 1,
+              maleRabbits: selected == 8 ? 1 : 2,
+              femaleRabbits: selected == 8 ? 1 : 1,
+              bredRabbits: selected == 8 ? 1 : 1,
+              readyForBreeding: 0,
+              litters: selected == 8 ? 2 : 3,
+              nursingKits: selected == 8 ? 4 : 7,
+              commodityRabbits: selected == 8 ? 1 : 1,
+              replacementRabbits: selected == 8 ? 0 : 1,
+              liveRate: selected == 8 ? 0.8 : 13 / 15,
+              monthlyBirths: List<int>.filled(12, 0),
+              monthlyWeaned: List<int>.filled(12, 0),
+            );
+          }),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('数据面板'), findsWidgets);
+    expect(find.text('全部兔舍'), findsOneWidget);
+    expect(find.text('已汇总 2 个兔舍'), findsOneWidget);
+    expect(find.text('3'), findsAtLeastNWidgets(1));
+
+    await tester.tap(find.byTooltip('选择兔舍'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('测试1').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('测试1'), findsOneWidget);
+    expect(find.text('仅显示当前选择的兔舍'), findsOneWidget);
+    expect(find.text('2'), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('blocks account login when legal consent is unchecked',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+
+    await tester.pumpWidget(const ProviderScopeWrapper());
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('login-mode-content')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).first, 'demo_user');
+    await tester.enterText(find.byType(TextFormField).last, 'password');
+    await tester.tap(find.text('登录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请阅读并同意《隐私政策》与《用户协议》'), findsOneWidget);
+  });
+
+  test('persists and clears local app settings', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalAppSettingsStore();
+
+    await store.saveThemeMode(ThemeMode.dark);
+    await store.saveStartRoute('/dashboard');
+
+    final saved = await store.read();
+    expect(saved.themeMode, ThemeMode.dark);
+    expect(saved.startRoute, '/dashboard');
+
+    await store.clearLocalPreferences();
+
+    final cleared = await store.read();
+    expect(cleared.themeMode, LocalAppSettings.defaultSettings.themeMode);
+    expect(cleared.startRoute, LocalAppSettings.defaultSettings.startRoute);
+  });
+}
+
+class _DelayedLocalAppSettingsStore extends LocalAppSettingsStore {
+  final _readCompleter = Completer<LocalAppSettings>();
+
+  @override
+  Future<LocalAppSettings> read() => _readCompleter.future;
+
+  void complete(LocalAppSettings settings) {
+    _readCompleter.complete(settings);
+  }
+}
+
+class ProviderScopeWrapper extends StatelessWidget {
+  const ProviderScopeWrapper({
+    super.key,
+    this.overrides = const [],
+    this.authRepository,
+  });
+
+  final List<Override> overrides;
+  final AuthRepository? authRepository;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(
+          authRepository ?? _FakeAuthRepository(),
+        ),
+        ...overrides,
+      ],
+      child: const RabbitManagerApp(),
+    );
+  }
+}
+
+Widget _rawScaleLoginApp() {
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+    ],
+    child: MaterialApp(
+      theme: buildAppTheme(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: child!,
+      ),
+      home: const LoginScreen(),
+    ),
+  );
+}
+
+class _FakeAuthRepository extends AuthRepository {
+  _FakeAuthRepository({this.validationError})
+      : super(ApiClient(SessionStore()));
+
+  final ApiException? validationError;
+  final _unauthorizedController = StreamController<void>.broadcast(sync: true);
+  int validationCalls = 0;
+  final List<String> sentPhones = [];
+
+  @override
+  Stream<void> get unauthorizedEvents => _unauthorizedController.stream;
+
+  @override
+  Future<AuthSession> validateSession(AuthSession localSession) async {
+    validationCalls += 1;
+    final error = validationError;
+    if (error != null) {
+      throw error;
+    }
+    return localSession;
+  }
+
+  @override
+  Future<SmsCodeDelivery> sendSmsCode(String phone) async {
+    sentPhones.add(phone);
+    return const SmsCodeDelivery(
+      expiresInSeconds: 300,
+      retryAfterSeconds: 60,
+    );
+  }
+
+  @override
+  Future<AuthSession> loginWithPhone(String phone, String code) async {
+    return const AuthSession(
+      token: 'phone-token',
+      userId: 9,
+      userName: 'mobile_user',
+      houseId: 0,
+    );
+  }
+
+  void emitUnauthorized() => _unauthorizedController.add(null);
+}
+
+class _PendingSessionStore extends SessionStore {
+  _PendingSessionStore(this._snapshot);
+
+  final Future<SessionSnapshot> _snapshot;
+
+  @override
+  Future<SessionSnapshot> readSession() => _snapshot;
+}
+
+class _RecordingHouseRepository extends HouseRepository {
+  _RecordingHouseRepository() : super(ApiClient(SessionStore()));
+
+  int calls = 0;
+
+  @override
+  Future<List<RabbitHouse>> listHouses() async {
+    calls += 1;
+    return const <RabbitHouse>[];
+  }
+}

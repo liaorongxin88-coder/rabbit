@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.repro.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.Date;
 import java.util.List;
 
@@ -24,6 +25,7 @@ public class BulkActionRequest {
 
     private String outcome;
 
+    @NotNull(message = "执行时间不能为空")
     private Date occurredAt;
 
     /** 推迟到期时间；action=POSTPONE 时必填。 */

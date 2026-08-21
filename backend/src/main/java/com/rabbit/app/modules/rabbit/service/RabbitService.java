@@ -4,11 +4,13 @@ import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.repro.domain.ReproStage;
+import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
 import com.rabbit.app.modules.repro.service.OperatorNameResolver;
 import com.rabbit.app.modules.repro.service.ReproActionService;
 import com.rabbit.app.modules.repro.service.ReproRequestIds;
 import com.rabbit.app.modules.repro.service.ReproStateMachineService;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
@@ -18,6 +20,8 @@ import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
+import com.rabbit.app.modules.rabbit.dto.ReplacementConversionItem;
+import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
@@ -30,6 +34,7 @@ import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -63,6 +68,7 @@ public class RabbitService {
     private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final RabbitDepartureRecordMapper rabbitDepartureRecordMapper;
     private final RequestDedupService requestDedupService;
+    private final WorkTaskWriter workTaskWriter;
     private final HouseService houseService;
     private final int commodityCageCapacity;
 
@@ -80,6 +86,7 @@ public class RabbitService {
             RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
             RabbitDepartureRecordMapper rabbitDepartureRecordMapper,
             RequestDedupService requestDedupService,
+            WorkTaskWriter workTaskWriter,
             HouseService houseService,
             @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
@@ -96,6 +103,7 @@ public class RabbitService {
         this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.rabbitDepartureRecordMapper = rabbitDepartureRecordMapper;
         this.requestDedupService = requestDedupService;
+        this.workTaskWriter = workTaskWriter;
         this.houseService = houseService;
         this.commodityCageCapacity =
             commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
@@ -170,6 +178,11 @@ public class RabbitService {
             rabbit.setHouseId(houseId);
             rabbit.setIsActive(Boolean.TRUE);
             rabbit.setRequestId(requestId);
+            if ("2".equals(rabbit.getType()) && rabbit.getGrowthStage() != null) {
+                rabbit.setGrowthStageEnteredAt(
+                    rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now()
+                );
+            }
             if (rabbit.getIsQuarantined() == null) {
                 rabbit.setIsQuarantined(Boolean.FALSE);
             }
@@ -203,6 +216,8 @@ public class RabbitService {
             h.setUpdateBy(String.valueOf(userId));
             rabbitStatusHistoryMapper.insert(h);
 
+            scheduleEntryLifecycleTask(userId, houseId, rabbit);
+
             // 入轨与录入同事务：要么兔子和它的生产周期一起存在，要么都不存在。
             // 分两步会留下“已入栏但永远进不了生产流程”的兔，那正是建批次曾经的缺陷。
             openReproEntryIfRequested(userId, houseId, rabbit, reproEntry, requestId);
@@ -213,6 +228,49 @@ public class RabbitService {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
+    }
+
+    private void scheduleEntryLifecycleTask(Long userId, Long houseId, Rabbit rabbit) {
+        Date startedAt = rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now();
+        String operator = String.valueOf(userId);
+        GlobalSetting setting = settingService.getEffectiveSetting(userId, houseId);
+        if ("2".equals(rabbit.getType())) {
+            workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
+                houseId,
+                TaskType.SALE_READY,
+                rabbit.getId(),
+                null,
+                rabbit.getCageId(),
+                DateUtil.plusDays(startedAt, setting.commodityMaturityDays()),
+                "商品兔成熟后可进入出售流程",
+                operator
+            ));
+            return;
+        }
+        if (!"1".equals(rabbit.getType())) {
+            return;
+        }
+        ReplacementRecord replacement = new ReplacementRecord();
+        replacement.setHouseId(houseId);
+        replacement.setRabbitId(rabbit.getId());
+        replacement.setOriginalType("1");
+        replacement.setReplacementDate(startedAt);
+        replacement.setExpectedMatureDate(DateUtil.plusDays(startedAt, setting.getReplacementDays()));
+        replacement.setIsMatureNotified(Boolean.FALSE);
+        replacement.setStatus("PENDING");
+        replacement.setCreateBy(operator);
+        replacement.setUpdateBy(operator);
+        replacementRecordMapper.insert(replacement);
+        workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
+            houseId,
+            TaskType.REPLACEMENT_MATURE,
+            rabbit.getId(),
+            null,
+            rabbit.getCageId(),
+            replacement.getExpectedMatureDate(),
+            "后备兔成熟后可转为种兔",
+            operator
+        ));
     }
 
     public List<Rabbit> listRabbits(Long houseId, Long cageId, String type, Boolean active) {
@@ -608,11 +666,11 @@ public class RabbitService {
     }
 
     @Transactional
-    public void convertToReplacement(Long userId, Long houseId, List<Long> rabbitIds, boolean forceExitBatch, Long targetCageId, String requestId) {
+    public ReplacementConversionResponse convertToReplacement(Long userId, Long houseId, List<Long> rabbitIds, boolean forceExitBatch, Long targetCageId, String requestId) {
         houseService.assertHousePermission(userId, houseId, "control");
         String api = "rabbit.toReplacement";
         if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
-            return;
+            return replacementConversionResponse(houseId, requestId);
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
@@ -699,6 +757,7 @@ public class RabbitService {
             GlobalSetting gs = settingService.getEffectiveSetting(userId, houseId);
             Date now = DateUtil.now();
             String operator = String.valueOf(userId);
+            List<ReplacementConversionItem> converted = new ArrayList<>();
             for (Long rabbitId : sortedRabbitIds) {
                 List<BatchRabbit> activeBatchLinks = batchRabbitMapper.selectActiveByRabbit(houseId, rabbitId);
                 if (!activeBatchLinks.isEmpty()) {
@@ -732,17 +791,36 @@ public class RabbitService {
                 if (rabbitMapper.updateTypeAndCage(houseId, rabbitId, "1", targetByRabbit.get(rabbitId), operator) != 1) {
                     throw new BizException(409, "兔子状态已变化: " + rabbitId);
                 }
+                workTaskWriter.completeForRabbit(
+                    houseId, rabbitId, TaskType.SALE_READY, operator
+                );
 
                 ReplacementRecord rr = new ReplacementRecord();
                 rr.setHouseId(houseId);
                 rr.setRabbitId(rabbitId);
+                rr.setRequestId(requestId);
                 rr.setOriginalType("2");
                 rr.setReplacementDate(now);
                 rr.setExpectedMatureDate(DateUtil.plusDays(now, gs.getReplacementDays()));
                 rr.setIsMatureNotified(Boolean.FALSE);
+                rr.setStatus("PENDING");
                 rr.setCreateBy(operator);
                 rr.setUpdateBy(operator);
                 replacementRecordMapper.insert(rr);
+                converted.add(new ReplacementConversionItem(
+                    rabbitId, rr.getId(), targetByRabbit.get(rabbitId)
+                ));
+
+                workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
+                    houseId,
+                    TaskType.REPLACEMENT_MATURE,
+                    rabbitId,
+                    null,
+                    targetByRabbit.get(rabbitId),
+                    rr.getExpectedMatureDate(),
+                    "后备兔成熟后可转为种兔",
+                    operator
+                ));
 
                 RabbitStatusHistory h = new RabbitStatusHistory();
                 h.setHouseId(houseId);
@@ -756,6 +834,130 @@ public class RabbitService {
                 h.setCreateBy(operator);
                 h.setUpdateBy(operator);
                 rabbitStatusHistoryMapper.insert(h);
+            }
+            requestDedupService.markDone(houseId, userId, api, requestId);
+            return new ReplacementConversionResponse(List.copyOf(converted));
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
+            throw e;
+        }
+    }
+
+    private ReplacementConversionResponse replacementConversionResponse(Long houseId, String requestId) {
+        List<ReplacementRecord> records = replacementRecordMapper.selectByRequestId(houseId, requestId);
+        if (records.isEmpty()) {
+            throw new BizException(500, "留后备兔幂等回查失败");
+        }
+        List<ReplacementConversionItem> items = new ArrayList<>();
+        for (ReplacementRecord record : records) {
+            Rabbit rabbit = rabbitMapper.selectById(houseId, record.getRabbitId());
+            items.add(new ReplacementConversionItem(
+                record.getRabbitId(),
+                record.getId(),
+                rabbit == null ? null : rabbit.getCageId()
+            ));
+        }
+        return new ReplacementConversionResponse(List.copyOf(items));
+    }
+
+    /** 后备兔成熟后原笼转种兔笼；母兔同时进入无批次的待催情周期。 */
+    @Transactional
+    public void promoteReplacement(
+        Long userId,
+        Long houseId,
+        Long rabbitId,
+        String requestId
+    ) {
+        houseService.assertHousePermission(userId, houseId, "control");
+        String api = "rabbit.promoteReplacement";
+        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
+            return;
+        }
+        requestDedupService.markProcessing(houseId, userId, api, requestId);
+        try {
+            List<Rabbit> locked = rabbitMapper.selectByIdsForUpdate(houseId, List.of(rabbitId));
+            if (locked.size() != 1) {
+                throw new BizException(404, "后备兔不存在");
+            }
+            Rabbit rabbit = locked.get(0);
+            if (!Boolean.TRUE.equals(rabbit.getIsActive()) || !"1".equals(rabbit.getType())) {
+                throw new BizException(409, "仅在栏后备兔可转为种兔");
+            }
+            ReplacementRecord replacement =
+                replacementRecordMapper.selectPendingByRabbitForUpdate(houseId, rabbitId);
+            if (replacement == null) {
+                throw new BizException(409, "该后备兔没有待处理的成熟记录");
+            }
+            Date now = DateUtil.now();
+            if (replacement.getExpectedMatureDate() == null
+                || replacement.getExpectedMatureDate().after(now)) {
+                throw new BizException(409, "该后备兔尚未达到成熟日期");
+            }
+
+            Cage cage = cageMapper.selectByIdForUpdate(houseId, rabbit.getCageId());
+            if (cage == null || !Boolean.TRUE.equals(cage.getIsEnabled())) {
+                throw new BizException(409, "当前后备兔笼不存在或已停用");
+            }
+            List<Rabbit> occupants = rabbitMapper.selectActiveByCageForUpdate(houseId, cage.getId());
+            if (occupants.size() != 1 || !rabbitId.equals(occupants.get(0).getId())) {
+                throw new BizException(409, "后备兔笼占用状态异常，无法转种");
+            }
+
+            String operator = String.valueOf(userId);
+            String reproductiveStage = "1".equals(rabbit.getGender()) ? "READY" : null;
+            if (rabbitMapper.promoteReplacement(
+                houseId, rabbitId, reproductiveStage, operator
+            ) != 1) {
+                throw new BizException(409, "后备兔状态已变化，请刷新后重试");
+            }
+            if (cageMapper.updateRabbitCountAndStatus(
+                houseId, cage.getId(), 1, "1", operator
+            ) != 1) {
+                throw new BizException(409, "笼位状态已变化，请刷新后重试");
+            }
+            if (replacementRecordMapper.markPromoted(
+                houseId, replacement.getId(), now, operator
+            ) != 1) {
+                throw new BizException(409, "成熟记录已被处理，请刷新后重试");
+            }
+            workTaskWriter.completeForRabbit(
+                houseId, rabbitId, TaskType.REPLACEMENT_MATURE, operator
+            );
+
+            RabbitStatusHistory history = new RabbitStatusHistory();
+            history.setHouseId(houseId);
+            history.setRabbitId(rabbitId);
+            history.setFromStatus("后备兔");
+            history.setToStatus("1".equals(rabbit.getGender()) ? "种公兔" : "种母兔");
+            history.setChangeTime(now);
+            history.setReason("后备成熟转种");
+            history.setRelatedRecordId(replacement.getId());
+            history.setRelatedRecordTable("replacement_records");
+            history.setCreateBy(operator);
+            history.setUpdateBy(operator);
+            rabbitStatusHistoryMapper.insert(history);
+
+            if (!"1".equals(rabbit.getGender())) {
+                reproStateMachineService.openCycleAt(new OpenCycleCommand(
+                    houseId,
+                    userId,
+                    operatorNameResolver.resolve(userId),
+                    rabbitId,
+                    null,
+                    ReproStage.AWAIT_ESTRUS,
+                    now,
+                    now,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "后备成熟转种",
+                    ReproRequestIds.derive(requestId, "repro")
+                ));
             }
             requestDedupService.markDone(houseId, userId, api, requestId);
         } catch (RuntimeException e) {
@@ -1044,6 +1246,9 @@ public class RabbitService {
                 "兔离场:" + t,
                 requestId
             );
+            // 商品兔、后备兔和无开放周期的母兔不会进入 RETIRE 状态机，
+            // 仍要在同一离场事务中取消兔只级待办。
+            workTaskWriter.cancelAllForRabbit(houseId, rabbitId, op);
 
             List<BatchRabbit> activeBatchLinks = lockedExit.batchLinks();
             if (!activeBatchLinks.isEmpty()) {

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -173,13 +174,14 @@ class ReproRepository {
     List<String> attachmentFileIds = const [],
     String? requestId,
   }) {
+    final executionTime = occurredAt ?? DateTime.now();
     return _api.post<ReproActionResult>(
       '/api/repro/cycles/$cycleId/actions',
       houseId: houseId,
       body: {
         'action': action.wire,
         if (outcome != null) 'outcome': outcome,
-        if (occurredAt != null) 'occurredAt': occurredAt.millisecondsSinceEpoch,
+        'occurredAt': executionTime.millisecondsSinceEpoch,
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (palpationResult != null) 'palpationResult': palpationResult.wire,
@@ -202,6 +204,69 @@ class ReproRepository {
         'requestId': requestId ?? _uuid.v4(),
       },
       decode: _decodeAction,
+    );
+  }
+
+  Future<String> uploadImage({
+    required int houseId,
+    required String filePath,
+    String? fileName,
+  }) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    return _api.postMultipart<String>(
+      '/api/business-files/images',
+      houseId: houseId,
+      body: form,
+      decode: (data) {
+        if (data is Map) {
+          final fileId = data['fileId'];
+          if (fileId is String && fileId.isNotEmpty) {
+            return fileId;
+          }
+        }
+        throw const FormatException('图片上传结果格式不正确');
+      },
+    );
+  }
+
+  Future<ReproLitter> getCycleLitter({
+    required int houseId,
+    required int cycleId,
+  }) {
+    return _api.get<ReproLitter>(
+      '/api/repro/cycles/$cycleId/litter',
+      houseId: houseId,
+      decode: (data) => data is Map
+          ? ReproLitter.fromJson(Map<String, dynamic>.from(data))
+          : throw const FormatException('窝记录格式不正确'),
+    );
+  }
+
+  Future<KeptKitsAdjustmentResult> adjustKeptKits({
+    required int houseId,
+    required int cycleId,
+    required DateTime occurredAt,
+    required int keptKits,
+    int? sourceMotherRabbitId,
+    String remark = '',
+    String? requestId,
+  }) {
+    return _api.post<KeptKitsAdjustmentResult>(
+      '/api/repro/cycles/$cycleId/kept-kits-adjustments',
+      houseId: houseId,
+      body: {
+        'occurredAt': occurredAt.millisecondsSinceEpoch,
+        'keptKits': keptKits,
+        if (sourceMotherRabbitId != null)
+          'sourceMotherRabbitId': sourceMotherRabbitId,
+        if (remark.trim().isNotEmpty) 'remark': remark.trim(),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (data) => data is Map
+          ? KeptKitsAdjustmentResult.fromJson(Map<String, dynamic>.from(data))
+          : throw const FormatException('留崽调整结果格式不正确'),
     );
   }
 
@@ -239,13 +304,14 @@ class ReproRepository {
       '批量目标必须二选一：taskIds 或 filter',
     );
 
+    final executionTime = occurredAt ?? DateTime.now();
     return _api.post<ReproBulkResult>(
       '/api/repro/tasks/bulk-actions',
       houseId: houseId,
       body: {
         'action': action.wire,
         if (outcome != null) 'outcome': outcome,
-        if (occurredAt != null) 'occurredAt': occurredAt.millisecondsSinceEpoch,
+        'occurredAt': executionTime.millisecondsSinceEpoch,
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (palpationResult != null) 'palpationResult': palpationResult.wire,
@@ -370,7 +436,7 @@ class ReproRepository {
           cycleId: opened.cycleId,
           action: ReproAction.mating,
           occurredAt: matingDate,
-          maleRabbitId: matingMethod == MatingMethod.ai ? null : maleRabbitId,
+          maleRabbitId: maleRabbitId,
           matingMethod: matingMethod,
           requestId: '$seed-mate-$rabbitId',
         );
@@ -400,7 +466,7 @@ class ReproRepository {
         action: ReproAction.mating,
         rabbitIds: matableRabbitIds,
         occurredAt: matingDate,
-        maleRabbitId: matingMethod == MatingMethod.ai ? null : maleRabbitId,
+        maleRabbitId: maleRabbitId,
         matingMethod: matingMethod,
         requestId: seed,
       );

@@ -17,6 +17,7 @@ import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class RabbitServiceTest {
         };
         RabbitService service = new RabbitService(
                 null, null, null, null, null, null, null, null, null, null,
-                null, null, null, houseService, 10
+                null, null, null, null, houseService, 10
         );
 
         BizException error = assertThrows(BizException.class,
@@ -71,7 +72,7 @@ class RabbitServiceTest {
 
         RabbitService service = new RabbitService(
             rabbitMapper, null, null, null, batchRabbitMapper, null, null, null, null, null,
-            null, null, null, null, 10
+            null, null, null, null, null, 10
         );
 
         List<BatchRabbitItem> activeResult = service.listBatchMemberships(7L, 31L, Boolean.TRUE);
@@ -98,6 +99,7 @@ class RabbitServiceTest {
         RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
         RabbitDepartureRecordMapper departureMapper = org.mockito.Mockito.mock(RabbitDepartureRecordMapper.class);
         RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
+        WorkTaskWriter workTaskWriter = org.mockito.Mockito.mock(WorkTaskWriter.class);
 
         Rabbit rabbit = new Rabbit();
         rabbit.setId(3L);
@@ -144,6 +146,7 @@ class RabbitServiceTest {
             historyMapper,
             departureMapper,
             dedup,
+            workTaskWriter,
             null,
             10
         );
@@ -176,5 +179,6 @@ class RabbitServiceTest {
             "兔离场:cull",
             "7"
         );
+        org.mockito.Mockito.verify(workTaskWriter).cancelAllForRabbit(1L, 3L, "7");
     }
 }

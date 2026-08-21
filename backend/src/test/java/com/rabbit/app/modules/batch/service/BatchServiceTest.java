@@ -318,6 +318,7 @@ class BatchServiceTest {
             stateMachine,
             org.mockito.Mockito.mock(
                 com.rabbit.app.modules.repro.service.OperatorNameResolver.class),
+            null,
             10
         );
     }

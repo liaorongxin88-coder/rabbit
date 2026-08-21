@@ -234,6 +234,7 @@ CREATE TABLE IF NOT EXISTS rabbit_departure_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
+  request_id VARCHAR(64),
   departure_type VARCHAR(20) NOT NULL,
   departure_date DATETIME NOT NULL,
   reason VARCHAR(200),
@@ -794,6 +795,7 @@ CREATE TABLE IF NOT EXISTS replacement_records (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_rr_house (house_id),
   KEY idx_rr_expected (expected_mature_date),
+  UNIQUE KEY uk_replacement_house_request_rabbit (house_id, request_id, rabbit_id),
   CONSTRAINT fk_rr_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_rr_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -1004,4 +1006,18 @@ CREATE TABLE IF NOT EXISTS biz_attachments (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_ba_biz_file (house_id, biz_type, biz_id, file_id),
   KEY idx_ba_biz (house_id, biz_type, biz_id, sort_no, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS business_files (
+  id VARCHAR(64) PRIMARY KEY,
+  house_id BIGINT NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  content_type VARCHAR(64) NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  sha256 CHAR(64) NOT NULL,
+  content LONGBLOB NOT NULL,
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_business_files_house_sha (house_id, sha256),
+  KEY idx_business_files_house_created (house_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

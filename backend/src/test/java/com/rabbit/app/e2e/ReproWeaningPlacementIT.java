@@ -1,5 +1,7 @@
 package com.rabbit.app.e2e;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -8,6 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -208,19 +211,110 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
         act(s, cycleId, "lineage_prep", obj("action", "PREPARTUM", "occurredAt", oneMinuteAgo()));
         act(s, cycleId, "lineage_birth", obj("action", "DELIVERY", "outcome", "BORN",
             "occurredAt", oneMinuteAgo(), "totalKits", 5, "liveKits", 4, "keptKits", 4));
-        act(s, cycleId, "lineage_wean", obj("action", "WEANING", "occurredAt", oneMinuteAgo(),
-            "weanedCount", 4));
+        JsonNode weaned = act(s, cycleId, "lineage_wean", obj(
+            "action", "WEANING", "occurredAt", oneMinuteAgo(), "weanedCount", 4
+        ));
 
         Assertions.assertEquals(4, count(
             "select count(*) from rabbits where birth_cycle_id = ? and mother_id = ? and father_id = ?",
             cycleId, doe, buck),
             "每只仔兔都要能追溯到父、母与出生周期");
+        Assertions.assertEquals(4, count(
+            "select count(*) from work_tasks wt inner join rabbits r on r.id = wt.rabbit_id"
+                + " where r.birth_cycle_id = ? and wt.task_type = 'SALE_READY' and wt.status = 'PENDING'",
+            cycleId),
+            "每只分笼生成的商品兔都要同步建立出售任务");
+        long followUpCycleId = weaned.get("followUpCycleId").asLong();
+        Assertions.assertEquals(1, count(
+            "select count(*) from breeding_cycles where id = ? and batch_id is null"
+                + " and lifecycle = 'OPEN' and stage = 'AWAIT_ESTRUS'",
+            followUpCycleId),
+            "下一轮待催情可以保留，但默认不继承已结束的批次；并行周期不应被误关");
+
+        // 模拟三段生长期已经过去；仔兔来源仍是上面的真实分笼写路径。
+        List<Long> kits = jdbc.queryForList(
+            "select id from rabbits where birth_cycle_id = ? order by id",
+            Long.class,
+            cycleId
+        );
+        jdbc.update(
+            "update rabbits set growth_stage = 'MATURE', state_version = state_version + 1"
+                + " where birth_cycle_id = ?",
+            cycleId
+        );
+        jdbc.update(
+            "update batch_rabbits set next_event_date = date_sub(now(), interval 1 day)"
+                + " where batch_id = ? and rabbit_id in (select id from rabbits where birth_cycle_id = ?)",
+            s.batchId(), cycleId
+        );
+
+        JsonNode outbound = api.postOk("/api/outbound/tasks", s.owner().token, s.houseId(), obj(
+            "entryType", "HOUSE", "resumeExisting", true
+        ));
+        List<java.util.Map<String, Object>> selected = new ArrayList<>();
+        java.util.Map<String, Object> versions = obj();
+        for (Long kitId : kits) {
+            long version = outboundVersion(outbound, kitId);
+            selected.add(obj(
+                "rabbitId", kitId, "stateVersion", version, "selectionType", "NORMAL"
+            ));
+            versions.put(String.valueOf(kitId), version);
+        }
+        JsonNode frozen = api.putOk(
+            "/api/outbound/tasks/" + outbound.get("taskId").asText(),
+            s.owner().token,
+            s.houseId(),
+            obj(
+                "revision", outbound.get("revision").asLong(),
+                "status", "WAITING_CONFIRMATION",
+                "items", selected,
+                "saleTime", LocalDate.now().toString(),
+                "totalWeight", 8.0,
+                "unitPrice", 18.0,
+                "customer", "分笼来源验收"
+            )
+        );
+        JsonNode sold = api.postOk(
+            "/api/outbound/tasks/" + frozen.get("taskId").asText() + "/submit",
+            s.owner().token,
+            s.houseId(),
+            obj(
+                "rabbitIds", kits,
+                "stateVersions", versions,
+                "saleTime", LocalDate.now().toString(),
+                "totalWeight", 8.0,
+                "unitPrice", 18.0,
+                "customer", "分笼来源验收",
+                "requestId", UUID.randomUUID().toString()
+            )
+        );
+        Assertions.assertEquals("COMPLETED", sold.get("status").asText());
+        Assertions.assertEquals(4, sold.get("rabbitCount").asInt());
+        Assertions.assertEquals(4, count(
+            "select count(*) from sale_order_items soi inner join rabbits r on r.id = soi.rabbit_id"
+                + " where soi.sale_order_id = ? and r.birth_cycle_id = ? and r.mother_id = ?",
+            sold.get("saleOrderId").asLong(), cycleId, doe
+        ));
+        Assertions.assertEquals(4, count(
+            "select count(*) from work_tasks wt inner join rabbits r on r.id = wt.rabbit_id"
+                + " where r.birth_cycle_id = ? and wt.task_type = 'SALE_READY' and wt.status = 'DONE'",
+            cycleId
+        ));
     }
 
-    private void act(Scenario s, long cycleId, String prefix, java.util.Map<String, Object> body) {
+    private JsonNode act(Scenario s, long cycleId, String prefix, java.util.Map<String, Object> body) {
         body.put("requestId", requestId(prefix));
-        api.postOk("/api/repro/cycles/" + cycleId + "/actions",
+        return api.postOk("/api/repro/cycles/" + cycleId + "/actions",
             s.owner().token, s.houseId(), body);
+    }
+
+    private long outboundVersion(JsonNode task, long rabbitId) {
+        for (JsonNode rabbit : task.get("rabbits")) {
+            if (rabbit.get("rabbitId").asLong() == rabbitId) {
+                return rabbit.get("stateVersion").asLong();
+            }
+        }
+        throw new AssertionError("rabbit missing from outbound precheck: " + rabbitId);
     }
 
     private void assertNoTrace(Scenario s, long cycleId) {

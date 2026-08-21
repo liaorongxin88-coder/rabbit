@@ -3,6 +3,10 @@ server:
   forward-headers-strategy: ${APP_FORWARD_HEADERS_STRATEGY:none}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: jdbc:mysql://localhost:3306/rabbit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root

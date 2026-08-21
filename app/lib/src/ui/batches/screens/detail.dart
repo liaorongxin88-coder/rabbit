@@ -13,6 +13,7 @@ import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/abortion.dart';
 import 'package:rabbit_flutter/src/ui/batches/sheets/add_members.dart';
+import 'package:rabbit_flutter/src/ui/batches/sheets/tracking.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/departure.dart';
@@ -222,7 +223,8 @@ class _HouseBatchDetailScreenState
             case 0:
               return _BatchHeader(
                 batch: currentBatch,
-                activeCount: allMembers.where((item) => item.isActive).length,
+                activeCount:
+                    allMembers.where((item) => item.isActivityActive).length,
                 canEdit: canEdit,
                 saving: _saving,
                 onComplete: () => _completeBatch(
@@ -285,9 +287,10 @@ class _HouseBatchDetailScreenState
               child: SectionCard(
                 child: EmptyState(
                   icon: Icons.filter_alt_off_outlined,
-                  title: allMembers.isEmpty ? '批次暂无成员' : '没有符合条件的成员',
-                  message:
-                      allMembers.isEmpty ? '成员加入后会显示在这里。' : '调整兔号、角色、状态或在场筛选。',
+                  title: allMembers.isEmpty ? '批次暂无追踪标签' : '没有符合条件的标签',
+                  message: allMembers.isEmpty
+                      ? '添加母兔或商品兔标签后会显示在这里。'
+                      : '调整兔号、种类、状态或在场筛选。',
                   actionLabel: allMembers.isEmpty ? null : '重置筛选',
                   onAction: allMembers.isEmpty ? null : _resetFilters,
                 ),
@@ -330,6 +333,16 @@ class _HouseBatchDetailScreenState
               onRemove: canEdit && item.isActive
                   ? () => _removeBatchMember(item)
                   : null,
+              onOpenRabbit: () => context.push(
+                '/houses/${widget.houseId}/rabbits/${item.rabbitId}',
+              ),
+              onOpenTracking: item.batchRole == 'breeding'
+                  ? () => showBatchTrackingSheet(
+                        context: context,
+                        houseId: widget.houseId,
+                        item: item,
+                      )
+                  : null,
             ),
           );
         },
@@ -370,10 +383,10 @@ class _HouseBatchDetailScreenState
       if (selectedStatus != _all && displayStatus != selectedStatus) {
         return false;
       }
-      if (_activity == _active && !item.isActive) {
+      if (_activity == _active && !item.isActivityActive) {
         return false;
       }
-      if (_activity == _exited && item.isActive) {
+      if (_activity == _exited && item.isActivityActive) {
         return false;
       }
       if (query.isEmpty) {
@@ -826,8 +839,8 @@ class _HouseBatchDetailScreenState
               children: [
                 Text(
                   activeCount == 0
-                      ? '当前没有活跃成员，可以正常结束。'
-                      : '当前仍有 $activeCount 个活跃成员。强制结束会关闭开放繁殖周期并移出批次。',
+                      ? '当前没有活跃标签，可以正常结束。'
+                      : '当前仍有 $activeCount 个活跃标签。强制结束会关闭开放繁殖周期并移出批次。',
                 ),
                 if (activeCount > 0) ...[
                   const SizedBox(height: 12),
@@ -1037,7 +1050,7 @@ class _BatchHeader extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${batch.dateLabel} · 活跃成员 $activeCount',
+            '${batch.dateLabel} · 活跃追踪标签 $activeCount',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1055,7 +1068,7 @@ class _BatchHeader extends StatelessWidget {
               key: const ValueKey('batch-add-members-button'),
               onPressed: saving ? null : onAddMembers,
               icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('添加兔子'),
+              label: const Text('添加追踪标签'),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -1078,16 +1091,19 @@ class _BatchMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = members.where((item) => item.isActive).length;
+    final active = members.where((item) => item.isActivityActive).length;
     final mothers = members
-        .where((item) => item.isActive && item.batchRole == 'breeding')
+        .where((item) =>
+            item.isActivityActive && item.batchRole == 'breeding')
         .length;
     final commodity = members
-        .where((item) => item.isActive && item.batchRole == 'fattening')
+        .where((item) =>
+            item.isActivityActive && item.batchRole == 'fattening')
         .length;
     final nursing = members.fold<int>(
       0,
-      (sum, item) => sum + (item.isActive ? item.currentNursingKits : 0),
+      (sum, item) =>
+          sum + (item.isActivityActive ? item.currentNursingKits : 0),
     );
 
     return SectionCard(
@@ -1098,8 +1114,8 @@ class _BatchMetrics extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _MetricTile(width: width, label: '全部成员', value: members.length),
-              _MetricTile(width: width, label: '活跃成员', value: active),
+              _MetricTile(width: width, label: '全部标签', value: members.length),
+              _MetricTile(width: width, label: '活跃标签', value: active),
               _MetricTile(width: width, label: '繁殖母兔', value: mothers),
               _MetricTile(width: width, label: '商品兔', value: commodity),
               _MetricTile(width: width, label: '当前带仔', value: nursing),
@@ -1200,7 +1216,7 @@ class _MemberFilters extends StatelessWidget {
             onChanged: onQueryChanged,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              labelText: '搜索成员',
+              labelText: '搜索追踪标签',
               hintText: '兔号、笼号、状态或事件',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: query.isEmpty
@@ -1275,7 +1291,7 @@ class _MemberFilters extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '显示 $visibleCount / $totalCount 个成员',
+                  '显示 $visibleCount / $totalCount 个标签',
                   key: const ValueKey('batch-member-filter-summary'),
                 ),
               ),
@@ -1461,6 +1477,8 @@ class _BatchMemberCard extends StatelessWidget {
     required this.onDeparture,
     required this.onAbortion,
     required this.onRemove,
+    required this.onOpenRabbit,
+    required this.onOpenTracking,
   });
 
   final BatchRabbitItem item;
@@ -1476,6 +1494,8 @@ class _BatchMemberCard extends StatelessWidget {
   /// 为空即该母兔当前阶段不允许流产（服务端字典判定）。
   final VoidCallback? onAbortion;
   final VoidCallback? onRemove;
+  final VoidCallback onOpenRabbit;
+  final VoidCallback? onOpenTracking;
 
   @override
   Widget build(BuildContext context) {
@@ -1547,6 +1567,7 @@ class _BatchMemberCard extends StatelessWidget {
               _LabelChip(
                 label: item.displayStatus,
               ),
+              const _LabelChip(label: '批次标签'),
               Text(_roleLabel(item.batchRole)),
               if (item.cageId != null) Text('笼 #${item.cageId}'),
               if (!item.isActive) const Text('已退出'),
@@ -1567,6 +1588,53 @@ class _BatchMemberCard extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
+          if (item.batchRole == 'breeding') ...[
+            const SizedBox(height: 10),
+            Divider(height: 1, color: AppPalette.of(context).line),
+            const SizedBox(height: 10),
+            Text(
+              '本批次 · ${item.batchCycleCount} 个周期 · ${item.batchOperationCount} 次操作',
+              key: ValueKey('batch-member-tracking-${item.rabbitId}'),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${item.batchLitterCount} 窝 · 产仔 ${item.batchTotalKits} · 活仔 ${item.batchLiveKits} · 断奶 ${item.batchWeanedKits}',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (item.batchLastOperationAt != null) ...[
+              const SizedBox(height: 3),
+              Text(
+                '最近操作 ${_compactDate(item.batchLastOperationAt!)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppPalette.of(context).muted,
+                    ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: ValueKey('batch-member-rabbit-${item.rabbitId}'),
+                onPressed: onOpenRabbit,
+                icon: const Icon(Icons.pets_outlined),
+                label: const Text('兔只详情'),
+              ),
+              if (onOpenTracking != null)
+                OutlinedButton.icon(
+                  key: ValueKey('batch-member-tracking-open-${item.rabbitId}'),
+                  onPressed: onOpenTracking,
+                  icon: const Icon(Icons.history),
+                  label: const Text('批次记录'),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -1590,6 +1658,13 @@ class _BatchMemberCard extends StatelessWidget {
     if (date == null) return '';
     return '（${date.month}月${date.day}日）';
   }
+}
+
+String _compactDate(DateTime value) {
+  final local = value.toLocal();
+  final month = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  return '${local.year}-$month-$day';
 }
 
 class _LabelChip extends StatelessWidget {

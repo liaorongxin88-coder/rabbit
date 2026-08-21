@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class OutboundSubmitServiceTest {
     private final OutboundSubmitService service = new OutboundSubmitService(
             null, null, null, null, null, null, null, null, null, null, null, null,
-            new ObjectMapper()
+            new ObjectMapper(), null
     );
 
     @Test

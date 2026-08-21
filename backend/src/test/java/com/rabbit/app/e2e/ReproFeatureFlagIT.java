@@ -33,7 +33,22 @@ public class ReproFeatureFlagIT extends E2eTestSupport {
         api.expectError("/api/repro/tasks/bulk-actions", HttpMethod.POST, owner.token, houseId, obj(
             "requestId", requestId("flag_off_bulk"),
             "action", "ESTRUS",
+            "occurredAt", now(),
             "taskIds", java.util.List.of(1L)
         ), 404, "未开启");
+
+        api.expectError(
+            "/api/repro/cycles/1/kept-kits-adjustments",
+            HttpMethod.POST,
+            owner.token,
+            houseId,
+            obj(
+                "occurredAt", now(),
+                "keptKits", 1,
+                "requestId", requestId("flag_off_kept")
+            ),
+            404,
+            "未开启"
+        );
     }
 }

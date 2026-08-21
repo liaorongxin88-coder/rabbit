@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Base64;
 
 @ActiveProfiles("e2e")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -88,6 +89,19 @@ public abstract class E2eTestSupport {
                 "requestId", requestId("rabbit")
         ));
         return rabbit.get("id").asLong();
+    }
+
+    protected String uploadTestImage(UserSession user, long houseId, String prefix) {
+        byte[] png = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        );
+        return api.uploadImage(
+            "/api/business-files/images",
+            user.token,
+            houseId,
+            prefix + ".png",
+            png
+        ).get("fileId").asText();
     }
 
     protected long now() {

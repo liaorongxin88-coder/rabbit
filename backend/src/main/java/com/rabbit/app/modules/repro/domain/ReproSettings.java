@@ -40,11 +40,11 @@ public record ReproSettings(
             positive(setting.getAphrodisiacDays(), 2),
             positive(setting.getPalpationDays(), 12),
             positive(setting.getGestationDays(), DEFAULT_GESTATION_DAYS),
-            positive(setting.getPrepartumDays(), 3),
-            positive(setting.getWeaningDays(), 25),
+            positive(setting.getPrepartumDays(), 15),
+            positive(setting.getWeaningDays(), 30),
             positive(setting.getPostpartumDays(), 10),
-            positive(setting.getSaleDays(), 30),
-            positive(setting.getReplacementDays(), 45)
+            setting.commodityMaturityDays(),
+            positive(setting.getReplacementDays(), 90)
         );
     }
 

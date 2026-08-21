@@ -27,7 +27,6 @@ import com.rabbit.app.modules.event.dto.EventItem;
 import com.rabbit.app.modules.event.service.EventService;
 import com.rabbit.app.modules.hardware.service.HardwareLinkService;
 import com.rabbit.app.modules.house.service.HouseService;
-import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
 import com.rabbit.app.modules.sale.dto.SaleRequest;
 import com.rabbit.app.modules.treatment.entity.TreatmentRecord;
 import com.rabbit.app.modules.treatment.service.TreatmentService;
@@ -209,14 +208,12 @@ public class BatchController {
         java.util.Set<Long> suppressedRep = eventService.getSuppressedIds(userId, houseId, "后备成熟");
         java.util.Set<Long> suppressedReview = eventService.getSuppressedIds(userId, houseId, "治疗复查");
 
-        boolean x = onlyUnnotified != null && onlyUnnotified;
-
         // 生产提醒一律来自待办中心（work_tasks）。
         //
         // 旧实现分两路读 breeding_cycles.next_event_* 与 batch_rabbits.next_event_*，
         // 两张表各自维护、各自漂移，首页与笼位因此给出不一致的提醒（飞书 recvsrmZKv1cqp）。
         // 现在首页、笼位 NFC、兔卡、批次详情共用 work_tasks 这一个来源，不可能再分歧。
-        // 后备成熟与治疗复查暂未进入待办中心，仍走各自的数据源。
+        // 商品出售与后备成熟同样来自 work_tasks；治疗复查暂时仍走治疗记录。
         for (TaskView task : workTaskService.pendingDue(
                 houseId,
                 dueBefore == null ? null : new Date(dueBefore),
@@ -227,6 +224,25 @@ public class BatchController {
                 1,
                 500
             ).items()) {
+            TaskType taskType = TaskType.parse(task.taskType());
+            if (taskType == TaskType.SALE_READY) {
+                if (!suppressedProd.contains(task.id())) {
+                    items.add(new EventItem(
+                        task.id(), "生产", "出售", task.dueDate(), task.batchId(), task.rabbitId(),
+                        task.overdue() ? "overdue" : null
+                    ));
+                }
+                continue;
+            }
+            if (taskType == TaskType.REPLACEMENT_MATURE) {
+                if (!suppressedRep.contains(task.id())) {
+                    items.add(new EventItem(
+                        task.id(), "后备成熟", "后备兔转种", task.dueDate(), null, task.rabbitId(),
+                        task.overdue() ? "overdue" : null
+                    ));
+                }
+                continue;
+            }
             if (task.cycleId() == null || suppressedCycles.contains(task.cycleId())) {
                 continue;
             }
@@ -241,13 +257,6 @@ public class BatchController {
                 task.rabbitId(),
                 task.overdue() ? "overdue" : null
             ));
-        }
-        List<ReplacementRecord> dueRep = batchService.listDueReplacement(houseId, x);
-        for (ReplacementRecord rr : dueRep) {
-            if (suppressedRep.contains(rr.getId())) {
-                continue;
-            }
-            items.add(new EventItem(rr.getId(), "后备成熟", "后备兔成熟", rr.getExpectedMatureDate(), null, rr.getRabbitId(), null));
         }
         List<TreatmentRecord> dueReview = treatmentService.listDueReviews(houseId);
         for (TreatmentRecord tr : dueReview) {

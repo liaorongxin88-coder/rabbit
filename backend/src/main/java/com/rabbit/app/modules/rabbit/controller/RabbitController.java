@@ -7,7 +7,9 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.CageTransferRequest;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.dto.CreateRabbitRequest;
+import com.rabbit.app.modules.rabbit.dto.PromoteReplacementRequest;
 import com.rabbit.app.modules.rabbit.dto.ReplacementRequest;
+import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.dto.UpdateRabbitRequest;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.service.RabbitService;
@@ -109,11 +111,25 @@ public class RabbitController {
 
     @PostMapping("/rabbits/replacement")
     @RequiresPermission(PermissionCode.RABBIT_RABBITS_CONTROL)
-    public ApiResponse<Void> replacement(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody ReplacementRequest req) {
+    public ApiResponse<ReplacementConversionResponse> replacement(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody ReplacementRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "control");
         boolean force = req.getForceExitBatch() != null && req.getForceExitBatch();
-        rabbitService.convertToReplacement(userId, houseId, req.getRabbitIds(), force, req.getTargetCageId(), req.getRequestId());
+        return ApiResponse.ok(rabbitService.convertToReplacement(
+            userId, houseId, req.getRabbitIds(), force, req.getTargetCageId(), req.getRequestId()
+        ));
+    }
+
+    @PostMapping("/rabbits/{id}/promote-breeder")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_CONTROL)
+    public ApiResponse<Void> promoteReplacement(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("id") Long id,
+            @Valid @RequestBody PromoteReplacementRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "control");
+        rabbitService.promoteReplacement(userId, houseId, id, req.getRequestId());
         return ApiResponse.ok(null);
     }
 

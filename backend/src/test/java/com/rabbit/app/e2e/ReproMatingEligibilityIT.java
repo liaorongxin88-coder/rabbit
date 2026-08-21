@@ -112,7 +112,7 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
     }
 
     @Test
-    void artificialInseminationNeedsNoBuck() {
+    void artificialInseminationAllowsNoSpecificBuck() {
         Fixture f = doeAwaitingMating("mate_ai");
 
         api.postOk("/api/repro/cycles/" + f.cycleId + "/actions", f.owner.token, f.houseId, obj(
@@ -124,6 +124,45 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
 
         Assertions.assertEquals("AWAIT_PALPATION", jdbc.queryForObject(
             "select stage from breeding_cycles where id = ?", String.class, f.cycleId));
+    }
+
+    @Test
+    void artificialInseminationCanOptionallyRecordTheSelectedBuck() {
+        Fixture f = doeAwaitingMating("mate_ai_buck");
+
+        api.postOk("/api/repro/cycles/" + f.cycleId + "/actions", f.owner.token, f.houseId, obj(
+            "action", "MATING",
+            "occurredAt", now(),
+            "maleRabbitId", f.buckId,
+            "matingMethod", "AI",
+            "requestId", requestId("ai_buck")
+        ));
+
+        Assertions.assertEquals(f.buckId, jdbc.queryForObject(
+            "select male_rabbit_id from breeding_cycles where id = ?",
+            Long.class,
+            f.cycleId
+        ));
+    }
+
+    @Test
+    void matingMethodIsRequiredEvenWhenABuckIsSelected() {
+        Fixture f = doeAwaitingMating("mate_method_required");
+
+        api.expectError(
+            "/api/repro/cycles/" + f.cycleId + "/actions",
+            HttpMethod.POST,
+            f.owner.token,
+            f.houseId,
+            obj(
+                "action", "MATING",
+                "occurredAt", now(),
+                "maleRabbitId", f.buckId,
+                "requestId", requestId("missing_method")
+            ),
+            400,
+            "请选择配种方式"
+        );
     }
 
     // ---------------------------------------------------------------- helpers

@@ -10,6 +10,13 @@ class RabbitBatchMembership {
     this.currentCycleId,
     this.nextEventDate,
     this.nextEventType,
+    this.batchCycleCount = 0,
+    this.batchOperationCount = 0,
+    this.batchLitterCount = 0,
+    this.batchTotalKits = 0,
+    this.batchLiveKits = 0,
+    this.batchWeanedKits = 0,
+    this.batchLastOperationAt,
   });
 
   final int batchId;
@@ -22,6 +29,13 @@ class RabbitBatchMembership {
   final String batchRole;
   final DateTime? nextEventDate;
   final String? nextEventType;
+  final int batchCycleCount;
+  final int batchOperationCount;
+  final int batchLitterCount;
+  final int batchTotalKits;
+  final int batchLiveKits;
+  final int batchWeanedKits;
+  final DateTime? batchLastOperationAt;
 
   static RabbitBatchMembership fromJson(Map<String, dynamic> json) {
     return RabbitBatchMembership(
@@ -35,6 +49,13 @@ class RabbitBatchMembership {
       batchRole: _optionalString(json['batchRole']) ?? '',
       nextEventDate: _dateValue(json['nextEventDate']),
       nextEventType: _optionalString(json['nextEventType']),
+      batchCycleCount: _intValue(json['batchCycleCount']),
+      batchOperationCount: _intValue(json['batchOperationCount']),
+      batchLitterCount: _intValue(json['batchLitterCount']),
+      batchTotalKits: _intValue(json['batchTotalKits']),
+      batchLiveKits: _intValue(json['batchLiveKits']),
+      batchWeanedKits: _intValue(json['batchWeanedKits']),
+      batchLastOperationAt: _dateValue(json['batchLastOperationAt']),
     );
   }
 

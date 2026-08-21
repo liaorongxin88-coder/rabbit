@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.file.mapper.BusinessFileMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.file.entity.BusinessFile">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="content_type" property="contentType"/>
+        <result column="size_bytes" property="sizeBytes"/>
+        <result column="sha256" property="sha256"/>
+        <result column="content" property="content"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <insert id="insert">
+        insert into business_files (
+            id, house_id, file_name, content_type, size_bytes, sha256, content, create_by
+        ) values (
+            #{id}, #{houseId}, #{fileName}, #{contentType}, #{sizeBytes}, #{sha256}, #{content}, #{createBy}
+        )
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select * from business_files where house_id = #{houseId} and id = #{id} limit 1
+    </select>
+
+    <select id="selectByHouseAndSha" resultMap="Map">
+        select id, house_id, file_name, content_type, size_bytes, sha256, create_by, create_time
+        from business_files
+        where house_id = #{houseId} and sha256 = #{sha256}
+        limit 1
+    </select>
+
+    <select id="countByIds" resultType="int">
+        select count(*) from business_files
+        where house_id = #{houseId}
+          and id in
+          <foreach collection="ids" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+    </select>
+</mapper>

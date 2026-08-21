@@ -23,6 +23,12 @@ backend/src/main/resources/db/migration/
   不保存运营商原 token 或手机号。
 - V18 为一键登录处理记录增加可接管租约，并新增按 IP 和时间桶唯一的原子限流计数；终态记录
   和过期限流桶由后端按配置保留期清理。
+- V34 增加商品兔三阶段参数、成长起始时间和后备转种状态；从在栏兔只幂等回填
+  `SALE_READY` / `REPLACEMENT_MATURE` 任务，并让新写路径在业务事务内同步维护任务。
+- V35 增加按兔场隔离的 `business_files` 图片内容表，并给 `replacement_records` 增加
+  `request_id`，让商品兔留后备接口可以幂等返回生成的后备记录 ID。
+- V36 将离场兔遗留的 `PENDING` 待办改为 `CANCELLED`。离场事务会同步取消兔只名下待办，
+  待办和治疗复查查询也只返回仍在场的兔只。
 
 ## 参考文件
 
@@ -39,6 +45,7 @@ backend/src/main/resources/db/migration/
 - `prepartum_records`
 - `weaning_records`
 - `rabbit_status_history`
+- `business_files`
 
 明细表仍通过父表关联归属兔场，例如：
 

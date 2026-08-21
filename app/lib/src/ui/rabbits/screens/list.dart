@@ -12,6 +12,7 @@ import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/abortion.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/kept_kits.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/header.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
@@ -496,6 +497,7 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
   ) {
     final rabbit = widget.rabbit;
     final stage = _stageOverride?.label ?? _stageLabel(rabbit.currentStage);
+    final pendingWeaningTask = _pendingWeaningTask(tasks);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -574,6 +576,17 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
             label: const Text('记录流产'),
           ),
         ],
+        if (widget.canEdit && pendingWeaningTask != null) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            key: ValueKey('rabbit-repro-kept-kits-${rabbit.id}'),
+            onPressed: () => _openKeptKitsAdjustment(
+              pendingWeaningTask.cycleId!,
+            ),
+            icon: const Icon(Icons.exposure_outlined),
+            label: const Text('调整留崽数'),
+          ),
+        ],
         if (!widget.pageMode && widget.canEdit && rabbit.isActive) ...[
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -594,6 +607,15 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
         stage != null &&
         (stageActions?[stage.wire]?.contains(ReproAction.abortion.wire) ??
             false);
+  }
+
+  ReproTask? _pendingWeaningTask(AsyncValue<List<ReproTask>> tasks) {
+    for (final task in tasks.valueOrNull ?? const <ReproTask>[]) {
+      if (task.action == ReproAction.weaning && task.cycleId != null) {
+        return task;
+      }
+    }
+    return null;
   }
 
   Widget _buildMemberships(
@@ -841,6 +863,18 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
       if (!widget.pageMode) {
         Navigator.of(context).pop();
       }
+    }
+  }
+
+  Future<void> _openKeptKitsAdjustment(int cycleId) async {
+    final changed = await showKeptKitsAdjustmentSheet(
+      context: context,
+      houseId: widget.houseId,
+      cycleId: cycleId,
+      motherRabbitId: widget.rabbit.id,
+    );
+    if (changed && mounted) {
+      _refreshRabbitFlow();
     }
   }
 
@@ -1101,6 +1135,37 @@ class _RabbitMembershipCard extends StatelessWidget {
             _membershipDateLabel(membership),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          if (membership.batchRole == 'breeding') ...[
+            const SizedBox(height: 8),
+            Text(
+              '本批次阶段：${_membershipStageLabel(membership)}',
+              key: ValueKey(
+                'rabbit-membership-stage-${membership.batchId}',
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${membership.batchCycleCount} 个周期 · ${membership.batchOperationCount} 次操作 · ${membership.batchLitterCount} 窝',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '产仔 ${membership.batchTotalKits} · 活仔 ${membership.batchLiveKits} · 断奶 ${membership.batchWeanedKits}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (membership.batchLastOperationAt != null) ...[
+              const SizedBox(height: 3),
+              Text(
+                '最近操作 ${_dateLabel(membership.batchLastOperationAt, fallback: '未记录')}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: palette.muted,
+                    ),
+              ),
+            ],
+          ],
           if (onOpenBatch != null || onRemove != null) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -1173,6 +1238,14 @@ String _membershipDateLabel(RabbitBatchMembership membership) {
     return _dateLabel(membership.joinDate, fallback: '加入日期未设置');
   }
   return _dateLabel(membership.exitDate, fallback: '退出日期未设置');
+}
+
+String _membershipStageLabel(RabbitBatchMembership membership) {
+  final stage = ReproStage.tryParse(membership.currentStage);
+  if (stage != null) {
+    return stage.label;
+  }
+  return membership.batchCycleCount > 0 ? '周期已结束' : '尚无生产周期';
 }
 
 String _dateLabel(DateTime? value, {required String fallback}) {

@@ -57,12 +57,18 @@
     </select>
 
     <select id="selectDueReviewsByHouse" resultMap="Map">
-        select id, house_id, rabbit_id, start_date, diagnosis, drug, dose, days, next_review_date, status, remark, request_id, create_by, create_time, update_by, update_time
-        from treatment_records
-        where house_id = #{houseId}
-          and status = 'OPEN'
-          and next_review_date is not null
-          and next_review_date &lt;= #{now}
-        order by next_review_date asc, id asc
+        select tr.id, tr.house_id, tr.rabbit_id, tr.start_date, tr.diagnosis, tr.drug,
+               tr.dose, tr.days, tr.next_review_date, tr.status, tr.remark, tr.request_id,
+               tr.create_by, tr.create_time, tr.update_by, tr.update_time
+        from treatment_records tr
+        inner join rabbits r
+          on r.house_id = tr.house_id
+         and r.id = tr.rabbit_id
+         and r.is_active = true
+        where tr.house_id = #{houseId}
+          and tr.status = 'OPEN'
+          and tr.next_review_date is not null
+          and tr.next_review_date &lt;= #{now}
+        order by tr.next_review_date asc, tr.id asc
     </select>
 </mapper>

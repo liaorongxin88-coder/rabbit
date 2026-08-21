@@ -376,7 +376,7 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<设备序列号> \
 - **`app.main()` 在 integration_test 里是空操作**，要模拟重启得
   `pumpWidget(ProviderScope(child: RabbitManagerApp()))`，这样才拿到新的 SessionStore。
   但即便如此它也连着旧的全局 navigator key 和旧路由栈，**不能用来验证“失效令牌回登录页”**——
-  我被它骗过一次，一度以为是产品 bug。那条逻辑由 `test/session_expiry_test.dart` 确定性地钉住
+  我被它骗过一次，一度以为是产品 bug。那条逻辑由 `test/app/session_expiry_test.dart` 确定性地钉住
   （冷启动带失效令牌、会话中途失效，两种都必须落回登录页）。
 
 还有一个反面教材：断言 `find.text('数据面板')` 是**假通过**，底部导航上就写着这四个字，
@@ -454,7 +454,7 @@ HEADED=1 pnpm --dir admin e2e:browser  # 看着它点
 `cage-map-legend`）而不是认笼位编号文字——地图格子上不写编号。新增三项断言：
 图例里五种关注度全部出现、停用笼位也在图上（它在货架上是真存在的）、
 换笼地图里商品兔笼对种母兔必须是 `disabled`（它没有对调路径，选完只会吃 400）。
-并补了 `14a-narrow-cage-map`，窄屏下地图与列表两个视图都要验。
+并补了 `14a-narrow-cage-map`，窄屏下要验证分层地图、筛选和笼位操作入口。
 
 2026-08-15 已从 `/workspace/login` 使用真实本地账号和真实后端完成 Admin Batch 闭环：两母兔首次批量配种、空怀、哺乳期二配、两轮分娩/断奶、7 只商品兔出库、母兔离场和 Batch 自动完成；24 张截图、HTTP 4xx/5xx 为 0、console/page error 为 0。另在 390x844 下分别以 OWNER 和 VIEWER 登录复测完成 Batch 条目，页面无横向溢出，只读账号无可执行写入口。测试账号矩阵保存在 `/private/tmp/rabbit-test-account-matrix-20260815112735492410.txt`，仅适用于当前本机 `rabbit_app`，不得复制到生产或提交密码到仓库。
 

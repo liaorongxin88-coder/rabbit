@@ -13,6 +13,9 @@ public class GlobalSetting {
     private Integer prepartumDays;
     private Integer weaningDays;
     private Integer postpartumDays;
+    private Integer adaptationDays;
+    private Integer growingDays;
+    private Integer fatteningDays;
     private Integer saleDays;
     private Integer replacementDays;
     private String remark;
@@ -91,6 +94,40 @@ public class GlobalSetting {
 
     public void setPostpartumDays(Integer postpartumDays) {
         this.postpartumDays = postpartumDays;
+    }
+
+    public Integer getAdaptationDays() {
+        return adaptationDays;
+    }
+
+    public void setAdaptationDays(Integer adaptationDays) {
+        this.adaptationDays = adaptationDays;
+    }
+
+    public Integer getGrowingDays() {
+        return growingDays;
+    }
+
+    public void setGrowingDays(Integer growingDays) {
+        this.growingDays = growingDays;
+    }
+
+    public Integer getFatteningDays() {
+        return fatteningDays;
+    }
+
+    public void setFatteningDays(Integer fatteningDays) {
+        this.fatteningDays = fatteningDays;
+    }
+
+    /** 新模型按三个商品兔阶段之和计算成熟日；旧数据缺列时回落 sale_days。 */
+    public int commodityMaturityDays() {
+        if (adaptationDays != null && adaptationDays > 0
+            && growingDays != null && growingDays > 0
+            && fatteningDays != null && fatteningDays > 0) {
+            return adaptationDays + growingDays + fatteningDays;
+        }
+        return saleDays == null || saleDays <= 0 ? 33 : saleDays;
     }
 
     public Integer getSaleDays() {

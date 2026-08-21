@@ -32,4 +32,12 @@ public interface ReproEventMapper {
         @Param("motherRabbitId") Long motherRabbitId,
         @Param("limit") int limit
     );
+
+    /** 一个批次标签下的近期生产操作，倒序。 */
+    List<ReproEvent> selectByBatchAndMother(
+        @Param("houseId") Long houseId,
+        @Param("batchId") Long batchId,
+        @Param("motherRabbitId") Long motherRabbitId,
+        @Param("limit") int limit
+    );
 }

@@ -37,7 +37,7 @@ class CageDetailScreen extends ConsumerWidget {
       title: '笼位管理',
       leading: IconButton(
         key: const ValueKey('cage-detail-back-button'),
-        tooltip: '返回笼位列表',
+        tooltip: '返回笼位地图',
         onPressed: () => context.go('/houses/$houseId/cages'),
         icon: const Icon(Icons.arrow_back),
       ),

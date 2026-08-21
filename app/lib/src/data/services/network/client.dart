@@ -92,6 +92,24 @@ class ApiClient {
     );
   }
 
+  Future<T> postMultipart<T>(
+    String path, {
+    required int houseId,
+    required FormData body,
+    required T Function(Object? data) decode,
+  }) async {
+    final options = await _options(houseId: houseId);
+    options.contentType = Headers.multipartFormDataContentType;
+    return _request(
+      () => _dio.post<Object?>(
+        path,
+        data: body,
+        options: options,
+      ),
+      decode,
+    );
+  }
+
   Future<T> put<T>(
     String path, {
     int? houseId,

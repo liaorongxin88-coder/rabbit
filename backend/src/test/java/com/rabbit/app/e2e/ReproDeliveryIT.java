@@ -97,6 +97,7 @@ public class ReproDeliveryIT extends E2eTestSupport {
     @Test
     void failedDeliveryWarnsButDoesNotCullTheDoe() {
         Fixture f = pregnantDoe("deliv_fail");
+        String imageId = uploadTestImage(f.owner, f.houseId, "dystocia");
 
         api.postOk("/api/repro/cycles/" + f.cycleId + "/actions", f.owner.token, f.houseId, obj(
             "action", "DELIVERY",
@@ -106,6 +107,7 @@ public class ReproDeliveryIT extends E2eTestSupport {
             "liveKits", 0,
             "keptKits", 0,
             "remark", "全窝死胎",
+            "attachmentFileIds", List.of(imageId),
             "requestId", requestId("failed")
         ));
 

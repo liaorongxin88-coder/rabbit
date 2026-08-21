@@ -110,6 +110,108 @@ public class ReproApiIT extends E2eTestSupport {
         }
     }
 
+    @Test
+    void batchTagsProjectOnlyTheirOwnCyclesOperationsAndProductionData() {
+        Fixture first = fixture("batch_tracking_scope", 1);
+        long doeId = first.does.get(0);
+        long firstCycleId = openAtEstrus(first, doeId, "first");
+
+        jdbc.update(
+            "insert into litters (house_id, cycle_id, mother_rabbit_id, batch_id,"
+                + " birth_date, total_kits, live_kits, kept_kits, current_nursing, status,"
+                + " weaning_date, weaned_count, request_id, create_by, update_by)"
+                + " values (?, ?, ?, ?, now(), 8, 7, 7, 0, 'WEANED', now(), 6, ?, ?, ?)",
+            first.houseId,
+            firstCycleId,
+            doeId,
+            first.batchId,
+            requestId("tracking_litter"),
+            first.userName,
+            first.userName
+        );
+
+        // 第一批次周期结束，但标签仍保留。随后同一母兔进入第二批次，
+        // rabbits.current_* 会指向第二批次；这里专门防止它串回第一批次详情。
+        jdbc.update(
+            "update breeding_cycles set lifecycle = 'CLOSED', stage = 'READY',"
+                + " stage_entered_at = now(), closed_at = now() where id = ?",
+            firstCycleId
+        );
+        jdbc.update(
+            "update work_tasks set status = 'DONE', update_time = now() where cycle_id = ?",
+            firstCycleId
+        );
+        jdbc.update(
+            "update rabbits set current_stage = null, current_cycle_id = null,"
+                + " stage_entered_at = null where house_id = ? and id = ?",
+            first.houseId,
+            doeId
+        );
+
+        long secondBatchId = api.postOk("/api/batches", first.token, first.houseId, obj(
+            "batchCode", "TRACKING-B",
+            "femaleRabbitIds", List.of(doeId),
+            "requestId", requestId("tracking_second_batch")
+        )).get("id").asLong();
+        long secondCycleId = jdbc.queryForObject(
+            "select id from breeding_cycles where batch_id = ? and mother_rabbit_id = ?",
+            Long.class,
+            secondBatchId,
+            doeId
+        );
+
+        JsonNode firstTag = api.getOk(
+            "/api/batches/" + first.batchId + "/batch-rabbits",
+            first.token,
+            first.houseId
+        ).get(0);
+        Assertions.assertTrue(firstTag.get("currentCycleId").isNull());
+        Assertions.assertTrue(firstTag.get("currentStage").isNull());
+        Assertions.assertEquals(1, firstTag.get("batchCycleCount").asInt());
+        Assertions.assertEquals(1, firstTag.get("batchOperationCount").asInt());
+        Assertions.assertEquals(1, firstTag.get("batchLitterCount").asInt());
+        Assertions.assertEquals(8, firstTag.get("batchTotalKits").asInt());
+        Assertions.assertEquals(7, firstTag.get("batchLiveKits").asInt());
+        Assertions.assertEquals(6, firstTag.get("batchWeanedKits").asInt());
+
+        JsonNode secondTag = api.getOk(
+            "/api/batches/" + secondBatchId + "/batch-rabbits",
+            first.token,
+            first.houseId
+        ).get(0);
+        Assertions.assertEquals(secondCycleId, secondTag.get("currentCycleId").asLong());
+        Assertions.assertEquals("AWAIT_ESTRUS", secondTag.get("currentStage").asText());
+        Assertions.assertEquals(0, secondTag.get("batchLitterCount").asInt());
+
+        JsonNode memberships = api.getOk(
+            "/api/rabbits/" + doeId + "/batch-memberships?active=true",
+            first.token,
+            first.houseId
+        );
+        Assertions.assertEquals(2, memberships.size());
+        JsonNode firstMembership = null;
+        for (JsonNode membership : memberships) {
+            if (membership.get("batchId").asLong() == first.batchId) {
+                firstMembership = membership;
+                break;
+            }
+        }
+        Assertions.assertNotNull(firstMembership);
+        Assertions.assertTrue(firstMembership.get("currentCycleId").isNull());
+        Assertions.assertEquals(8, firstMembership.get("batchTotalKits").asInt());
+
+        JsonNode events = api.getOk(
+            "/api/repro/events?batchId=" + first.batchId
+                + "&motherRabbitId=" + doeId,
+            first.token,
+            first.houseId
+        );
+        Assertions.assertEquals(1, events.size());
+        Assertions.assertEquals(first.batchId, events.get(0).get("batchId").asLong());
+        Assertions.assertEquals(firstCycleId, events.get(0).get("cycleId").asLong());
+        Assertions.assertEquals("开始周期", events.get(0).get("eventLabel").asText());
+    }
+
     /**
      * 提醒完全由待办中心承载：每推进一步，旧任务置 DONE、新任务同事务生成。
      *
@@ -132,6 +234,7 @@ public class ReproApiIT extends E2eTestSupport {
         api.postOk("/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, obj(
             "action", "MATING", "occurredAt", now(),
             "maleRabbitId", f.buckId,
+            "matingMethod", "NATURAL",
             "requestId", requestId("compat_mating")));
         Assertions.assertEquals("PALPATION", pendingTaskType(cycleId));
 

@@ -71,7 +71,7 @@ class OutboundSubmitCoordinatorTest {
 
         private FakeBusinessService(RuntimeException failure) {
             super(null, null, null, null, null, null, null, null, null, null, null, null,
-                    new ObjectMapper());
+                    new ObjectMapper(), null);
             this.failure = failure;
         }
 

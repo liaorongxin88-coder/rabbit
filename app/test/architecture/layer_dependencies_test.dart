@@ -3,6 +3,128 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('unit and widget tests follow source ownership', () {
+    const topLevelOwners = {
+      'app',
+      'architecture',
+      'config',
+      'data',
+      'domain',
+      'routing',
+      'ui',
+    };
+    const dataTypes = {'repositories', 'services'};
+    const uiTypes = {'screens', 'sheets', 'widgets', 'view_models'};
+    final violations = <String>[];
+
+    for (final entity in Directory('test').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('_test.dart')) {
+        continue;
+      }
+
+      final segments = entity.path.split('/');
+      final owner = segments.length > 1 ? segments[1] : null;
+      if (owner == null || !topLevelOwners.contains(owner)) {
+        violations.add(entity.path);
+        continue;
+      }
+
+      if (owner == 'data') {
+        final dataType = segments.length > 2 ? segments[2] : null;
+        if (!dataTypes.contains(dataType) || segments.length < 5) {
+          violations.add(entity.path);
+        }
+        continue;
+      }
+
+      if (owner == 'domain' && segments.length < 4) {
+        violations.add(entity.path);
+        continue;
+      }
+
+      if (owner == 'ui') {
+        final feature = segments.length > 2 ? segments[2] : null;
+        final interfaceType = segments.length > 3 ? segments[3] : null;
+        if (feature == 'core') {
+          final isCoreFile = interfaceType == 'widgets' ||
+              (interfaceType?.endsWith('_test.dart') ?? false);
+          if (!isCoreFile) {
+            violations.add(entity.path);
+          }
+        } else if (feature == null ||
+            !uiTypes.contains(interfaceType) ||
+            segments.length < 5) {
+          violations.add(entity.path);
+        }
+      }
+    }
+
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Tests must use the same owner and interface types as lib/src: '
+          '${violations.join(', ')}',
+    );
+  });
+
+  test('device tests are grouped by business workflow', () {
+    const businessOwners = {
+      'auth',
+      'batches',
+      'cages',
+      'houses',
+      'nfc',
+      'outbound',
+      'profile',
+      'rabbits',
+      'reports',
+      'reproduction',
+      'settings',
+    };
+    final violations = <String>[];
+
+    for (final entity
+        in Directory('integration_test').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('_test.dart')) {
+        continue;
+      }
+
+      final segments = entity.path.split('/');
+      final owner = segments.length > 1 ? segments[1] : null;
+      if (segments.length < 3 || !businessOwners.contains(owner)) {
+        violations.add(entity.path);
+      }
+    }
+
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Device tests must live under a business workflow: '
+          '${violations.join(', ')}',
+    );
+  });
+
+  test('test support code keeps an explicit owner', () {
+    const forbiddenDirectories = [
+      'test/shared',
+      'test/common',
+      'test/utils',
+      'integration_test/shared',
+      'integration_test/common',
+      'integration_test/utils',
+    ];
+    final violations = forbiddenDirectories
+        .where((path) => Directory(path).existsSync())
+        .toList();
+
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Test support belongs to the nearest layer or business owner: '
+          '${violations.join(', ')}',
+    );
+  });
+
   test('lower layers do not import UI code', () {
     const lowerLayers = ['config', 'data', 'domain'];
     final violations = <String>[];

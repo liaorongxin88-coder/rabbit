@@ -16,7 +16,7 @@ public enum ReproEventType {
     PALPATION_UNSURE("摸胎-不确定"),
     PREPARTUM_DONE("备产"),
     DELIVERY_DONE("接产"),
-    DELIVERY_FAILED("分娩失败"),
+    DELIVERY_FAILED("难产"),
     WEANING_DONE("分笼"),
     ABORTION("流产"),
     POSTPONE("推迟"),
@@ -29,7 +29,9 @@ public enum ReproEventType {
      * 异期复孕等异常补产的兜底事件（设计 §3.4）。刻意不开第二条管线周期：
      * 生产管理上这属于应预防的事故，用异常事件 + 窝计数修正记录，而不是把它建成常规路径。
      */
-    DELIVERY_EXTRA("异常补产");
+    DELIVERY_EXTRA("异常补产"),
+    /** 哺乳期留崽数调整；阶段与待办不变，只更新窝计数并追加审计事件。 */
+    KEPT_KITS_ADJUSTED("留崽数调整");
 
     private final String label;
 

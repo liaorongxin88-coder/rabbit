@@ -6,11 +6,14 @@ public class ReplacementRecord {
     private Long id;
     private Long houseId;
     private Long rabbitId;
+    private String requestId;
     private String originalType;
     private Date replacementDate;
     private Date expectedMatureDate;
     private Boolean isMatureNotified;
     private Date matureNotifyDate;
+    private String status;
+    private Date promotedAt;
     private String remark;
     private String createBy;
     private Date createTime;
@@ -39,6 +42,14 @@ public class ReplacementRecord {
 
     public void setRabbitId(Long rabbitId) {
         this.rabbitId = rabbitId;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
     }
 
     public String getOriginalType() {
@@ -79,6 +90,22 @@ public class ReplacementRecord {
 
     public void setMatureNotifyDate(Date matureNotifyDate) {
         this.matureNotifyDate = matureNotifyDate;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Date getPromotedAt() {
+        return promotedAt;
+    }
+
+    public void setPromotedAt(Date promotedAt) {
+        this.promotedAt = promotedAt;
     }
 
     public String getRemark() {

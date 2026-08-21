@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
 
 final currentHouseBatchesProvider =
@@ -81,6 +82,50 @@ final batchMembersProvider = FutureProvider.autoDispose
     return ref.watch(batchRepositoryProvider).listBatchRabbits(
           houseId: request.houseId,
           batchId: request.batchId,
+          cancelToken: cancelToken,
+        );
+  },
+);
+
+class BatchTrackingRequest {
+  const BatchTrackingRequest({
+    required this.houseId,
+    required this.batchId,
+    required this.motherRabbitId,
+  });
+
+  final int houseId;
+  final int batchId;
+  final int motherRabbitId;
+
+  @override
+  bool operator ==(Object other) {
+    return other is BatchTrackingRequest &&
+        other.houseId == houseId &&
+        other.batchId == batchId &&
+        other.motherRabbitId == motherRabbitId;
+  }
+
+  @override
+  int get hashCode => Object.hash(houseId, batchId, motherRabbitId);
+}
+
+final batchTrackingEventsProvider = FutureProvider.autoDispose
+    .family<List<BatchTrackingEvent>, BatchTrackingRequest>(
+  (ref, request) async {
+    final userId = ref.watch(authenticatedUserIdProvider);
+    if (userId <= 0 ||
+        request.houseId <= 0 ||
+        request.batchId <= 0 ||
+        request.motherRabbitId <= 0) {
+      throw ArgumentError('批次追踪参数不正确');
+    }
+    final cancelToken = CancelToken();
+    ref.onDispose(cancelToken.cancel);
+    return ref.watch(batchRepositoryProvider).listBatchTrackingEvents(
+          houseId: request.houseId,
+          batchId: request.batchId,
+          motherRabbitId: request.motherRabbitId,
           cancelToken: cancelToken,
         );
   },

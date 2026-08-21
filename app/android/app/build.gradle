@@ -18,7 +18,7 @@ def hasReleaseSigning = [
 
 android {
     namespace = "com.rabbit.app.flutter"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "25.1.8937393"
 
     compileOptions {

@@ -38,6 +38,13 @@ public interface RabbitMapper {
 
     int updateTypeAndCage(@Param("houseId") Long houseId, @Param("id") Long id, @Param("type") String type, @Param("cageId") Long cageId, @Param("updateBy") String updateBy);
 
+    int promoteReplacement(
+        @Param("houseId") Long houseId,
+        @Param("id") Long id,
+        @Param("reproductiveStage") String reproductiveStage,
+        @Param("updateBy") String updateBy
+    );
+
     int updateCageIfActive(@Param("houseId") Long houseId,
                            @Param("id") Long id,
                            @Param("cageId") Long cageId,
@@ -98,4 +105,10 @@ public interface RabbitMapper {
     List<CageCountRow> selectActiveCountsByCage(@Param("houseId") Long houseId);
 
     List<RabbitCageRow> selectCageIdsByIds(@Param("houseId") Long houseId, @Param("ids") List<Long> ids);
+
+    int advanceCommodityGrowthStages(
+        @Param("houseId") Long houseId,
+        @Param("now") java.util.Date now,
+        @Param("updateBy") String updateBy
+    );
 }

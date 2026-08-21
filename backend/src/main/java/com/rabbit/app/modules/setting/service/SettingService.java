@@ -12,6 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class SettingService {
     /** 家兞妊娠期约 30 天；与 V26 的列默认值保持一致。 */
     private static final int DEFAULT_GESTATION_DAYS = 30;
+    private static final int DEFAULT_PREPARTUM_DAYS = 15;
+    private static final int DEFAULT_WEANING_DAYS = 30;
+    private static final int DEFAULT_REPLACEMENT_DAYS = 90;
+    private static final int DEFAULT_ADAPTATION_DAYS = 3;
+    private static final int DEFAULT_GROWING_DAYS = 18;
+    private static final int DEFAULT_FATTENING_DAYS = 12;
 
     private final GlobalSettingMapper globalSettingMapper;
 
@@ -131,7 +137,24 @@ public class SettingService {
         setting.setPrepartumDays(req.getPrepartumDays());
         setting.setWeaningDays(req.getWeaningDays());
         setting.setPostpartumDays(req.getPostpartumDays());
-        setting.setSaleDays(req.getSaleDays());
+        boolean hasStageDurations = req.getAdaptationDays() != null
+            || req.getGrowingDays() != null
+            || req.getFatteningDays() != null;
+        setting.setAdaptationDays(valueOrDefault(
+            req.getAdaptationDays() != null ? req.getAdaptationDays() : setting.getAdaptationDays(),
+            DEFAULT_ADAPTATION_DAYS
+        ));
+        setting.setGrowingDays(valueOrDefault(
+            req.getGrowingDays() != null ? req.getGrowingDays() : setting.getGrowingDays(),
+            DEFAULT_GROWING_DAYS
+        ));
+        setting.setFatteningDays(valueOrDefault(
+            req.getFatteningDays() != null ? req.getFatteningDays() : setting.getFatteningDays(),
+            DEFAULT_FATTENING_DAYS
+        ));
+        setting.setSaleDays(hasStageDurations
+            ? setting.commodityMaturityDays()
+            : req.getSaleDays());
         setting.setReplacementDays(req.getReplacementDays());
         setting.setRemark(req.getRemark());
     }
@@ -143,11 +166,11 @@ public class SettingService {
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
         setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
-        setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), 3));
-        setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), 25));
+        setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), DEFAULT_PREPARTUM_DAYS));
+        setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), DEFAULT_WEANING_DAYS));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
-        setting.setSaleDays(valueOrDefault(source.getSaleDays(), 30));
-        setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), 45));
+        copyCommoditySettings(setting, source);
+        setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), DEFAULT_REPLACEMENT_DAYS));
         setting.setRemark(source.getRemark());
         setting.setCreateBy(String.valueOf(userId));
         setting.setUpdateBy(String.valueOf(userId));
@@ -161,11 +184,11 @@ public class SettingService {
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
         setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
-        setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), 3));
-        setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), 25));
+        setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), DEFAULT_PREPARTUM_DAYS));
+        setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), DEFAULT_WEANING_DAYS));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
-        setting.setSaleDays(valueOrDefault(source.getSaleDays(), 30));
-        setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), 45));
+        copyCommoditySettings(setting, source);
+        setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), DEFAULT_REPLACEMENT_DAYS));
         setting.setRemark(source.getRemark());
         setting.setCreateBy(String.valueOf(userId));
         setting.setUpdateBy(String.valueOf(userId));
@@ -179,11 +202,14 @@ public class SettingService {
         setting.setAphrodisiacDays(2);
         setting.setPalpationDays(12);
         setting.setGestationDays(DEFAULT_GESTATION_DAYS);
-        setting.setPrepartumDays(3);
-        setting.setWeaningDays(25);
+        setting.setPrepartumDays(DEFAULT_PREPARTUM_DAYS);
+        setting.setWeaningDays(DEFAULT_WEANING_DAYS);
         setting.setPostpartumDays(10);
-        setting.setSaleDays(30);
-        setting.setReplacementDays(45);
+        setting.setAdaptationDays(DEFAULT_ADAPTATION_DAYS);
+        setting.setGrowingDays(DEFAULT_GROWING_DAYS);
+        setting.setFatteningDays(DEFAULT_FATTENING_DAYS);
+        setting.setSaleDays(setting.commodityMaturityDays());
+        setting.setReplacementDays(DEFAULT_REPLACEMENT_DAYS);
         setting.setCreateBy(String.valueOf(userId));
         setting.setUpdateBy(String.valueOf(userId));
         return setting;
@@ -191,6 +217,14 @@ public class SettingService {
 
     private int valueOrDefault(Integer value, int fallback) {
         return value == null ? fallback : value;
+    }
+
+    private void copyCommoditySettings(GlobalSetting target, GlobalSetting source) {
+        target.setAdaptationDays(valueOrDefault(source.getAdaptationDays(), DEFAULT_ADAPTATION_DAYS));
+        target.setGrowingDays(valueOrDefault(source.getGrowingDays(), DEFAULT_GROWING_DAYS));
+        target.setFatteningDays(valueOrDefault(source.getFatteningDays(), DEFAULT_FATTENING_DAYS));
+        // sale_days 仍作为旧客户端的响应镜像保留；新写路径只读取三个阶段之和。
+        target.setSaleDays(valueOrDefault(source.getSaleDays(), target.commodityMaturityDays()));
     }
 
     private void requireHouseId(Long houseId) {

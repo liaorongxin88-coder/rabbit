@@ -77,6 +77,20 @@ Data 和 Domain 层使用业务能力命名；`home`、`dashboard` 这类界面�
 - 列表入口用 `list.dart`，模块总览用 `overview.dart`，不要使用无法表达用途的 `index.dart`。
 - 领域主实体保留自然名称，例如 `domain/rabbits/rabbit.dart`；不要为了消除业务词而改成含义模糊的 `model.dart`。
 
+## 测试目录职责
+
+`test/` 沿用源码的职责边界，不在根目录平铺测试文件：
+
+- 应用装配、启动、会话失效和路由生命周期放在 `test/app/`。
+- 配置和静态文案放在 `test/config/`。
+- Repository 测试放在 `test/data/repositories/<business>/`，底层服务测试放在 `test/data/services/<capability>/`。
+- 纯模型和业务规则测试放在 `test/domain/<business>/`。
+- 路由表、导航守卫和 ShellRoute 测试放在 `test/routing/`。
+- UI 测试放在 `test/ui/<feature>/{screens,sheets,widgets,view_models}/`，与被测源码的界面类型一致。
+- 架构约束放在 `test/architecture/`；真机流程放在 `integration_test/<business>/`。
+
+测试跨越多层时，按最外层被测行为归档。页面测试即使替换了 Repository，仍归页面；验证请求和响应契约的测试即使解析了领域模型，仍归 Repository。测试辅助代码放在最近的职责目录，不新增 `shared/`、`common/` 或 `utils/` 杂物目录，也不为没有测试的源码目录创建空镜像。
+
 ## API 规则
 
 - Android 模拟器默认后端地址为 `http://10.0.2.2:8080`。
@@ -175,10 +189,10 @@ Data 和 Domain 层使用业务能力命名；`home`、`dashboard` 这类界面�
 - 缺笼的坐标留空槽，不得把后面的笼往前挤，否则“第几排第几位”就不可信；
   格子上写位号（排号在排头、层号在切换器，三者拼起来就是笼位）。
 - 筛选和搜索在地图上只能压暗不命中的格子，不能把它们从网格里移除。
-- 笼位管理的地图格子和列表卡片以在栏种母兔的 `currentStage` 显示生产阶段；
+- 笼位管理的地图格子以在栏种母兔的 `currentStage` 显示生产阶段；
   没有种母兔或母兔尚无生产阶段时显示「无状态」。在栏数仍保留在笼位统计和无障碍语义中。
 - 笼位多时按「排」分页，不一次铺完；大字号下格子跟着长，不用 `FittedBox` 缩字。
-- 分层地图是默认视图，但必须保留列表视图切换：大兔舍、200% 字号和按编号翻找时列表更可用。
+- 笼位管理只保留分层地图，不提供列表视图切换；搜索和筛选只压暗不命中的格子，不能改变空间坐标。
 
 ## Android 构建规则
 

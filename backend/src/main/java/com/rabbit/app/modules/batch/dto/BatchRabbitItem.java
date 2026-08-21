@@ -25,14 +25,23 @@ public class BatchRabbitItem {
     private Long cageId;
 
     /**
-     * 母兔当前所处的生产阶段（ReproStage 名，如 AWAIT_PALPATION），取自 rabbits 的投影列。
-     * 与 currentStatus 的区别是：currentStatus 是旧写路径留下的中文快照，旧写路径删除后不再更新；
-     * 这一列由生产状态机在推进周期的同一事务里维护，是权威现状。为空表示该母兔尚未入轨。
+     * 该批次标签下当前最先要处理的开放周期阶段（ReproStage 名，如 AWAIT_PALPATION）。
+     * 母兔同时带多个批次标签时不得读取 rabbits 的跨批次全局投影，否则会把另一个批次的
+     * 周期显示到本批次。为空表示这个标签下已经没有开放周期。
      */
     private String currentStage;
 
-    /** 母兔当前进行中的周期 id。客户端提交生产动作时需要它。 */
+    /** 与 currentStage 对应、且属于本批次标签的开放周期 id。 */
     private Long currentCycleId;
+
+    /** 下列字段全部限定在 batchId + rabbitId 关系内，不是母兔的跨批次总计。 */
+    private Integer batchCycleCount;
+    private Integer batchOperationCount;
+    private Integer batchLitterCount;
+    private Integer batchTotalKits;
+    private Integer batchLiveKits;
+    private Integer batchWeanedKits;
+    private Date batchLastOperationAt;
 
     public String getCurrentStage() {
         return currentStage;
@@ -48,6 +57,62 @@ public class BatchRabbitItem {
 
     public void setCurrentCycleId(Long currentCycleId) {
         this.currentCycleId = currentCycleId;
+    }
+
+    public Integer getBatchCycleCount() {
+        return batchCycleCount;
+    }
+
+    public void setBatchCycleCount(Integer batchCycleCount) {
+        this.batchCycleCount = batchCycleCount;
+    }
+
+    public Integer getBatchOperationCount() {
+        return batchOperationCount;
+    }
+
+    public void setBatchOperationCount(Integer batchOperationCount) {
+        this.batchOperationCount = batchOperationCount;
+    }
+
+    public Integer getBatchLitterCount() {
+        return batchLitterCount;
+    }
+
+    public void setBatchLitterCount(Integer batchLitterCount) {
+        this.batchLitterCount = batchLitterCount;
+    }
+
+    public Integer getBatchTotalKits() {
+        return batchTotalKits;
+    }
+
+    public void setBatchTotalKits(Integer batchTotalKits) {
+        this.batchTotalKits = batchTotalKits;
+    }
+
+    public Integer getBatchLiveKits() {
+        return batchLiveKits;
+    }
+
+    public void setBatchLiveKits(Integer batchLiveKits) {
+        this.batchLiveKits = batchLiveKits;
+    }
+
+    public Integer getBatchWeanedKits() {
+        return batchWeanedKits;
+    }
+
+    public void setBatchWeanedKits(Integer batchWeanedKits) {
+        this.batchWeanedKits = batchWeanedKits;
+    }
+
+    public Date getBatchLastOperationAt() {
+        return batchLastOperationAt;
+    }
+
+    public void setBatchLastOperationAt(Date batchLastOperationAt) {
+        this.batchLastOperationAt = batchLastOperationAt;
     }
 
     public Long getId() {

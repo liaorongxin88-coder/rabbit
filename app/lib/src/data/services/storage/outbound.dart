@@ -16,6 +16,8 @@ class OutboundLocalSnapshot {
     required this.unitPrice,
     required this.customer,
     required this.remark,
+    this.selectionMode = 'cage',
+    this.selectedOnly = false,
   });
 
   final OutboundTask task;
@@ -24,6 +26,8 @@ class OutboundLocalSnapshot {
   final String unitPrice;
   final String customer;
   final String remark;
+  final String selectionMode;
+  final bool selectedOnly;
 
   Map<String, dynamic> toJson() => {
         'task': task.toJson(),
@@ -32,6 +36,8 @@ class OutboundLocalSnapshot {
         'unitPrice': unitPrice,
         'customer': customer,
         'remark': remark,
+        'selectionMode': selectionMode,
+        'selectedOnly': selectedOnly,
       };
 
   factory OutboundLocalSnapshot.fromJson(Map<String, dynamic> json) {
@@ -43,6 +49,8 @@ class OutboundLocalSnapshot {
       unitPrice: json['unitPrice'] as String? ?? '',
       customer: json['customer'] as String? ?? '',
       remark: json['remark'] as String? ?? '',
+      selectionMode: json['selectionMode'] as String? ?? 'cage',
+      selectedOnly: json['selectedOnly'] as bool? ?? false,
     );
   }
 }

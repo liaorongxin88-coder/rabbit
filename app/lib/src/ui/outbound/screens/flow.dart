@@ -280,6 +280,24 @@ void _leaveOutbound(BuildContext context, OutboundEntry entry) {
   }
 }
 
+String _scopeLabel(OutboundTask task) {
+  switch (task.entryType.toUpperCase()) {
+    case 'RABBIT':
+      return '兔 #${task.sourceRabbitId ?? '-'}';
+    case 'CAGE':
+      for (final rabbit in task.rabbits) {
+        if (rabbit.cageId == task.sourceCageId) {
+          return '笼位 ${rabbit.cageNumber}';
+        }
+      }
+      return '笼位 #${task.sourceCageId ?? '-'}';
+    case 'ROW':
+      return '${task.sourceRowCode ?? '-'} 排';
+    default:
+      return '当前兔舍';
+  }
+}
+
 class _ResumeDraftView extends StatelessWidget {
   const _ResumeDraftView(
       {required this.task, required this.onContinue, required this.onDiscard});
@@ -304,6 +322,8 @@ class _ResumeDraftView extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
+              Text('候选范围：${_scopeLabel(task)}', textAlign: TextAlign.center),
+              const SizedBox(height: 4),
               Text('已选 ${task.selectedItems.length} 只，继续后会重新预检当前状态。',
                   textAlign: TextAlign.center),
               const SizedBox(height: 24),
@@ -343,6 +363,17 @@ class _SelectionView extends ConsumerWidget {
       listEntries.add(_SelectionRowEntry(row.key, row.value));
       listEntries.addAll(row.value.map(_SelectionCageEntry.new));
     }
+    final visibleIds =
+        state.visibleRabbits.map((rabbit) => rabbit.rabbitId).toSet();
+    final hiddenSelectedCount = state.selectedRabbitIds
+        .where((rabbitId) => !visibleIds.contains(rabbitId))
+        .length;
+    final normalRabbitIds = state.rabbits
+        .where((rabbit) => rabbit.isNormal)
+        .map((rabbit) => rabbit.rabbitId)
+        .toSet();
+    final houseFullySelected = normalRabbitIds.isNotEmpty &&
+        normalRabbitIds.every(state.selectedRabbitIds.contains);
     final largeText = MediaQuery.textScalerOf(context).scale(10) / 10 >= 1.3;
     return RefreshIndicator(
       onRefresh: controller.refresh,
@@ -364,10 +395,13 @@ class _SelectionView extends ConsumerWidget {
                             : '草稿保存失败，请检查网络后重试'),
                     warning: true,
                   ),
+                _ScopeSummary(task: state.task!),
+                const SizedBox(height: 12),
                 _EligibilitySummary(
                     state: state, onFilter: controller.setFilter),
                 const SizedBox(height: 12),
                 SegmentedButton<OutboundSelectionMode>(
+                  key: const ValueKey('outbound-selection-mode'),
                   segments: const [
                     ButtonSegment(
                         value: OutboundSelectionMode.cage,
@@ -388,12 +422,19 @@ class _SelectionView extends ConsumerWidget {
                 ),
                 if (state.mode == OutboundSelectionMode.house) ...[
                   const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
-                    onPressed: state.task!.summary.normal == 0
-                        ? null
-                        : controller.toggleHouse,
-                    icon: const Icon(Icons.select_all),
-                    label: Text('选择整舍可出库兔 ${state.task!.summary.normal} 只'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: state.task!.summary.normal == 0
+                          ? null
+                          : controller.toggleHouse,
+                      icon: Icon(houseFullySelected
+                          ? Icons.deselect
+                          : Icons.select_all),
+                      label: Text(houseFullySelected
+                          ? '取消整舍已选 ${state.task!.summary.normal} 只'
+                          : '选择整舍可出库兔 ${state.task!.summary.normal} 只'),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -423,8 +464,21 @@ class _SelectionView extends ConsumerWidget {
                                 state.filter == OutboundEligibility.blocked,
                         onSelected: (_) => controller
                             .setFilter(OutboundEligibility.needsAction)),
+                    ChoiceChip(
+                        key: const ValueKey('outbound-filter-selected'),
+                        avatar: const Icon(Icons.check, size: 18),
+                        label: Text('已选 ${state.selectedCount}'),
+                        selected: state.selectedOnly,
+                        onSelected: controller.setSelectedOnly),
                   ],
                 ),
+                if (hiddenSelectedCount > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '当前筛选隐藏了 $hiddenSelectedCount 只已选兔，底部汇总仍包含它们',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ]),
             ),
           ),
@@ -434,7 +488,7 @@ class _SelectionView extends ConsumerWidget {
               sliver: SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
-                  child: Center(child: Text('当前筛选没有兔只')),
+                  child: Center(child: Text('当前范围没有符合筛选的兔只')),
                 ),
               ),
             )
@@ -475,6 +529,41 @@ class _SelectionView extends ConsumerWidget {
           SliverToBoxAdapter(child: SizedBox(height: largeText ? 148 : 104)),
         ],
       ),
+    );
+  }
+}
+
+class _ScopeSummary extends StatelessWidget {
+  const _ScopeSummary({required this.task});
+
+  final OutboundTask task;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey('outbound-scope-summary'),
+      children: [
+        const SizedBox.square(
+          dimension: 48,
+          child: Icon(Icons.filter_alt_outlined),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('候选范围', style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                _scopeLabel(task),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+        ),
+        Text('${task.rabbits.length} 只'),
+      ],
     );
   }
 }
@@ -1462,12 +1551,23 @@ Future<void> _markBreeding(BuildContext context, WidgetRef ref,
               ]));
   if (confirmed != true) return;
   try {
-    await ref.read(rabbitRepositoryProvider).convertToReplacement(
-        houseId: entry.houseId, rabbitIds: [rabbit.rabbitId]);
+    final conversions = await ref
+        .read(rabbitRepositoryProvider)
+        .convertToReplacement(
+            houseId: entry.houseId, rabbitIds: [rabbit.rabbitId]);
     ref
         .read(outboundControllerProvider(entry).notifier)
         .removeRabbit(rabbit.rabbitId);
     await ref.read(outboundControllerProvider(entry).notifier).refresh();
+    if (context.mounted && conversions.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已留种，后备记录 #${conversions.first.replacementRecordId}',
+          ),
+        ),
+      );
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context)

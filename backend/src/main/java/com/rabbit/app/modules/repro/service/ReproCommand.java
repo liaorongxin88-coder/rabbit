@@ -149,6 +149,10 @@ public final class ReproCommand {
         return attachmentFileIds;
     }
 
+    public void setAttachmentFileIds(List<String> attachmentFileIds) {
+        this.attachmentFileIds = attachmentFileIds;
+    }
+
     public static final class Builder {
         private final ReproCommand command = new ReproCommand();
 

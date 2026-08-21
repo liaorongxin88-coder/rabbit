@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
@@ -11,6 +11,9 @@ import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/required_images.dart';
 
 /// 记录流产。
 ///
@@ -72,13 +75,14 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
   final _writeRequest = BatchWriteRequestController();
 
   late DateTime _occurredAt;
+  List<XFile> _images = const [];
   var _confirmed = false;
   var _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _occurredAt = _dateOnly(DateTime.now());
+    _occurredAt = DateTime.now();
   }
 
   @override
@@ -89,18 +93,13 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await pickActionTime(
       context: context,
-      initialDate: _occurredAt,
-      firstDate: DateTime(2020),
-      // 允许补录过去，但不能记到明天：流产是已经发生的事。
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      current: _occurredAt,
       helpText: '选择流产日期',
-      cancelText: '取消',
-      confirmText: '确定',
     );
     if (picked != null && mounted) {
-      setState(() => _occurredAt = _dateOnly(picked));
+      setState(() => _occurredAt = picked);
     }
   }
 
@@ -115,30 +114,47 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
       _showMessage('请确认本轮妊娠已终止');
       return;
     }
+    if (_images.isEmpty) {
+      _showMessage('请至少上传一张流产相关图片');
+      return;
+    }
 
     final stillbirth = int.tryParse(_stillbirthController.text.trim());
     final remark = _remarkController.text.trim();
     setState(() => _saving = true);
     try {
+      final repository = ref.read(reproRepositoryProvider);
+      final attachmentFileIds = <String>[];
+      for (final image in _images) {
+        attachmentFileIds.add(
+          await repository.uploadImage(
+            houseId: widget.houseId,
+            filePath: image.path,
+            fileName: image.name,
+          ),
+        );
+      }
       final requestId = _writeRequest.requestIdFor(
         canonicalBatchWriteFingerprint({
           'action': 'abortion',
           'houseId': widget.houseId,
           'cycleId': widget.cycleId,
-          'occurredAt': _occurredAt.millisecondsSinceEpoch,
+          'occurredAt': _occurredAt.toUtc().toIso8601String(),
           'stillbirthCount': stillbirth,
           'remark': remark,
+          'imageNames': _images.map((image) => image.name).toList(),
         }),
       );
-      await ref.read(reproRepositoryProvider).applyAction(
-            houseId: widget.houseId,
-            cycleId: widget.cycleId,
-            action: ReproAction.abortion,
-            occurredAt: _occurredAt,
-            stillbirthCount: stillbirth,
-            remark: remark,
-            requestId: requestId,
-          );
+      await repository.applyAction(
+        houseId: widget.houseId,
+        cycleId: widget.cycleId,
+        action: ReproAction.abortion,
+        occurredAt: _occurredAt,
+        stillbirthCount: stillbirth,
+        remark: remark,
+        attachmentFileIds: attachmentFileIds,
+        requestId: requestId,
+      );
       if (!mounted) {
         return;
       }
@@ -182,7 +198,7 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final palette = AppPalette.of(context);
-    final dateLabel = DateFormat('yyyy-MM-dd').format(_occurredAt);
+    final dateLabel = formatActionTime(_occurredAt);
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 120),
@@ -210,17 +226,19 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  widget.stageLabel == null
-                      ? widget.rabbitLabel
-                      : '${widget.rabbitLabel} · 当前${widget.stageLabel}',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                ProductionContextLine(
+                  houseLabel: widget.stageLabel == null
+                      ? '当前兔舍'
+                      : '当前${widget.stageLabel}',
+                  rabbitId: widget.rabbitId,
+                  batchId: widget.batchId,
+                  cycleRecordId: widget.cycleId,
                 ),
                 const SizedBox(height: 16),
                 ListTile(
                   key: const ValueKey('abortion-date'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('流产日期'),
+                  title: const Text('执行时间 *'),
                   subtitle: Text(dateLabel),
                   trailing: const Icon(Icons.calendar_today_outlined),
                   onTap: _saving ? null : _pickDate,
@@ -248,15 +266,23 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
                   },
                 ),
                 const SizedBox(height: 12),
+                RequiredImagesField(
+                  files: _images,
+                  enabled: !_saving,
+                  onChanged: (files) => setState(() => _images = files),
+                ),
+                const SizedBox(height: 12),
                 TextFormField(
                   key: const ValueKey('abortion-remark'),
                   controller: _remarkController,
                   enabled: !_saving,
                   maxLines: 2,
                   decoration: const InputDecoration(
-                    labelText: '备注',
-                    hintText: '可记录原因、处理方式等',
+                    labelText: '流产详情 *',
+                    hintText: '记录原因、状态和处理方式',
                   ),
+                  validator: (value) =>
+                      value == null || value.trim().isEmpty ? '请填写流产详情' : null,
                 ),
                 const SizedBox(height: 8),
                 CheckboxListTile(
@@ -289,9 +315,6 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
     );
   }
 }
-
-DateTime _dateOnly(DateTime value) =>
-    DateTime(value.year, value.month, value.day);
 
 String _errorMessage(Object error) {
   if (error is ApiException) {

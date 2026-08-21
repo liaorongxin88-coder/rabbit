@@ -23,11 +23,13 @@ import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.repro.domain.ReproStage;
+import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
 import com.rabbit.app.modules.repro.service.OperatorNameResolver;
 import com.rabbit.app.modules.repro.service.ReproRequestIds;
 import com.rabbit.app.modules.repro.service.ReproStateMachineService;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
@@ -88,6 +90,7 @@ public class BatchService {
     private final ReproCycleMapper reproCycleMapper;
     private final ReproStateMachineService reproStateMachineService;
     private final OperatorNameResolver operatorNameResolver;
+    private final WorkTaskWriter workTaskWriter;
 
     public BatchService(
         BatchMapper batchMapper,
@@ -111,11 +114,13 @@ public class BatchService {
         ReproCycleMapper reproCycleMapper,
         ReproStateMachineService reproStateMachineService,
         OperatorNameResolver operatorNameResolver,
+        WorkTaskWriter workTaskWriter,
         @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
         this.reproCycleMapper = reproCycleMapper;
         this.reproStateMachineService = reproStateMachineService;
         this.operatorNameResolver = operatorNameResolver;
+        this.workTaskWriter = workTaskWriter;
         this.batchMapper = batchMapper;
         this.batchRabbitMapper = batchRabbitMapper;
         this.breedingCycleMapper = breedingCycleMapper;
@@ -857,6 +862,12 @@ public class BatchService {
                     "出售",
                     departure.getId(),
                     "rabbit_departure_records"
+                );
+                workTaskWriter.completeForRabbit(
+                    houseId, rabbitId, TaskType.SALE_READY, String.valueOf(userId)
+                );
+                workTaskWriter.cancelAllForRabbit(
+                    houseId, rabbitId, String.valueOf(userId)
                 );
             }
 

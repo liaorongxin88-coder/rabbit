@@ -22,10 +22,6 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
-/// 地图按「排 → 层 → 位」还原笼位的真实位置；列表是原来的扁平网格，
-/// 大兔舍、200% 字号或只想按编号翻的场景下仍然更好用，所以两种都留。
-enum _CageViewMode { map, list }
-
 enum _CageOccupancyFilter { all, empty, occupied }
 
 enum _CageUsageFilter {
@@ -53,9 +49,6 @@ class CageManagementSection extends ConsumerStatefulWidget {
 }
 
 class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
-  static const _infiniteScrollThreshold = 30;
-  static const _batchSize = 20;
-
   /// 地图按「排」分页：排数远少于笼数，一次多铺几排也不至于卡。
   static const _rowBatchSize = 6;
 
@@ -63,31 +56,21 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   var _keyword = '';
   var _occupancyFilter = _CageOccupancyFilter.all;
   var _usageFilter = _CageUsageFilter.all;
-  var _viewMode = _CageViewMode.map;
 
   /// 筛选默认折叠：展开后它比地图本身还高，真机上会把笼位整个挤到首屏之外。
   var _filtersExpanded = false;
   var _visibleRowCount = _rowBatchSize;
-  var _visibleCageCount = _batchSize;
-  var _availableCageCount = 0;
-  var _loadingMore = false;
-  var _paginationGeneration = 0;
   int? _lastSourceCageCount;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_handleSearchChanged);
-    widget.scrollController.addListener(_handleScroll);
   }
 
   @override
   void didUpdateWidget(covariant CageManagementSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.scrollController != widget.scrollController) {
-      oldWidget.scrollController.removeListener(_handleScroll);
-      widget.scrollController.addListener(_handleScroll);
-    }
     if (oldWidget.house.id != widget.house.id) {
       _lastSourceCageCount = null;
       _resetPagination();
@@ -99,7 +82,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     _searchController
       ..removeListener(_handleSearchChanged)
       ..dispose();
-    widget.scrollController.removeListener(_handleScroll);
     super.dispose();
   }
 
@@ -115,22 +97,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
   }
 
   void _resetPagination() {
-    _visibleCageCount = _batchSize;
     _visibleRowCount = _rowBatchSize;
-    _availableCageCount = 0;
-    _loadingMore = false;
-    _paginationGeneration += 1;
-  }
-
-  void _setViewMode(_CageViewMode value) {
-    if (_viewMode == value) {
-      return;
-    }
-    _scrollToTop();
-    setState(() {
-      _viewMode = value;
-      _resetPagination();
-    });
   }
 
   void _setOccupancyFilter(_CageOccupancyFilter value) {
@@ -194,31 +161,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
         controller.offset > controller.position.minScrollExtent) {
       controller.jumpTo(controller.position.minScrollExtent);
     }
-  }
-
-  void _handleScroll() {
-    final controller = widget.scrollController;
-    if (!controller.hasClients ||
-        controller.position.extentAfter > 240 ||
-        _loadingMore ||
-        _visibleCageCount >= _availableCageCount) {
-      return;
-    }
-
-    final generation = _paginationGeneration;
-    setState(() => _loadingMore = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || generation != _paginationGeneration) {
-        return;
-      }
-      setState(() {
-        _visibleCageCount = (_visibleCageCount + _batchSize).clamp(
-          0,
-          _availableCageCount,
-        );
-        _loadingMore = false;
-      });
-    });
   }
 
   @override
@@ -337,7 +279,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
         .toList();
 
     if (cages.isEmpty) {
-      _availableCageCount = 0;
       final canControl = permission.valueOrNull?.canControl == true;
       return _CageEmptyState(
         title: '暂无笼位',
@@ -348,45 +289,14 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
       );
     }
 
-    final occupied = cages.where((cage) => cage.rabbitCount > 0).length;
     final matches = filtered.map((cage) => cage.id).toSet();
     final showDoeBreeding = cages.any((cage) => cage.isDoeBreedingCage) ||
         _usageFilter == _CageUsageFilter.doeBreeding;
     final showBuckBreeding = cages.any((cage) => cage.isBuckBreedingCage) ||
         _usageFilter == _CageUsageFilter.buckBreeding;
-    final usesInfiniteScroll = filtered.length > _infiniteScrollThreshold;
-    final visibleCageCount = usesInfiniteScroll
-        ? _visibleCageCount.clamp(0, filtered.length)
-        : filtered.length;
-    final hasMore = visibleCageCount < filtered.length;
-    // 地图模式自己按「排」分页，不能再让滚动到底触发列表页的预取。
-    _availableCageCount =
-        hasMore && _viewMode == _CageViewMode.list ? filtered.length : 0;
-
-    final isMap = _viewMode == _CageViewMode.map;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 地图模式不再重复这三个数量 chip：图例本身就是分状态汇总，
-        // 而真机上每多一行控件，笼位就多往屏外推一截。
-        if (!isMap) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _CageMetricChip(label: '总笼位', value: '${cages.length}'),
-              _CageMetricChip(
-                label: '空笼',
-                value: '${cages.length - occupied}',
-              ),
-              _CageMetricChip(label: '有兔', value: '$occupied'),
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
-        _CageViewToggle(mode: _viewMode, onChanged: _setViewMode),
-        const SizedBox(height: 12),
         _CageFilters(
           occupancyFilter: _occupancyFilter,
           usageFilter: _usageFilter,
@@ -412,69 +322,13 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             actionLabel: _hasActiveFilters ? '重置筛选' : null,
             onAction: _hasActiveFilters ? _clearFilters : null,
           )
-        else if (_viewMode == _CageViewMode.map)
+        else
           _buildCageMap(
             context,
             cages,
             matches,
             permission,
             doeStatusByCage,
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
-              final columns = textScale >= 1.3
-                  ? 2
-                  : constraints.maxWidth >= 640
-                      ? 4
-                      : 3;
-              final tileExtent = textScale >= 1.8
-                  ? 188.0
-                  : textScale >= 1.3
-                      ? 152.0
-                      : 120.0;
-              return GridView.builder(
-                key: const ValueKey('house-cage-grid'),
-                itemCount: visibleCageCount,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  mainAxisExtent: tileExtent,
-                ),
-                itemBuilder: (context, index) {
-                  final cage = filtered[index];
-                  return _CageTile(
-                    cage: cage,
-                    statusLabel: doeStatusByCage[cage.id] ?? '无状态',
-                    onTap: () => context.go(
-                      '/houses/${widget.house.id}/cages/${cage.id}',
-                    ),
-                    onRowOutbound: permission.valueOrNull?.canEdit == true &&
-                            cage.rowCode != 'LEGACY'
-                        ? () => context.push(
-                              '/houses/${widget.house.id}/outbound?entryType=ROW&rowCode=${Uri.encodeQueryComponent(cage.rowCode)}',
-                            )
-                        : null,
-                  );
-                },
-              );
-            },
-          ),
-        if (hasMore && _viewMode == _CageViewMode.list)
-          SizedBox(
-            height: 42,
-            child: Center(
-              child: _loadingMore
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
-            ),
           ),
       ],
     );
@@ -543,45 +397,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
       context: context,
       useRootNavigator: false,
       builder: (context) => _CreateCagesSheet(houseId: widget.house.id),
-    );
-  }
-}
-
-class _CageViewToggle extends StatelessWidget {
-  const _CageViewToggle({required this.mode, required this.onChanged});
-
-  final _CageViewMode mode;
-  final ValueChanged<_CageViewMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text('显示方式', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ChoiceChip(
-                key: const ValueKey('cage-view-map-toggle'),
-                avatar: const Icon(Icons.grid_view_outlined, size: 16),
-                label: const Text('分层地图'),
-                selected: mode == _CageViewMode.map,
-                onSelected: (_) => onChanged(_CageViewMode.map),
-              ),
-              ChoiceChip(
-                key: const ValueKey('cage-view-list-toggle'),
-                avatar: const Icon(Icons.view_list_outlined, size: 16),
-                label: const Text('列表'),
-                selected: mode == _CageViewMode.list,
-                onSelected: (_) => onChanged(_CageViewMode.list),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -877,7 +692,7 @@ class _CageHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('笼位列表', style: Theme.of(context).textTheme.titleLarge),
+              Text('分层笼位图', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 3),
               Text(
                 '${house.name} · ${house.layoutLabel}',
@@ -926,92 +741,6 @@ class _CageHeader extends StatelessWidget {
         const SizedBox(height: 8),
         Align(alignment: Alignment.centerRight, child: actions),
       ],
-    );
-  }
-}
-
-class _CageTile extends StatelessWidget {
-  const _CageTile({
-    required this.cage,
-    required this.statusLabel,
-    required this.onTap,
-    this.onRowOutbound,
-  });
-
-  final Cage cage;
-  final String statusLabel;
-  final VoidCallback onTap;
-  final VoidCallback? onRowOutbound;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = AppPalette.of(context);
-    final titleColor = statusLabel == '无状态' ? palette.muted : palette.text;
-
-    return Material(
-      color: palette.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: palette.line),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Text(
-                    statusLabel,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: titleColor,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ),
-              ),
-            ),
-            Divider(height: 1, color: palette.line),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: palette.muted,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (onRowOutbound != null)
-                    IconButton(
-                      key: ValueKey('cage-row-outbound-${cage.id}'),
-                      tooltip: '${cage.rowCode} 排批量出库',
-                      constraints: const BoxConstraints.tightFor(
-                        width: 48,
-                        height: 48,
-                      ),
-                      onPressed: onRowOutbound,
-                      icon: const Icon(Icons.local_shipping_outlined),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1373,33 +1102,6 @@ class _PreviewLabel extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: palette.text,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _CageMetricChip extends StatelessWidget {
-  const _CageMetricChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = AppPalette.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: palette.surfaceSubtle,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: palette.line),
-      ),
-      child: Text(
-        '$label $value',
         style: TextStyle(
           color: palette.text,
           fontWeight: FontWeight.w800,

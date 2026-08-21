@@ -7,11 +7,14 @@
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
         <result column="rabbit_id" property="rabbitId"/>
+        <result column="request_id" property="requestId"/>
         <result column="original_type" property="originalType"/>
         <result column="replacement_date" property="replacementDate"/>
         <result column="expected_mature_date" property="expectedMatureDate"/>
         <result column="is_mature_notified" property="isMatureNotified"/>
         <result column="mature_notify_date" property="matureNotifyDate"/>
+        <result column="status" property="status"/>
+        <result column="promoted_at" property="promotedAt"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
@@ -20,8 +23,8 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into replacement_records (house_id, rabbit_id, original_type, replacement_date, expected_mature_date, is_mature_notified, mature_notify_date, remark, create_by, update_by)
-        values (#{houseId}, #{rabbitId}, #{originalType}, #{replacementDate}, #{expectedMatureDate}, #{isMatureNotified}, #{matureNotifyDate}, #{remark}, #{createBy}, #{updateBy})
+        insert into replacement_records (house_id, rabbit_id, request_id, original_type, replacement_date, expected_mature_date, is_mature_notified, mature_notify_date, status, promoted_at, remark, create_by, update_by)
+        values (#{houseId}, #{rabbitId}, #{requestId}, #{originalType}, #{replacementDate}, #{expectedMatureDate}, #{isMatureNotified}, #{matureNotifyDate}, #{status}, #{promotedAt}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectDue" resultMap="ReplacementRecordMap">
@@ -29,7 +32,15 @@
         from replacement_records
         where house_id = #{houseId}
           and expected_mature_date &lt;= #{today}
+          and status = 'PENDING'
         order by expected_mature_date asc, id asc
+    </select>
+
+    <select id="selectByRequestId" resultMap="ReplacementRecordMap">
+        select *
+        from replacement_records
+        where house_id = #{houseId} and request_id = #{requestId}
+        order by rabbit_id, id
     </select>
 
     <select id="selectDueUnnotified" resultMap="ReplacementRecordMap">
@@ -38,6 +49,7 @@
         where house_id = #{houseId}
           and expected_mature_date &lt;= #{today}
           and is_mature_notified = false
+          and status = 'PENDING'
         order by expected_mature_date asc, id asc
     </select>
 
@@ -82,5 +94,27 @@
             update_by = #{updateBy},
             update_time = now()
         where id = #{id} and house_id = #{houseId}
+    </update>
+
+    <select id="selectPendingByRabbitForUpdate" resultMap="ReplacementRecordMap">
+        select *
+        from replacement_records
+        where house_id = #{houseId}
+          and rabbit_id = #{rabbitId}
+          and status = 'PENDING'
+        order by id desc
+        limit 1
+        for update
+    </select>
+
+    <update id="markPromoted">
+        update replacement_records
+        set status = 'PROMOTED',
+            promoted_at = #{promotedAt},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and id = #{id}
+          and status = 'PENDING'
     </update>
 </mapper>

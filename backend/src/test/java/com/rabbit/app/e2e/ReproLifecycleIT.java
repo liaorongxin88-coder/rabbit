@@ -28,8 +28,8 @@ public class ReproLifecycleIT extends E2eTestSupport {
     /**
      * 接替 {@code BreedingCycleAcrossBatchIT}：母兔换批次后周期编号如何延续。
      *
-     * <p>编号按 (house, batch, mother) 计，所以进新批次会从 1 重新起算；
-     * 而同一批次内复配则递增。这条把两半都钉住——只测一半会让另一半悄悄退化。
+     * <p>编号按 (house, batch, mother) 计。自动接续进入无批次作用域，显式换到新批次
+     * 也进入新的编号作用域，因此两者都从 1 起算。
      */
     @Test
     void cycleNumberRestartsPerBatchButIncrementsWithinOne() {
@@ -38,7 +38,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
 
         long first = advanceToMating(f, doe, "b1c1");
         Assertions.assertEquals(1, intOf("select cycle_no from breeding_cycles where id = ?", first));
-        // 空怀关掉第一轮，同批次再开一轮：编号应递增。
+        // 空怀关掉第一轮，自动接续进入无批次作用域。
         act(f, first, "b1c1_mate", obj("action", "MATING", "occurredAt", oneMinuteAgo(),
             "maleRabbitId", f.buckId, "matingMethod", "NATURAL"));
         act(f, first, "b1c1_empty", obj("action", "PALPATION", "occurredAt", oneMinuteAgo(),
@@ -47,8 +47,11 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Long reopened = jdbc.queryForObject(
             "select id from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
             Long.class, doe);
-        Assertions.assertEquals(2, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
-            "同批次内重开应递增");
+        Assertions.assertEquals(1, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
+            "无批次接续应在自己的编号作用域从 1 开始");
+        Assertions.assertNull(jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?", Long.class, reopened
+        ));
 
         // 换到新批次：编号重新从 1 起算。
         //
@@ -270,6 +273,88 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Assertions.assertEquals("CLOSED", strOf(
             "select lifecycle from breeding_cycles where id = ?", nursing),
             "哺乳周期也要关，不能只关流水线那一个");
+    }
+
+    @Test
+    void departingACommodityRabbitRemovesEveryReminder() {
+        UserSession owner = register("depart_reminder");
+        long houseId = createHouse(owner, "离场提醒兔舍", 1, 2, 1);
+        long rabbitId = createRabbit(
+            owner,
+            houseId,
+            cageIds(owner, houseId).get(0),
+            "2",
+            "0",
+            "离场提醒商品兔"
+        );
+
+        jdbc.update(
+            "update work_tasks set due_date = date_sub(curdate(), interval 1 day),"
+                + " due_time = date_sub(now(), interval 1 day)"
+                + " where house_id = ? and rabbit_id = ? and task_type = 'SALE_READY'",
+            houseId,
+            rabbitId
+        );
+        api.postOk("/api/treatments", owner.token, houseId, obj(
+            "rabbitId", rabbitId,
+            "startDate", oneMinuteAgo(),
+            "nextReviewDate", oneMinuteAgo(),
+            "diagnosis", "离场前观察",
+            "requestId", requestId("depart_treatment")
+        ));
+        Assertions.assertEquals(2, reminderCount(owner, houseId, rabbitId),
+            "前置：商品出售和治疗复查都应进入首页提醒");
+
+        api.postOk("/api/rabbits/events", owner.token, houseId, obj(
+            "rabbitId", rabbitId,
+            "eventType", "cull",
+            "actionDate", oneMinuteAgo(),
+            "reason", "离场提醒回归",
+            "forceExitBatch", false,
+            "requestId", requestId("depart_reminder_cull")
+        ));
+
+        Assertions.assertEquals(0, intOf(
+            "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and status = 'PENDING'",
+            houseId,
+            rabbitId
+        ), "离场事务必须取消兔只名下全部待办");
+        Assertions.assertEquals(0, reminderCount(owner, houseId, rabbitId),
+            "离场兔不能继续出现在首页提醒");
+
+        // 查询端也要兜底。即使历史数据或并发写入重新造出 PENDING 行，离场兔仍不可见。
+        jdbc.update(
+            "update work_tasks set status = 'PENDING' where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY'",
+            houseId,
+            rabbitId
+        );
+        JsonNode tasks = api.getOk(
+            "/api/tasks?includeFuture=true&rabbitId=" + rabbitId,
+            owner.token,
+            houseId
+        );
+        Assertions.assertEquals(0, tasks.get("total").asInt(),
+            "待办查询不得返回离场兔的残留任务");
+        Assertions.assertEquals(0, reminderCount(owner, houseId, rabbitId),
+            "首页查询不得返回离场兔的残留任务或治疗复查");
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from treatment_records where house_id = ? and rabbit_id = ?"
+                + " and status = 'OPEN'",
+            houseId,
+            rabbitId
+        ), "治疗记录保留原始状态供追溯，但不再生成提醒");
+    }
+
+    private int reminderCount(UserSession owner, long houseId, long rabbitId) {
+        int count = 0;
+        for (JsonNode event : api.getOk("/api/events", owner.token, houseId)) {
+            if (event.path("rabbitId").asLong() == rabbitId) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private long openAt(Fixture f, long doe, long batchId, String stage, String prefix) {

@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/cages/transfer.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/replacement.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
   return RabbitRepository(ref.watch(apiClientProvider));
@@ -288,14 +289,14 @@ class RabbitRepository {
     );
   }
 
-  Future<void> convertToReplacement({
+  Future<List<ReplacementConversion>> convertToReplacement({
     required int houseId,
     required List<int> rabbitIds,
     int? targetCageId,
     bool forceExitBatch = true,
     String? requestId,
   }) {
-    return _api.post<void>(
+    return _api.post<List<ReplacementConversion>>(
       '/api/rabbits/replacement',
       houseId: houseId,
       body: {
@@ -305,6 +306,29 @@ class RabbitRepository {
         if (targetCageId != null && targetCageId > 0)
           'targetCageId': targetCageId,
       },
+      decode: (data) {
+        if (data is! Map || data['items'] is! List) {
+          throw const FormatException('留后备兔结果格式不正确');
+        }
+        return (data['items'] as List)
+            .whereType<Map>()
+            .map((item) => ReplacementConversion.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .toList(growable: false);
+      },
+    );
+  }
+
+  Future<void> promoteReplacement({
+    required int houseId,
+    required int rabbitId,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/rabbits/$rabbitId/promote-breeder',
+      houseId: houseId,
+      body: {'requestId': requestId ?? _uuid.v4()},
       decode: (_) {},
     );
   }

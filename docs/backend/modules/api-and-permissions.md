@@ -119,9 +119,17 @@ house_users.role grants requested permission
 - `GET /api/rabbits`
 - `GET /api/batches`
 - `POST /api/batches`
+- `POST /api/repro/cycles/{cycleId}/actions`
+- `GET /api/repro/cycles/{cycleId}/litter`
+- `POST /api/repro/cycles/{cycleId}/kept-kits-adjustments`
+- `POST /api/business-files/images`
+- `GET /api/business-files/{fileId}`
 - `GET /api/events`
 - `POST /api/events/ack`
 - `POST /api/maintenance/events/scan`
+
+生产图片上传与读取都属于兔场域：上传要求编辑权限，读取要求查看权限，且文件必须与
+`X-House-Id` 属于同一兔场。生产动作只能关联当前兔场已上传的图片 ID。
 
 平台管理：
 

@@ -18,6 +18,7 @@
         <result column="arrival_date" property="arrivalDate"/>
         <result column="weight" property="weight"/>
         <result column="growth_stage" property="growthStage"/>
+        <result column="growth_stage_entered_at" property="growthStageEnteredAt"/>
         <result column="reproductive_stage" property="reproductiveStage"/>
         <result column="current_stage" property="currentStage"/>
         <result column="current_cycle_id" property="currentCycleId"/>
@@ -38,19 +39,19 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbits (house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
-        values (#{houseId}, #{cageId}, #{motherId}, #{fatherId}, #{birthBatchId}, #{birthCycleId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, #{growthStage}, #{reproductiveStage}, coalesce(#{stateVersion}, 0), #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
+        insert into rabbits (house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage, state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
+        values (#{houseId}, #{cageId}, #{motherId}, #{fatherId}, #{birthBatchId}, #{birthCycleId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, #{growthStage}, #{growthStageEnteredAt}, #{reproductiveStage}, coalesce(#{stateVersion}, 0), #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
     </insert>
 
     <insert id="insertBatch">
         insert into rabbits (house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender,
-                             breed, arrival_method, arrival_date, weight, growth_stage, reproductive_stage, state_version, is_active, is_quarantined,
+                             breed, arrival_method, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage, state_version, is_active, is_quarantined,
                              quarantine_time, quarantine_reason, request_id, create_by, update_by)
         values
         <foreach collection="list" item="item" separator=",">
             (#{item.houseId}, #{item.cageId}, #{item.motherId}, #{item.fatherId}, #{item.birthBatchId},
              #{item.birthCycleId}, #{item.type}, #{item.gender}, #{item.breed}, #{item.arrivalMethod},
-             #{item.arrivalDate}, #{item.weight}, #{item.growthStage}, #{item.reproductiveStage}, coalesce(#{item.stateVersion}, 0), #{item.isActive},
+             #{item.arrivalDate}, #{item.weight}, #{item.growthStage}, #{item.growthStageEnteredAt}, #{item.reproductiveStage}, coalesce(#{item.stateVersion}, 0), #{item.isActive},
              #{item.isQuarantined}, #{item.quarantineTime}, #{item.quarantineReason}, #{item.requestId},
              #{item.createBy}, #{item.updateBy})
         </foreach>
@@ -63,7 +64,7 @@
     -->
     <sql id="RabbitColumns">
         id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed,
-        arrival_method, arrival_date, weight, growth_stage, reproductive_stage,
+        arrival_method, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage,
         current_stage, current_cycle_id, stage_entered_at, last_mating_date,
         state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id,
         departure_date, departure_reason, create_by, create_time, update_by, update_time
@@ -150,10 +151,28 @@
         update rabbits
         set type = #{type},
             cage_id = #{cageId},
+            growth_stage = case when #{type} = '1' then null else growth_stage end,
+            growth_stage_entered_at = case when #{type} = '1' then null else growth_stage_entered_at end,
+            reproductive_stage = case when #{type} = '1' then 'RESERVE' else reproductive_stage end,
             state_version = state_version + 1,
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id}
+    </update>
+
+    <update id="promoteReplacement">
+        update rabbits
+        set type = '0',
+            growth_stage = null,
+            growth_stage_entered_at = null,
+            reproductive_stage = #{reproductiveStage},
+            state_version = state_version + 1,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and id = #{id}
+          and type = '1'
+          and is_active = true
     </update>
 
     <update id="updateDeparture">
@@ -237,6 +256,48 @@
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId} and id = #{id} and is_active = true
+    </update>
+
+    <update id="advanceCommodityGrowthStages">
+        update rabbits r
+        inner join global_setting gs on gs.house_id = r.house_id
+        set r.growth_stage = case
+              when date_add(
+                r.growth_stage_entered_at,
+                interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+              ) &lt;= #{now} then 'MATURE'
+              when date_add(
+                r.growth_stage_entered_at,
+                interval (gs.adaptation_days + gs.growing_days) day
+              ) &lt;= #{now} then 'FATTENING'
+              when date_add(
+                r.growth_stage_entered_at,
+                interval gs.adaptation_days day
+              ) &lt;= #{now} then 'GROWING'
+              else 'JUVENILE'
+            end,
+            r.state_version = r.state_version + 1,
+            r.update_by = #{updateBy},
+            r.update_time = now()
+        where r.house_id = #{houseId}
+          and r.is_active = true
+          and r.type = '2'
+          and r.growth_stage_entered_at is not null
+          and r.growth_stage &lt;&gt; case
+              when date_add(
+                r.growth_stage_entered_at,
+                interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+              ) &lt;= #{now} then 'MATURE'
+              when date_add(
+                r.growth_stage_entered_at,
+                interval (gs.adaptation_days + gs.growing_days) day
+              ) &lt;= #{now} then 'FATTENING'
+              when date_add(
+                r.growth_stage_entered_at,
+                interval gs.adaptation_days day
+              ) &lt;= #{now} then 'GROWING'
+              else 'JUVENILE'
+            end
     </update>
 
     <!--

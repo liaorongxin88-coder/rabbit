@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart'
-    show formatBatchWriteDate;
+    show formatBatchWriteDate, formatBatchWriteDateTime;
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
@@ -18,6 +17,7 @@ import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
@@ -142,18 +142,10 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   }
 
   Future<void> _pickDate() async {
-    final firstDate = DateTime(2020);
-    final lastDate = DateTime.now().add(const Duration(days: 1));
-    final initialDate = _weaningDate.isBefore(firstDate)
-        ? firstDate
-        : _weaningDate.isAfter(lastDate)
-            ? lastDate
-            : _weaningDate;
-    final picked = await showDatePicker(
+    final picked = await pickActionTime(
       context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
+      current: _weaningDate,
+      helpText: '选择分笼日期',
     );
     if (picked != null && mounted) {
       setState(() => _weaningDate = picked);
@@ -357,7 +349,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           'batchId': widget.batchId,
           'rabbitId': widget.rabbitId,
           'breedingCycleId': widget.breedingCycleId,
-          'weaningDate': formatBatchWriteDate(_weaningDate),
+          'weaningDate': formatBatchWriteDateTime(_weaningDate),
           'weaningCount': count,
           'maleCount': male,
           'femaleCount': female,
@@ -436,7 +428,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final availableHeight = mediaQuery.size.height - keyboardInset;
-    final dateLabel = DateFormat('yyyy-MM-dd').format(_weaningDate);
+    final dateLabel = formatActionTime(_weaningDate);
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -524,7 +516,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                         const SizedBox(height: 14),
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('断奶日期'),
+                          title: const Text('执行时间 *'),
                           subtitle: Text(dateLabel),
                           trailing: const Icon(Icons.calendar_today_outlined),
                           onTap: _saving ? null : _pickDate,

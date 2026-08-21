@@ -246,6 +246,67 @@ class ReproActionResult {
   }
 }
 
+class ReproLitter {
+  const ReproLitter({
+    required this.id,
+    required this.cycleId,
+    required this.motherRabbitId,
+    required this.keptKits,
+    required this.currentNursing,
+    required this.status,
+    this.batchId,
+  });
+
+  final int id;
+  final int cycleId;
+  final int motherRabbitId;
+  final int? batchId;
+  final int keptKits;
+  final int currentNursing;
+  final String status;
+
+  factory ReproLitter.fromJson(Map<String, dynamic> json) => ReproLitter(
+        id: _int(json['id']) ?? 0,
+        cycleId: _int(json['cycleId']) ?? 0,
+        motherRabbitId: _int(json['motherRabbitId']) ?? 0,
+        batchId: _int(json['batchId']),
+        keptKits: _int(json['keptKits']) ?? 0,
+        currentNursing: _int(json['currentNursing']) ?? 0,
+        status: _str(json['status']),
+      );
+}
+
+class KeptKitsAdjustmentResult {
+  const KeptKitsAdjustmentResult({
+    required this.cycleId,
+    required this.litterId,
+    required this.eventId,
+    required this.previousKeptKits,
+    required this.keptKits,
+    required this.replayed,
+    this.sourceMotherRabbitId,
+  });
+
+  final int cycleId;
+  final int litterId;
+  final int eventId;
+  final int previousKeptKits;
+  final int keptKits;
+  final int? sourceMotherRabbitId;
+  final bool replayed;
+
+  factory KeptKitsAdjustmentResult.fromJson(Map<String, dynamic> json) =>
+      KeptKitsAdjustmentResult(
+        cycleId: _int(json['cycleId']) ?? 0,
+        litterId: _int(json['litterId']) ?? 0,
+        eventId: _int(json['eventId']) ?? 0,
+        previousKeptKits: _int(json['previousKeptKits']) ?? 0,
+        keptKits: _int(json['keptKits']) ?? 0,
+        sourceMotherRabbitId: _int(json['sourceMotherRabbitId']),
+        replayed: json['replayed'] == true,
+      );
+}
+
 /// 批量操作的逐项结果。部分成功是常态，不是异常。
 class ReproBulkResult {
   const ReproBulkResult({
