@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "project": "rabbit",
+  "canonicalRules": [
+    "AGENTS.md",
+    "admin/.rules",
+    "app/.rule"
+  ],
+  "commands": {
+    "install": null,
+    "check": "./scripts/ci/check.sh",
+    "lint": null,
+    "test": null,
+    "build": "./scripts/ci/build.sh",
+    "docs": "node scripts/ci/check-markdown-links.mjs",
+    "deployPreflight": "./scripts/ci/release-preflight.sh",
+    "deploy": null
+  },
+  "gates": {
+    "integration": {
+      "commands": [
+        "./scripts/ci/backend-e2e.sh"
+      ]
+    },
+    "container": {
+      "commands": [
+        "./scripts/ci/backend-container-smoke.sh rabbit-backend:harness"
+      ]
+    }
+  },
+  "policy": {
+    "requireLockfile": false,
+    "requireDocsForFeature": true,
+    "requireMigrationForDatabaseChange": true,
+    "requireEvidenceForRelease": true,
+    "allowRemoteContainerContext": false,
+    "maxCommandSeconds": 1800
+  },
+  "evidence": {
+    "directory": ".harness/evidence",
+    "includeGitSha": true,
+    "includeCommandOutput": false
+  }
+}

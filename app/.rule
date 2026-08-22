@@ -1,6 +1,6 @@
-# flutter_app/.rule
+# app/.rule
 
-> Canonical rule file for `flutter_app/`. `AGENTS.md` and `CLAUDE.md` are compatibility symlinks; edit this file instead.
+> Canonical rule file for `app/`. `AGENTS.md` and `CLAUDE.md` are compatibility symlinks; edit this file instead.
 
 ## 当前定位
 
@@ -217,7 +217,7 @@ Data 和 Domain 层使用业务能力命名；`home`、`dashboard` 这类界面�
 
 ## 常用命令
 
-在 `flutter_app/` 下：
+在 `app/` 下：
 
 ```bash
 ./rabbit bootstrap

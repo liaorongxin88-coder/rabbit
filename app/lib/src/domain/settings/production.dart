@@ -5,7 +5,6 @@ class GlobalSetting {
     required this.houseId,
     required this.aphrodisiacDays,
     required this.palpationDays,
-    required this.gestationDays,
     required this.prepartumDays,
     required this.weaningDays,
     required this.postpartumDays,
@@ -22,7 +21,6 @@ class GlobalSetting {
   final int houseId;
   final int aphrodisiacDays;
   final int palpationDays;
-  final int gestationDays;
   final int prepartumDays;
   final int weaningDays;
   final int postpartumDays;
@@ -40,7 +38,6 @@ class GlobalSetting {
       houseId: 0,
       aphrodisiacDays: 2,
       palpationDays: 12,
-      gestationDays: 30,
       prepartumDays: 15,
       weaningDays: 30,
       postpartumDays: 10,
@@ -60,7 +57,6 @@ class GlobalSetting {
       houseId: _intValue(json['houseId']),
       aphrodisiacDays: _intValue(json['aphrodisiacDays'], fallback: 2),
       palpationDays: _intValue(json['palpationDays'], fallback: 12),
-      gestationDays: _intValue(json['gestationDays'], fallback: 30),
       prepartumDays: _intValue(json['prepartumDays'], fallback: 15),
       weaningDays: _intValue(json['weaningDays'], fallback: 30),
       postpartumDays: _intValue(json['postpartumDays'], fallback: 10),
@@ -77,7 +73,6 @@ class GlobalSetting {
     return {
       'aphrodisiacDays': aphrodisiacDays,
       'palpationDays': palpationDays,
-      'gestationDays': gestationDays,
       'prepartumDays': prepartumDays,
       'weaningDays': weaningDays,
       'postpartumDays': postpartumDays,

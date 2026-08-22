@@ -1,63 +1,62 @@
-# Rabbit 文档索引
+# Rabbit 项目文档
 
-本目录按 harness 工程文档方式组织：先读公共约定，再进入对应子项目和模块索引。根目录 README 只做项目入口，本文件是维护者和 agent 的主导航。
+`docs/` 是 Rabbit 的工程文档入口。阅读顺序从项目总体开始，再进入后端、移动端或管理端，最后按需查阅业务专题、交付流程和历史资料。
 
-## 快速路由
+## 阅读顺序
 
-| 任务 | 先读 | 再读 |
-| --- | --- | --- |
-| 本地启动或调试环境 | [common/development.md](common/development.md) | 对应子项目 README |
-| 判断系统边界和数据流 | [common/architecture.md](common/architecture.md) | [backend/README.md](backend/README.md)、[flutter_app/README.md](flutter_app/README.md)、[admin/README.md](admin/README.md) |
-| 后端 API、权限、数据库或迁移 | [backend/README.md](backend/README.md) | [backend/modules/api-and-permissions.md](backend/modules/api-and-permissions.md)、[backend/modules/data-and-migrations.md](backend/modules/data-and-migrations.md) |
-| Flutter Android 客户端 | [flutter_app/README.md](flutter_app/README.md) | [flutter_app/modules/rabbit-management-flow.md](flutter_app/modules/rabbit-management-flow.md)、`../app/.rule` |
-| SaaS 平台管理后台 | [admin/README.md](admin/README.md) | [admin/modules/platform-admin.md](admin/modules/platform-admin.md)、`../admin/.rules`、`../admin/DESIGN.md` |
-| 测试、E2E 或验收 | [common/testing.md](common/testing.md) | 对应子项目 README 和模块文档 |
-| Docker 部署或运维 | [common/operations.md](common/operations.md) | [backend/README.md](backend/README.md) |
-| 对照原始业务设计 | [common/business-baseline.md](common/business-baseline.md) | [archive/legacy/README.md](archive/legacy/README.md) |
+1. [项目级文档](project/README.md)：系统边界、总体架构、本地开发、测试和业务基准。
+2. [后端](backend/README.md)、[Flutter App](app/README.md) 或 [Admin](admin/README.md)：进入要修改的子项目。
+3. [跨端业务专题](features/README.md)：查阅批量出库、母兔生产流程等跨子项目契约。
+4. [部署与发布](operations/README.md)：处理 Compose、CI/CD、制品、生产部署和回滚。
+5. [架构决策](adr/README.md) 与 [历史资料](archive/README.md)：追溯决策背景或旧版设计。
 
-## 目录结构
+## 目录
 
 ```text
 docs/
   README.md
-  common/
-    architecture.md
-    business-baseline.md
-    development.md
-    operations.md
-    testing.md
-  backend/
-    README.md
-    modules/
-      api-and-permissions.md
-      data-and-migrations.md
-      domain-modules.md
-      direct-house-access.md
-  flutter_app/
-    README.md
-    modules/
-      rabbit-management-flow.md
-  admin/
-    README.md
-    modules/
-      platform-admin.md
-  archive/
-    legacy/
-      README.md
-      ...
+  project/                 # 项目总体、开发、测试和业务基准
+  backend/                 # Spring Boot 后端
+  app/                     # Flutter Android 客户端
+  admin/                   # React 管理端和业务工作台
+  features/                # 跨端业务专题
+  operations/              # 部署、发布和运维
+  adr/                     # 架构决策记录
+  archive/                 # 仅供追溯的历史资料
 ```
 
-## 当前应用入口
+每个一级目录都有自己的 `README.md`。先读该入口，再进入模块或专题文件。
 
-- 后端源码 README：[../backend/README.md](../backend/README.md)
-- Flutter 客户端源码 README：[../app/README.md](../app/README.md)
-- Admin 源码 README：[../admin/README.md](../admin/README.md)
-- 提交和自测规范：[../CONTRIBUTING.md](../CONTRIBUTING.md)
+## 事实归属
 
-## 文档维护规则
+| 内容 | 权威入口 |
+| --- | --- |
+| 系统边界、身份、租户和数据流 | [project/architecture.md](project/architecture.md) |
+| 本地环境和启动方式 | [project/development.md](project/development.md) |
+| 测试、E2E 和验收 | [project/testing.md](project/testing.md) |
+| 后端模块、API、权限和迁移 | [backend/README.md](backend/README.md) |
+| Flutter 分层、路由和业务流程 | [app/README.md](app/README.md) 与 `../app/.rule` |
+| Admin 工程与交互规则 | [admin/README.md](admin/README.md)、`../admin/.rules` 与 `../admin/DESIGN.md` |
+| 兔只类型、业务状态和批次操作 | [features/rabbit-lifecycle/README.md](features/rabbit-lifecycle/README.md) |
+| CI/CD、镜像、生产部署和回滚 | [operations/README.md](operations/README.md) |
+| 需求、实施计划和专题验收 | [features/README.md](features/README.md) |
 
-- 新的跨项目规则放在 `docs/common/`。
-- 子项目特有规则放在 `docs/<subproject>/README.md` 或 `docs/<subproject>/modules/`。
-- 业务原始资料、抽取产物和过时入口放在 `docs/archive/legacy/`，只能作为背景参考。
-- 根目录 README 不承载长篇细节，只指向本索引和常用命令。
-- 修改路径后必须检查 Markdown 链接是否仍然能解析。
+源码目录中的 `AGENTS.md`、`.rule`、`.rules` 和 `DESIGN.md` 约束实现方式。这里的文档解释系统和工作流程，不复制这些规则的全部内容。
+
+## 维护规则
+
+- 项目级事实写入 `project/`，子项目事实写入对应子项目目录。
+- 同时影响多个子项目的业务契约放入 `features/`，并在专题入口标明文档用途和状态。
+- 部署步骤、运行时配置和发布证据放入 `operations/`。
+- 已废弃但仍需追溯的资料移入 `archive/`，不要继续作为当前实现依据。
+- 已执行的 Flyway 迁移不能为更新文档路径而修改校验和；这类历史引用在原路径保留最小兼容入口。
+- 数据库结构以 Flyway 迁移为准，路由和接口以当前源码为准，状态类文档必须标注核对时间。
+- 移动或新增文档后运行 `node scripts/ci/check-markdown-links.mjs`。
+
+## 仓库入口
+
+- [项目 README](../README.md)
+- [贡献指南](../CONTRIBUTING.md)
+- [后端源码说明](../backend/README.md)
+- [Flutter 源码说明](../app/README.md)
+- [Admin 源码说明](../admin/README.md)

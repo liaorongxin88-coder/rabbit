@@ -98,7 +98,6 @@ class _ProductionSettingsFormState
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _aphrodisiacController;
   late final TextEditingController _palpationController;
-  late final TextEditingController _gestationController;
   late final TextEditingController _prepartumController;
   late final TextEditingController _weaningController;
   late final TextEditingController _postpartumController;
@@ -118,8 +117,6 @@ class _ProductionSettingsFormState
         TextEditingController(text: '${widget.setting.aphrodisiacDays}');
     _palpationController =
         TextEditingController(text: '${widget.setting.palpationDays}');
-    _gestationController =
-        TextEditingController(text: '${widget.setting.gestationDays}');
     _prepartumController =
         TextEditingController(text: '${widget.setting.prepartumDays}');
     _weaningController =
@@ -141,7 +138,6 @@ class _ProductionSettingsFormState
   void dispose() {
     _aphrodisiacController.dispose();
     _palpationController.dispose();
-    _gestationController.dispose();
     _prepartumController.dispose();
     _weaningController.dispose();
     _postpartumController.dispose();
@@ -215,12 +211,6 @@ class _ProductionSettingsFormState
                   fieldKey: const ValueKey('production-palpation-days'),
                   label: '配种至摸胎时长',
                   controller: _palpationController,
-                ),
-                const SizedBox(height: 12),
-                _DayField(
-                  fieldKey: const ValueKey('production-gestation-days'),
-                  label: '妊娠参考天数',
-                  controller: _gestationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
@@ -321,7 +311,6 @@ class _ProductionSettingsFormState
         houseId: widget.setting.houseId,
         aphrodisiacDays: _intValue(_aphrodisiacController),
         palpationDays: _intValue(_palpationController),
-        gestationDays: _intValue(_gestationController),
         prepartumDays: _intValue(_prepartumController),
         weaningDays: _intValue(_weaningController),
         postpartumDays: _intValue(_postpartumController),

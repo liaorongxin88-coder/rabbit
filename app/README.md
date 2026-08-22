@@ -1,6 +1,6 @@
 # Rabbit Flutter App
 
-`flutter_app/` 是 Rabbit 当前移动端重构方向，面向 Android 客户端。它使用真实后端 API，不是静态原型。
+`app/` 是 Rabbit 当前维护的 Flutter Android 客户端。它使用真实后端 API，不是静态原型。
 
 ## 当前范围
 
@@ -13,9 +13,12 @@
 - 笼位管理
 - 兔只查看和编辑
 - 从具体笼位进入新增兔只
-- 未迁移模块的占位入口
+- 批次查看和现场生产操作
+- 批量出库
+- NFC 笼位标签写入和解析
+- 账号、生产参数和提醒设置
 
-NFC、后台通知、离线待提交和全量批次操作页尚未迁移，除非任务明确要求，不要顺手改后端契约或恢复原生 Android。
+后台通知等未实现能力仍需单独规划。客户端改动不能顺手改变后端契约或恢复历史原生 Android 入口。
 
 ## 技术栈
 
@@ -30,7 +33,7 @@ NFC、后台通知、离线待提交和全量批次操作页尚未迁移，除�
 ## 本地运行
 
 ```bash
-cd flutter_app
+cd app
 ./rabbit bootstrap
 ./rabbit run dev
 ```
@@ -63,7 +66,7 @@ cp config/env/toolchain.local.env.example config/env/toolchain.local.env
 
 使用 Make 时，对应入口为 `make doctor`、`make check`、`make verify`、`make run ENV=dev DEVICE=<device-id>`、`make apk ENV=test MODE=release` 和 `make aab`。所有 Android 相关入口都会在执行时重新解析 JDK 21 和 Android SDK，不依赖某台机器提交的绝对路径。
 
-Android Studio 打开 `flutter_app/` 后，Run/Debug Configurations 里使用：
+Android Studio 打开 `app/` 后，Run/Debug Configurations 里使用：
 
 - `Rabbit Dev`：本地开发，`dev` flavor，默认后端 `http://10.0.2.2:8080`。
 - `Rabbit Test`：测试环境，Android `staging` flavor，读取 `config/env/test.env`。
@@ -138,7 +141,7 @@ Android 包名：
 ## 验证
 
 ```bash
-cd flutter_app
+cd app
 ./rabbit check
 ./rabbit apk dev --debug
 ```
@@ -174,7 +177,7 @@ cd flutter_app
 
 ## 规则入口
 
-- `flutter_app/.rule`：当前 Flutter 工程规则。
-- `flutter_app/AGENTS.md`、`flutter_app/CLAUDE.md`：Agent 兼容入口，内容应指回 `.rule`。
+- `app/.rule`：当前 Flutter 工程规则。
+- `app/AGENTS.md`、`app/CLAUDE.md`：Agent 兼容入口，内容应指回 `.rule`。
 
-更多项目文档见 [../docs/flutter_app/README.md](../docs/flutter_app/README.md) 和 [../docs/README.md](../docs/README.md)。
+更多项目文档见 [../docs/app/README.md](../docs/app/README.md) 和 [../docs/README.md](../docs/README.md)。

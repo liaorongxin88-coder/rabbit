@@ -9,12 +9,14 @@
 ### 分支策略
 
 推荐：
+
 - `main`：可随时部署的稳定分支
 - `feat/<topic>`：新功能分支（例如 `feat/audit-export`）
 - `fix/<topic>`：修复分支（例如 `fix/weaning-idempotent`）
 - `chore/<topic>`：工程化/脚手架（例如 `chore/docker`）
 
 合并方式：
+
 - 建议使用 PR 合并到 `main`
 - 小修复允许直接 push，但仍需遵循下面的提交与自测要求
 
@@ -31,6 +33,7 @@
 ```
 
 推荐 type：
+
 - `feat`：新功能
 - `fix`：Bug 修复
 - `refactor`：重构（不改变外部行为）
@@ -40,21 +43,24 @@
 - `chore`：构建/脚本/工程化
 
 推荐 scope（按模块）：
+
 - `backend`
 - `flutter`
 - `admin`
 - `db`
 - `docker`
 - `docs`
-- `tools`
+- `ci`
 
 示例：
+
 - `feat(backend): export audit logs csv`
 - `fix(flutter): keep rabbit creation tied to cage context`
 - `feat(admin): add merchant status filters`
 - `chore(db): add flyway migration for indexes`
 
 禁止：
+
 - `update`
 - `fix bug`
 - 无意义/不包含范围的描述
@@ -72,14 +78,16 @@ cd backend
 mvn -DskipTests package
 ```
 
-若涉及 API 变更，建议用接口脚本回归：
-- `tools/demo_flow.ps1`
-- `tools/demo_flow_full.ps1`
+若涉及 API、权限或数据库行为，运行后端 E2E：
+
+```bash
+mvn --file backend/pom.xml -Pe2e verify
+```
 
 ### Flutter Android 客户端
 
 ```bash
-cd flutter_app
+cd app
 ./rabbit check
 ./rabbit apk dev --debug
 ```
@@ -102,7 +110,7 @@ pnpm --dir admin build
 ### 只允许通过 Flyway 迁移演进
 
 - 任何表结构变更、索引变更，必须新增迁移文件到：
-  - `backend/src/main/resources/db/migration/`
+  - `backend/rabbit-boot/src/main/resources/db/migration/`
 - 迁移文件必须可在“全新库”与“已有库”上执行
 
 ### 迁移内容约束
@@ -114,7 +122,7 @@ pnpm --dir admin build
 
 ## 权限与数据隔离（强制）
 
-- 任何涉及业务数据的 API 必须校验权限（view/edit/control）
+- 任何涉及业务数据的 API 必须校验对应的 `rabbit:*` 动作权限
 - 任何查询/写入必须确保 `house_id` 过滤正确
 - 涉及批次从表且没有 `house_id` 的，需要 join 批次表按 `b.house_id` 过滤
 
@@ -123,7 +131,7 @@ pnpm --dir admin build
 ## 幂等与可恢复（强制）
 
 - 写接口尽量支持 `requestId` 幂等
-- Android 写操作失败要考虑落入 PendingOps（可重试）
+- 客户端写操作失败时必须保留明确的重试或冲突处理路径，不能静默重复提交
 
 ---
 

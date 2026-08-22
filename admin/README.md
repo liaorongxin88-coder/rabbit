@@ -124,4 +124,4 @@ curl -s -H 'Content-Type: application/json' \
   http://127.0.0.1:5173/api/admin/auth/login
 ```
 
-更多验证说明见 [../docs/admin/README.md](../docs/admin/README.md) 和 [../docs/common/testing.md](../docs/common/testing.md)。
+更多验证说明见 [../docs/admin/README.md](../docs/admin/README.md) 和 [../docs/project/testing.md](../docs/project/testing.md)。

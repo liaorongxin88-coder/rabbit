@@ -1,44 +1,32 @@
 # Rabbit 养兔管理系统
 
-Rabbit 是面向兔场生产管理的一体化系统，当前仓库包含后端 API、Flutter Android 客户端、平台管理后台和演示/回归脚本。
+Rabbit 是面向兔场生产管理的一体化系统。当前仓库维护一个后端和两个客户端，并包含数据库迁移、自动化验证、部署脚本和项目文档。
 
-当前维护入口以 `backend/`、`flutter_app/`、`admin/` 为主；历史原生 Android 客户端已不再作为当前开发入口。
+## 子项目
 
-## 当前组成
-
-| 目录 | 定位 | 主要技术 |
+| 目录 | 定位 | 技术 |
 | --- | --- | --- |
-| `backend/` | 业务后端、权限隔离、Flyway 迁移、平台管理 API | Spring Boot 3.5、MyBatis、MySQL、JDK 21 |
-| `flutter_app/` | 并行 Flutter Android 客户端，承接移动端重构 | Flutter、Riverpod、go_router、Dio |
-| `admin/` | SaaS 平台管理控制台，面向平台管理员 | React、TypeScript、Vite、Tailwind、Radix |
-| `tools/` | 接口演示和回归脚本 | PowerShell |
-| `docs/` | 当前项目文档入口 | Markdown |
+| `backend/` | 业务 API、权限、生产流程、Flyway 迁移和平台管理 API | Spring Boot 3.5、Java 21、MyBatis、MySQL |
+| `app/` | 兔场现场使用的 Flutter Android 客户端 | Flutter、Riverpod、go_router、Dio |
+| `admin/` | 平台管理端和业务工作台 | React 19、TypeScript、Vite、Tailwind、Radix |
+| `scripts/` | CI、构建、E2E 和发布预检脚本 | Bash、Node.js |
+| `deploy/` | 生产镜像激活和远端部署脚本 | Docker Compose、Bash |
+| `docs/` | 从项目总体到子项目的工程文档 | Markdown |
 
-## 文档导航
+## 文档
 
-- [docs/README.md](docs/README.md)：文档总入口和阅读顺序
-- [docs/common/development.md](docs/common/development.md)：本地开发、运行和常用命令
-- [docs/common/architecture.md](docs/common/architecture.md)：系统架构、仓库边界和模块职责
-- [docs/common/testing.md](docs/common/testing.md)：验证、E2E 和回归测试
-- [docs/common/business-baseline.md](docs/common/business-baseline.md)：业务设计基准、Word 文档抽取版和实现对齐说明
-- [docs/common/operations.md](docs/common/operations.md)：Docker 部署、配置和运维注意事项
+从 [docs/README.md](docs/README.md) 开始。文档按以下层级组织：
 
-子项目入口：
-
-- [backend/README.md](backend/README.md)
-- [flutter_app/README.md](flutter_app/README.md)
-- [admin/README.md](admin/README.md)
-
-历史/基准资料：
-
-- [docs/archive/legacy/README.md](docs/archive/legacy/README.md)
-- [docs/archive/legacy/养兔管理系统完整技术文档.docx](docs/archive/legacy/养兔管理系统完整技术文档.docx)
-- [docs/archive/legacy/养兔管理系统完整技术文档.extracted.md](docs/archive/legacy/养兔管理系统完整技术文档.extracted.md)
-- [docs/archive/legacy/养兔管理系统完整技术文档.extracted.json](docs/archive/legacy/养兔管理系统完整技术文档.extracted.json)
+- [项目总体](docs/project/README.md)
+- [后端](docs/backend/README.md)
+- [Flutter App](docs/app/README.md)
+- [Admin](docs/admin/README.md)
+- [跨端业务专题](docs/features/README.md)
+- [部署与发布](docs/operations/README.md)
 
 ## 快速启动
 
-### 后端和 MySQL
+### Backend 和 MySQL
 
 ```bash
 cp .env.example .env
@@ -46,71 +34,60 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose 要求 `.env` 提供应用 JWT、管理 JWT、手机号摘要和 NFC 标签签名密钥；应用 JWT 与
-管理 JWT 必须不同。短信默认关闭，`APP_SMS_CODE_SECRET` 仅在启用短信时必需。后端拒绝
-`change-me` 等公开占位值。所有持久密钥都应独立生成并稳定保存；轮换 NFC 密钥时保留旧 key，
-再提升 `APP_NFC_TAG_ACTIVE_KEY_ID`，否则既有标签将无法验证。
+默认 backend 地址是 `http://127.0.0.1:8080`。MySQL 只在 Compose 网络内开放，不映射宿主机端口。短信和应用缓存默认关闭，按需启用 Redis 或 Valkey profile。
 
-默认服务：
-
-- Backend: `http://localhost:8080`
-- MySQL: `localhost:3306`
-- MySQL root 密码: `rabbit_root`
-
-生产环境还必须覆盖或关闭平台管理员 bootstrap 密码。
-
-### Flutter Android 客户端
+### Flutter App
 
 ```bash
-cd flutter_app
+cd app
 ./rabbit bootstrap
 ./rabbit check
 ./rabbit apk dev --debug
 ```
 
-Android 模拟器默认后端地址为 `http://10.0.2.2:8080`。
+Android 模拟器默认通过 `http://10.0.2.2:8080` 访问宿主机 backend。
 
-### 平台管理后台
+### Admin
 
 ```bash
 pnpm --dir admin install
 pnpm --dir admin dev
 ```
 
-开发默认平台管理员账号由后端 bootstrap 创建：`admin / admin123456`。生产环境必须通过环境变量覆盖或关闭 bootstrap。
+Vite 开发服务器默认把 `/api` 代理到 `http://127.0.0.1:8080`。
 
-## 最小验证
+## 验证
 
-按改动范围选择验证：
+按改动范围运行对应入口：
 
 ```bash
-# 后端
-mvn --file backend/pom.xml -DskipTests package
+# 后端单测，包含 Checkstyle
+mvn --file backend/pom.xml test
 
-# 后端 API E2E
+# 后端 MySQL E2E
 mvn --file backend/pom.xml -Pe2e verify
 
-# Flutter
-cd flutter_app
-./rabbit check
-./rabbit apk dev --debug
+# Flutter 静态检查和测试
+(cd app && ./rabbit check)
 
-# Admin
+# Admin lint、测试和构建
 pnpm --dir admin lint
+pnpm --dir admin test
 pnpm --dir admin build
+
+# 三端快速质量门禁
+./scripts/ci/check.sh
 ```
 
-更多测试说明见 [docs/common/testing.md](docs/common/testing.md)。
+完整测试、浏览器和真机验收见 [docs/project/testing.md](docs/project/testing.md)。
 
 ## 关键约定
 
-- 后端使用 Flyway 管理数据库结构，任何 schema 变更必须新增迁移脚本。
-- 登录态使用 JWT；普通业务请求带 `Authorization: Bearer <token>`。
-- 兔舍域请求必须带 `X-House-Id: <houseId>` 并校验 `view/edit/control` 权限。
-- 写接口优先支持 `requestId` 幂等。
-- 平台管理 API 使用 `/api/admin/**`，不走普通兔舍上下文。
-- Flutter 客户端按 `config/data/domain/routing/ui` 分层，不再新增旧式 `features/` 顶层架构。
+- 数据库结构只通过 `backend/rabbit-boot/src/main/resources/db/migration/` 下的 Flyway 迁移演进。
+- 普通业务请求使用业务用户 JWT，兔场范围请求还必须携带并校验 `X-House-Id`。
+- 平台管理 API 使用 `/api/admin/**` 和独立 JWT，不进入普通兔场上下文。
+- 写接口通过 `requestId` 和服务端去重逻辑处理重复提交。
+- Flutter 源码按 `config`、`data`、`domain`、`routing` 和 `ui` 分层。
+- Admin 平台端与业务工作台共享组件，但会话、请求客户端和权限边界相互隔离。
 
-## 贡献规范
-
-提交和自测要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+贡献、提交和自测要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。

@@ -4,7 +4,7 @@
 
 This repository contains three maintained applications:
 
-- `backend/`: Spring Boot 3.5, Java 21, MyBatis, and Flyway. Production code is under `src/main/java/com/rabbit/app`; mapper XML and migrations are under `src/main/resources/`.
+- `backend/`: Spring Boot 3.5, Java 21, MyBatis, and Flyway modular monolith. Production code is split across `rabbit-platform`, `rabbit-access`, `rabbit-production`, and `rabbit-reporting`; `rabbit-boot` owns the application entry point, Flyway migrations, runtime configuration, and full-service tests.
 - `admin/`: React 19, TypeScript, Vite, Tailwind, and Radix. Put routes in `src/pages`, shared UI in `src/components`, API calls in `src/api`, and domain types in `src/types`.
 - `app/`: Flutter Android client. Code follows `lib/src/{config,data,domain,routing,ui}`; unit/widget tests live in `test/`, and device flows in `integration_test/`.
 

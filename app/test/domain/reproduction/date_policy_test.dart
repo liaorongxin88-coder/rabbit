@@ -10,7 +10,6 @@ void main() {
     houseId: 9,
     aphrodisiacDays: 2,
     palpationDays: 12,
-    gestationDays: 30,
     prepartumDays: 3,
     weaningDays: 25,
     postpartumDays: 10,

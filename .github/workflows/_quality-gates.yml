@@ -1,0 +1,197 @@
+name: Reusable quality gates
+
+on:
+  workflow_call:
+    inputs:
+      upload_qa_artifacts:
+        description: Upload Admin dist and a debug-signed staging APK.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  workflow_lint:
+    name: Workflow and documentation lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Check GitHub Actions workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
+      - name: Check shell scripts
+        run: shellcheck scripts/ci/*.sh deploy/scripts/*.sh deploy/remote/*.sh
+
+      - name: Check local Markdown links
+        run: node scripts/ci/check-markdown-links.mjs
+
+  backend_unit:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: |
+            backend/pom.xml
+            backend/*/pom.xml
+
+      - name: Run Checkstyle and unit tests
+        run: mvn --batch-mode --no-transfer-progress --file backend/pom.xml test
+
+  backend_e2e:
+    name: Backend MySQL and Valkey integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rabbit_root
+          MYSQL_DATABASE: rabbit_app_e2e
+          TZ: Asia/Shanghai
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -prabbit_root"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_CACHE_PORT: "6379"
+      E2E_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      E2E_MIGRATION_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e_migration?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      E2E_LARGE_LOOP_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e_large_loop?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: |
+            backend/pom.xml
+            backend/*/pom.xml
+
+      - name: Create isolated E2E databases
+        env:
+          MYSQL_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec "$MYSQL_CONTAINER" mysql -uroot -prabbit_root -e \
+            'CREATE DATABASE IF NOT EXISTS rabbit_app_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS rabbit_app_e2e_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS rabbit_app_e2e_large_loop CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+
+      - name: Run integration tests
+        run: >-
+          mvn --batch-mode --no-transfer-progress --file backend/pom.xml -Pe2e
+          -Dcache.it.host=127.0.0.1 -Dcache.it.port=6379 verify
+
+  admin:
+    name: Admin lint, tests, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@11.22.0 --activate
+
+      - name: Install dependencies from lockfile
+        run: pnpm --dir admin install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --dir admin lint
+
+      - name: Test
+        run: pnpm --dir admin test
+
+      - name: Build
+        run: pnpm --dir admin build
+
+      - name: Upload QA Admin bundle
+        if: inputs.upload_qa_artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: qa-admin-${{ github.sha }}
+          path: admin/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  flutter:
+    name: Flutter checks and QA APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            app/android/build.gradle
+            app/android/settings.gradle
+            app/android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Flutter 3.24.3
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: 3.24.3
+          cache: true
+
+      - name: Analyze and test
+        working-directory: app
+        run: ./rabbit check
+
+      - name: Build debug-signed staging APK
+        if: inputs.upload_qa_artifacts
+        working-directory: app
+        run: |
+          build_number=$((4003 + GITHUB_RUN_NUMBER))
+          ./rabbit apk test --release "--build-number=$build_number"
+
+      - name: Upload QA APK
+        if: inputs.upload_qa_artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: qa-android-staging-${{ github.sha }}
+          path: app/build/app/outputs/flutter-apk/app-staging-release.apk
+          if-no-files-found: error
+          retention-days: 14

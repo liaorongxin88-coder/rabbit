@@ -5,7 +5,7 @@
 迁移脚本目录：
 
 ```text
-backend/src/main/resources/db/migration/
+backend/rabbit-boot/src/main/resources/db/migration/
 ```
 
 规则：
@@ -32,9 +32,11 @@ backend/src/main/resources/db/migration/
 
 ## 参考文件
 
-- `backend/src/main/resources/db/schema.sql`：当前全量结构参考。
-- `backend/src/main/resources/db/seed_demo.sql`：演示数据参考。
-- `tools/demo_flow.ps1`、`tools/demo_flow_full.ps1`：更推荐的演示数据生成方式，因为它们走真实 API。
+- `backend/rabbit-boot/src/main/resources/db/schema.sql`：当前全量结构参考。
+- `backend/rabbit-boot/src/main/resources/db/seed_demo.sql`：演示数据参考。
+- [后端数据结构资料](../data/README.md)：按业务域整理的结构说明和关系图。
+
+生产和持续集成以 Flyway 回放为准，演示数据不能替代迁移验证。
 
 ## 兔场隔离
 

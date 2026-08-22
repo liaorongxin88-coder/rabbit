@@ -18,7 +18,7 @@ cd backend
 set -a
 source ../.env
 set +a
-mvn spring-boot:run
+mvn -pl rabbit-boot -am spring-boot:run
 ```
 
 默认端口：`8080`。
@@ -48,15 +48,15 @@ docker compose up -d --build --no-deps backend
 
 ## 数据库
 
-- 迁移目录：`src/main/resources/db/migration/`
-- 当前结构参考：`src/main/resources/db/schema.sql`
-- 演示数据参考：`src/main/resources/db/seed_demo.sql`
+- 迁移目录：`rabbit-boot/src/main/resources/db/migration/`
+- 当前结构参考：`rabbit-boot/src/main/resources/db/schema.sql`
+- 演示数据参考：`rabbit-boot/src/main/resources/db/seed_demo.sql`
 
 首次启动由 Flyway 自动执行迁移。任何 schema 变更都必须新增 Flyway 迁移脚本。
 
 ## 配置
 
-默认配置：`src/main/resources/application.yml`。
+默认配置：`rabbit-boot/src/main/resources/application.yml`。
 
 常用环境变量：
 
@@ -96,15 +96,15 @@ docker compose up -d --build --no-deps backend
 
 ## 模块
 
-业务模块位于 `src/main/java/com/rabbit/app/modules/`：
+后端由五个 Maven 模块组成，但仍作为一个 Spring Boot 服务部署：
 
-- `auth`、`workspace`、`house`、`cage`、`rabbit`、`batch`
-- `event`、`feed`、`treatment`、`weight`
-- `inventory`、`sale`、`nfc`
-- `audit`、`dedup`、`hardware`
-- `admin`、`report`、`setting`
+- `rabbit-platform`：通用响应、缓存、工具和请求幂等。
+- `rabbit-access`：认证、兔场、工作空间和业务权限。
+- `rabbit-production`：笼位、兔只、批次、繁殖、现场记录、库存、销售、设置、文件和硬件适配。
+- `rabbit-reporting`：报表、审计和平台管理。
+- `rabbit-boot`：启动类、配置、Flyway 迁移和整体验证测试。
 
-详细边界见 [../docs/backend/README.md](../docs/backend/README.md) 和 [../docs/common/architecture.md](../docs/common/architecture.md)。
+`rabbit-boot` 依次依赖 reporting、production、access 和 platform，最终只生成一个可执行 JAR。详细边界见 [../docs/backend/README.md](../docs/backend/README.md)、[../docs/project/architecture.md](../docs/project/architecture.md) 和 [../docs/adr/0002-backend-maven-modules.md](../docs/adr/0002-backend-maven-modules.md)。
 
 ## 请求约定
 
@@ -112,7 +112,7 @@ docker compose up -d --build --no-deps backend
 
 - `Authorization: Bearer <token>`
 - `X-House-Id: <houseId>` 用于兔舍域请求
-- 权限分为 `view`、`edit`、`control`
+- 动作权限使用 `rabbit:*` 权限码，旧 `view`、`edit`、`control` 仅用于兼容
 
 平台管理 API：
 
@@ -164,11 +164,15 @@ docker compose up -d --build --no-deps backend
 
 ```bash
 cd backend
+mvn checkstyle:check
 mvn -DskipTests package
 mvn -Pe2e verify
 ```
 
-E2E 说明见 [../docs/common/testing.md](../docs/common/testing.md)。手机号登录的阿里云短信配置、
+`mvn checkstyle:check` 会检查生产和测试 Java 源码。Checkstyle 同时绑定到 Maven
+`validate` 阶段，因此 `test`、`package` 和 `verify` 也会先执行 Java lint。
+
+E2E 说明见 [../docs/project/testing.md](../docs/project/testing.md)。手机号登录的阿里云短信配置、
 接口契约和限流规则见 [../docs/backend/sms-auth.md](../docs/backend/sms-auth.md)；运营商取号、
 防重放和客户端接入边界见 [../docs/backend/modules/auth-phone-wechat.md](../docs/backend/modules/auth-phone-wechat.md)。
 多养殖业务的工作空间兼容层和后续模块化路线见
@@ -177,7 +181,7 @@ E2E 说明见 [../docs/common/testing.md](../docs/common/testing.md)。手机号
 ## 更多文档
 
 - [../docs/backend/README.md](../docs/backend/README.md)
-- [../docs/common/development.md](../docs/common/development.md)
-- [../docs/common/testing.md](../docs/common/testing.md)
-- [../docs/common/operations.md](../docs/common/operations.md)
-- [../docs/common/business-baseline.md](../docs/common/business-baseline.md)
+- [../docs/project/development.md](../docs/project/development.md)
+- [../docs/project/testing.md](../docs/project/testing.md)
+- [../docs/operations/deployment.md](../docs/operations/deployment.md)
+- [../docs/project/business-baseline.md](../docs/project/business-baseline.md)

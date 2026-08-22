@@ -15,7 +15,7 @@ resolve_db_container() {
   # Prefer the current underscore form, while retaining the historical name.
   for candidate in rabbit_mysql_1 rabbit-mysql-1; do
     if command -v docker >/dev/null 2>&1 &&
-       docker inspect "$candidate" >/dev/null 2>&1; then
+      docker inspect "$candidate" >/dev/null 2>&1; then
       printf '%s\n' "$candidate"
       return
     fi
@@ -114,7 +114,7 @@ if ! curl -fsS "$HOST_API_URL/api/houses" >/dev/null; then
 fi
 
 # 必须跑在完整 compose 集群上（mysql + valkey + backend 容器），而不是临时拼的环境。
-# 本地跑 mvn spring-boot:run 也能让用例通过，但那就测不到容器网络、镜像构建
+# 本地跑 mvn -pl rabbit-boot -am spring-boot:run 也能让用例通过，但那就测不到容器网络、镜像构建
 # 与缓存接线这三件真实部署才有的事。
 for container in "$DB_CONTAINER" "$CACHE_CONTAINER" "$BACKEND_CONTAINER"; do
   if ! docker inspect "$container" >/dev/null 2>&1; then
@@ -142,7 +142,6 @@ if [[ "$DEVICE_API_URL" == http://10.0.2.2:* ]]; then
   echo "Warning: falling back to emulator loopback; no host LAN IP detected" >&2
 fi
 
-
 # V32 includes the user/house reminder preferences exercised by this scenario.
 # Checking only the older doe-breeding-v2 migration lets a stale backend image
 # reach the settings page and then fail as a misleading missing-widget timeout.
@@ -158,8 +157,8 @@ fi
 if [[ -z "$DEVICE_ID" ]]; then
   DEVICE_ID="$($ADB_BIN devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
 fi
-if [[ -z "$DEVICE_ID" ]] || \
-   [[ "$("$ADB_BIN" -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
+if [[ -z "$DEVICE_ID" ]] ||
+  [[ "$("$ADB_BIN" -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
   echo "A connected Android device is required for the Batch lifecycle E2E" >&2
   exit 69
 fi
@@ -183,8 +182,8 @@ if [[ "$KEEP_DEVICE_AWAKE" == "1" ]]; then
   "$ADB_BIN" -s "$DEVICE_ID" shell svc power stayon true
   "$ADB_BIN" -s "$DEVICE_ID" shell input keyevent KEYCODE_WAKEUP
   "$ADB_BIN" -s "$DEVICE_ID" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  if "$ADB_BIN" -s "$DEVICE_ID" shell dumpsys window | \
-      tr -d '\r' | grep -Eq 'mDreamingLockscreen=true|isStatusBarKeyguard=true'; then
+  if "$ADB_BIN" -s "$DEVICE_ID" shell dumpsys window |
+    tr -d '\r' | grep -Eq 'mDreamingLockscreen=true|isStatusBarKeyguard=true'; then
     echo "Android device $DEVICE_ID is locked; unlock it before starting the visible Batch lifecycle E2E" >&2
     exit 69
   fi
@@ -204,18 +203,18 @@ if [[ ! -f "$fixture_file" ]]; then
   exit 66
 fi
 fixture_output=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" -i "$DB_CONTAINER" \
-  mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$fixture_file")
+  mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" <"$fixture_file")
 
 read -r run_id house_id mother_a_id mother_b_id father_id <<<"$(awk 'NR == 2 { print $1, $2, $3, $4, $5 }' <<<"$fixture_output")"
-if [[ -z "$run_id" || -z "$house_id" || -z "$mother_a_id" || \
-      -z "$mother_b_id" || -z "$father_id" ]]; then
+if [[ -z "$run_id" || -z "$house_id" || -z "$mother_a_id" ||
+  -z "$mother_b_id" || -z "$father_id" ]]; then
   echo "Unable to parse Batch lifecycle fixture output" >&2
   exit 65
 fi
 
 artifact_dir="$PROJECT_DIR/build/android-batch-lifecycle-e2e/$run_id"
 mkdir -p "$artifact_dir"
-printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
+printf '%s\n' "$fixture_output" >"$artifact_dir/fixture.txt"
 physical_size="$($ADB_BIN -s "$DEVICE_ID" shell wm size | awk -F ': ' '/Physical size/ { print $2; exit }' | tr -d '\r')"
 physical_density="$($ADB_BIN -s "$DEVICE_ID" shell wm density | awk -F ': ' '/Physical density/ { print $2; exit }' | tr -d '\r')"
 cache_keys_before=$(docker exec "$CACHE_CONTAINER" valkey-cli dbsize 2>/dev/null | tr -d '\r')
@@ -223,7 +222,7 @@ printf 'device=%s\nprofile=batch-lifecycle\ntime_mode=compressed-work-task-due\n
   "$DEVICE_ID" "$DEVICE_API_URL" "$CACHE_CONTAINER" "${cache_keys_before:-0}" \
   "$TEXT_SCALE" "$EXPECTED_EFFECTIVE_TEXT_SCALE" "$physical_size" "$physical_density" \
   "$run_id" "$house_id" "$mother_a_id" "$mother_b_id" "$father_id" \
-  > "$artifact_dir/environment.txt"
+  >"$artifact_dir/environment.txt"
 
 export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
 
@@ -308,7 +307,7 @@ for screenshot in "${screenshots[@]}"; do
     exit 1
   fi
 done
-printf '%s.png\n' "${screenshots[@]}" > "$artifact_dir/screenshots.txt"
+printf '%s.png\n' "${screenshots[@]}" >"$artifact_dir/screenshots.txt"
 
 batch_id=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
   mysql -N -B -u"$DB_USER" -D "$DB_NAME" \
