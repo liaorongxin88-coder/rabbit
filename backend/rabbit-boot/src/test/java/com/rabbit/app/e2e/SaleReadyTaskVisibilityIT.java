@@ -27,10 +27,21 @@ public class SaleReadyTaskVisibilityIT extends E2eTestSupport {
         long immatureCommodity = rabbit(houseId, cages.get(1), "2", "FATTENING", "immature");
         long matureCommodity = rabbit(houseId, cages.get(2), "2", "MATURE", "mature");
 
-        long breederSaleTask = task(houseId, breeder, "SALE_READY", "breeder-sale");
-        long immatureSaleTask = task(houseId, immatureCommodity, "SALE_READY", "immature-sale");
-        long matureSaleTask = task(houseId, matureCommodity, "SALE_READY", "mature-sale");
-        long estrusTask = task(houseId, breeder, "ESTRUS", "breeder-estrus");
+        long breederSaleTask = task(houseId, breeder, breeder, "SALE_READY", "breeder-sale");
+        long immatureSaleTask = task(
+            houseId, immatureCommodity, immatureCommodity, "SALE_READY", "immature-sale"
+        );
+        long matureSaleTask = task(houseId, matureCommodity, matureCommodity, "SALE_READY", "mature-sale");
+        long saleReadyWithoutRabbitTask = task(
+            houseId, breeder, null, "SALE_READY", "sale-without-rabbit"
+        );
+        long orphanSaleReadyTask = task(
+            houseId, breeder, Long.MAX_VALUE, "SALE_READY", "orphan-sale"
+        );
+        long estrusTask = task(houseId, breeder, breeder, "ESTRUS", "breeder-estrus");
+        long estrusWithoutRabbitTask = task(
+            houseId, breeder, null, "ESTRUS", "estrus-without-rabbit"
+        );
 
         Date dueBefore = new Date();
         List<WorkTask> dueTasks = workTaskMapper.selectPendingDue(
@@ -41,10 +52,12 @@ public class SaleReadyTaskVisibilityIT extends E2eTestSupport {
         );
         Set<Long> visibleIds = dueTasks.stream().map(WorkTask::getId).collect(Collectors.toSet());
 
-        Assertions.assertEquals(2L, dueCount);
-        Assertions.assertEquals(Set.of(matureSaleTask, estrusTask), visibleIds);
+        Assertions.assertEquals(3L, dueCount);
+        Assertions.assertEquals(Set.of(matureSaleTask, estrusTask, estrusWithoutRabbitTask), visibleIds);
         Assertions.assertFalse(visibleIds.contains(breederSaleTask));
         Assertions.assertFalse(visibleIds.contains(immatureSaleTask));
+        Assertions.assertFalse(visibleIds.contains(saleReadyWithoutRabbitTask));
+        Assertions.assertFalse(visibleIds.contains(orphanSaleReadyTask));
 
         List<Long> filteredSaleReadyIds = workTaskMapper.selectPendingByFilter(
             houseId, "SALE_READY", null, null, 20
@@ -72,7 +85,7 @@ public class SaleReadyTaskVisibilityIT extends E2eTestSupport {
         );
     }
 
-    private long task(Long houseId, Long rabbitId, String taskType, String suffix) {
+    private long task(Long houseId, Long subjectId, Long rabbitId, String taskType, String suffix) {
         String dedupKey = "sale-ready-visibility:" + suffix;
         jdbc.update(
             "insert into work_tasks (house_id, task_type, subject_type, subject_id, rabbit_id,"
@@ -81,7 +94,7 @@ public class SaleReadyTaskVisibilityIT extends E2eTestSupport {
                 + " date_sub(now(), interval 1 day), 'PENDING', ?, 'test', 'test')",
             houseId,
             taskType,
-            rabbitId,
+            subjectId,
             rabbitId,
             dedupKey
         );

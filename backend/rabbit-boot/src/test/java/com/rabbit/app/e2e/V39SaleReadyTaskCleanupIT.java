@@ -29,7 +29,8 @@ class V39SaleReadyTaskCleanupIT {
     }
 
     @Test
-    void cancelsOnlyPendingSaleReadyTasksForActiveNonCommodityRabbits() throws SQLException {
+    void cancelsInvalidPendingSaleReadyTasksAndRetainsCommodityRabbitsUntilMature()
+        throws SQLException {
         Flyway toV36 = flyway(MigrationVersion.fromVersion("36"));
         toV36.clean();
         toV36.migrate();
@@ -40,68 +41,85 @@ class V39SaleReadyTaskCleanupIT {
         );
         long cageId = insert(
             "insert into cages (house_id, cage_number, status, rabbit_count, create_by, update_by)"
-                + " values (?, 'V39-C', '3', 4, 'test', 'test')",
+                + " values (?, 'V39-C', '3', 5, 'test', 'test')",
             houseId
         );
-        long breeder = rabbit(houseId, cageId, "0", null, "breeder");
-        long immatureCommodity = rabbit(houseId, cageId, "2", "FATTENING", "immature");
-        long matureCommodity = rabbit(houseId, cageId, "2", "MATURE", "mature");
-        task(houseId, breeder, "SALE_READY", "breeder-sale");
-        task(houseId, immatureCommodity, "SALE_READY", "immature-sale");
-        task(houseId, matureCommodity, "SALE_READY", "mature-sale");
-        task(houseId, breeder, "ESTRUS", "breeder-estrus");
+        long breeder = rabbit(houseId, cageId, "0", null, true, "breeder");
+        long immatureCommodity = rabbit(houseId, cageId, "2", "FATTENING", true, "immature");
+        long matureCommodity = rabbit(houseId, cageId, "2", "MATURE", true, "mature");
+        long inactiveCommodity = rabbit(houseId, cageId, "2", "MATURE", false, "inactive");
+        long breederSaleTask = task(houseId, breeder, breeder, "SALE_READY", "breeder-sale");
+        long immatureSaleTask = task(
+            houseId, immatureCommodity, immatureCommodity, "SALE_READY", "immature-sale"
+        );
+        long matureSaleTask = task(houseId, matureCommodity, matureCommodity, "SALE_READY", "mature-sale");
+        long inactiveSaleTask = task(
+            houseId, inactiveCommodity, inactiveCommodity, "SALE_READY", "inactive-sale"
+        );
+        long saleReadyWithoutRabbitTask = task(houseId, breeder, null, "SALE_READY", "without-rabbit");
+        long orphanSaleReadyTask = task(
+            houseId, breeder, Long.MAX_VALUE, "SALE_READY", "orphan-sale"
+        );
+        long estrusTask = task(houseId, breeder, breeder, "ESTRUS", "breeder-estrus");
 
         flyway(null).migrate();
 
-        assertEquals("CANCELLED", taskStatus(breeder, "SALE_READY"));
-        assertEquals("v39", updateBy(breeder, "SALE_READY"));
-        assertEquals("PENDING", taskStatus(immatureCommodity, "SALE_READY"));
-        assertEquals("PENDING", taskStatus(matureCommodity, "SALE_READY"));
-        assertEquals("PENDING", taskStatus(breeder, "ESTRUS"));
+        assertCancelledByV39(breederSaleTask);
+        assertCancelledByV39(inactiveSaleTask);
+        assertCancelledByV39(saleReadyWithoutRabbitTask);
+        assertCancelledByV39(orphanSaleReadyTask);
+        assertEquals("PENDING", taskStatus(immatureSaleTask));
+        assertEquals("PENDING", taskStatus(matureSaleTask));
+        assertEquals("PENDING", taskStatus(estrusTask));
     }
 
-    private long rabbit(Long houseId, Long cageId, String type, String growthStage, String suffix)
-        throws SQLException {
+    private long rabbit(
+        Long houseId,
+        Long cageId,
+        String type,
+        String growthStage,
+        boolean active,
+        String suffix
+    ) throws SQLException {
         return insert(
             "insert into rabbits (house_id, cage_id, type, gender, arrival_method, growth_stage,"
                 + " state_version, is_active, is_quarantined, request_id, create_by, update_by)"
-                + " values (?, ?, ?, '0', '1', ?, 0, true, false, ?, 'test', 'test')",
+                + " values (?, ?, ?, '0', '1', ?, 0, ?, false, ?, 'test', 'test')",
             houseId,
             cageId,
             type,
             growthStage,
+            active,
             "v39-" + suffix
         );
     }
 
-    private void task(Long houseId, Long rabbitId, String taskType, String suffix) throws SQLException {
-        insert(
+    private long task(Long houseId, Long subjectId, Long rabbitId, String taskType, String suffix)
+        throws SQLException {
+        return insert(
             "insert into work_tasks (house_id, task_type, subject_type, subject_id, rabbit_id,"
                 + " due_date, due_time, status, dedup_key, create_by, update_by)"
                 + " values (?, ?, 'RABBIT', ?, ?, date_add(curdate(), interval 30 day),"
                 + " date_add(now(), interval 30 day), 'PENDING', ?, 'test', 'test')",
             houseId,
             taskType,
-            rabbitId,
+            subjectId,
             rabbitId,
             "v39:" + suffix
         );
     }
 
-    private String taskStatus(Long rabbitId, String taskType) throws SQLException {
-        return stringValue(
-            "select status from work_tasks where rabbit_id = ? and task_type = ?",
-            rabbitId,
-            taskType
-        );
+    private void assertCancelledByV39(long taskId) throws SQLException {
+        assertEquals("CANCELLED", taskStatus(taskId));
+        assertEquals("v39", updateBy(taskId));
     }
 
-    private String updateBy(Long rabbitId, String taskType) throws SQLException {
-        return stringValue(
-            "select update_by from work_tasks where rabbit_id = ? and task_type = ?",
-            rabbitId,
-            taskType
-        );
+    private String taskStatus(long taskId) throws SQLException {
+        return stringValue("select status from work_tasks where id = ?", taskId);
+    }
+
+    private String updateBy(long taskId) throws SQLException {
+        return stringValue("select update_by from work_tasks where id = ?", taskId);
     }
 
     private long insert(String sql, Object... values) throws SQLException {

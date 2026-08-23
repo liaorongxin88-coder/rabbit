@@ -131,19 +131,28 @@
 
     <sql id="pendingRabbitFilter">
         and (
-          work_tasks.rabbit_id is null
-          or exists (
-            select 1 from rabbits active_rabbit
-            where active_rabbit.house_id = work_tasks.house_id
-              and active_rabbit.id = work_tasks.rabbit_id
-              and active_rabbit.is_active = true
-              and (
-                work_tasks.task_type &lt;&gt; 'SALE_READY'
-                or (
-                  active_rabbit.type = '2'
-                  and active_rabbit.growth_stage = 'MATURE'
-                )
+          (
+            work_tasks.task_type = 'SALE_READY'
+            and exists (
+              select 1 from rabbits active_rabbit
+              where active_rabbit.house_id = work_tasks.house_id
+                and active_rabbit.id = work_tasks.rabbit_id
+                and active_rabbit.is_active = true
+                and active_rabbit.type = '2'
+                and active_rabbit.growth_stage = 'MATURE'
+            )
+          )
+          or (
+            work_tasks.task_type &lt;&gt; 'SALE_READY'
+            and (
+              work_tasks.rabbit_id is null
+              or exists (
+                select 1 from rabbits active_rabbit
+                where active_rabbit.house_id = work_tasks.house_id
+                  and active_rabbit.id = work_tasks.rabbit_id
+                  and active_rabbit.is_active = true
               )
+            )
           )
         )
     </sql>
