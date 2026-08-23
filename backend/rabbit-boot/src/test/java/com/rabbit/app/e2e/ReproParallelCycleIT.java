@@ -251,7 +251,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
     }
 
     @Test
-    void emptyAndAbortionFollowUpsDoNotReuseTheClosedBatchTag() {
+    void emptyAbortionAndWeaningFollowUpsDoNotReuseTheClosedBatchTag() {
         Fixture emptyFixture = batchFixture("batch_empty_close");
         Long emptyCycle = openCycleIdInBatch(emptyFixture);
         apply(emptyFixture, emptyCycle, ReproAction.ESTRUS, "batch_empty_estrus", b -> b);
@@ -282,6 +282,20 @@ public class ReproParallelCycleIT extends E2eTestSupport {
                 .attachmentFileIds(List.of(abortionImage))
         );
         assertFollowUpLeftBatch(abortionFixture, aborted.followUpCycleId());
+
+        Fixture weaningFixture = batchFixture("batch_weaning_close");
+        Long weaningCycle = openCycleIdInBatch(weaningFixture);
+        advanceToDelivery(weaningFixture, weaningCycle, "batch_weaning");
+        ReproResult weaned = actionService.apply(
+            command(
+                weaningFixture,
+                weaningCycle,
+                ReproAction.WEANING,
+                requestId("batch_weaning_do")
+            ).weanedCount(7).build(),
+            new ReproActionService.PlacementInput(null, 3, 4)
+        );
+        assertFollowUpLeftBatch(weaningFixture, weaned.followUpCycleId());
     }
 
     private void assertFollowUpLeftBatch(Fixture fixture, Long followUpCycleId) {

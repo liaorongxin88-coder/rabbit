@@ -230,10 +230,12 @@ public class RabbitService {
     }
 
     private void scheduleEntryLifecycleTask(Long userId, Long houseId, Rabbit rabbit) {
-        Date startedAt = rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now();
         String operator = String.valueOf(userId);
         GlobalSetting setting = settingService.getEffectiveSetting(userId, houseId);
         if ("2".equals(rabbit.getType())) {
+            Date startedAt = rabbit.getArrivalDate() != null
+                ? rabbit.getArrivalDate()
+                : DateUtil.now();
             workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
                 houseId,
                 TaskType.SALE_READY,
@@ -249,6 +251,7 @@ public class RabbitService {
         if (!"1".equals(rabbit.getType())) {
             return;
         }
+        Date startedAt = DateUtil.now();
         ReplacementRecord replacement = new ReplacementRecord();
         replacement.setHouseId(houseId);
         replacement.setRabbitId(rabbit.getId());
@@ -1070,6 +1073,9 @@ public class RabbitService {
     private void normalizeAndValidateStages(String type, String gender, Rabbit rabbit) {
         String growthStage = normalizeStage(rabbit.getGrowthStage());
         String reproductiveStage = normalizeStage(rabbit.getReproductiveStage());
+        if ("2".equals(type) && growthStage == null) {
+            growthStage = "JUVENILE";
+        }
         if (growthStage != null && !GROWTH_STAGES.contains(growthStage)) {
             throw new BizException(400, "growthStage不支持");
         }
