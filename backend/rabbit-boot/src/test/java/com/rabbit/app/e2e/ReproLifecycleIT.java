@@ -281,6 +281,11 @@ public class ReproLifecycleIT extends E2eTestSupport {
         );
 
         jdbc.update(
+            "update rabbits set growth_stage = 'MATURE' where house_id = ? and id = ?",
+            houseId,
+            rabbitId
+        );
+        jdbc.update(
             "update work_tasks set due_date = date_sub(curdate(), interval 1 day),"
                 + " due_time = date_sub(now(), interval 1 day)"
                 + " where house_id = ? and rabbit_id = ? and task_type = 'SALE_READY'",
