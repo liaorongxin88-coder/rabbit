@@ -1,7 +1,6 @@
 package com.rabbit.app.modules.repro.service;
 
 import com.rabbit.app.common.BizException;
-import com.rabbit.app.modules.repro.domain.MatingMethod;
 import com.rabbit.app.modules.repro.domain.PalpationResult;
 import com.rabbit.app.modules.repro.domain.ReproAction;
 import com.rabbit.app.modules.repro.domain.TaskType;
@@ -139,6 +138,9 @@ public class WorkTaskService {
         BulkActionRequest request
     ) {
         ReproAction action = ReproAction.parse(request.getAction());
+        if (action == ReproAction.MATING) {
+            throw new BizException(400, "批量配种功能已下线，请逐只提交配种记录");
+        }
         if (BULK_FORBIDDEN.contains(action)) {
             throw new BizException(400, "【" + action.label() + "】每只数据不同，不支持批量，请逐只提交");
         }
@@ -204,8 +206,6 @@ public class WorkTaskService {
             .requestId(ReproRequestIds.derive(request.getRequestId(), String.valueOf(task.getId())))
             .remark(request.getRemark())
             .reason(request.getReason())
-            .maleRabbitId(request.getMaleRabbitId())
-            .matingMethod(MatingMethod.parse(request.getMatingMethod()))
             .palpationResult(PalpationResult.parse(request.getPalpationResult()))
             .nextRemindAt(request.getNextRemindAt())
             .build();

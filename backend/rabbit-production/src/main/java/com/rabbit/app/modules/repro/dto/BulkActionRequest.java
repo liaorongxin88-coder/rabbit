@@ -35,8 +35,10 @@ public class BulkActionRequest {
 
     private String reason;
 
+    /** 保留旧客户端的配种载荷，使其得到明确的业务错误。 */
     private Long maleRabbitId;
 
+    /** 保留旧客户端的配种载荷，使其得到明确的业务错误。 */
     private String matingMethod;
 
     private String palpationResult;

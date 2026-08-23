@@ -129,7 +129,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
     /**
      * 接替 {@code LargeHouseBatchScaleIT}：规模下的正确性与租户隔离。
      *
-     * <p>原测试用一千只母兔，跑一次要两分钟。这里压到 120 只——它验证的是
+     * <p>原测试用一千只母兔，跑一次要两分钟。这里压到 120 只，它验证的是
      * 批量路径不会串舍、不会漏项、编号不冲突，这些在 120 只上同样能暴露；
      * 一千只多出来的只是等待时间，不是新的失败模式。
      */
@@ -137,32 +137,24 @@ public class ReproLifecycleIT extends E2eTestSupport {
     void bulkRoundStaysInsideItsOwnHouse() {
         Fixture mine = fixture("scale_a", 120);
         Fixture other = fixture("scale_b", 3);
-        for (long doe : other.doeIds) {
-            advanceToMating(other, doe, "other_" + doe);
-        }
-        for (long doe : mine.doeIds) {
-            advanceToMating(mine, doe, "mine_" + doe);
-        }
 
         JsonNode res = api.postOk("/api/repro/tasks/bulk-actions", mine.owner.token, mine.houseId, obj(
             "requestId", requestId("scale_round"),
-            "action", "MATING",
+            "action", "ESTRUS",
             "occurredAt", oneMinuteAgo(),
-            "maleRabbitId", mine.buckId,
-            "matingMethod", "NATURAL",
-            "filter", obj("batchId", mine.batchId, "taskType", "MATING")
+            "filter", obj("batchId", mine.batchId, "taskType", "ESTRUS")
         ));
         Assertions.assertEquals(120, res.get("succeeded").asInt());
 
         Assertions.assertEquals(120, intOf(
-            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_PALPATION'",
+            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_MATING'",
             mine.houseId));
         // 隔离：另一个兔舍一头都不该被推进。
         Assertions.assertEquals(3, intOf(
-            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_MATING'",
+            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_ESTRUS'",
             other.houseId), "批量操作串到了别的兔舍");
         Assertions.assertEquals(0, intOf(
-            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_PALPATION'",
+            "select count(*) from breeding_cycles where house_id = ? and stage = 'AWAIT_MATING'",
             other.houseId));
     }
 
