@@ -10,8 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SettingService {
-    /** 家兞妊娠期约 30 天；与 V26 的列默认值保持一致。 */
-    private static final int DEFAULT_GESTATION_DAYS = 30;
     private static final int DEFAULT_PREPARTUM_DAYS = 15;
     private static final int DEFAULT_WEANING_DAYS = 30;
     private static final int DEFAULT_REPLACEMENT_DAYS = 90;
@@ -160,7 +158,6 @@ public class SettingService {
         setting.setUserId(userId);
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
-        setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
         setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), DEFAULT_PREPARTUM_DAYS));
         setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), DEFAULT_WEANING_DAYS));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
@@ -178,7 +175,6 @@ public class SettingService {
         setting.setUserId(null);
         setting.setAphrodisiacDays(valueOrDefault(source.getAphrodisiacDays(), 2));
         setting.setPalpationDays(valueOrDefault(source.getPalpationDays(), 12));
-        setting.setGestationDays(valueOrDefault(source.getGestationDays(), DEFAULT_GESTATION_DAYS));
         setting.setPrepartumDays(valueOrDefault(source.getPrepartumDays(), DEFAULT_PREPARTUM_DAYS));
         setting.setWeaningDays(valueOrDefault(source.getWeaningDays(), DEFAULT_WEANING_DAYS));
         setting.setPostpartumDays(valueOrDefault(source.getPostpartumDays(), 10));
@@ -196,7 +192,6 @@ public class SettingService {
         setting.setUserId(userId);
         setting.setAphrodisiacDays(2);
         setting.setPalpationDays(12);
-        setting.setGestationDays(DEFAULT_GESTATION_DAYS);
         setting.setPrepartumDays(DEFAULT_PREPARTUM_DAYS);
         setting.setWeaningDays(DEFAULT_WEANING_DAYS);
         setting.setPostpartumDays(10);

@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | recvsrp9E2dqvB 种母兔繁育阶段和批次中不对应 | 已完成 | 状态三写收敛为单一写路径 `ReproStateMachineService.apply()`；母兔阶段改为 `rabbits.current_stage` 投影列，与周期同事务写入。`ReproParallelCycleIT`（并行周期互不干扰）、`ReproStateMachineIT`，以及真机用例每步操作后的**批次全员**状态校验 `_assertBatchState` |
 | recvsrq7rGZHdi 兔子周期/批次周期/提醒绑定异常 | 已完成 | 三处 `next_event_*` 与后备成熟、出售提醒统一收敛到 `work_tasks`；V27 step 6 回填，V28 删除镜像列。`ReproApiIT.everyAdvanceRotatesTheTaskCentre` 钉住「每条开放周期恰好一条 PENDING 待办」 |
-| recvsrpXPZd3Xg 备产提醒口径调整 | 已完成 | 按现场流程改为摸胎确认日 + `prepartum_days` 进入待备产，备产完成当天进入待分娩；`DueDateCalculatorTest` 与 `TransitionTableTest` 覆盖该锚点，`gestation_days` 仅保留为预产期参考值 |
+| recvsrpXPZd3Xg 备产提醒口径调整 | 已完成 | 按现场流程改为摸胎确认日 + `prepartum_days` 进入待备产，备产完成当天进入待分娩；`DueDateCalculatorTest` 与 `TransitionTableTest` 覆盖该锚点，预产期固定为配种日后 30 天且无配置项 |
 | recvsrrPUz0djZ / recvss4qXnDEIX 六大人工操作表单 | 已完成 | 六个动作统一走 `POST /api/repro/cycles/{id}/actions`，合法性由转换表判定；操作留痕统一进 `repro_events`（含 `operator_name` 快照）。「未执行→改下次提醒」升为一等动作 POSTPONE。真机 19 张截图覆盖全部表单 |
 | recvsrrTP2Rp0l 流产操作 | 已完成 | 转换表 T8 + `GET /api/repro/stage-actions` 阶段字典 + 两端入口；真机 `aborted_cycles=1`，事件载荷含死胎数，周期链 `EMPTY → ABORTED → 自动接续` |
 | recvsrmZKv1cqp 首页提醒兔舍选择 | 已完成 | 首页、笼位 NFC、兔卡共用 `GET /api/tasks` 单端点，支持 `houseId/cageId/batchId/type/dueBefore` 过滤，口径不可能再互相打架 |

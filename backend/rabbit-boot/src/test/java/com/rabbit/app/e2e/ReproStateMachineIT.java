@@ -56,11 +56,6 @@ public class ReproStateMachineIT extends E2eTestSupport {
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), estrus.lifecycle());
         assertSinglePendingTask(fixture.houseId, opened.cycleId(), "MATING");
 
-        // 存量数据库列可能保存过自定义值，但预产期不再读取这个配置。
-        jdbc.update(
-            "update global_setting set gestation_days = 31 where house_id = ?",
-            fixture.houseId
-        );
         ReproResult mating = apply(fixture, opened.cycleId(), ReproAction.MATING, "full_mating",
             b -> b.maleRabbitId(fixture.sireId).matingMethod(MatingMethod.NATURAL));
         Assertions.assertEquals(ReproStage.AWAIT_PALPATION, mating.stage());
@@ -107,11 +102,21 @@ public class ReproStateMachineIT extends E2eTestSupport {
             )
         );
 
+        jdbc.update(
+            "update global_setting set postpartum_days = 6 where house_id = ?",
+            fixture.houseId
+        );
+        Date weaningAt = new Date();
         ReproResult weaning = apply(fixture, opened.cycleId(), ReproAction.WEANING, "full_weaning",
-            b -> b.weanedCount(8).avgWeaningWeight(0.6));
+            b -> b.occurredAt(weaningAt).weanedCount(8).avgWeaningWeight(0.6));
         Assertions.assertEquals(opened.cycleId(), weaning.cycleId(), "动作周期仍应是刚完成的断奶周期");
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
         Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, weaning.stage());
+        Assertions.assertEquals(
+            6,
+            daysBetween(weaningAt, weaning.nextDueTime()),
+            "断奶后再催情时间应使用兔舍恢复期配置"
+        );
         Assertions.assertEquals(
             CycleResult.WEANED.name(),
             jdbc.queryForObject(

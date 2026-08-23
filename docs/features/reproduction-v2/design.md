@@ -39,7 +39,7 @@
 1. **提醒产生 = 夜间扫全业务表**（EventReminderScanJob 遍历所有 house × 3 张表），租户数增长后线性恶化，且当日内状态变化无法实时反映。
 2. **长事务**：批量配种在单事务内循环上千母兔（BatchService:681）。
 3. **幂等三段式**手工重复实现于每个操作方法。
-4. **配置层级混乱**：`global_setting` 的 house/user 两列可空互斥，语义靠约定；缺 `gestation_days`。
+4. **配置层级混乱**：`global_setting` 的 house/user 两列可空互斥，语义靠约定。
 5. `batch_rabbits` 承载状态快照 + 哺乳计数 + 提醒，职责过载。
 
 ---
@@ -50,7 +50,7 @@
 2. **统一词汇**：前后端、App、报表共用一套阶段/操作枚举，与业务方口径一致。
 3. **操作全留痕**：所有人工操作（含"未执行推迟"与"取消"）append-only 记录人员/时间/母兔/批次。
 4. **统一任务中心**：所有提醒（繁育六步 + 出售 + 后备成熟）收敛到一张按到期日索引的任务表，消灭扫表作业（批次标签化后无自身提醒，空批次角标为查询派生）。
-5. **配置驱动**：所有间隔天数（含妊娠期）配置化、分层（平台默认 → 租户 → 兔舍），语义明确。
+5. **配置驱动**：可配置的间隔天数分层（平台默认 → 租户 → 兔舍），语义明确；预产期固定为配种日后 30 天。
 6. **SaaS 就绪**：租户维度贯穿、索引前缀统一、计数器反范式、短事务、可归档、可重放。
 
 ---
@@ -92,7 +92,7 @@ DoeStage（母兔繁育阶段，存储值用英文，展示映射中文）
 | T10 | 取消弹窗 CANCEL | 任意 | — | 不变，任务保留 | 不变（仅客户端行为，不落事件） |
 | T11 | 离场 RETIRE（死亡/淘汰/出售） | 任意 | 关联 departure 记录 | 周期关闭 result=REMOVED；NURSING 窝需选择寄养(foster_out)或随场处置 | 级联 CANCELLED 该母兔全部 PENDING 任务 |
 
-业务流程口径：`prepartum_days` 表示摸胎确认后进入待备产前的等待时长；备产完成后当天进入待分娩。`gestation_days` 保留为预产期参考值，不参与这两步提醒推进。
+业务流程口径：`prepartum_days` 表示摸胎确认后进入待备产前的等待时长；备产完成后当天进入待分娩。预产期固定为配种日后 30 天，不提供配置项。
 
 **任意阶段入周期（T1 泛化，业务确认口径）**：母兔可在任何阶段加入周期（存量录入/兔场初始化/后备转种母/V27 回填公用同一机制 `openCycleAt(stage, facts)`）。各入轨阶段需补录事实与首任务锚点：
 
@@ -296,12 +296,11 @@ ALTER TABLE rabbits
   - 商品兔：仅 growth_stage + SALE_READY 任务。
 - 录入表单支持"阶段 + 进入该阶段日期/天数"（recvsrnEJ8bKrk、recvqh6N0wWVjR）：走 `openCycleAt` 任意阶段入轨（§3.2 入轨表），首任务按阶段锚点计算并折减已过天数。
 
-### 4.7 配置：生产周期设置（物理表沿用 global_setting，仅加列与语义映射）
+### 4.7 配置：生产周期设置（物理表沿用 global_setting，语义映射）
 
 ```sql
--- 物理表不改名（避免大面积 mapper 改动）：V26 仅 ADD COLUMN gestation_days INT DEFAULT 30；
+-- V38 删除 gestation_days；预产期固定为配种日后 30 天。
 -- 列改名推迟到 V29+，代码层先用新语义常量映射旧列。三层解析（平台默认 → 用户 → 兔舍）不变：
---   gestation_days        INT DEFAULT 30   -- 新增：妊娠天数（消除硬编码 30）
 --   estrus_duration_days                  -- 原 aphrodisiac_days，催情→配种
 --   palpation_wait_days                   -- 原 palpation_days，配种→摸胎
 --   prepartum_duration_days               -- 原 prepartum_days，摸胎确认后待备产时长
@@ -421,6 +420,7 @@ response: { cycleId, currentCycleId?, eventId, nextTaskId?, stage, lifecycle,
 | 2 | V27 | 数据回填：旧 status → 新 stage 映射（待配种→AWAIT_MATING、已配种/不确定→AWAIT_PALPATION、怀孕确认→AWAIT_PREPARTUM/AWAIT_DELIVERY(按 next_event_type)、哺乳中→AWAIT_WEANING+建 litter、已断奶→CLOSED/WEANED…）；4 张记录表 → repro_events；next_event_* → work_tasks；校验后加 uk_bc_pipeline / uk_bc_batch_mother | 迁移前脚本检测违反新唯一键的数据并出清单 |
 | 3 | 代码 | ReproStateMachineService 上线，新端点启用；BatchService 旧写路径切只读兼容（读新表拼旧响应），App/admin 灰度切换 | 旧接口保留一个版本期 |
 | 4 | V28 | `batch_rabbits` 整表退役（数据回填进 breeding_cycles.batch_id 后转只读归档）；batches 删除 status/start/end 列、加 is_archived；EventReminderScanJob/事件 ack 表退役；旧记录表转只读归档 | 观察期后执行 |
+| 5 | V38 | 删除 `global_setting.gestation_days`；预产期固定为配种日后 30 天 | 先删除 API、Mapper 与 schema 残留，再迁移并验证存量设置保留 |
 
 配套测试：状态机转换矩阵单测（合法/非法全覆盖）、并发管线守卫 IT（仿 RabbitStagesAndCageConcurrencyIT）、幂等重放 IT、迁移回填对账脚本。
 

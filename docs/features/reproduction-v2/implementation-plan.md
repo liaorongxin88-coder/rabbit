@@ -4,6 +4,8 @@
 上游设计：[design.md](design.md)
 现状参考：[Flyway V32 数据结构快照](../../backend/data/snapshots/schema-v32.md)
 
+> 本文保留 V26 的历史施工记录。当前实现以 V38 为准：`gestation_days` 已删除，预产期固定为配种日后 30 天。
+
 ---
 
 ## 0. 本次审查发现并已处置的问题
@@ -19,7 +21,7 @@
 | A5 | `operator_id NOT NULL` 无法承载历史回填（旧数据只有 create_by 字符串） | operator_id 可空 + operator_name 快照列 |
 | A6 | 回填遗漏：`待催情/待配种/催情中` 的活跃成员在 breeding_cycles **无行**（现状配种时才建周期），不能只做 UPDATE 映射 | V27 增加"为无周期活跃成员 INSERT 周期"步骤（§3.3） |
 | A7 | 回填遗漏：replacement_records 成熟提醒、商品兔 SALE_READY 未列入 work_tasks 生成 | 已列入 §3.3 |
-| A8 | 配置表改名 production_cycle_settings 与"迁移只加列"矛盾 | 物理表沿用 global_setting，仅加 gestation_days，列改名推迟 V29+ |
+| A8 | 配置表改名 production_cycle_settings 与"迁移只加列"矛盾 | 当时物理表沿用 global_setting；V38 已删除 `gestation_days`，预产期改为固定规则 |
 | A9 | T7 自动开启与血配冲突、分笼-预产期联动校验、双子宫决策未落文档 | 已补 §3.2 T7 注、§3.3、§3.4、T11 离场转换 |
 | A10 | 旧 App 无 OTA（recvrqlA3OU53F 未落地），一刀切换端点会打断存量 APK | 兼容策略定为"旧端点内部适配新服务，响应形状不变"（§4） |
 | A11 | 批量操作逐项幂等键派生规则未写 | 已补 §5.1（requestId + '-' + taskId） |
@@ -42,7 +44,7 @@ P4 打开新路径+旧端点适配化+客户端改造 ──► 观察期(≥2�
 1. 建表：`repro_events`、`work_tasks`、`litters`、`biz_attachments`（DDL 见设计 §4.1/4.3/4.4/4.8，tenant_id 一律可空）。
 2. `breeding_cycles` 加列：`stage`(NULL)、`stage_entered_at`(NULL)、`lifecycle` DEFAULT 'OPEN'、`result`、`mating_method`、`state_version`、两个生成列 `pipeline_guard`/`batch_member_guard`——**本期不加唯一键**（存量数据可能违反）。
 3. `rabbits` 加列：`current_stage`、`current_cycle_id`、`stage_entered_at`、`last_mating_date`。
-4. `global_setting` 加列：`gestation_days INT NOT NULL DEFAULT 30`。
+4. `global_setting` 当时新增 `gestation_days INT NOT NULL DEFAULT 30`；V38 已安全删除该历史列。
 5. `batches` 加列：`is_archived BOOLEAN NOT NULL DEFAULT FALSE`（status 等旧列本期不动）。
 
 验证：`mvn --file backend/pom.xml test`（Flyway 空库/存量库双跑）；对拷贝的生产库快照演练。
@@ -62,7 +64,7 @@ ReproCycleController                        POST /repro/cycles（openCycleAt 任
 WorkTaskService + WorkTaskController        GET /tasks、POST /repro/tasks/bulk-actions
 LitterService                               窝创建/哺乳计数/分笼（复用 weaning_record_allocations 落笼）
 StageProjector                              rabbits.current_stage 单写者投影
-SettingResolver                             gestation_days 接入 + Caffeine 缓存 + 语义常量映射旧列
+SettingResolver                             房级配置解析和旧列语义映射；预产期固定为配种日后 30 天
 ```
 
 交付线：转换矩阵单测全绿（合法/非法全覆盖）+ 并发守卫 IT + 幂等重放 IT（仿 `RabbitStagesAndCageConcurrencyIT` 模式）。

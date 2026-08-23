@@ -163,7 +163,6 @@ CREATE TABLE IF NOT EXISTS global_setting (
   user_id BIGINT,
   aphrodisiac_days INT NOT NULL,
   palpation_days INT NOT NULL,
-  gestation_days INT NOT NULL DEFAULT 30,
   prepartum_days INT NOT NULL,
   weaning_days INT NOT NULL,
   postpartum_days INT NOT NULL,

@@ -8,8 +8,6 @@ public class GlobalSetting {
     private Long userId;
     private Integer aphrodisiacDays;
     private Integer palpationDays;
-    /** 妊娠天数：V26 新增，取代 BatchService 里硬编码的 30 天（飞书 recvsrpXPZd3Xg）。 */
-    private Integer gestationDays;
     private Integer prepartumDays;
     private Integer weaningDays;
     private Integer postpartumDays;
@@ -62,14 +60,6 @@ public class GlobalSetting {
 
     public void setPalpationDays(Integer palpationDays) {
         this.palpationDays = palpationDays;
-    }
-
-    public Integer getGestationDays() {
-        return gestationDays;
-    }
-
-    public void setGestationDays(Integer gestationDays) {
-        this.gestationDays = gestationDays;
     }
 
     public Integer getPrepartumDays() {

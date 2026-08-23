@@ -50,9 +50,9 @@ class V34BackfillIT {
             houseId
         );
         insert(
-            "insert into global_setting (house_id, aphrodisiac_days, palpation_days, gestation_days,"
+            "insert into global_setting (house_id, aphrodisiac_days, palpation_days,"
                 + " prepartum_days, weaning_days, postpartum_days, sale_days, replacement_days,"
-                + " create_by, update_by) values (?, 2, 12, 30, 3, 25, 10, 30, 45, 'test', 'test')",
+                + " create_by, update_by) values (?, 2, 12, 3, 25, 10, 30, 45, 'test', 'test')",
             houseId
         );
         long commodityRabbit = insert(

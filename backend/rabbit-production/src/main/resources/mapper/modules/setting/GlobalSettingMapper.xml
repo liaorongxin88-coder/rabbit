@@ -9,7 +9,6 @@
         <result column="user_id" property="userId"/>
         <result column="aphrodisiac_days" property="aphrodisiacDays"/>
         <result column="palpation_days" property="palpationDays"/>
-        <result column="gestation_days" property="gestationDays"/>
         <result column="prepartum_days" property="prepartumDays"/>
         <result column="weaning_days" property="weaningDays"/>
         <result column="postpartum_days" property="postpartumDays"/>
@@ -26,12 +25,12 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into global_setting (house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days, remark, create_by, update_by)
-        values (#{houseId}, #{userId}, #{aphrodisiacDays}, #{palpationDays}, #{gestationDays}, #{prepartumDays}, #{weaningDays}, #{postpartumDays}, #{adaptationDays}, #{growingDays}, #{fatteningDays}, #{saleDays}, #{replacementDays}, #{remark}, #{createBy}, #{updateBy})
+        insert into global_setting (house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days, remark, create_by, update_by)
+        values (#{houseId}, #{userId}, #{aphrodisiacDays}, #{palpationDays}, #{prepartumDays}, #{weaningDays}, #{postpartumDays}, #{adaptationDays}, #{growingDays}, #{fatteningDays}, #{saleDays}, #{replacementDays}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByUserId" resultMap="GlobalSettingMap">
-        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
+        select id, house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
                remark, create_by, create_time, update_by, update_time
         from global_setting
         where user_id = #{userId}
@@ -39,7 +38,7 @@
     </select>
 
     <select id="selectFirstByUserHouse" resultMap="GlobalSettingMap">
-        select gs.id, gs.house_id, gs.user_id, gs.aphrodisiac_days, gs.palpation_days, gs.gestation_days, gs.prepartum_days, gs.weaning_days, gs.postpartum_days,
+        select gs.id, gs.house_id, gs.user_id, gs.aphrodisiac_days, gs.palpation_days, gs.prepartum_days, gs.weaning_days, gs.postpartum_days,
                gs.adaptation_days, gs.growing_days, gs.fattening_days,
                gs.sale_days, gs.replacement_days, gs.remark, gs.create_by, gs.create_time, gs.update_by, gs.update_time
         from house_users hu
@@ -51,7 +50,7 @@
     </select>
 
     <select id="selectByHouseId" resultMap="GlobalSettingMap">
-        select id, house_id, user_id, aphrodisiac_days, palpation_days, gestation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
+        select id, house_id, user_id, aphrodisiac_days, palpation_days, prepartum_days, weaning_days, postpartum_days, adaptation_days, growing_days, fattening_days, sale_days, replacement_days,
                remark, create_by, create_time, update_by, update_time
         from global_setting
         where house_id = #{houseId}
@@ -61,7 +60,6 @@
         update global_setting
         set aphrodisiac_days = #{aphrodisiacDays},
             palpation_days = #{palpationDays},
-            gestation_days = #{gestationDays},
             prepartum_days = #{prepartumDays},
             weaning_days = #{weaningDays},
             postpartum_days = #{postpartumDays},
@@ -80,7 +78,6 @@
         update global_setting
         set aphrodisiac_days = #{aphrodisiacDays},
             palpation_days = #{palpationDays},
-            gestation_days = #{gestationDays},
             prepartum_days = #{prepartumDays},
             weaning_days = #{weaningDays},
             postpartum_days = #{postpartumDays},

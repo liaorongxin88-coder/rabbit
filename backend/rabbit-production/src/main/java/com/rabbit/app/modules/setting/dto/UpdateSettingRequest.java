@@ -14,13 +14,6 @@ public class UpdateSettingRequest {
     @Min(0)
     private Integer palpationDays;
 
-    /**
-     * 仅用于接收旧 APK 的历史字段。服务层忽略该值，新客户端不再提交。
-     */
-    @Deprecated(forRemoval = true)
-    @Min(1)
-    private Integer gestationDays;
-
     @NotNull
     @Min(0)
     private Integer prepartumDays;
@@ -72,14 +65,6 @@ public class UpdateSettingRequest {
 
     public void setPalpationDays(Integer palpationDays) {
         this.palpationDays = palpationDays;
-    }
-
-    public Integer getGestationDays() {
-        return gestationDays;
-    }
-
-    public void setGestationDays(Integer gestationDays) {
-        this.gestationDays = gestationDays;
     }
 
     public Integer getPrepartumDays() {

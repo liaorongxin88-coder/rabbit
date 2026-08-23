@@ -153,7 +153,7 @@ class SchemaSqlV24Test {
             () -> assertContains(cycles, "batch_id bigint,"),
             () -> assertFalse(cycles.contains("batch_id bigint not null")),
             () -> assertContains(table("batches"), "is_archived boolean not null default false"),
-            () -> assertContains(table("global_setting"), "gestation_days int not null default 30"),
+            () -> assertFalse(table("global_setting").contains("gestation_days")),
             // V29: a free-range doe has no batch, so her weaning record cannot carry one
             // either. The record belongs to the litter and cycle; batch_id is legacy
             // denormalisation. Leaving it NOT NULL made weaning crash for free-range does.

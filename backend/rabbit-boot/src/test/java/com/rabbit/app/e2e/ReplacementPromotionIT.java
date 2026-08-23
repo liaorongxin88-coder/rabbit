@@ -118,4 +118,39 @@ public class ReplacementPromotionIT extends E2eTestSupport {
             Integer.class, houseId, rabbitId
         ));
     }
+
+    @Test
+    void commodityGrowthUsesConfiguredStageDurations() {
+        UserSession owner = register("commodity_growth_stages");
+        long houseId = createHouse(owner, "商品兔阶段兔舍", 1, 1, 1);
+        long rabbitId = createRabbit(owner, houseId, cageIds(owner, houseId).getFirst(), "2", "0", "新西兰白兔");
+        jdbc.update(
+            "update global_setting set adaptation_days = 2, growing_days = 15, fattening_days = 12"
+                + " where house_id = ?",
+            houseId
+        );
+
+        assertCommodityGrowthStage(houseId, rabbitId, 2, "GROWING");
+        assertCommodityGrowthStage(houseId, rabbitId, 17, "FATTENING");
+        assertCommodityGrowthStage(houseId, rabbitId, 29, "MATURE");
+    }
+
+    private void assertCommodityGrowthStage(long houseId, long rabbitId, int daysSinceEntry, String expectedStage) {
+        jdbc.update(
+            "update rabbits set growth_stage = 'JUVENILE',"
+                + " growth_stage_entered_at = date_sub(now(), interval ? day)"
+                + " where house_id = ? and id = ?",
+            daysSinceEntry,
+            houseId,
+            rabbitId
+        );
+
+        Assertions.assertEquals(1, commodityGrowthService.advanceHouse(houseId, new java.util.Date()));
+        Assertions.assertEquals(expectedStage, jdbc.queryForObject(
+            "select growth_stage from rabbits where house_id = ? and id = ?",
+            String.class,
+            houseId,
+            rabbitId
+        ));
+    }
 }

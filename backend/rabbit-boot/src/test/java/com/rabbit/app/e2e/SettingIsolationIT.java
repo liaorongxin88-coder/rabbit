@@ -9,7 +9,7 @@ public class SettingIsolationIT extends E2eTestSupport {
     @Test
     void userDefaultsAreSnapshottedWhenHousesAreCreatedAndRemainIsolated() {
         UserSession owner = register("setting_isolation_owner");
-        updateUserSetting(owner, 11, 22, 31, 4, 26, 9, 33, 44);
+        updateUserSetting(owner, 11, 22, 4, 26, 9, 33, 44);
 
         long firstHouse = createHouse(owner, "设置隔离兔舍一", 1, 1, 1);
         JsonNode firstInitial = api.getOk("/api/house-settings", owner.token, firstHouse);
@@ -17,7 +17,7 @@ public class SettingIsolationIT extends E2eTestSupport {
         assertSetting(firstInitial.get("setting"), 11, 22, 4, 26, 9, 33, 44);
 
         // 修改用户默认模板只能影响之后新建的兔场，不能改变已存在兔场。
-        updateUserSetting(owner, 12, 23, 32, 5, 27, 10, 34, 45);
+        updateUserSetting(owner, 12, 23, 5, 27, 10, 34, 45);
         JsonNode firstAfterUserUpdate = api.getOk("/api/house-settings", owner.token, firstHouse);
         assertSetting(firstAfterUserUpdate.get("setting"), 11, 22, 4, 26, 9, 33, 44);
 
@@ -27,7 +27,7 @@ public class SettingIsolationIT extends E2eTestSupport {
         assertSetting(secondInitial.get("setting"), 12, 23, 5, 27, 10, 34, 45);
 
         api.putOk("/api/house-settings", owner.token, firstHouse, settingBody(
-            61, 62, 63, 64, 65, 66, 67, 68, "第一兔场独立配置"
+            61, 62, 64, 65, 66, 67, 68, "第一兔场独立配置"
         ));
 
         JsonNode firstAfterHouseUpdate = api.getOk("/api/house-settings", owner.token, firstHouse);
@@ -40,23 +40,21 @@ public class SettingIsolationIT extends E2eTestSupport {
     }
 
     private void updateUserSetting(UserSession owner, int aphrodisiac, int palpation,
-                                   int gestation, int prepartum, int weaning,
-                                   int postpartum, int sale, int replacement) {
+                                   int prepartum, int weaning, int postpartum,
+                                   int sale, int replacement) {
         api.putOk("/api/settings", owner.token, null, settingBody(
-            aphrodisiac, palpation, gestation, prepartum, weaning,
+            aphrodisiac, palpation, prepartum, weaning,
             postpartum, sale, replacement, "用户默认模板"
         ));
     }
 
     private java.util.Map<String, Object> settingBody(int aphrodisiac, int palpation,
-                                                        int gestation, int prepartum,
-                                                        int weaning, int postpartum,
-                                                        int sale, int replacement,
+                                                        int prepartum, int weaning,
+                                                        int postpartum, int sale, int replacement,
                                                         String remark) {
         return obj(
             "aphrodisiacDays", aphrodisiac,
             "palpationDays", palpation,
-            "gestationDays", gestation,
             "prepartumDays", prepartum,
             "weaningDays", weaning,
             "postpartumDays", postpartum,
@@ -72,7 +70,7 @@ public class SettingIsolationIT extends E2eTestSupport {
                                int sale, int replacement) {
         Assertions.assertEquals(aphrodisiac, setting.get("aphrodisiacDays").asInt());
         Assertions.assertEquals(palpation, setting.get("palpationDays").asInt());
-        Assertions.assertEquals(30, setting.get("gestationDays").asInt());
+        Assertions.assertFalse(setting.has("gestationDays"));
         Assertions.assertEquals(prepartum, setting.get("prepartumDays").asInt());
         Assertions.assertEquals(weaning, setting.get("weaningDays").asInt());
         Assertions.assertEquals(postpartum, setting.get("postpartumDays").asInt());

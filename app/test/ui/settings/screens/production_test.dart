@@ -52,11 +52,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('妊娠参考天数'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('production-gestation-days')),
-      findsNothing,
-    );
     expect(find.text('当前兔舍提醒'), findsOneWidget);
     expect(find.textContaining('东区兔舍的提醒单独配置'), findsOneWidget);
     expect(find.byKey(const ValueKey('reminder-house')), findsNothing);
