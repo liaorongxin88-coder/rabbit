@@ -158,6 +158,36 @@ public class ReproLifecycleIT extends E2eTestSupport {
             other.houseId));
     }
 
+    @Test
+    void batchCodeFallbackUsesTheAuthenticatedHouseAndKeepsReplaysStable() {
+        UserSession owner = register("batch_code_fallback");
+        long eastHouseId = createHouse(owner, "东一舍", 1, 1, 1);
+        long westHouseId = createHouse(owner, "西二舍", 1, 1, 1);
+        String eastRequestId = requestId("batch_code_east");
+
+        JsonNode east = api.postOk("/api/batches", owner.token, eastHouseId, obj(
+                "requestId", eastRequestId
+        ));
+        JsonNode replay = api.postOk("/api/batches", owner.token, eastHouseId, obj(
+                "requestId", eastRequestId
+        ));
+        JsonNode west = api.postOk("/api/batches", owner.token, westHouseId, obj(
+                "batchCode", "   ",
+                "requestId", requestId("batch_code_west")
+        ));
+        JsonNode manual = api.postOk("/api/batches", owner.token, eastHouseId, obj(
+                "batchCode", "人工批次-复配",
+                "requestId", requestId("batch_code_manual")
+        ));
+
+        Assertions.assertTrue(east.get("batchCode").asText().matches("东一舍-批次-\\d{17}"));
+        Assertions.assertTrue(west.get("batchCode").asText().matches("西二舍-批次-\\d{17}"));
+        Assertions.assertNotEquals(east.get("batchCode").asText(), west.get("batchCode").asText());
+        Assertions.assertEquals(east.get("id").asLong(), replay.get("id").asLong());
+        Assertions.assertEquals(east.get("batchCode").asText(), replay.get("batchCode").asText());
+        Assertions.assertEquals("人工批次-复配", manual.get("batchCode").asText());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private int intOf(String sql, Object... args) {

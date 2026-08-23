@@ -37,6 +37,7 @@ import {
   normalizeParturitionPayload,
   type PendingBatchActionRequest,
 } from '@/lib/batch-workflow'
+import { BATCH_CODE_MAX_LENGTH, batchCodeDraftForDialog } from '@/lib/batch-code'
 import { formatLocalDate } from '@/lib/date'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -205,6 +206,7 @@ export function WorkspaceProductionPage() {
               open={createOpen}
               onOpenChange={setCreateOpen}
               houseId={workspace.selectedHouse?.id ?? null}
+              houseName={workspace.selectedHouse?.name ?? ''}
               rabbits={rabbits}
               disabled={!canEdit}
               onSaved={load}
@@ -341,6 +343,7 @@ function CreateBatchDialog({
   open,
   onOpenChange,
   houseId,
+  houseName,
   rabbits,
   disabled,
   onSaved,
@@ -348,6 +351,7 @@ function CreateBatchDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   houseId: number | null
+  houseName: string
   rabbits: Rabbit[]
   disabled: boolean
   onSaved: () => Promise<void>
@@ -362,6 +366,7 @@ function CreateBatchDialog({
   const [rabbitPage, setRabbitPage] = useState(1)
   const [remark, setRemark] = useState('')
   const [saving, setSaving] = useState(false)
+  const wasOpenRef = useRef(false)
 
   const filteredFemaleRabbits = useMemo(() => {
     const keyword = rabbitSearch.trim().toLowerCase()
@@ -379,13 +384,16 @@ function CreateBatchDialog({
   )
 
   useEffect(() => {
-    if (!open) return
-    setCode(`PC-${formatLocalDate().replaceAll('-', '')}`)
-    setSelectedIds([])
-    setRabbitSearch('')
-    setRabbitPage(1)
-    setRemark('')
-  }, [open])
+    const isOpening = open && !wasOpenRef.current
+    setCode((current) => batchCodeDraftForDialog(current, isOpening, houseName))
+    if (isOpening) {
+      setSelectedIds([])
+      setRabbitSearch('')
+      setRabbitPage(1)
+      setRemark('')
+    }
+    wasOpenRef.current = open
+  }, [houseName, open])
 
   function toggleRabbit(id: number) {
     setSelectedIds((current) => {
@@ -435,7 +443,7 @@ function CreateBatchDialog({
           <FieldGroup className="overflow-y-auto pr-1">
             <Field>
               <FieldLabel htmlFor="batch-code">批次编号</FieldLabel>
-              <Input id="batch-code" value={code} required maxLength={100} onChange={(event) => setCode(event.target.value)} />
+              <Input id="batch-code" value={code} required maxLength={BATCH_CODE_MAX_LENGTH} onChange={(event) => setCode(event.target.value)} />
             </Field>
             <Field>
               <FieldLabel>种母兔</FieldLabel>

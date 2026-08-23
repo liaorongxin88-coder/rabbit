@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public class CreateBatchRequest {
-    @NotBlank(message = "batchCode不能为空")
     @Size(max = 100, message = "batchCode过长")
     private String batchCode;
 

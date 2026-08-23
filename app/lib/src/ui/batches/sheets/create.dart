@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch_code.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
@@ -17,12 +16,14 @@ Future<void> showCreateBatchSheet({
   required BuildContext context,
   required int houseId,
   required String houseName,
+  DateTime Function()? now,
 }) {
   return showAppModalSheet<void>(
     context: context,
     builder: (context) => _CreateBatchSheet(
       houseId: houseId,
       houseName: houseName,
+      now: now ?? DateTime.now,
     ),
   );
 }
@@ -31,10 +32,12 @@ class _CreateBatchSheet extends ConsumerStatefulWidget {
   const _CreateBatchSheet({
     required this.houseId,
     required this.houseName,
+    required this.now,
   });
 
   final int houseId;
   final String houseName;
+  final DateTime Function() now;
 
   @override
   ConsumerState<_CreateBatchSheet> createState() => _CreateBatchSheetState();
@@ -52,7 +55,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   @override
   void initState() {
     super.initState();
-    _codeController.text = 'B${DateFormat('yyyyMMdd').format(DateTime.now())}';
+    _codeController.text = defaultBatchCode(widget.houseName, widget.now());
   }
 
   @override
@@ -276,6 +279,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                                 key: const ValueKey('batch-code-field'),
                                 controller: _codeController,
                                 enabled: !_saving,
+                                maxLength: maxBatchCodeLength,
                                 decoration: const InputDecoration(
                                   labelText: '批次编号',
                                 ),

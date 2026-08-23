@@ -13,6 +13,7 @@ import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
+import com.rabbit.app.modules.batch.service.BatchCodeFallbackResolver;
 import com.rabbit.app.modules.batch.service.BatchService;
 import com.rabbit.app.modules.event.dto.EventItem;
 import com.rabbit.app.modules.event.service.EventService;
@@ -46,6 +47,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BatchController {
     private final HouseService houseService;
     private final BatchService batchService;
+    private final BatchCodeFallbackResolver batchCodeFallbackResolver;
     private final BatchRabbitMapper batchRabbitMapper;
     private final EventService eventService;
     private final TreatmentService treatmentService;
@@ -53,10 +55,11 @@ public class BatchController {
     /** 生产提醒的唯一来源；首页与笼位共用它，不再各读一张镜像表。 */
     private final WorkTaskService workTaskService;
 
-    public BatchController(HouseService houseService, BatchService batchService, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService, WorkTaskService workTaskService) {
+    public BatchController(HouseService houseService, BatchService batchService, BatchCodeFallbackResolver batchCodeFallbackResolver, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService, WorkTaskService workTaskService) {
         this.workTaskService = workTaskService;
         this.houseService = houseService;
         this.batchService = batchService;
+        this.batchCodeFallbackResolver = batchCodeFallbackResolver;
         this.batchRabbitMapper = batchRabbitMapper;
         this.eventService = eventService;
         this.treatmentService = treatmentService;
@@ -81,7 +84,8 @@ public class BatchController {
     public ApiResponse<Batch> createBatch(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateBatchRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        return ApiResponse.ok(batchService.createBatch(userId, houseId, req.getBatchCode(), req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
+        String batchCode = batchCodeFallbackResolver.resolve(houseId, req.getBatchCode());
+        return ApiResponse.ok(batchService.createBatch(userId, houseId, batchCode, req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
     }
 
     /** 向批次追加兔只标签；同一兔只可以同时属于多个批次。 */
