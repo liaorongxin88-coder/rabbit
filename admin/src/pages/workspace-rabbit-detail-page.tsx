@@ -7,6 +7,7 @@ import {
   Edit3Icon,
   HeartCrackIcon,
   RabbitIcon,
+  ShoppingCartIcon,
 } from 'lucide-react'
 import { getRabbit, listCages, listReproStageActions } from '@/api/workspace'
 import { PageHeader } from '@/components/page-header'
@@ -17,11 +18,13 @@ import {
   RabbitPromotionDialog,
   RabbitTransferDialog,
 } from '@/components/rabbit-operation-dialogs'
+import { RabbitSaleDialog } from '@/components/rabbit-sale-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
+import { isIndividualSaleRabbit } from '@/lib/rabbit-sale'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
 import {
   rabbitArrivalMethodLabel,
@@ -42,9 +45,11 @@ export function WorkspaceRabbitDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [promotionOpen, setPromotionOpen] = useState(false)
+  const [saleOpen, setSaleOpen] = useState(false)
   const [departureOpen, setDepartureOpen] = useState(false)
   const canEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
   const canControl = hasPermission(workspace.permission, 'rabbit:rabbits:control')
+  const canSell = hasPermission(workspace.permission, 'rabbit:sales:add')
   const canReadRepro = hasPermission(workspace.permission, 'rabbit:batches:query')
 
   const load = useCallback(async () => {
@@ -126,6 +131,7 @@ export function WorkspaceRabbitDetailPage() {
   const cage = cages.find((item) => item.id === rabbit.cageId)
   const stageSummary = rabbitStageSummary(rabbit, reproStageLabels)
   const isMatureReplacement = rabbit.isActive && rabbit.type === '1' && rabbit.growthStage === 'MATURE'
+  const isIndividualSaleTarget = rabbit.isActive && isIndividualSaleRabbit(rabbit)
 
   return (
     <>
@@ -157,6 +163,12 @@ export function WorkspaceRabbitDetailPage() {
               <Button variant="outline" disabled={!canControl} onClick={() => setPromotionOpen(true)}>
                 <ArrowUpRightIcon data-icon="inline-start" />
                 转为种兔
+              </Button>
+            ) : null}
+            {isIndividualSaleTarget ? (
+              <Button variant="outline" disabled={!canSell} onClick={() => setSaleOpen(true)}>
+                <ShoppingCartIcon data-icon="inline-start" />
+                出售出栏
               </Button>
             ) : null}
             <Button
@@ -261,6 +273,12 @@ export function WorkspaceRabbitDetailPage() {
         rabbit={promotionOpen ? rabbit : null}
         houseId={workspace.selectedHouse.id}
         onOpenChange={setPromotionOpen}
+        onSaved={load}
+      />
+      <RabbitSaleDialog
+        rabbit={saleOpen ? rabbit : null}
+        houseId={workspace.selectedHouse.id}
+        onOpenChange={setSaleOpen}
         onSaved={load}
       />
       <RabbitDepartureDialog

@@ -20,6 +20,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/screens/list.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/bind_batch.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/move.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/sale.dart';
 
 class RabbitDetailScreen extends ConsumerWidget {
   const RabbitDetailScreen({
@@ -140,6 +141,9 @@ class _RabbitDetailContent extends ConsumerWidget {
     final cageDisplay = _cageDisplay(cageItems, rabbit.cageId);
     final canEdit = currentPermission.canEdit;
     final canOperate = canEdit && rabbit.isActive;
+    final canSell = rabbit.isActive &&
+        (rabbit.type == '0' || rabbit.type == '1') &&
+        currentPermission.canAddSales;
     final boundBatchIds = (activeMemberships.valueOrNull ?? const [])
         .where((membership) => membership.isActive)
         .map((membership) => membership.batchId)
@@ -177,6 +181,18 @@ class _RabbitDetailContent extends ConsumerWidget {
                 cages: cageItems,
               );
               if (context.mounted) {
+                onRefresh();
+              }
+            }
+          : null,
+      onSale: canSell
+          ? () async {
+              final sold = await showRabbitSaleSheet(
+                context: context,
+                houseId: request.houseId,
+                rabbit: rabbit,
+              );
+              if (sold && context.mounted) {
                 onRefresh();
               }
             }

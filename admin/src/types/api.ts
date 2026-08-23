@@ -358,6 +358,16 @@ export interface RabbitDepartureRequest {
   requestId: string
 }
 
+export interface RabbitSaleRequest {
+  rabbitIds: [number]
+  saleTime: number
+  totalWeight: number
+  unitPrice?: number
+  customer?: string
+  remark?: string
+  requestId: string
+}
+
 export type OutboundEligibility = 'NORMAL' | 'EARLY_SALE' | 'NEEDS_ACTION' | 'BLOCKED'
 
 export interface OutboundSummary {

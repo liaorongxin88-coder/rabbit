@@ -78,6 +78,24 @@ void main() {
     expect(find.text('兔只列表页'), findsOneWidget);
   });
 
+  testWidgets('active breeder and replacement rabbits use the sale action',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeBreeder));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rabbit-detail-sale-31')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('rabbit-detail-outbound-31')), findsNothing);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeReplacement));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('rabbit-detail-sale-31')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('rabbit-detail-outbound-31')), findsNothing);
+  });
+
   testWidgets('existing batch tags can be extended or removed', (tester) async {
     final router = _router();
     addTearDown(router.dispose);
@@ -223,6 +241,34 @@ const _activeRabbit = Rabbit(
   cageId: 12,
   motherId: null,
   type: '2',
+  gender: '0',
+  breed: '新西兰白兔',
+  arrivalMethod: '0',
+  arrivalDate: null,
+  weight: 2.5,
+  isActive: true,
+);
+
+const _activeBreeder = Rabbit(
+  id: 31,
+  houseId: 8,
+  cageId: 12,
+  motherId: null,
+  type: '0',
+  gender: '1',
+  breed: '新西兰白兔',
+  arrivalMethod: '0',
+  arrivalDate: null,
+  weight: 2.5,
+  isActive: true,
+);
+
+const _activeReplacement = Rabbit(
+  id: 31,
+  houseId: 8,
+  cageId: 12,
+  motherId: null,
+  type: '1',
   gender: '0',
   breed: '新西兰白兔',
   arrivalMethod: '0',

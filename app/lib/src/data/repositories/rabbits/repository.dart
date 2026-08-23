@@ -333,6 +333,32 @@ class RabbitRepository {
     );
   }
 
+  Future<void> createRabbitSale({
+    required int houseId,
+    required int rabbitId,
+    required DateTime saleTime,
+    required double totalWeight,
+    double? unitPrice,
+    String customer = '',
+    String remark = '',
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/sales',
+      houseId: houseId,
+      body: {
+        'rabbitIds': [rabbitId],
+        'saleTime': saleTime.millisecondsSinceEpoch,
+        'totalWeight': totalWeight,
+        if (unitPrice != null) 'unitPrice': unitPrice,
+        if (customer.trim().isNotEmpty) 'customer': customer.trim(),
+        if (remark.trim().isNotEmpty) 'remark': remark.trim(),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
+    );
+  }
+
   /// Records a terminal rabbit event and, when requested, exits every active
   /// Batch relationship for the rabbit in the same server-side transaction.
   ///

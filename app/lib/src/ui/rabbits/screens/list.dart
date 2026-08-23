@@ -278,6 +278,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
     required this.canEdit,
     this.onMove,
     this.onEdit,
+    this.onSale,
     this.onOutbound,
     this.onChanged,
     this.onOpenBatch,
@@ -292,6 +293,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
   final bool canEdit;
   final VoidCallback? onMove;
   final VoidCallback? onEdit;
+  final VoidCallback? onSale;
   final VoidCallback? onOutbound;
   final VoidCallback? onChanged;
   final ValueChanged<int>? onOpenBatch;
@@ -704,6 +706,13 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
 
   List<Widget> _actionButtons() {
     return [
+      if (widget.onSale != null)
+        OutlinedButton.icon(
+          key: ValueKey('rabbit-detail-sale-${widget.rabbit.id}'),
+          onPressed: widget.onSale,
+          icon: const Icon(Icons.sell_outlined),
+          label: const Text('出售出栏'),
+        ),
       if (widget.onOutbound != null)
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-outbound-${widget.rabbit.id}'),

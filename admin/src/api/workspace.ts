@@ -20,6 +20,7 @@ import type {
   ProductionBatch,
   Rabbit,
   RabbitDepartureRequest,
+  RabbitSaleRequest,
   RabbitHouse,
   ReproActionResult,
   ReproBulkResult,
@@ -153,6 +154,10 @@ export function listRabbits(houseId: number) {
 
 export function getRabbit(houseId: number, rabbitId: number) {
   return workspaceGetJson<Rabbit>(`/api/rabbits/${rabbitId}`, { houseId })
+}
+
+export function createRabbitSale(houseId: number, data: RabbitSaleRequest) {
+  return workspacePostJson<void>('/api/sales', data, { houseId })
 }
 
 export function promoteReplacementRabbit(
