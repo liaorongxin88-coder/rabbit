@@ -2,6 +2,8 @@ package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.rabbit.app.modules.rabbit.service.CommodityGrowthService;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -93,6 +95,89 @@ public class ReplacementPromotionIT extends E2eTestSupport {
             }
         }
         Assertions.assertTrue(found, "成熟商品兔必须出现在首页出售提醒中");
+    }
+
+    @Test
+    void historicalCommodityEntryDatesPersistAdvanceAndKeepReminderCalendarDays() {
+        UserSession owner = register("commodity_entry_dates");
+        long houseId = createHouse(owner, "商品兔历史入场日期兔舍", 1, 1, 1);
+        long cageId = cageIds(owner, houseId).get(0);
+        List<LocalDate> selectedDates = List.of(
+            LocalDate.of(2025, 8, 21),
+            LocalDate.of(2025, 8, 23)
+        );
+        List<Long> rabbitIds = new ArrayList<>();
+        List<String> dueDates = new ArrayList<>();
+        int maturityDays = jdbc.queryForObject(
+            "select adaptation_days + growing_days + fattening_days"
+                + " from global_setting where house_id = ?",
+            Integer.class, houseId
+        );
+
+        for (int index = 0; index < selectedDates.size(); index++) {
+            LocalDate selectedDate = selectedDates.get(index);
+            JsonNode rabbit = api.postOk("/api/rabbits", owner.token, houseId, obj(
+                "cageId", cageId,
+                "type", "2",
+                "gender", "0",
+                "breed", "历史入场商品兔",
+                "arrivalMethod", "0",
+                "arrivalDate", selectedDate.toString(),
+                "weight", 2.5,
+                "requestId", requestId("commodity_entry_date_" + index)
+            ));
+            long rabbitId = rabbit.get("id").asLong();
+            rabbitIds.add(rabbitId);
+
+            Assertions.assertEquals(selectedDate.toString(), rabbit.get("arrivalDate").asText());
+            Assertions.assertEquals(selectedDate.toString(), jdbc.queryForObject(
+                "select date_format(arrival_date, '%Y-%m-%d') from rabbits"
+                    + " where house_id = ? and id = ?",
+                String.class, houseId, rabbitId
+            ));
+            Assertions.assertEquals(selectedDate.toString(), jdbc.queryForObject(
+                "select date_format(growth_stage_entered_at, '%Y-%m-%d') from rabbits"
+                    + " where house_id = ? and id = ?",
+                String.class, houseId, rabbitId
+            ));
+            String expectedDueDate = selectedDate.plusDays(maturityDays).toString();
+            String dueDate = jdbc.queryForObject(
+                "select date_format(due_date, '%Y-%m-%d') from work_tasks"
+                    + " where house_id = ? and rabbit_id = ?"
+                    + " and task_type = 'SALE_READY' and status = 'PENDING'",
+                String.class, houseId, rabbitId
+            );
+            Assertions.assertEquals(expectedDueDate, dueDate);
+            dueDates.add(dueDate);
+        }
+
+        Assertions.assertEquals(2,
+            com.rabbit.app.util.DateUtil.daysBetween(
+                java.sql.Date.valueOf(dueDates.get(0)),
+                java.sql.Date.valueOf(dueDates.get(1))
+            ));
+        Assertions.assertEquals(2, commodityGrowthService.advanceHouse(houseId, new Date()));
+        for (Long rabbitId : rabbitIds) {
+            Assertions.assertEquals("MATURE", jdbc.queryForObject(
+                "select growth_stage from rabbits where house_id = ? and id = ?",
+                String.class, houseId, rabbitId
+            ));
+        }
+
+        JsonNode events = api.getOk("/api/events", owner.token, houseId);
+        for (int index = 0; index < rabbitIds.size(); index++) {
+            long rabbitId = rabbitIds.get(index);
+            String expectedDueDate = dueDates.get(index);
+            boolean found = false;
+            for (JsonNode event : events) {
+                if (event.get("rabbitId").asLong() == rabbitId
+                    && "出售".equals(event.get("eventType").asText())) {
+                    Assertions.assertEquals(expectedDueDate, event.get("eventDate").asText());
+                    found = true;
+                }
+            }
+            Assertions.assertTrue(found, "历史入场商品兔必须保留各自的出售提醒日期");
+        }
     }
 
     @Test

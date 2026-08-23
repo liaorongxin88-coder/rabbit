@@ -53,14 +53,16 @@ void main() {
       () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
+    final arrivalDate = DateTime(2025, 8, 23);
 
-    await repository.createRabbit(
+    final created = await repository.createRabbit(
       houseId: 8,
       cageId: 11,
       type: '0',
       gender: '0',
       breed: ' 新西兰白兔 ',
       arrivalMethod: '0',
+      arrivalDate: arrivalDate,
       weight: 4.2,
       growthStage: ' MATURE ',
       reproductiveStage: ' PREGNANT ',
@@ -90,9 +92,12 @@ void main() {
     expect(create.method, 'POST');
     expect(create.headers['X-House-Id'], '8');
     expect(create.body['breed'], '新西兰白兔');
+    expect(create.body['arrivalDate'], '2025-08-23');
     expect(create.body['growthStage'], 'MATURE');
     expect(create.body['reproductiveStage'], 'PREGNANT');
     expect(create.body['requestId'], isNotEmpty);
+    expect(created.arrivalDate, DateTime(2025, 8, 23));
+    expect(created.stageEnteredAt, DateTime(2025, 8, 21));
 
     final update = adapter.requests[1];
     expect(update.path, '/api/rabbits/801');
@@ -174,10 +179,11 @@ const _rabbitJson = <String, dynamic>{
   'gender': '0',
   'breed': '新西兰白兔',
   'arrivalMethod': '0',
-  'arrivalDate': null,
+  'arrivalDate': '2025-08-23',
   'weight': 4.2,
   'isActive': true,
   'currentCycleId': 901,
+  'stageEnteredAt': '2025-08-21',
 };
 
 const _cageJson = <String, dynamic>{

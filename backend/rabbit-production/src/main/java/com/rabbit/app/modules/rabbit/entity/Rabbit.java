@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.rabbit.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.util.Date;
 
 public class Rabbit {
@@ -69,6 +70,7 @@ public class Rabbit {
         this.currentCycleId = currentCycleId;
     }
 
+    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "Asia/Shanghai")
     public Date getStageEnteredAt() {
         return stageEnteredAt;
     }
@@ -165,6 +167,7 @@ public class Rabbit {
         this.arrivalMethod = arrivalMethod;
     }
 
+    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "Asia/Shanghai")
     public Date getArrivalDate() {
         return arrivalDate;
     }

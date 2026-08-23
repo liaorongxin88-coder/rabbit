@@ -117,6 +117,35 @@ void main() {
   // 调用方（笼位详情页）靠这个 Future 决定何时刷笼内列表。早先的写法在类型页
   // pop 后用 post-frame 回调另开表单且不等，于是刷新在兔子创建前就跑完了——
   // 真机上表现为录入完看不到新兔，得退出重进页面。
+  testWidgets('entry date picker keeps the selected historical day',
+      (tester) async {
+    await tester.pumpWidget(_entryTestApp());
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final dateField = find.byKey(const ValueKey('rabbit-arrival-date'));
+    await tester.ensureVisible(dateField);
+    await tester.tap(dateField);
+    await tester.pumpAndSettle();
+
+    final today = DateTime.now();
+    final targetDay = today.day > 2 ? today.day - 2 : 1;
+    final targetDate = DateTime(today.year, today.month, targetDay);
+    await tester.tap(find.text('$targetDay').last);
+    await tester.tap(find.text('确定').last);
+    await tester.pumpAndSettle();
+
+    final expected = '${targetDate.year.toString().padLeft(4, '0')}-'
+        '${targetDate.month.toString().padLeft(2, '0')}-'
+        '${targetDate.day.toString().padLeft(2, '0')}';
+    expect(
+      find.descendant(of: dateField, matching: find.text(expected)),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('entry flow future completes only after the form closes',
       (tester) async {
     var finished = false;
@@ -143,6 +172,7 @@ void main() {
 
     expect(find.text('繁殖阶段：后备（后备兔固定记录为后备阶段）'), findsOneWidget);
     expect(find.text('笼位 #12（只读）'), findsOneWidget);
+    expect(find.text('2025-08-23'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('rabbit-reproductive-stage')),
       findsNothing,
@@ -290,7 +320,7 @@ const _commodityCage = Cage(
   isEnabled: true,
 );
 
-const _replacementRabbit = Rabbit(
+final _replacementRabbit = Rabbit(
   id: 801,
   houseId: 8,
   cageId: 12,
@@ -299,7 +329,7 @@ const _replacementRabbit = Rabbit(
   gender: '0',
   breed: '新西兰白兔',
   arrivalMethod: '0',
-  arrivalDate: null,
+  arrivalDate: DateTime(2025, 8, 23),
   weight: 3.2,
   isActive: true,
   growthStage: 'GROWING',
