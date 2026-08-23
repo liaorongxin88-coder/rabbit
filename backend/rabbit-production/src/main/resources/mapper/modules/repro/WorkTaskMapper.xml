@@ -120,6 +120,15 @@
         where house_id = #{houseId} and rabbit_id = #{rabbitId} and status = 'PENDING'
     </update>
 
+    <update id="assignPendingCycleTasksToBatch">
+        update work_tasks
+        set batch_id = #{batchId}, update_by = #{updateBy}, update_time = now()
+        where house_id = #{houseId}
+          and cycle_id = #{cycleId}
+          and batch_id is null
+          and status = 'PENDING'
+    </update>
+
     <sql id="dueFilter">
         house_id = #{houseId}
         and status = 'PENDING'

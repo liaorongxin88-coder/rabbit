@@ -60,6 +60,14 @@ public interface WorkTaskMapper {
         @Param("updateBy") String updateBy
     );
 
+    /** 将无批次周期尚未完成的待办归入新批次。 */
+    int assignPendingCycleTasksToBatch(
+        @Param("houseId") Long houseId,
+        @Param("cycleId") Long cycleId,
+        @Param("batchId") Long batchId,
+        @Param("updateBy") String updateBy
+    );
+
     List<WorkTask> selectPendingBySubject(
         @Param("houseId") Long houseId,
         @Param("subjectType") String subjectType,

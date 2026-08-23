@@ -126,6 +126,18 @@ public class WorkTaskWriter {
         workTaskMapper.cancelPendingByRabbit(houseId, rabbitId, operator);
     }
 
+    /** 将已有开放周期归入批次时，同步其待办的冗余批次定位列。 */
+    public void assignPendingCycleTasksToBatch(
+        Long houseId,
+        Long cycleId,
+        Long batchId,
+        String operator
+    ) {
+        workTaskMapper.assignPendingCycleTasksToBatch(
+            houseId, cycleId, batchId, operator
+        );
+    }
+
     /** 完成兔只名下指定类型的待办；幂等重放时已完成任务不会再次更新。 */
     public void completeForRabbit(
         Long houseId,

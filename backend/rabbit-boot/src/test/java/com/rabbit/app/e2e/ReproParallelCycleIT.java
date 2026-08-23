@@ -251,7 +251,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
     }
 
     @Test
-    void emptyAndAbortionFollowUpsDoNotReuseTheClosedBatchTag() {
+    void emptyAbortionAndWeaningFollowUpsDoNotReuseTheClosedBatchTag() {
         Fixture emptyFixture = batchFixture("batch_empty_close");
         Long emptyCycle = openCycleIdInBatch(emptyFixture);
         apply(emptyFixture, emptyCycle, ReproAction.ESTRUS, "batch_empty_estrus", b -> b);
@@ -282,6 +282,18 @@ public class ReproParallelCycleIT extends E2eTestSupport {
                 .attachmentFileIds(List.of(abortionImage))
         );
         assertFollowUpLeftBatch(abortionFixture, aborted.followUpCycleId());
+
+        Fixture weaningFixture = batchFixture("batch_weaning_close");
+        Long weaningCycle = openCycleIdInBatch(weaningFixture);
+        advanceToDelivery(weaningFixture, weaningCycle, "batch_weaning");
+        ReproResult weaned = apply(
+            weaningFixture,
+            weaningCycle,
+            ReproAction.WEANING,
+            "batch_weaning_do",
+            b -> b.weanedCount(7)
+        );
+        assertFollowUpLeftBatch(weaningFixture, weaned.followUpCycleId());
     }
 
     private void assertFollowUpLeftBatch(Fixture fixture, Long followUpCycleId) {
@@ -294,6 +306,19 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "select batch_id from breeding_cycles where id = ?",
             Long.class, followUpCycleId
         ));
+
+        JsonNode item = api.getOk(
+            "/api/batches/" + fixture.batchId + "/batch-rabbits",
+            fixture.owner.token,
+            fixture.houseId
+        ).get(0);
+        Assertions.assertTrue(item.get("currentCycleId").isNull());
+        Assertions.assertTrue(item.get("currentStage").isNull());
+        Assertions.assertEquals(0, api.getOk(
+            "/api/tasks?batchId=" + fixture.batchId + "&includeFuture=true",
+            fixture.owner.token,
+            fixture.houseId
+        ).get("total").asInt());
     }
 
     /** 哺乳段不是孕期，对待分笼周期发流产必须被拒。 */

@@ -112,6 +112,17 @@
         order by id
     </select>
 
+    <update id="assignBatchIfUnbound">
+        update breeding_cycles
+        set batch_id = #{batchId},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and id = #{id}
+          and batch_id is null
+          and lifecycle = 'OPEN'
+    </update>
+
     <!--
       state_version 比对 + 自增：并发第二写入者影响 0 行，服务层据此抛 409。
       刻意不用 status 做乐观锁条件（旧实现的做法）——status 是兼容列，

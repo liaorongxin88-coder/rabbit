@@ -19,6 +19,7 @@ import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.domain.TaskType;
+import com.rabbit.app.modules.repro.entity.ReproCycle;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
 import com.rabbit.app.modules.repro.service.OperatorNameResolver;
@@ -40,16 +41,12 @@ import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
 import com.rabbit.app.util.RequestIdUtil;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -233,7 +230,8 @@ public class BatchService {
             Batch b = new Batch();
             b.setHouseId(houseId);
             b.setBatchCode(batchCode);
-            b.setStatus("计划中");
+            b.setStatus("进行中");
+            b.setStartDate(now);
             b.setRemark(remark);
             b.setRequestId(requestId);
             b.setCreateBy(String.valueOf(userId));
@@ -422,8 +420,8 @@ public class BatchService {
      * doe-breeding-v2 之后状态在 breeding_cycles 上，批次只是个标签。如果这里不开周期，
      * 母兔就既没有阶段也没有待办，整条生产流程从界面上根本无法开始。
      *
-     * <p>已有进行中流水线周期的母兔会被跳过：她可能正怀着孕只是被重新贴了个标签，
-     * 再开一个会撞上 uk_bc_pipeline，也不符合事实。
+     * <p>已有未归属批次的流水线周期会原子绑定到新批次并同步其待办；已有其他批次
+     * 归属的周期保持不动，避免新标签篡改旧批次的结束语义。
      */
     @Transactional
     public void removeMember(
@@ -473,8 +471,20 @@ public class BatchService {
         String requestId
     ) {
         String operatorName = operatorNameResolver.resolve(userId);
+        String operator = operatorName == null || operatorName.isBlank()
+            ? String.valueOf(userId)
+            : operatorName;
         for (Rabbit r : females) {
-            if (reproCycleMapper.selectOpenPipelineForUpdate(houseId, r.getId()) != null) {
+            ReproCycle existing = reproCycleMapper.selectOpenPipelineForUpdate(houseId, r.getId());
+            if (existing != null) {
+                if (existing.getBatchId() == null
+                    && reproCycleMapper.assignBatchIfUnbound(
+                        houseId, existing.getId(), batchId, operator
+                    ) > 0) {
+                    workTaskWriter.assignPendingCycleTasksToBatch(
+                        houseId, existing.getId(), batchId, operator
+                    );
+                }
                 continue;
             }
             OpenCycleCommand command = new OpenCycleCommand(
@@ -545,118 +555,6 @@ public class BatchService {
             }
         }
     }
-
-
-
-
-    private List<Long> normalizeBulkMatingIds(List<Long> values) {
-        if (values == null || values.isEmpty()) {
-            throw new BizException(400, "femaleRabbitIds不能为空");
-        }
-        if (values.size() > 1000) {
-            throw new BizException(400, "单次最多配种1000只母兔");
-        }
-        LinkedHashSet<Long> unique = new LinkedHashSet<Long>();
-        for (Long value : values) {
-            if (value == null || value <= 0 || !unique.add(value)) {
-                throw new BizException(400, "femaleRabbitIds包含无效或重复值");
-            }
-        }
-        List<Long> sorted = new ArrayList<Long>(unique);
-        sorted.sort(Long::compareTo);
-        return sorted;
-    }
-
-    private void validateBulkMatingRequest(Long maleRabbitId, Date matingDate, String requestId) {
-        if (maleRabbitId == null || maleRabbitId <= 0) {
-            throw new BizException(400, "maleRabbitId不合法");
-        }
-        if (matingDate == null) {
-            throw new BizException(400, "matingDate不能为空");
-        }
-        if (requestId == null || requestId.trim().isEmpty()) {
-            throw new BizException(400, "requestId不能为空");
-        }
-        if (requestId.length() > 64) {
-            throw new BizException(400, "requestId长度不能超过64");
-        }
-    }
-
-    private void validateMotherForMating(Rabbit mother, Long houseId) {
-        if (mother == null || !houseId.equals(mother.getHouseId())) {
-            throw new BizException(400, "母兔不存在");
-        }
-        if (!Boolean.TRUE.equals(mother.getIsActive())) {
-            throw new BizException(400, "母兔不在场");
-        }
-        if (!"0".equals(mother.getGender())) {
-            throw new BizException(400, "母兔性别不正确");
-        }
-        if (!"0".equals(mother.getType()) && !"1".equals(mother.getType())) {
-            throw new BizException(400, "母兔类型不正确");
-        }
-    }
-
-    private void validateMaleForMating(Rabbit male, Long houseId) {
-        if (male == null || !houseId.equals(male.getHouseId())) {
-            throw new BizException(400, "公兔不存在");
-        }
-        if (!Boolean.TRUE.equals(male.getIsActive())) {
-            throw new BizException(400, "公兔不在场");
-        }
-        if (!"1".equals(male.getGender())) {
-            throw new BizException(400, "公兔性别不正确");
-        }
-        if (!"0".equals(male.getType())) {
-            throw new BizException(400, "仅种公兔可用于配种");
-        }
-    }
-
-    private String deriveMatingItemRequestId(String requestId, Long motherId) {
-        return deriveBoundedRequestId(requestId, String.valueOf(motherId));
-    }
-
-    private String bulkMatingPayloadHash(
-        Long batchId,
-        List<Long> motherIds,
-        Long maleRabbitId,
-        Date matingDate
-    ) {
-        StringBuilder canonical = new StringBuilder()
-            .append(batchId)
-            .append('|')
-            .append(maleRabbitId)
-            .append('|')
-            .append(matingDate.getTime())
-            .append('|');
-        for (Long motherId : motherIds) {
-            canonical.append(motherId).append(',');
-        }
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(
-                canonical.toString().getBytes(StandardCharsets.UTF_8)
-            );
-            StringBuilder hex = new StringBuilder(digest.length * 2);
-            for (byte value : digest) {
-                hex.append(String.format("%02x", value));
-            }
-            return hex.toString();
-        } catch (NoSuchAlgorithmException error) {
-            throw new IllegalStateException("SHA-256 unavailable", error);
-        }
-    }
-
-    private String deriveBoundedRequestId(String requestId, String suffix) {
-        String candidate = requestId + "-" + suffix;
-        if (candidate.length() <= 64) {
-            return candidate;
-        }
-        return UUID.nameUUIDFromBytes(candidate.getBytes(StandardCharsets.UTF_8)).toString();
-    }
-
-
-
-
 
     private List<WeaningRecordAllocation> pickCommodityCageAllocations(
         Long houseId,

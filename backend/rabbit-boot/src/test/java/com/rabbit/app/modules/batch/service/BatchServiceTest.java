@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.batch.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -21,8 +22,10 @@ import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.repro.entity.ReproCycle;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
 import com.rabbit.app.modules.repro.service.ReproStateMachineService;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import java.util.List;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
@@ -57,6 +60,8 @@ class BatchServiceTest {
         ).createBatch(7L, 1L, "B-1", List.of(2L, 1L), null, "request-1");
 
         assertEquals(9L, result.getId());
+        assertEquals("进行中", result.getStatus());
+        assertNotNull(result.getStartDate());
         InOrder lockingOrder = org.mockito.Mockito.inOrder(
             rabbitMapper,
             batchMapper
@@ -143,7 +148,8 @@ class BatchServiceTest {
             dedup,
             null,
             reproCycleMapper,
-            stateMachine
+            stateMachine,
+            org.mockito.Mockito.mock(WorkTaskWriter.class)
         ).addMembers(7L, 1L, 9L, List.of(18L), "request-sale");
 
         @SuppressWarnings("unchecked")
@@ -153,6 +159,55 @@ class BatchServiceTest {
         assertEquals("fattening", link.getBatchRole());
         assertEquals("养育/售卖", link.getJoinReason());
         assertEquals("成长期", link.getCurrentStatus());
+        verify(stateMachine, never()).openCycleAt(any());
+    }
+
+    @Test
+    void bindsUnboundPipelineToBatchWithoutOpeningAnotherCycle() {
+        BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
+        BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
+        RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
+        RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
+        RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
+        ReproCycleMapper reproCycleMapper = org.mockito.Mockito.mock(ReproCycleMapper.class);
+        ReproStateMachineService stateMachine = org.mockito.Mockito.mock(
+            ReproStateMachineService.class
+        );
+        WorkTaskWriter workTaskWriter = org.mockito.Mockito.mock(WorkTaskWriter.class);
+        Batch batch = new Batch();
+        batch.setId(9L);
+        batch.setHouseId(1L);
+        batch.setStatus("进行中");
+        ReproCycle pipeline = new ReproCycle();
+        pipeline.setId(21L);
+        pipeline.setHouseId(1L);
+        pipeline.setMotherRabbitId(3L);
+        pipeline.setBatchId(null);
+
+        when(dedup.shouldSkipAsDone(1L, 7L, "batch.addMembers", "request-open"))
+            .thenReturn(false);
+        when(batchMapper.selectById(1L, 9L)).thenReturn(batch);
+        when(rabbitMapper.selectByIdsForUpdate(1L, List.of(3L)))
+            .thenReturn(List.of(mother(3L)));
+        when(batchRabbitMapper.selectActiveByBatchAndRabbitsForUpdate(1L, 9L, List.of(3L)))
+            .thenReturn(List.of());
+        when(reproCycleMapper.selectOpenPipelineForUpdate(1L, 3L)).thenReturn(pipeline);
+        when(reproCycleMapper.assignBatchIfUnbound(1L, 21L, 9L, "7")).thenReturn(1);
+
+        service(
+            batchMapper,
+            batchRabbitMapper,
+            rabbitMapper,
+            historyMapper,
+            dedup,
+            null,
+            reproCycleMapper,
+            stateMachine,
+            workTaskWriter
+        ).addMembers(7L, 1L, 9L, List.of(3L), "request-open");
+
+        verify(reproCycleMapper).assignBatchIfUnbound(1L, 21L, 9L, "7");
+        verify(workTaskWriter).assignPendingCycleTasksToBatch(1L, 21L, 9L, "7");
         verify(stateMachine, never()).openCycleAt(any());
     }
 
@@ -280,7 +335,8 @@ class BatchServiceTest {
             dedup,
             cycleMapper,
             org.mockito.Mockito.mock(ReproCycleMapper.class),
-            org.mockito.Mockito.mock(ReproStateMachineService.class)
+            org.mockito.Mockito.mock(ReproStateMachineService.class),
+            org.mockito.Mockito.mock(WorkTaskWriter.class)
         );
     }
 
@@ -292,7 +348,8 @@ class BatchServiceTest {
         RequestDedupService dedup,
         BreedingCycleMapper cycleMapper,
         ReproCycleMapper reproCycleMapper,
-        ReproStateMachineService stateMachine
+        ReproStateMachineService stateMachine,
+        WorkTaskWriter workTaskWriter
     ) {
         return new BatchService(
             batchMapper,
@@ -317,7 +374,7 @@ class BatchServiceTest {
             stateMachine,
             org.mockito.Mockito.mock(
                 com.rabbit.app.modules.repro.service.OperatorNameResolver.class),
-            null,
+            workTaskWriter,
             10
         );
     }

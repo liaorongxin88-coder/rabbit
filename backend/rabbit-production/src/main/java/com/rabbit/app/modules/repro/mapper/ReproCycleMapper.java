@@ -36,6 +36,14 @@ public interface ReproCycleMapper {
         @Param("motherRabbitId") Long motherRabbitId
     );
 
+    /** 将锁定的无批次周期归入新批次，不覆盖已有批次归属。 */
+    int assignBatchIfUnbound(
+        @Param("houseId") Long houseId,
+        @Param("id") Long id,
+        @Param("batchId") Long batchId,
+        @Param("updateBy") String updateBy
+    );
+
     /**
      * 应用一次状态转换。
      *

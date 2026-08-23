@@ -111,6 +111,81 @@ public class ReproApiIT extends E2eTestSupport {
     }
 
     @Test
+    void joiningBatchAdoptsAnOpenCycleAndItsPendingTask() {
+        UserSession owner = register("batch_mid_cycle");
+        long houseId = createHouse(owner, "batch_mid_cycle_house", 1, 4, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", "mid_cycle_doe");
+        long buckId = createRabbit(owner, houseId, cages.get(1), "0", "1", "mid_cycle_buck");
+
+        JsonNode opened = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+            "motherRabbitId", doeId,
+            "stage", "AWAIT_ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId("mid_cycle_open")
+        ));
+        long cycleId = opened.get("cycleId").asLong();
+
+        JsonNode batch = api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", "MID-" + requestId("batch").substring(0, 8),
+            "femaleRabbitIds", List.of(doeId),
+            "requestId", requestId("mid_cycle_batch")
+        ));
+        long batchId = batch.get("id").asLong();
+        Assertions.assertEquals("进行中", batch.get("status").asText());
+        Assertions.assertEquals(batchId, jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?", Long.class, cycleId
+        ));
+
+        JsonNode item = api.getOk(
+            "/api/batches/" + batchId + "/batch-rabbits", owner.token, houseId
+        ).get(0);
+        Assertions.assertTrue(item.get("isActive").asBoolean());
+        Assertions.assertEquals(cycleId, item.get("currentCycleId").asLong());
+        Assertions.assertEquals("AWAIT_ESTRUS", item.get("currentStage").asText());
+
+        JsonNode batchTasks = api.getOk(
+            "/api/tasks?batchId=" + batchId + "&includeFuture=true", owner.token, houseId
+        );
+        Assertions.assertEquals(1, batchTasks.get("total").asInt());
+        Assertions.assertEquals(cycleId, batchTasks.get("items").get(0).get("cycleId").asLong());
+
+        api.postOk("/api/repro/cycles/" + cycleId + "/actions", owner.token, houseId, obj(
+            "action", "ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId("mid_cycle_estrus")
+        ));
+        api.postOk("/api/repro/cycles/" + cycleId + "/actions", owner.token, houseId, obj(
+            "action", "MATING",
+            "occurredAt", now(),
+            "maleRabbitId", buckId,
+            "matingMethod", "NATURAL",
+            "requestId", requestId("mid_cycle_mating")
+        ));
+        JsonNode empty = api.postOk(
+            "/api/repro/cycles/" + cycleId + "/actions", owner.token, houseId, obj(
+                "action", "PALPATION",
+                "palpationResult", "EMPTY",
+                "occurredAt", now(),
+                "requestId", requestId("mid_cycle_empty")
+            )
+        );
+        long followUpCycleId = empty.get("followUpCycleId").asLong();
+
+        JsonNode ended = api.getOk(
+            "/api/batches/" + batchId + "/batch-rabbits", owner.token, houseId
+        ).get(0);
+        Assertions.assertTrue(ended.get("currentCycleId").isNull());
+        Assertions.assertTrue(ended.get("currentStage").isNull());
+        Assertions.assertEquals(0, api.getOk(
+            "/api/tasks?batchId=" + batchId + "&includeFuture=true", owner.token, houseId
+        ).get("total").asInt());
+        Assertions.assertNull(jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?", Long.class, followUpCycleId
+        ));
+    }
+
+    @Test
     void batchTagsProjectOnlyTheirOwnCyclesOperationsAndProductionData() {
         Fixture first = fixture("batch_tracking_scope", 1);
         long doeId = first.does.get(0);
