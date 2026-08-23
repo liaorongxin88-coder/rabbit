@@ -91,6 +91,12 @@
         where house_id = #{houseId} and id = #{id} and status = 'PENDING'
     </update>
 
+    <update id="cancel">
+        update work_tasks
+        set status = 'CANCELLED', update_by = #{updateBy}, update_time = now()
+        where house_id = #{houseId} and id = #{id} and status = 'PENDING'
+    </update>
+
     <!--
       推迟保持 PENDING：任务中心没有「已知悉」态，「没做」只有改期一种表达，
       任务因此不会从待办里消失（旧的 event_acks + is_event_notified 会）。
@@ -143,7 +149,45 @@
             )
           )
           or (
-            work_tasks.task_type &lt;&gt; 'SALE_READY'
+            work_tasks.task_type = 'COMMODITY_ADAPTATION_CARE'
+            and exists (
+              select 1 from rabbits active_rabbit
+              where active_rabbit.house_id = work_tasks.house_id
+                and active_rabbit.id = work_tasks.rabbit_id
+                and active_rabbit.is_active = true
+                and active_rabbit.type = '2'
+                and active_rabbit.growth_stage in ('JUVENILE', 'ADAPTATION')
+            )
+          )
+          or (
+            work_tasks.task_type = 'COMMODITY_GROWING_CARE'
+            and exists (
+              select 1 from rabbits active_rabbit
+              where active_rabbit.house_id = work_tasks.house_id
+                and active_rabbit.id = work_tasks.rabbit_id
+                and active_rabbit.is_active = true
+                and active_rabbit.type = '2'
+                and active_rabbit.growth_stage = 'GROWING'
+            )
+          )
+          or (
+            work_tasks.task_type = 'COMMODITY_FATTENING_CARE'
+            and exists (
+              select 1 from rabbits active_rabbit
+              where active_rabbit.house_id = work_tasks.house_id
+                and active_rabbit.id = work_tasks.rabbit_id
+                and active_rabbit.is_active = true
+                and active_rabbit.type = '2'
+                and active_rabbit.growth_stage = 'FATTENING'
+            )
+          )
+          or (
+            work_tasks.task_type not in (
+              'SALE_READY',
+              'COMMODITY_ADAPTATION_CARE',
+              'COMMODITY_GROWING_CARE',
+              'COMMODITY_FATTENING_CARE'
+            )
             and (
               work_tasks.rabbit_id is null
               or exists (

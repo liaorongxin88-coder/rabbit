@@ -415,4 +415,58 @@ void main() {
     expect(find.text('兔只详情 8/401'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('home shows daily commodity care titles and instructions',
+      (tester) async {
+    final event = EventItem(
+      recordId: 61,
+      category: '生产',
+      eventType: '生长饲喂观察',
+      eventDate: DateTime.now(),
+      batchId: null,
+      rabbitId: 701,
+      status: 'due',
+      sourceHouseId: 8,
+      sourceHouseName: '测试兔舍',
+      content: '观察采食、饮水和投料量。',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => [event]),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dailyTab = find.descendant(
+      of: find.byType(TabBar),
+      matching: find.text('日常'),
+    );
+    await tester.ensureVisible(dailyTab);
+    await tester.tap(dailyTab);
+    await tester.pumpAndSettle();
+
+    expect(find.text('生长饲喂观察'), findsOneWidget);
+    expect(find.text('观察采食、饮水和投料量。'), findsOneWidget);
+    expect(find.text('兔 #701'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

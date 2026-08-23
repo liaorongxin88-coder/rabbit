@@ -414,13 +414,21 @@ public class RabbitService {
             if (!sameStage(r.getGrowthStage(), stages.getGrowthStage())
                     || !sameStage(r.getReproductiveStage(), stages.getReproductiveStage())) {
                 insertStageHistory(
-                        houseId,
-                        rabbitId,
-                        r.getGrowthStage(),
-                        r.getReproductiveStage(),
-                        stages.getGrowthStage(),
-                        stages.getReproductiveStage(),
-                        String.valueOf(userId)
+                    houseId,
+                    rabbitId,
+                    r.getGrowthStage(),
+                    r.getReproductiveStage(),
+                    stages.getGrowthStage(),
+                    stages.getReproductiveStage(),
+                    String.valueOf(userId)
+                );
+            }
+            if ("2".equals(r.getType())
+                    && !sameStage(r.getGrowthStage(), stages.getGrowthStage())) {
+                workTaskWriter.cancelCommodityDailyCareForRabbit(
+                    houseId,
+                    rabbitId,
+                    String.valueOf(userId)
                 );
             }
             Rabbit done = rabbitMapper.selectById(houseId, rabbitId);
@@ -790,6 +798,7 @@ public class RabbitService {
                 if (rabbitMapper.updateTypeAndCage(houseId, rabbitId, "1", targetByRabbit.get(rabbitId), operator) != 1) {
                     throw new BizException(409, "兔子状态已变化: " + rabbitId);
                 }
+                workTaskWriter.cancelCommodityDailyCareForRabbit(houseId, rabbitId, operator);
                 workTaskWriter.completeForRabbit(
                     houseId, rabbitId, TaskType.SALE_READY, operator
                 );

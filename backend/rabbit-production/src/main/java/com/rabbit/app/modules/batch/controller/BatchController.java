@@ -238,6 +238,21 @@ public class BatchController {
                 }
                 continue;
             }
+            if (taskType.isCommodityDailyCare()) {
+                if (!suppressedProd.contains(task.id())) {
+                    items.add(new EventItem(
+                        task.id(),
+                        "生产",
+                        task.taskLabel(),
+                        task.dueDate(),
+                        task.batchId(),
+                        task.rabbitId(),
+                        task.overdue() ? "overdue" : null,
+                        task.remark()
+                    ));
+                }
+                continue;
+            }
             if (task.cycleId() == null || suppressedCycles.contains(task.cycleId())) {
                 continue;
             }

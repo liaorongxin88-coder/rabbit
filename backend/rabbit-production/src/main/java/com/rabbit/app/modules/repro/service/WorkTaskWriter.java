@@ -5,6 +5,8 @@ import com.rabbit.app.modules.repro.domain.TaskSubjectType;
 import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.entity.WorkTask;
 import com.rabbit.app.modules.repro.mapper.WorkTaskMapper;
+import com.rabbit.app.util.DateUtil;
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -64,26 +66,44 @@ public class WorkTaskWriter {
      * 再次被 {@link #subjectTypeOf(TaskType)} 默认归到 CYCLE。
      */
     public WorkTask scheduleForRabbit(RabbitTaskScheduleRequest request) {
-        if (request.rabbitId() == null) {
-            throw new IllegalArgumentException("兔只任务的 rabbitId 不能为空: " + request.taskType());
+        return scheduleRabbitTask(
+            request,
+            dedupKey(TaskSubjectType.RABBIT, request.rabbitId(), request.taskType())
+        );
+    }
+
+    /**
+     * 每日任务的去重键带上业务自然日。同一只兔在同一天重复跑调度只更新同一条待办，
+     * 次日则建立新的待办，不会覆盖尚未处理的前一日记录。
+     */
+    public WorkTask scheduleDailyForRabbit(RabbitTaskScheduleRequest request) {
+        LocalDate taskDate = DateUtil.localDate(request.dueTime());
+        if (taskDate == null) {
+            throw new IllegalArgumentException("每日兔只任务的到期时间不能为空: " + request.taskType());
         }
-        WorkTask task = new WorkTask();
-        task.setHouseId(request.houseId());
-        task.setTaskType(request.taskType().name());
-        task.setSubjectType(TaskSubjectType.RABBIT.name());
-        task.setSubjectId(request.rabbitId());
-        task.setRabbitId(request.rabbitId());
-        task.setBatchId(request.batchId());
-        task.setCageId(request.cageId());
-        task.setDueDate(request.dueTime());
-        task.setDueTime(request.dueTime());
-        task.setStatus(TaskStatus.PENDING.name());
-        task.setDedupKey(dedupKey(TaskSubjectType.RABBIT, request.rabbitId(), request.taskType()));
-        task.setRemark(request.remark());
-        task.setCreateBy(request.operator());
-        task.setUpdateBy(request.operator());
-        workTaskMapper.upsert(task);
-        return task;
+        return scheduleRabbitTask(
+            request,
+            dedupKey(TaskSubjectType.RABBIT, request.rabbitId(), request.taskType()) + ':' + taskDate
+        );
+    }
+
+    public void cancelCommodityDailyCareForRabbit(Long houseId, Long rabbitId, String operator) {
+        cancelCommodityDailyCareForRabbitExcept(houseId, rabbitId, null, operator);
+    }
+
+    /** 保留当前阶段的每日任务，作废其它阶段尚未处理的日常任务。 */
+    public void cancelCommodityDailyCareForRabbitExcept(
+        Long houseId,
+        Long rabbitId,
+        TaskType retainedType,
+        String operator
+    ) {
+        for (WorkTask task : pendingBySubject(houseId, TaskSubjectType.RABBIT, rabbitId)) {
+            if (TaskType.isCommodityDailyCare(task.getTaskType())
+                && (retainedType == null || !retainedType.name().equals(task.getTaskType()))) {
+                workTaskMapper.cancel(houseId, task.getId(), operator);
+            }
+        }
     }
 
     /** 完成任务并回链事件。返回 false 表示任务已被他人处理（并发或重复提交）。 */
@@ -150,6 +170,29 @@ public class WorkTaskWriter {
                 workTaskMapper.complete(houseId, task.getId(), null, operator);
             }
         }
+    }
+
+    private WorkTask scheduleRabbitTask(RabbitTaskScheduleRequest request, String dedupKey) {
+        if (request.rabbitId() == null) {
+            throw new IllegalArgumentException("兔只任务的 rabbitId 不能为空: " + request.taskType());
+        }
+        WorkTask task = new WorkTask();
+        task.setHouseId(request.houseId());
+        task.setTaskType(request.taskType().name());
+        task.setSubjectType(TaskSubjectType.RABBIT.name());
+        task.setSubjectId(request.rabbitId());
+        task.setRabbitId(request.rabbitId());
+        task.setBatchId(request.batchId());
+        task.setCageId(request.cageId());
+        task.setDueDate(request.dueTime());
+        task.setDueTime(request.dueTime());
+        task.setStatus(TaskStatus.PENDING.name());
+        task.setDedupKey(dedupKey);
+        task.setRemark(request.remark());
+        task.setCreateBy(request.operator());
+        task.setUpdateBy(request.operator());
+        workTaskMapper.upsert(task);
+        return task;
     }
 
     private static TaskSubjectType subjectTypeOf(TaskType taskType) {

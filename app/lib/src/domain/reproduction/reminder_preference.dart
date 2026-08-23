@@ -26,6 +26,9 @@ class ReminderPreference {
     'WEANING': '分笼',
     'SALE_READY': '出售',
     'REPLACEMENT_MATURE': '后备成熟',
+    'COMMODITY_ADAPTATION_CARE': '幼兔适应观察',
+    'COMMODITY_GROWING_CARE': '生长饲喂观察',
+    'COMMODITY_FATTENING_CARE': '育肥饲喂观察',
     'CUSTOM': '治疗复查与自定义',
   };
 
@@ -107,6 +110,9 @@ class ReminderPreference {
     if (value.contains('备产')) return 'PREPARTUM';
     if (value.contains('分娩') || value.contains('生产')) return 'DELIVERY';
     if (value.contains('断奶') || value.contains('分笼')) return 'WEANING';
+    if (value.contains('幼兔适应')) return 'COMMODITY_ADAPTATION_CARE';
+    if (value.contains('生长饲喂')) return 'COMMODITY_GROWING_CARE';
+    if (value.contains('育肥饲喂')) return 'COMMODITY_FATTENING_CARE';
     if (value.contains('出售')) return 'SALE_READY';
     if (value.contains('后备')) return 'REPLACEMENT_MATURE';
     return 'CUSTOM';

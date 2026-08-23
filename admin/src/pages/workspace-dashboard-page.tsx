@@ -11,6 +11,7 @@ import {
   WarehouseIcon,
 } from 'lucide-react'
 import { getDashboard, listReproTasks } from '@/api/workspace'
+import { commodityCareTaskTypes, summarizeCommodityCareTasks } from '@/lib/commodity-care-tasks'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
@@ -25,24 +26,39 @@ export function WorkspaceDashboardPage() {
   const workspace = useWorkspace()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [saleTasks, setSaleTasks] = useState<ReproTaskPage | null>(null)
+  const [commodityCareTasks, setCommodityCareTasks] = useState<ReproTaskPage | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!workspace.selectedHouse) {
       setSummary(null)
       setSaleTasks(null)
+      setCommodityCareTasks(null)
       return
     }
     setSummary(null)
     setSaleTasks(null)
+    setCommodityCareTasks(null)
     setLoading(true)
     try {
-      const [summaryResult, saleTasksResult] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         getDashboard(workspace.selectedHouse.id),
         listReproTasks(workspace.selectedHouse.id, { type: 'SALE_READY', size: 1 }),
+        ...commodityCareTaskTypes.map((type) =>
+          listReproTasks(workspace.selectedHouse.id, { type, size: 1 }),
+        ),
       ])
+      const [summaryResult, saleTasksResult, ...careResults] = results
       setSummary(summaryResult.status === 'fulfilled' ? summaryResult.value : null)
       setSaleTasks(saleTasksResult.status === 'fulfilled' ? saleTasksResult.value : null)
+      const carePages = careResults.filter(
+        (result): result is PromiseFulfilledResult<ReproTaskPage> => result.status === 'fulfilled',
+      )
+      setCommodityCareTasks(
+        carePages.length === commodityCareTaskTypes.length
+          ? summarizeCommodityCareTasks(carePages.map((result) => result.value))
+          : null,
+      )
     } finally {
       setLoading(false)
     }
@@ -100,7 +116,7 @@ export function WorkspaceDashboardPage() {
             <MetricCard title="哺乳仔兔" value={summary.nursingKits} icon={BabyIcon} />
           </section>
 
-          <section>
+          <section className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-1.5">
@@ -132,6 +148,35 @@ export function WorkspaceDashboardPage() {
                   )
                 ) : (
                   <p className="text-sm text-muted-foreground">出售提醒暂时无法加载，请刷新重试。</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>商品兔日常观察</CardTitle>
+                <CardDescription>当前兔舍的商品兔饲喂与观察待办。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {commodityCareTasks ? (
+                  commodityCareTasks.total > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-2xl font-semibold">{commodityCareTasks.total} 条待办</p>
+                      {commodityCareTasks.items.map((task) => (
+                        <div key={task.id} className="border-l-2 border-primary pl-3">
+                          <p className="text-sm font-medium">
+                            {task.taskLabel} · 兔 #{task.rabbitId ?? '-'}
+                          </p>
+                          {task.remark ? (
+                            <p className="mt-1 text-sm text-muted-foreground">{task.remark}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">当前没有商品兔日常观察待办。</p>
+                  )
+                ) : (
+                  <p className="text-sm text-muted-foreground">日常观察待办暂时无法加载，请刷新重试。</p>
                 )}
               </CardContent>
             </Card>

@@ -22,6 +22,14 @@ public class DateUtil {
         return Date.from(zdt.toInstant());
     }
 
+    /** 将时间转换为业务使用的中国时区自然日。 */
+    public static LocalDate localDate(Date date) {
+        if (date == null) {
+            return null;
+        }
+        return Instant.ofEpochMilli(date.getTime()).atZone(ZONE_ID).toLocalDate();
+    }
+
     public static Date minusDays(Date date, int days) {
         return plusDays(date, -days);
     }

@@ -36,6 +36,12 @@ public interface WorkTaskMapper {
         @Param("updateBy") String updateBy
     );
 
+    int cancel(
+        @Param("houseId") Long houseId,
+        @Param("id") Long id,
+        @Param("updateBy") String updateBy
+    );
+
     /** 推迟：状态保持 PENDING，只改到期时间并累加 snoozeCount。 */
     int postpone(
         @Param("houseId") Long houseId,

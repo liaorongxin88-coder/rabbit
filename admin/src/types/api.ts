@@ -311,6 +311,8 @@ export interface ReproTask {
   /** 是否逾期。由服务端判定，避免前后端时区不一致。 */
   overdue?: boolean
   snoozeCount?: number
+  /** 服务端下发的待办说明。 */
+  remark?: string | null
 }
 
 export interface ReproTaskPage {

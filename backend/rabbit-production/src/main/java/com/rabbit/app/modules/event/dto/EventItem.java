@@ -10,11 +10,16 @@ public class EventItem {
     private Long batchId;
     private Long rabbitId;
     private String status;
+    private String content;
 
     public EventItem() {
     }
 
     public EventItem(Long recordId, String category, String eventType, Date eventDate, Long batchId, Long rabbitId, String status) {
+        this(recordId, category, eventType, eventDate, batchId, rabbitId, status, null);
+    }
+
+    public EventItem(Long recordId, String category, String eventType, Date eventDate, Long batchId, Long rabbitId, String status, String content) {
         this.recordId = recordId;
         this.category = category;
         this.eventType = eventType;
@@ -22,6 +27,7 @@ public class EventItem {
         this.batchId = batchId;
         this.rabbitId = rabbitId;
         this.status = status;
+        this.content = content;
     }
 
     public Long getRecordId() {
@@ -78,5 +84,13 @@ public class EventItem {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
     }
 }

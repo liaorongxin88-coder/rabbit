@@ -11,6 +11,7 @@ class EventItem {
     required this.status,
     this.sourceHouseId,
     this.sourceHouseName = '',
+    this.content = '',
   });
 
   final int recordId;
@@ -22,6 +23,7 @@ class EventItem {
   final String status;
   final int? sourceHouseId;
   final String sourceHouseName;
+  final String content;
 
   bool get isProduction => category == '生产' || category == '生产周期';
   bool get isBreedingCycle => category == '生产周期';
@@ -139,6 +141,7 @@ class EventItem {
       status: status,
       sourceHouseId: sourceHouseId ?? this.sourceHouseId,
       sourceHouseName: sourceHouseName ?? this.sourceHouseName,
+      content: content,
     );
   }
 
@@ -154,6 +157,7 @@ class EventItem {
       sourceHouseId: _nullableInt(json['sourceHouseId'] ?? json['houseId']),
       sourceHouseName:
           (json['sourceHouseName'] ?? json['houseName']) as String? ?? '',
+      content: json['content'] as String? ?? '',
     );
   }
 

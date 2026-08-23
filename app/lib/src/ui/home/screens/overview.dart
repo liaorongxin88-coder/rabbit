@@ -96,14 +96,15 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   var _dueFilter = _DueFilter.all;
 
   static const _tabs = [
-    _FlowTab(0, '催情', ['催情'], Icons.play_circle_outline_rounded),
-    _FlowTab(1, '配种', ['配种'], Icons.favorite_border_rounded),
-    _FlowTab(2, '摸胎', ['摸胎'], Icons.health_and_safety_outlined),
-    _FlowTab(3, '备产', ['备产'], Icons.inventory_2_outlined),
-    _FlowTab(4, '分娩', ['分娩', '生产'], Icons.child_care_outlined),
-    _FlowTab(5, '断奶', ['断奶'], Icons.call_split_rounded),
-    _FlowTab(6, '出售', ['出售'], Icons.local_shipping_outlined),
-    _FlowTab(7, '后备兔', ['后备兔', '后备成熟'], Icons.trending_up_rounded),
+    _FlowTab(0, '日常', ['观察', '饲喂'], Icons.restaurant_outlined),
+    _FlowTab(1, '催情', ['催情'], Icons.play_circle_outline_rounded),
+    _FlowTab(2, '配种', ['配种'], Icons.favorite_border_rounded),
+    _FlowTab(3, '摸胎', ['摸胎'], Icons.health_and_safety_outlined),
+    _FlowTab(4, '备产', ['备产'], Icons.inventory_2_outlined),
+    _FlowTab(5, '分娩', ['分娩', '生产'], Icons.child_care_outlined),
+    _FlowTab(6, '断奶', ['断奶'], Icons.call_split_rounded),
+    _FlowTab(7, '出售', ['出售'], Icons.local_shipping_outlined),
+    _FlowTab(8, '后备兔', ['后备兔', '后备成熟'], Icons.trending_up_rounded),
   ];
 
   @override
@@ -114,7 +115,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     _tabController = TabController(
       length: _tabs.length,
       vsync: this,
-      initialIndex: 1,
+      initialIndex: 2,
     );
   }
 
@@ -216,6 +217,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       }
       final searchable = [
         event.eventType,
+        event.content,
         event.operationalTargetLabel,
         event.houseLabel,
         event.batchLabel ?? '',
@@ -954,6 +956,9 @@ class _EventCard extends StatelessWidget {
     }
     if (type.contains('断奶')) return Icons.call_split_rounded;
     if (type.contains('出售')) return Icons.local_shipping_outlined;
+    if (type.contains('观察') || type.contains('饲喂')) {
+      return Icons.restaurant_outlined;
+    }
     if (type.contains('后备')) return Icons.trending_up_rounded;
     return Icons.notifications_active_outlined;
   }
@@ -1014,6 +1019,17 @@ class _EventCard extends StatelessWidget {
                         _EventStatus(label: event.statusLabel, color: color),
                       ],
                     ),
+                    if (event.content.trim().isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        event.content,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: palette.muted,
+                            ),
+                      ),
+                    ],
                     const SizedBox(height: 11),
                     _RabbitDetailLink(
                       event: event,
