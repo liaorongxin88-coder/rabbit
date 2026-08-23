@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
+import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 
 final batchRepositoryProvider = Provider<BatchRepository>((ref) {
   return BatchRepository(ref.watch(apiClientProvider));
@@ -93,6 +94,43 @@ class BatchRepository {
       decode: (data) => Batch.fromJson(
         requireJsonObject(data, message: '批次详情格式不正确'),
       ),
+    );
+  }
+
+  Future<List<PendingWeaningRecord>> listPendingWeaningRecords({
+    required int houseId,
+    required int batchId,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<List<PendingWeaningRecord>>(
+      '/api/batches/$batchId/weaning-records',
+      houseId: houseId,
+      cancelToken: cancelToken,
+      decode: (data) => requireJsonObjectList(
+        data,
+        message: '待分笼记录格式不正确',
+      ).map(PendingWeaningRecord.fromJson).toList(),
+    );
+  }
+
+  Future<void> separatePendingWeaning({
+    required int houseId,
+    required int batchId,
+    required int weaningRecordId,
+    required int cageId,
+    required int count,
+    String? requestId,
+  }) {
+    return _api.post<void>(
+      '/api/batches/$batchId/weaning-records/$weaningRecordId/separation',
+      houseId: houseId,
+      body: {
+        'allocations': [
+          {'cageId': cageId, 'count': count},
+        ],
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (_) {},
     );
   }
 

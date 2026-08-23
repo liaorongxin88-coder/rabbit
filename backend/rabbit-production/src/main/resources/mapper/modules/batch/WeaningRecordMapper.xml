@@ -17,6 +17,8 @@
         <result column="weaning_date" property="weaningDate"/>
         <result column="weaning_count" property="weaningCount"/>
         <result column="waiting_count" property="waitingCount"/>
+        <result column="male_count" property="maleCount"/>
+        <result column="female_count" property="femaleCount"/>
         <result column="avg_weight" property="avgWeight"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
@@ -26,14 +28,14 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into weaning_records (house_id, batch_id, breeding_cycle_id, rabbit_id, target_cage_id, in_cage_id, weaning_date, weaning_count, waiting_count, avg_weight, remark, create_by, update_by)
-        values (#{houseId}, #{batchId}, #{breedingCycleId}, #{rabbitId}, #{targetCageId}, #{inCageId}, #{weaningDate}, #{weaningCount}, #{waitingCount}, #{avgWeight}, #{remark}, #{createBy}, #{updateBy})
+        insert into weaning_records (house_id, batch_id, breeding_cycle_id, rabbit_id, target_cage_id, in_cage_id, weaning_date, weaning_count, waiting_count, male_count, female_count, avg_weight, remark, create_by, update_by)
+        values (#{houseId}, #{batchId}, #{breedingCycleId}, #{rabbitId}, #{targetCageId}, #{inCageId}, #{weaningDate}, #{weaningCount}, #{waitingCount}, #{maleCount}, #{femaleCount}, #{avgWeight}, #{remark}, #{createBy}, #{updateBy})
     </insert>
 
     <select id="selectByBatch" resultMap="Map">
         select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
                group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
-               w.weaning_date, w.weaning_count, w.waiting_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
         from weaning_records w
         inner join batches b on b.id = w.batch_id
         left join cages ct on ct.id = w.target_cage_id and ct.house_id = b.house_id
@@ -46,10 +48,51 @@
         limit #{limit}
     </select>
 
+    <select id="selectPendingByBatch" resultMap="Map">
+        select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
+               group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+        from weaning_records w
+        inner join batches b on b.id = w.batch_id
+        left join cages ct on ct.id = w.target_cage_id and ct.house_id = b.house_id
+        left join cages ci on ci.id = w.in_cage_id and ci.house_id = b.house_id
+        left join weaning_record_allocations a on a.weaning_record_id = w.id
+        left join cages ca on ca.id = a.cage_id and ca.house_id = b.house_id
+        where w.house_id = #{houseId} and b.house_id = #{houseId} and w.batch_id = #{batchId}
+          and w.waiting_count &gt; 0
+        group by w.id
+        order by w.id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectById" resultMap="Map">
+        select id, house_id, batch_id, breeding_cycle_id, rabbit_id, target_cage_id, in_cage_id,
+               weaning_date, weaning_count, waiting_count, male_count, female_count, avg_weight, remark,
+               create_by, create_time, update_by, update_time
+        from weaning_records
+        where house_id = #{houseId} and batch_id = #{batchId} and id = #{id}
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="Map">
+        select id, house_id, batch_id, breeding_cycle_id, rabbit_id, target_cage_id, in_cage_id,
+               weaning_date, weaning_count, waiting_count, male_count, female_count, avg_weight, remark,
+               create_by, create_time, update_by, update_time
+        from weaning_records
+        where house_id = #{houseId} and batch_id = #{batchId} and id = #{id}
+        for update
+    </select>
+
+    <update id="decrementWaitingCount">
+        update weaning_records
+        set waiting_count = waiting_count - #{count}, update_by = #{updateBy}, update_time = now()
+        where house_id = #{houseId} and batch_id = #{batchId} and id = #{id}
+          and waiting_count &gt;= #{count}
+    </update>
+
     <select id="selectByRabbit" resultMap="Map">
         select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
                group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
-               w.weaning_date, w.weaning_count, w.waiting_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
         from weaning_records w
         inner join rabbits r on r.id = w.rabbit_id
         left join cages ct on ct.id = w.target_cage_id and ct.house_id = r.house_id

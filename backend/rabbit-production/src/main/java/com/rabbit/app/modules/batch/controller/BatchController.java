@@ -8,6 +8,8 @@ import com.rabbit.app.modules.repro.dto.TaskView;
 import com.rabbit.app.modules.repro.service.WorkTaskService;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.dto.CompleteBatchRequest;
+import com.rabbit.app.modules.batch.dto.SeparateWeaningRecordRequest;
+import com.rabbit.app.modules.batch.dto.WeaningSeparationResult;
 import com.rabbit.app.modules.batch.dto.AddBatchMembersRequest;
 import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
 import com.rabbit.app.modules.batch.entity.Batch;
@@ -15,6 +17,7 @@ import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.service.BatchCodeFallbackResolver;
 import com.rabbit.app.modules.batch.service.BatchService;
+import com.rabbit.app.modules.batch.service.BatchWeaningSeparationService;
 import com.rabbit.app.modules.event.dto.EventItem;
 import com.rabbit.app.modules.event.service.EventService;
 import com.rabbit.app.modules.hardware.service.HardwareLinkService;
@@ -48,6 +51,7 @@ public class BatchController {
     private final HouseService houseService;
     private final BatchService batchService;
     private final BatchCodeFallbackResolver batchCodeFallbackResolver;
+    private final BatchWeaningSeparationService batchWeaningSeparationService;
     private final BatchRabbitMapper batchRabbitMapper;
     private final EventService eventService;
     private final TreatmentService treatmentService;
@@ -55,11 +59,22 @@ public class BatchController {
     /** 生产提醒的唯一来源；首页与笼位共用它，不再各读一张镜像表。 */
     private final WorkTaskService workTaskService;
 
-    public BatchController(HouseService houseService, BatchService batchService, BatchCodeFallbackResolver batchCodeFallbackResolver, BatchRabbitMapper batchRabbitMapper, EventService eventService, TreatmentService treatmentService, HardwareLinkService hardwareLinkService, WorkTaskService workTaskService) {
+    public BatchController(
+        HouseService houseService,
+        BatchService batchService,
+        BatchCodeFallbackResolver batchCodeFallbackResolver,
+        BatchWeaningSeparationService batchWeaningSeparationService,
+        BatchRabbitMapper batchRabbitMapper,
+        EventService eventService,
+        TreatmentService treatmentService,
+        HardwareLinkService hardwareLinkService,
+        WorkTaskService workTaskService
+    ) {
         this.workTaskService = workTaskService;
         this.houseService = houseService;
         this.batchService = batchService;
         this.batchCodeFallbackResolver = batchCodeFallbackResolver;
+        this.batchWeaningSeparationService = batchWeaningSeparationService;
         this.batchRabbitMapper = batchRabbitMapper;
         this.eventService = eventService;
         this.treatmentService = treatmentService;
@@ -163,10 +178,31 @@ public class BatchController {
         return ApiResponse.ok(batchService.listBreedingCycles(houseId, batchId, motherRabbitId, activeOnly));
     }
 
-    // 旧的繁殖写端点（配种/批量配种/催情开始/催情完成/孕检/备产/接产/分笼）已于
-    // doe-breeding-v2 P4 删除，统一走 POST /api/repro/cycles/{cycleId}/actions。
-    // 硬件催情不随之消失：它本就有独立的 HardwareController 端点，客户端分别调用。
+    @GetMapping("/batches/{batchId}/weaning-records")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<List<com.rabbit.app.modules.batch.entity.WeaningRecord>> listPendingWeaningRecords(
+        @RequestHeader("X-House-Id") Long houseId,
+        @PathVariable("batchId") Long batchId
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(batchWeaningSeparationService.listPending(houseId, batchId));
+    }
 
+    @PostMapping("/batches/{batchId}/weaning-records/{weaningRecordId}/separation")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<WeaningSeparationResult> separateWeaningRecord(
+        @RequestHeader("X-House-Id") Long houseId,
+        @PathVariable("batchId") Long batchId,
+        @PathVariable("weaningRecordId") Long weaningRecordId,
+        @Valid @RequestBody SeparateWeaningRecordRequest request
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(batchWeaningSeparationService.separate(
+            userId, houseId, batchId, weaningRecordId, request
+        ));
+    }
 
     @PostMapping("/batches/{batchId}/sale")
     @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)

@@ -11,5 +11,13 @@ public interface WeaningRecordMapper {
 
     List<WeaningRecord> selectByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("limit") int limit);
 
+    List<WeaningRecord> selectPendingByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("limit") int limit);
+
+    WeaningRecord selectById(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("id") Long id);
+
+    WeaningRecord selectByIdForUpdate(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("id") Long id);
+
+    int decrementWaitingCount(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("id") Long id, @Param("count") int count, @Param("updateBy") String updateBy);
+
     List<WeaningRecord> selectByRabbit(@Param("houseId") Long houseId, @Param("rabbitId") Long rabbitId, @Param("limit") int limit);
 }

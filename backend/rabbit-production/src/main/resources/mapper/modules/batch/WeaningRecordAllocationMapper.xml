@@ -12,11 +12,12 @@
     </resultMap>
 
     <insert id="insertBatch">
-        insert ignore into weaning_record_allocations (weaning_record_id, cage_id, alloc_count)
+        insert into weaning_record_allocations (weaning_record_id, cage_id, alloc_count)
         values
         <foreach collection="rows" item="r" separator=",">
             (#{r.weaningRecordId}, #{r.cageId}, #{r.allocCount})
         </foreach>
+        on duplicate key update alloc_count = alloc_count + values(alloc_count)
     </insert>
 
     <select id="selectByWeaningRecordId" resultMap="Map">

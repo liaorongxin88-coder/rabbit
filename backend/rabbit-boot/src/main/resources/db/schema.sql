@@ -450,6 +450,8 @@ CREATE TABLE IF NOT EXISTS weaning_records (
   weaning_date DATETIME,
   weaning_count INT NOT NULL,
   waiting_count INT NOT NULL DEFAULT 0,
+  male_count INT,
+  female_count INT,
   avg_weight DOUBLE,
   remark TEXT,
   create_by VARCHAR(64),

@@ -8,12 +8,14 @@ import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/abortion.dart';
 import 'package:rabbit_flutter/src/ui/batches/sheets/add_members.dart';
 import 'package:rabbit_flutter/src/ui/batches/sheets/tracking.dart';
+import 'package:rabbit_flutter/src/ui/batches/sheets/separation.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/departure.dart';
@@ -78,6 +80,7 @@ class _HouseBatchDetailScreenState
     }
     ref.invalidate(batchDetailProvider(_request));
     ref.invalidate(batchMembersProvider(_request));
+    ref.invalidate(pendingWeaningRecordsProvider(_request));
     ref.invalidate(houseBatchesProvider(widget.houseId));
     if (includePermission) {
       ref.invalidate(housePermissionProvider(widget.houseId));
@@ -87,6 +90,7 @@ class _HouseBatchDetailScreenState
       final futures = <Future<Object?>>[
         ref.read(batchDetailProvider(_request).future),
         ref.read(batchMembersProvider(_request).future),
+        ref.read(pendingWeaningRecordsProvider(_request).future),
         ref.read(houseBatchesProvider(widget.houseId).future),
       ];
       if (includePermission) {
@@ -112,6 +116,7 @@ class _HouseBatchDetailScreenState
   Widget build(BuildContext context) {
     final batch = ref.watch(batchDetailProvider(_request));
     final members = ref.watch(batchMembersProvider(_request));
+    final pendingWeanings = ref.watch(pendingWeaningRecordsProvider(_request));
     final permission = ref.watch(housePermissionProvider(widget.houseId));
 
     return AppPage(
@@ -128,19 +133,26 @@ class _HouseBatchDetailScreenState
           icon: const Icon(Icons.refresh),
         ),
       ],
-      child: _buildBody(batch, members, permission),
+      child: _buildBody(batch, members, pendingWeanings, permission),
     );
   }
 
   Widget _buildBody(
     AsyncValue<Batch> batch,
     AsyncValue<List<BatchRabbitItem>> members,
+    AsyncValue<List<PendingWeaningRecord>> pendingWeanings,
     AsyncValue<dynamic> permission,
   ) {
-    if (batch.isLoading || members.isLoading || permission.isLoading) {
+    if (batch.isLoading ||
+        members.isLoading ||
+        pendingWeanings.isLoading ||
+        permission.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    final error = batch.error ?? members.error ?? permission.error;
+    final error = batch.error ??
+        members.error ??
+        pendingWeanings.error ??
+        permission.error;
     if (error != null) {
       return ErrorState(
         message: _errorMessage(error),
@@ -150,6 +162,7 @@ class _HouseBatchDetailScreenState
 
     final currentBatch = batch.requireValue;
     final allMembers = members.requireValue;
+    final pendingRecords = pendingWeanings.requireValue;
     final canEdit = permission.requireValue.canEdit == true;
     final statuses = _statuses(allMembers);
     final effectiveStatus = _effectiveStatus(statuses);
@@ -200,7 +213,7 @@ class _HouseBatchDetailScreenState
       child: ListView.builder(
         key: const ValueKey('batch-detail-member-list'),
         padding: AppSpacing.pagePadding,
-        itemCount: 7 + (filtered.isEmpty ? 1 : filtered.length),
+        itemCount: 9 + (filtered.isEmpty ? 1 : filtered.length),
         itemBuilder: (context, index) {
           switch (index) {
             case 0:
@@ -223,6 +236,17 @@ class _HouseBatchDetailScreenState
             case 3:
               return const SizedBox(height: 12);
             case 4:
+              return _PendingWeaningSection(
+                records: pendingRecords,
+                canEdit: canEdit,
+                saving: _saving,
+                onSeparate: _separateWeaning,
+              );
+            case 5:
+              return pendingRecords.isEmpty
+                  ? const SizedBox.shrink()
+                  : const SizedBox(height: 12);
+            case 6:
               return _MemberFilters(
                 controller: _searchController,
                 query: _query,
@@ -240,9 +264,9 @@ class _HouseBatchDetailScreenState
                     _updateFilter(() => _activity = value),
                 onReset: _resetFilters,
               );
-            case 5:
+            case 7:
               return const SizedBox(height: 12);
-            case 6:
+            case 8:
               return canEdit
                   ? _BatchSelectionBar(
                       visible: filtered,
@@ -276,7 +300,7 @@ class _HouseBatchDetailScreenState
             );
           }
 
-          final item = filtered[index - 7];
+          final item = filtered[index - 9];
           final action = _isEstrusSelectable(item) ? _BulkMode.estrus : null;
           return Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -317,6 +341,23 @@ class _HouseBatchDetailScreenState
         },
       ),
     );
+  }
+
+  Future<void> _separateWeaning(PendingWeaningRecord record) async {
+    final completed = await showBatchWeaningSeparationSheet(
+      context: context,
+      houseId: widget.houseId,
+      batchId: widget.batchId,
+      record: record,
+    );
+    if (completed == true && mounted) {
+      await _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('分笼完成')),
+        );
+      }
+    }
   }
 
   String _effectiveStatus(List<String> statuses) {
@@ -1190,6 +1231,57 @@ class _MemberFilters extends StatelessWidget {
                 ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingWeaningSection extends StatelessWidget {
+  const _PendingWeaningSection({
+    required this.records,
+    required this.canEdit,
+    required this.saving,
+    required this.onSeparate,
+  });
+
+  final List<PendingWeaningRecord> records;
+  final bool canEdit;
+  final bool saving;
+  final ValueChanged<PendingWeaningRecord> onSeparate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (records.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('待分笼', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final record in records) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '母兔 #${record.rabbitId} · 待分笼 ${record.waitingCount} / ${record.weaningCount} 只',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (canEdit)
+                  OutlinedButton.icon(
+                    key: ValueKey('pending-weaning-separate-${record.id}'),
+                    onPressed: saving ? null : () => onSeparate(record),
+                    icon: const Icon(Icons.call_split_outlined),
+                    label: const Text('分笼'),
+                  ),
+              ],
+            ),
+            if (record != records.last) const Divider(height: 20),
+          ],
         ],
       ),
     );

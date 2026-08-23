@@ -66,7 +66,7 @@ public class ReproActionService {
 
         ReproCycle cycle = reproCycleMapper.selectById(command.getHouseId(), result.cycleId());
         PlacementInput input = placement == null ? PlacementInput.empty() : placement;
-        kitPlacementService.place(new KitPlacementCommand(
+        var weaningRecord = kitPlacementService.registerPending(new KitPlacementCommand(
             command.getHouseId(),
             command.getUserId(),
             operatorOf(command),
@@ -83,7 +83,7 @@ public class ReproActionService {
             command.getRemark(),
             command.getRequestId()
         ));
-        return result;
+        return result.withWeaning(weaningRecord.getId(), weaningRecord.getWaitingCount());
     }
 
     /**

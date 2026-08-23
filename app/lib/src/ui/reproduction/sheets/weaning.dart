@@ -6,15 +6,12 @@ import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart'
     show formatBatchWriteDate, formatBatchWriteDateTime;
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
-import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
-import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
-import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
@@ -84,8 +81,6 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   DateTime? _customNextReminderDate;
   var _nextReminderMode = _NextReminderMode.houseSetting;
   var _postponed = false;
-  var _autoAssignCage = true;
-  int? _selectedCageId;
   var _saving = false;
 
   @override
@@ -118,27 +113,6 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       return null;
     }
     return double.tryParse(text);
-  }
-
-  List<Cage> _commodityCages(List<Cage> cages) {
-    return cages.where((cage) => cage.isCommodityCage).toList()
-      ..sort((a, b) {
-        if (a.status == '0' && b.status != '0') {
-          return -1;
-        }
-        if (b.status == '0' && a.status != '0') {
-          return 1;
-        }
-        return a.cageNumber.compareTo(b.cageNumber);
-      });
-  }
-
-  String _cageLabel(Cage cage) {
-    final name = cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
-    if (cage.rabbitCount <= 0) {
-      return '$name · 空笼 · 可放 ${Cage.commodityCapacity} 只';
-    }
-    return '$name · ${cage.rabbitCount} 只 · 还可放 ${cage.commodityRemainingCapacity} 只';
   }
 
   Future<void> _pickDate() async {
@@ -241,10 +215,10 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     );
     ref.invalidate(batchDetailProvider(detailRequest));
     ref.invalidate(batchMembersProvider(detailRequest));
+    ref.invalidate(pendingWeaningRecordsProvider(detailRequest));
   }
 
-  Future<void> _submit(List<Cage> cages) async {
-    final commodityCages = _commodityCages(cages);
+  Future<void> _submit() async {
     if (_postponed) {
       final cycleId = widget.breedingCycleId;
       final postponeDate = _postponeDate;
@@ -316,27 +290,6 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       return;
     }
 
-    int? targetCageId;
-    if (count > 0 && !_autoAssignCage) {
-      targetCageId = _selectedCageId;
-      if (targetCageId == null || targetCageId <= 0) {
-        _showMessage('请选择目标商品兔笼位');
-        return;
-      }
-      Cage? selectedCage;
-      for (final cage in commodityCages) {
-        if (cage.id == targetCageId) {
-          selectedCage = cage;
-          break;
-        }
-      }
-      if (selectedCage == null ||
-          !selectedCage.canAcceptCommodityCount(count)) {
-        _showMessage('所选笼位剩余容量不足');
-        return;
-      }
-    }
-
     setState(() => _saving = true);
     try {
       final avgWeight = _parseOptionalDouble(_weightController);
@@ -353,15 +306,13 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           'weaningCount': count,
           'maleCount': male,
           'femaleCount': female,
-          'targetCageId': targetCageId,
           'avgWeight': avgWeight,
           'remark': remark,
           if (nextRemindAt != null)
             'nextRemindAt': formatBatchWriteDate(nextRemindAt),
         }),
       );
-      // 分笼走 doe-breeding-v2 的单一写入口：服务端在同一事务里推进周期、
-      // 结窝、分配商品兔笼位并生成仔兔，不再需要客户端分两步。
+      // 断奶只推进周期并保留待分笼记录；批次详情的分笼操作才会创建商品兔。
       final cycleId = widget.breedingCycleId;
       if (cycleId <= 0) {
         _showMessage('未找到对应的生产周期，请刷新后重试');
@@ -376,7 +327,6 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
             weanedCount: count,
             maleCount: male,
             femaleCount: female,
-            targetCageId: targetCageId,
             avgWeaningWeight: avgWeight,
             remark: remark,
             requestId: requestId,
@@ -386,20 +336,12 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       }
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
-      ref.invalidate(houseCagesProvider(widget.houseId));
       _invalidateBatchProviders();
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop(result);
-      final cageHint = count == 0
-          ? ''
-          : _autoAssignCage
-              ? '，仔兔已自动分配到商品兔笼'
-              : '，仔兔已放入笼位 #$targetCageId';
       messenger?.showSnackBar(
         SnackBar(
-          content: Text(
-            '母兔 #${widget.rabbitId} 断奶完成（$count 只$cageHint）',
-          ),
+          content: Text('母兔 #${widget.rabbitId} 断奶完成（$count 只待分笼）'),
         ),
       );
     } catch (error) {
@@ -424,7 +366,6 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   @override
   Widget build(BuildContext context) {
     ref.watch(houseSettingProvider(widget.houseId));
-    final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final availableHeight = mediaQuery.size.height - keyboardInset;
@@ -440,334 +381,262 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           constraints: BoxConstraints(
             maxHeight: availableHeight,
           ),
-          child: cagesAsync.when(
-            skipLoadingOnRefresh: false,
-            loading: () => SheetLoadingState(
-              sheetTitle: '断奶并放入笼位',
-              message: '正在加载可用笼位',
-              onClose: () => Navigator.pop(context),
-            ),
-            error: (error, _) => SheetErrorState(
-              sheetTitle: '断奶并放入笼位',
-              error: error,
-              fallbackMessage: '无法加载笼位信息，请检查网络后重试。',
-              onRetry: () => ref.invalidate(houseCagesProvider(widget.houseId)),
-              onClose: () => Navigator.pop(context),
-            ),
-            data: (cages) {
-              final commodityCages = _commodityCages(cages);
-              if (!_autoAssignCage &&
-                  _selectedCageId == null &&
-                  commodityCages.isNotEmpty) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _selectedCageId == null) {
-                    setState(() => _selectedCageId = commodityCages.first.id);
-                  }
-                });
-              }
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: ListView(
-                      key: const ValueKey('weaning-form-list'),
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(0, 18, 0, 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '断奶并放入笼位',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    ProductionContextLine(
-                                      houseLabel: widget.houseLabel,
-                                      rabbitId: widget.rabbitId,
-                                      batchId: widget.batchId,
-                                      cycleRecordId: widget.breedingCycleId,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: _saving
-                                    ? null
-                                    : () => Navigator.pop(context),
-                                icon: const Icon(Icons.close),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const InfoNotice(
-                          text: '断奶后将自动生成商品兔仔兔并写入兔笼。'
-                              '数量填 0 表示全部损失，不生成仔兔。',
-                        ),
-                        const SizedBox(height: 14),
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('执行时间 *'),
-                          subtitle: Text(dateLabel),
-                          trailing: const Icon(Icons.calendar_today_outlined),
-                          onTap: _saving ? null : _pickDate,
-                        ),
-                        SwitchListTile(
-                          key: const ValueKey('weaning-postpone-switch'),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('本次未执行，改期提醒'),
-                          subtitle: const Text('不推进断奶状态，只调整下一次提醒日期'),
-                          value: _postponed,
-                          onChanged: _saving
-                              ? null
-                              : (value) => setState(() {
-                                    _postponed = value;
-                                    if (!value) _postponeDate = null;
-                                  }),
-                        ),
-                        if (_postponed)
-                          ListTile(
-                            key: const ValueKey('weaning-postpone-date'),
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('下次提醒日期 *'),
-                            subtitle: Text(
-                              _postponeDate == null
-                                  ? '请选择日期'
-                                  : formatBatchWriteDate(_postponeDate!),
-                            ),
-                            trailing: const Icon(Icons.event),
-                            onTap: _saving ? null : _pickPostponeDate,
-                          ),
-                        if (!_postponed) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            _nextReminderDateLabel,
-                            key: const ValueKey(
-                              'weaning-next-reminder-stage-label',
-                            ),
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          SegmentedButton<_NextReminderMode>(
-                            segments: const [
-                              ButtonSegment(
-                                value: _NextReminderMode.houseSetting,
-                                label: Text(
-                                  '按兔场设置',
-                                  key: ValueKey(
-                                    'weaning-next-reminder-house-setting',
-                                  ),
-                                ),
-                              ),
-                              ButtonSegment(
-                                value: _NextReminderMode.custom,
-                                label: Text(
-                                  '自定义日期',
-                                  key: ValueKey(
-                                    'weaning-next-reminder-custom',
-                                  ),
-                                ),
-                              ),
-                            ],
-                            selected: {_nextReminderMode},
-                            showSelectedIcon: false,
-                            onSelectionChanged: _saving
-                                ? null
-                                : (selection) => setState(() {
-                                      _nextReminderMode = selection.first;
-                                      if (_nextReminderMode ==
-                                          _NextReminderMode.custom) {
-                                        _customNextReminderDate ??=
-                                            _suggestedNextReminderDate;
-                                      }
-                                    }),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _nextReminderMode == _NextReminderMode.houseSetting
-                                ? '建议 ${formatBatchWriteDate(_suggestedNextReminderDate)}，由兔场规则计算'
-                                : '覆盖断奶后生成的$_nextReminderDateLabel',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          if (_nextReminderMode == _NextReminderMode.custom)
-                            ListTile(
-                              key: const ValueKey(
-                                'weaning-next-reminder-custom-date',
-                              ),
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(_nextReminderDateLabel),
-                              subtitle: Text(
-                                formatBatchWriteDate(
-                                  _customNextReminderDate ??
-                                      _suggestedNextReminderDate,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.event_outlined),
-                              onTap:
-                                  _saving ? null : _pickCustomNextReminderDate,
-                            ),
-                          const SizedBox(height: 8),
-                        ],
-                        TextField(
-                          key: const ValueKey('weaning-count'),
-                          controller: _countController,
-                          enabled: !_saving,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly
-                          ],
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
-                            labelText: '断奶数量',
-                            hintText: '本次放入笼位的仔兔数量',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                key: const ValueKey('weaning-male-count'),
-                                controller: _maleController,
-                                enabled: !_saving,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: '公兔数（可选）',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                key: const ValueKey('weaning-female-count'),
-                                controller: _femaleController,
-                                enabled: !_saving,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                decoration: const InputDecoration(
-                                  labelText: '母兔数（可选）',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          key: const ValueKey('weaning-average-weight'),
-                          controller: _weightController,
-                          enabled: !_saving,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: '平均体重 kg（可选）',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          key: const ValueKey('weaning-remark'),
-                          controller: _remarkController,
-                          enabled: !_saving,
-                          maxLines: 2,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('自动分配商品兔笼位'),
-                          subtitle: const Text('优先使用空笼，再使用已有商品兔笼'),
-                          value: _autoAssignCage,
-                          onChanged: _saving
-                              ? null
-                              : (value) =>
-                                  setState(() => _autoAssignCage = value),
-                        ),
-                        if (!_autoAssignCage) ...[
-                          const SizedBox(height: 8),
-                          if (commodityCages.isEmpty)
-                            Text(
-                              '暂无可用商品兔笼位，请先创建笼位或改用自动分配。',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            )
-                          else
-                            ...commodityCages.map((cage) {
-                              final count =
-                                  int.tryParse(_countController.text.trim()) ??
-                                      0;
-                              final enabled = count <= 0 ||
-                                  cage.canAcceptCommodityCount(count);
-                              return RadioListTile<int>(
-                                value: cage.id,
-                                groupValue: _selectedCageId,
-                                onChanged: _saving || !enabled
-                                    ? null
-                                    : (value) => setState(
-                                          () => _selectedCageId = value,
-                                        ),
-                                title: Text(_cageLabel(cage)),
-                                subtitle: enabled ? null : const Text('剩余容量不足'),
-                              );
-                            }),
-                        ],
-                      ],
-                    ),
-                  ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: AppPalette.of(context).line),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: ListView(
+                  key: const ValueKey('weaning-form-list'),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 18, 0, 8),
                       child: Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed:
-                                  _saving ? null : () => Navigator.pop(context),
-                              child: const Text('取消'),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '记录断奶',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(height: 4),
+                                ProductionContextLine(
+                                  houseLabel: widget.houseLabel,
+                                  rabbitId: widget.rabbitId,
+                                  batchId: widget.batchId,
+                                  cycleRecordId: widget.breedingCycleId,
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              key: const ValueKey('weaning-submit'),
-                              onPressed: _saving ? null : () => _submit(cages),
-                              child: _saving
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('确认断奶'),
-                            ),
+                          IconButton(
+                            onPressed:
+                                _saving ? null : () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
                           ),
                         ],
                       ),
                     ),
+                    const InfoNotice(
+                      text: '断奶仅记录待分笼数量。请在批次详情选择商品兔笼位后完成分笼；数量填 0 表示全部损失。',
+                    ),
+                    const SizedBox(height: 14),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('执行时间 *'),
+                      subtitle: Text(dateLabel),
+                      trailing: const Icon(Icons.calendar_today_outlined),
+                      onTap: _saving ? null : _pickDate,
+                    ),
+                    SwitchListTile(
+                      key: const ValueKey('weaning-postpone-switch'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('本次未执行，改期提醒'),
+                      subtitle: const Text('不推进断奶状态，只调整下一次提醒日期'),
+                      value: _postponed,
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() {
+                                _postponed = value;
+                                if (!value) _postponeDate = null;
+                              }),
+                    ),
+                    if (_postponed)
+                      ListTile(
+                        key: const ValueKey('weaning-postpone-date'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('下次提醒日期 *'),
+                        subtitle: Text(
+                          _postponeDate == null
+                              ? '请选择日期'
+                              : formatBatchWriteDate(_postponeDate!),
+                        ),
+                        trailing: const Icon(Icons.event),
+                        onTap: _saving ? null : _pickPostponeDate,
+                      ),
+                    if (!_postponed) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _nextReminderDateLabel,
+                        key: const ValueKey(
+                          'weaning-next-reminder-stage-label',
+                        ),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<_NextReminderMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: _NextReminderMode.houseSetting,
+                            label: Text(
+                              '按兔场设置',
+                              key: ValueKey(
+                                'weaning-next-reminder-house-setting',
+                              ),
+                            ),
+                          ),
+                          ButtonSegment(
+                            value: _NextReminderMode.custom,
+                            label: Text(
+                              '自定义日期',
+                              key: ValueKey(
+                                'weaning-next-reminder-custom',
+                              ),
+                            ),
+                          ),
+                        ],
+                        selected: {_nextReminderMode},
+                        showSelectedIcon: false,
+                        onSelectionChanged: _saving
+                            ? null
+                            : (selection) => setState(() {
+                                  _nextReminderMode = selection.first;
+                                  if (_nextReminderMode ==
+                                      _NextReminderMode.custom) {
+                                    _customNextReminderDate ??=
+                                        _suggestedNextReminderDate;
+                                  }
+                                }),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _nextReminderMode == _NextReminderMode.houseSetting
+                            ? '建议 ${formatBatchWriteDate(_suggestedNextReminderDate)}，由兔场规则计算'
+                            : '覆盖断奶后生成的$_nextReminderDateLabel',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (_nextReminderMode == _NextReminderMode.custom)
+                        ListTile(
+                          key: const ValueKey(
+                            'weaning-next-reminder-custom-date',
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(_nextReminderDateLabel),
+                          subtitle: Text(
+                            formatBatchWriteDate(
+                              _customNextReminderDate ??
+                                  _suggestedNextReminderDate,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.event_outlined),
+                          onTap: _saving ? null : _pickCustomNextReminderDate,
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                    TextField(
+                      key: const ValueKey('weaning-count'),
+                      controller: _countController,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: '断奶数量',
+                        hintText: '本次断奶的仔兔数量',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('weaning-male-count'),
+                            controller: _maleController,
+                            enabled: !_saving,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: '公兔数（可选）',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('weaning-female-count'),
+                            controller: _femaleController,
+                            enabled: !_saving,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: '母兔数（可选）',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const ValueKey('weaning-average-weight'),
+                      controller: _weightController,
+                      enabled: !_saving,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: '平均体重 kg（可选）',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const ValueKey('weaning-remark'),
+                      controller: _remarkController,
+                      enabled: !_saving,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: '备注（可选）',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: AppPalette.of(context).line),
                   ),
-                ],
-              );
-            },
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed:
+                              _saving ? null : () => Navigator.pop(context),
+                          child: const Text('取消'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          key: const ValueKey('weaning-submit'),
+                          onPressed: _saving ? null : _submit,
+                          child: _saving
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('确认断奶'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

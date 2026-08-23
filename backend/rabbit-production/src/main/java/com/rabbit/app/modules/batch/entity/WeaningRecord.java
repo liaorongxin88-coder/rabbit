@@ -16,6 +16,8 @@ public class WeaningRecord {
     private Date weaningDate;
     private Integer weaningCount;
     private Integer waitingCount;
+    private Integer maleCount;
+    private Integer femaleCount;
     private Double avgWeight;
     private String remark;
     private String createBy;
@@ -125,6 +127,22 @@ public class WeaningRecord {
 
     public void setWaitingCount(Integer waitingCount) {
         this.waitingCount = waitingCount;
+    }
+
+    public Integer getMaleCount() {
+        return maleCount;
+    }
+
+    public void setMaleCount(Integer maleCount) {
+        this.maleCount = maleCount;
+    }
+
+    public Integer getFemaleCount() {
+        return femaleCount;
+    }
+
+    public void setFemaleCount(Integer femaleCount) {
+        this.femaleCount = femaleCount;
     }
 
     public Double getAvgWeight() {

@@ -5,9 +5,7 @@ import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.entity.WeaningRecord;
 import com.rabbit.app.modules.batch.entity.WeaningRecordAllocation;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
-import com.rabbit.app.modules.batch.mapper.WeaningRecordAllocationMapper;
 import com.rabbit.app.modules.batch.mapper.WeaningRecordMapper;
-import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
@@ -26,21 +24,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * 分笼落位：把断奶仔兔从母兔笼迁入商品兔笼，并建立仔兔档案。
+ * Stores a completed weaning and later turns explicit cage allocations into commodity rabbits.
  *
- * <p><b>为什么单独一个服务，而不是塞进状态机。</b>
- * 状态机回答的是「母兔的周期走到哪一步」，只碰周期/事件/窝/任务/投影。
- * 落位回答的是「这一窝仔兔去哪个笼、算谁的账」，要碰笼位容量、兔子档案、
- * 批次成员、绩效统计。把后者并进状态机，它会重新长成这次重构要拆掉的
- * 那个上帝对象——旧的 {@code BatchService.weaning} 就是 288 行的反面教材。
- *
- * <p><b>并发不变式在这里，不在调用方。</b>笼位容量靠
- * {@code incrementCommodityRabbitCountWithinCapacity} 的条件 UPDATE 保证：
- * 先查后写会在并发下超员，只有「带容量判据的原子递增 + 影响行数校验」才成立。
- * 这条不变式由 WeaningCageConsistencyIT 的并发用例守着。
- *
- * <p>本服务不开自己的事务，靠调用方的事务传播：落位失败必须连同周期状态
- * 一起回滚，否则会出现「周期已断奶但仔兔没落位」的悬空数据。
+ * <p>The reproduction state machine owns the former operation. The later inventory operation is
+ * called by the batch separation service, after it has locked the batch, weaning record, and cages.
+ * This class deliberately does not open its own transaction so both workflows remain atomic.
  */
 @Service
 public class KitPlacementService {
@@ -52,7 +40,6 @@ public class KitPlacementService {
     private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final BatchRabbitMapper batchRabbitMapper;
     private final WeaningRecordMapper weaningRecordMapper;
-    private final WeaningRecordAllocationMapper weaningRecordAllocationMapper;
     private final BreedingPerformanceRecorder performanceRecorder;
     private final SettingService settingService;
     private final WorkTaskWriter workTaskWriter;
@@ -64,7 +51,6 @@ public class KitPlacementService {
         RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
         BatchRabbitMapper batchRabbitMapper,
         WeaningRecordMapper weaningRecordMapper,
-        WeaningRecordAllocationMapper weaningRecordAllocationMapper,
         BreedingPerformanceRecorder performanceRecorder,
         SettingService settingService,
         WorkTaskWriter workTaskWriter,
@@ -75,130 +61,29 @@ public class KitPlacementService {
         this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.batchRabbitMapper = batchRabbitMapper;
         this.weaningRecordMapper = weaningRecordMapper;
-        this.weaningRecordAllocationMapper = weaningRecordAllocationMapper;
         this.performanceRecorder = performanceRecorder;
         this.settingService = settingService;
         this.workTaskWriter = workTaskWriter;
         this.commodityCageCapacity = commodityCageCapacity;
     }
 
-    /**
-     * 执行落位。必须在调用方的事务内运行。
-     *
-     * @return 生成的仔兔 id；断奶数为 0 时返回空列表
-     */
-    public List<Long> place(KitPlacementCommand command) {
-        validate(command);
-        if (command.weanedCount() == 0) {
-            // 全窝损失也要留痕：记录一条 0 只的分笼，绩效才不会把这一窝算成没发生过。
-            recordWeaning(command, List.of());
-            return List.of();
-        }
+    /** Records completed weaning without allocating a cage or creating rabbit inventory. */
+    public WeaningRecord registerPending(KitPlacementCommand command) {
+        validateWeaning(command);
 
-        List<WeaningRecordAllocation> allocations = allocate(command);
-        WeaningRecord record = recordWeaning(command, allocations);
-
-        for (WeaningRecordAllocation allocation : allocations) {
-            allocation.setWeaningRecordId(record.getId());
-        }
-        weaningRecordAllocationMapper.insertBatch(allocations);
-
-        List<Rabbit> kits = occupyCagesAndBuildKits(command, allocations);
-        insertKitsAndHydrateIds(kits);
-        linkKitsToBatch(command, record, kits);
-        return kits.stream().map(Rabbit::getId).toList();
-    }
-
-    private void validate(KitPlacementCommand command) {
-        if (command.weanedCount() < 0) {
-            throw new BizException(400, "断奶数量错误");
-        }
-        int male = orZero(command.maleCount());
-        int female = orZero(command.femaleCount());
-        if (male + female != 0 && male + female != command.weanedCount()) {
-            throw new BizException(400, "公母数量之和需等于断奶数量");
-        }
-    }
-
-    /** 指定笼位时只校验不挑选；未指定时自动选笼。 */
-    private List<WeaningRecordAllocation> allocate(KitPlacementCommand command) {
-        Long targetCageId = command.targetCageId() != null && command.targetCageId() > 0
-            ? command.targetCageId()
-            : null;
-        if (targetCageId == null) {
-            List<WeaningRecordAllocation> picked =
-                pickCommodityCages(command.houseId(), command.weanedCount());
-            if (picked.isEmpty()) {
-                throw new BizException(400, "没有可用商品兔笼位");
-            }
-            return picked;
-        }
-
-        Cage cage = cageMapper.selectByIdForUpdate(command.houseId(), targetCageId);
-        if (cage == null) {
-            throw new BizException(400, "目标笼位不存在");
-        }
-        if (!Boolean.TRUE.equals(cage.getIsEnabled())) {
-            throw new BizException(400, "目标笼位已停用");
-        }
-        if (!"0".equals(cage.getStatus()) && !"3".equals(cage.getStatus())) {
-            throw new BizException(400, "目标笼位不是商品兔笼位");
-        }
-        if (orZero(cage.getRabbitCount()) + command.weanedCount() > commodityCageCapacity) {
-            throw new BizException(400, "目标笼位容量不足");
-        }
-        WeaningRecordAllocation allocation = new WeaningRecordAllocation();
-        allocation.setCageId(cage.getId());
-        allocation.setAllocCount(command.weanedCount());
-        return new ArrayList<>(List.of(allocation));
-    }
-
-    /** 先填空笼（status 0）再填半满笼（status 3），保持旧的落位偏好不变。 */
-    private List<WeaningRecordAllocation> pickCommodityCages(Long houseId, int count) {
-        List<Cage> candidates = cageMapper.selectCommodityCagesForUpdate(houseId);
-        List<WeaningRecordAllocation> rows = new ArrayList<>();
-        int left = count;
-        for (String status : List.of("0", "3")) {
-            for (Cage cage : candidates) {
-                if (!status.equals(cage.getStatus())) {
-                    continue;
-                }
-                left = allocToCage(cage, left, rows);
-                if (left <= 0) {
-                    return rows;
-                }
-            }
-        }
-        throw new BizException(400, "没有可用商品兔笼位");
-    }
-
-    private int allocToCage(Cage cage, int left, List<WeaningRecordAllocation> rows) {
-        int remain = commodityCageCapacity - orZero(cage.getRabbitCount());
-        if (remain <= 0) {
-            return left;
-        }
-        int add = Math.min(remain, left);
-        WeaningRecordAllocation allocation = new WeaningRecordAllocation();
-        allocation.setCageId(cage.getId());
-        allocation.setAllocCount(add);
-        rows.add(allocation);
-        return left - add;
-    }
-
-    private WeaningRecord recordWeaning(
-        KitPlacementCommand command,
-        List<WeaningRecordAllocation> allocations
-    ) {
         WeaningRecord record = new WeaningRecord();
         record.setHouseId(command.houseId());
         record.setBatchId(command.batchId());
         record.setBreedingCycleId(command.cycleId());
         record.setRabbitId(command.motherRabbitId());
-        record.setTargetCageId(command.targetCageId());
-        record.setInCageId(allocations.isEmpty() ? null : allocations.get(0).getCageId());
+        // Kept for request compatibility only. WEANING must never allocate this cage.
+        record.setTargetCageId(null);
+        record.setInCageId(null);
         record.setWeaningDate(command.weaningDate());
         record.setWeaningCount(command.weanedCount());
-        record.setWaitingCount(0);
+        record.setWaitingCount(command.weanedCount());
+        record.setMaleCount(command.maleCount());
+        record.setFemaleCount(command.femaleCount());
         record.setAvgWeight(command.avgWeight());
         record.setRemark(command.remark());
         record.setCreateBy(command.operator());
@@ -211,52 +96,75 @@ public class KitPlacementService {
         return record;
     }
 
-    /**
-     * 占笼并生成仔兔对象。
-     *
-     * <p>占笼用带容量判据的原子递增，影响行数不为 1 即判定并发冲突——
-     * 这是「同一批笼位被两个分笼请求同时写入」时唯一可靠的防超员手段。
-     */
-    private List<Rabbit> occupyCagesAndBuildKits(
-        KitPlacementCommand command,
-        List<WeaningRecordAllocation> allocations
-    ) {
+    /** Creates only the rabbits represented by one explicit separation request. */
+    public List<Long> separate(KitSeparationCommand command) {
+        validateSeparation(command);
+        List<Rabbit> kits = occupyCagesAndBuildKits(command);
+        insertKitsAndHydrateIds(kits);
+        linkKitsToBatch(command, kits);
+        return kits.stream().map(Rabbit::getId).toList();
+    }
+
+    private void validateWeaning(KitPlacementCommand command) {
+        if (command.weanedCount() < 0) {
+            throw new BizException(400, "断奶数量错误");
+        }
+        int male = orZero(command.maleCount());
+        int female = orZero(command.femaleCount());
+        if (male + female != 0 && male + female != command.weanedCount()) {
+            throw new BizException(400, "公母数量之和需等于断奶数量");
+        }
+    }
+
+    private void validateSeparation(KitSeparationCommand command) {
+        WeaningRecord record = command.weaningRecord();
+        if (record == null || record.getId() == null) {
+            throw new BizException(400, "待分笼记录不存在");
+        }
+        int total = allocationCount(command.allocations());
+        if (total <= 0 || total > orZero(record.getWaitingCount())) {
+            throw new BizException(400, "分笼数量超过待分笼数量");
+        }
+    }
+
+    private List<Rabbit> occupyCagesAndBuildKits(KitSeparationCommand command) {
+        WeaningRecord record = command.weaningRecord();
         List<Rabbit> kits = new ArrayList<>();
-        int index = 0;
-        for (WeaningRecordAllocation allocation : allocations) {
+        int index = orZero(record.getWeaningCount()) - orZero(record.getWaitingCount());
+        for (WeaningRecordAllocation allocation : command.allocations()) {
             int add = orZero(allocation.getAllocCount());
             if (add <= 0) {
                 continue;
             }
             if (cageMapper.incrementCommodityRabbitCountWithinCapacity(
-                command.houseId(), allocation.getCageId(), add,
-                commodityCageCapacity, command.operator()
+                record.getHouseId(), allocation.getCageId(), add, commodityCageCapacity,
+                command.operator()
             ) != 1) {
                 throw new BizException(409, "笼位状态或容量已变化，请刷新后重试");
             }
-            for (int i = 0; i < add; i++) {
-                kits.add(newKit(command, allocation.getCageId(), index));
-                index++;
+            for (int offset = 0; offset < add; offset++) {
+                kits.add(newKit(command, allocation.getCageId(), index++));
             }
         }
         return kits;
     }
 
-    private Rabbit newKit(KitPlacementCommand command, Long cageId, int index) {
+    private Rabbit newKit(KitSeparationCommand command, Long cageId, int index) {
+        WeaningRecord record = command.weaningRecord();
         Rabbit kit = new Rabbit();
-        kit.setHouseId(command.houseId());
+        kit.setHouseId(record.getHouseId());
         kit.setCageId(cageId);
-        kit.setMotherId(command.motherRabbitId());
+        kit.setMotherId(record.getRabbitId());
         kit.setFatherId(command.sireRabbitId());
-        kit.setBirthBatchId(command.batchId());
-        kit.setBirthCycleId(command.cycleId());
+        kit.setBirthBatchId(record.getBatchId());
+        kit.setBirthCycleId(record.getBreedingCycleId());
         kit.setType("2");
-        kit.setGender(pickGender(index, orZero(command.maleCount()), orZero(command.femaleCount())));
+        kit.setGender(pickGender(index, orZero(record.getMaleCount()), orZero(record.getFemaleCount())));
         kit.setArrivalMethod("1");
-        kit.setArrivalDate(command.weaningDate());
-        kit.setWeight(command.avgWeight());
+        kit.setArrivalDate(command.separatedAt());
+        kit.setWeight(record.getAvgWeight());
         kit.setGrowthStage("JUVENILE");
-        kit.setGrowthStageEnteredAt(command.weaningDate());
+        kit.setGrowthStageEnteredAt(command.separatedAt());
         kit.setIsActive(Boolean.TRUE);
         kit.setIsQuarantined(Boolean.FALSE);
         kit.setRequestId(ReproRequestIds.derive(command.requestId(), "kit-" + index));
@@ -265,7 +173,6 @@ public class KitPlacementService {
         return kit;
     }
 
-    /** 不区分性别时一律记为母；给了公母数则前 maleCount 只记公。 */
     private static String pickGender(int index, int maleCount, int femaleCount) {
         if (maleCount + femaleCount == 0) {
             return "0";
@@ -273,12 +180,6 @@ public class KitPlacementService {
         return index < maleCount ? "1" : "0";
     }
 
-    /**
-     * 批量插入仔兔并回填主键。
-     *
-     * <p>MyBatis 的批量插入不回填自增 id，而后续的批次成员和状态历史都需要它，
-     * 所以按 request_id 回查一次——request_id 在仔兔上是唯一的。
-     */
     private void insertKitsAndHydrateIds(List<Rabbit> kits) {
         for (int from = 0; from < kits.size(); from += BULK_WRITE_SIZE) {
             int to = Math.min(from + BULK_WRITE_SIZE, kits.size());
@@ -309,45 +210,39 @@ public class KitPlacementService {
         }
     }
 
-    private void linkKitsToBatch(
-        KitPlacementCommand command,
-        WeaningRecord record,
-        List<Rabbit> kits
-    ) {
-        GlobalSetting setting =
-            settingService.getEffectiveSetting(command.userId(), command.houseId());
-        Date saleDate = DateUtil.plusDays(
-            command.weaningDate(), setting.commodityMaturityDays()
+    private void linkKitsToBatch(KitSeparationCommand command, List<Rabbit> kits) {
+        WeaningRecord record = command.weaningRecord();
+        GlobalSetting setting = settingService.getEffectiveSetting(
+            command.userId(), record.getHouseId()
         );
+        Date saleDate = DateUtil.plusDays(command.separatedAt(), setting.commodityMaturityDays());
 
         List<BatchRabbit> links = new ArrayList<>(kits.size());
         List<RabbitStatusHistory> histories = new ArrayList<>(kits.size());
         for (Rabbit kit : kits) {
-            if (command.batchId() != null) {
-                BatchRabbit link = new BatchRabbit();
-                link.setBatchId(command.batchId());
-                link.setRabbitId(kit.getId());
-                link.setJoinReason("断奶");
-                link.setBatchRole("fattening");
-                link.setCurrentStatus("幼兔适应期");
-                link.setLastEventDate(command.weaningDate());
-                link.setNextEventDate(saleDate);
-                link.setNextEventType("出售");
-                link.setIsActive(Boolean.TRUE);
-                link.setJoinDate(command.weaningDate());
-                link.setCreateBy(command.operator());
-                link.setUpdateBy(command.operator());
-                links.add(link);
-            }
+            BatchRabbit link = new BatchRabbit();
+            link.setBatchId(record.getBatchId());
+            link.setRabbitId(kit.getId());
+            link.setJoinReason("分笼");
+            link.setBatchRole("fattening");
+            link.setCurrentStatus("幼兔适应期");
+            link.setLastEventDate(command.separatedAt());
+            link.setNextEventDate(saleDate);
+            link.setNextEventType("出售");
+            link.setIsActive(Boolean.TRUE);
+            link.setJoinDate(command.separatedAt());
+            link.setCreateBy(command.operator());
+            link.setUpdateBy(command.operator());
+            links.add(link);
 
             RabbitStatusHistory history = new RabbitStatusHistory();
-            history.setHouseId(command.houseId());
+            history.setHouseId(record.getHouseId());
             history.setRabbitId(kit.getId());
-            history.setBatchId(command.batchId());
+            history.setBatchId(record.getBatchId());
             history.setFromStatus(null);
             history.setToStatus("幼兔适应期");
-            history.setChangeTime(DateUtil.now());
-            history.setReason("断奶生成仔兔");
+            history.setChangeTime(command.separatedAt());
+            history.setReason("分笼生成仔兔");
             history.setRelatedRecordId(record.getId());
             history.setRelatedRecordTable("weaning_records");
             history.setCreateBy(command.operator());
@@ -355,10 +250,10 @@ public class KitPlacementService {
             histories.add(history);
 
             workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
-                command.houseId(),
+                record.getHouseId(),
                 TaskType.SALE_READY,
                 kit.getId(),
-                command.batchId(),
+                record.getBatchId(),
                 kit.getCageId(),
                 saleDate,
                 "商品兔成熟后可进入出售流程",
@@ -373,6 +268,14 @@ public class KitPlacementService {
             int to = Math.min(from + BULK_WRITE_SIZE, histories.size());
             rabbitStatusHistoryMapper.insertBatch(histories.subList(from, to));
         }
+    }
+
+    private static int allocationCount(List<WeaningRecordAllocation> allocations) {
+        int total = 0;
+        for (WeaningRecordAllocation allocation : allocations) {
+            total += orZero(allocation.getAllocCount());
+        }
+        return total;
     }
 
     private static int orZero(Integer value) {

@@ -57,6 +57,8 @@ class SchemaSqlV24Test {
             () -> assertCycleReference("prepartum_records", "idx_ppr_cycle"),
             () -> assertCycleReference("parturition_records", "idx_pr_cycle"),
             () -> assertCycleReference("weaning_records", "idx_wr_cycle"),
+            () -> assertContains(table("weaning_records"), "male_count int"),
+            () -> assertContains(table("weaning_records"), "female_count int"),
             () -> assertContains(table("rabbits"), "father_id bigint"),
             () -> assertContains(table("rabbits"), "birth_batch_id bigint"),
             () -> assertContains(table("rabbits"), "birth_cycle_id bigint"),
