@@ -29,6 +29,11 @@ class EventItem {
   bool get isBreedingCycle => category == '生产周期';
   bool get isReplacement => category == '后备成熟';
   bool get isTreatment => category == '治疗复查';
+  bool get isCommodityCare =>
+      eventType.startsWith('COMMODITY_') ||
+      eventType.contains('幼兔适应') ||
+      eventType.contains('生长饲喂') ||
+      eventType.contains('育肥饲喂');
 
   String get operationalTargetLabel {
     final id = rabbitId;
@@ -37,7 +42,8 @@ class EventItem {
     }
     if (isProduction &&
         !eventType.contains('出售') &&
-        !eventType.contains('后备')) {
+        !eventType.contains('后备') &&
+        !isCommodityCare) {
       return '母兔 #$id';
     }
     return '兔 #$id';

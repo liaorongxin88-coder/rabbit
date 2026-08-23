@@ -1272,11 +1272,14 @@ class _PendingWeaningSection extends StatelessWidget {
                   ),
                 ),
                 if (canEdit)
-                  OutlinedButton.icon(
-                    key: ValueKey('pending-weaning-separate-${record.id}'),
-                    onPressed: saving ? null : () => onSeparate(record),
-                    icon: const Icon(Icons.call_split_outlined),
-                    label: const Text('分笼'),
+                  SizedBox(
+                    width: 112,
+                    child: OutlinedButton.icon(
+                      key: ValueKey('pending-weaning-separate-${record.id}'),
+                      onPressed: saving ? null : () => onSeparate(record),
+                      icon: const Icon(Icons.call_split_outlined),
+                      label: const Text('分笼'),
+                    ),
                   ),
               ],
             ),
