@@ -30,7 +30,8 @@ export function WorkspaceDashboardPage() {
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!workspace.selectedHouse) {
+    const houseId = workspace.selectedHouse?.id
+    if (!houseId) {
       setSummary(null)
       setSaleTasks(null)
       setCommodityCareTasks(null)
@@ -42,10 +43,10 @@ export function WorkspaceDashboardPage() {
     setLoading(true)
     try {
       const results = await Promise.allSettled([
-        getDashboard(workspace.selectedHouse.id),
-        listReproTasks(workspace.selectedHouse.id, { type: 'SALE_READY', size: 1 }),
+        getDashboard(houseId),
+        listReproTasks(houseId, { type: 'SALE_READY', size: 1 }),
         ...commodityCareTaskTypes.map((type) =>
-          listReproTasks(workspace.selectedHouse.id, { type, size: 1 }),
+          listReproTasks(houseId, { type, size: 1 }),
         ),
       ])
       const [summaryResult, saleTasksResult, ...careResults] = results

@@ -12,7 +12,6 @@ import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 public class CommodityDailyCareReminderIT extends E2eTestSupport {
@@ -43,6 +42,13 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             "商品兔日常观察"
         );
         Date today = new Date();
+        jdbc.update(
+            "update rabbits set growth_stage = 'ADAPTATION', growth_stage_entered_at = ?"
+                + " where house_id = ? and id = ?",
+            today,
+            houseId,
+            rabbitId
+        );
 
         commodityDailyCareReminderService.scheduleHouse(houseId, today);
         commodityDailyCareReminderService.scheduleHouse(houseId, today);

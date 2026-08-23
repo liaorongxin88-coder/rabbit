@@ -45,8 +45,12 @@ public final class LegacyEventType {
             // 旧词是「断奶」，新词是「分笼」——同一件事，两个词。
             case WEANING -> "断奶";
             case SALE_READY -> "出售";
-            // 后备成熟走 replacement_records.expected_mature_date，周期级无对应列。
-            case REPLACEMENT_MATURE, CUSTOM -> null;
+            // 后备成熟和商品兔日常观察都没有旧周期列，由 work_tasks 直接展示。
+            case REPLACEMENT_MATURE,
+                 COMMODITY_ADAPTATION_CARE,
+                 COMMODITY_GROWING_CARE,
+                 COMMODITY_FATTENING_CARE,
+                 CUSTOM -> null;
         };
     }
 }
