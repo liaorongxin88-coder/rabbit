@@ -148,4 +148,40 @@ void main() {
         find.byKey(const ValueKey('batch-member-abortion-2301')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('没有本批次开放周期的母兔显示为活动已结束', (tester) async {
+    await pumpWithMembers(
+      tester,
+      const [
+        BatchRabbitItem(
+          id: 2401,
+          batchId: batchId,
+          rabbitId: 2401,
+          currentStatus: '待催情',
+          currentStage: null,
+          currentCycleId: null,
+          nextEventType: '',
+          batchRole: 'breeding',
+          isActive: true,
+          batchCycleCount: 1,
+        ),
+      ],
+    );
+
+    expect(find.byKey(const ValueKey('batch-member-2401')), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('batch-member-activity-filter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('活动已结束').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('batch-member-2401')), findsOneWidget);
+    expect(find.text('活动已结束'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('batch-member-action-2401')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -26,12 +26,15 @@ void main() {
     expect(item.isActivityActive, isTrue);
   });
 
-  test('batch member parses batch-scoped production tracking totals', () {
+  test('batch member marks a closed batch activity as ended', () {
     final item = BatchRabbitItem.fromJson({
       'id': 1,
       'batchId': 2,
       'rabbitId': 3,
-      'currentStatus': '旧状态',
+      'currentStatus': '待催情',
+      'isActive': true,
+      'currentStage': null,
+      'currentCycleId': null,
       'nextEventType': '',
       'batchRole': 'breeding',
       'batchCycleCount': 2,
@@ -43,7 +46,7 @@ void main() {
       'batchLastOperationAt': '2026-08-20T10:30:00',
     });
 
-    expect(item.displayStatus, '周期已结束');
+    expect(item.displayStatus, '活动已结束');
     expect(item.isActivityActive, isFalse);
     expect(item.batchCycleCount, 2);
     expect(item.batchOperationCount, 9);
@@ -52,6 +55,27 @@ void main() {
     expect(item.batchLiveKits, 7);
     expect(item.batchWeanedKits, 6);
     expect(item.batchLastOperationAt, DateTime(2026, 8, 20, 10, 30));
+  });
+
+  test('batch activity does not fall back to a no-batch follow-up cycle', () {
+    for (final completion in ['流产', '空怀', '分笼']) {
+      final item = BatchRabbitItem.fromJson({
+        'id': 1,
+        'batchId': 2,
+        'rabbitId': 3,
+        'currentStatus': '待催情',
+        'isActive': true,
+        'currentStage': null,
+        'currentCycleId': null,
+        'batchRole': 'breeding',
+        'batchCycleCount': 1,
+        'batchOperationCount': 1,
+        'nextEventType': '',
+      });
+
+      expect(item.displayStatus, '活动已结束', reason: '$completion 后的旧批次');
+      expect(item.isActivityActive, isFalse, reason: '$completion 后的旧批次');
+    }
   });
 
   test('batch tracking event parses the public timeline contract', () {

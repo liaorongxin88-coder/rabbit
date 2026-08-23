@@ -28,35 +28,6 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({'token': 'operator-token'});
   });
 
-  testWidgets('batch AI shows optional buck choice and can submit without one',
-      (tester) async {
-    final adapter = _MatingAdapter();
-    final repository = _reproRepository(adapter);
-
-    await tester.pumpWidget(
-      _batchApp(
-        repository: repository,
-        rabbits: const [],
-      ),
-    );
-    await _open(tester, const ValueKey('open-batch-mating'));
-
-    await tester.tap(
-      find.byKey(const ValueKey('batch-mating-method-AI')),
-    );
-    await tester.pump();
-
-    expect(find.text('种公兔（可选）'), findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('batch-mating-male-none')), findsOneWidget);
-    final submit = find.byKey(const ValueKey('batch-mating-confirm'));
-    expect(tester.widget<ElevatedButton>(submit).onPressed, isNotNull);
-    await tester.tap(submit);
-    await tester.pumpAndSettle();
-    expect(adapter.actionRequests.single['matingMethod'], 'AI');
-    expect(adapter.actionRequests.single.containsKey('maleRabbitId'), isFalse);
-  });
-
   testWidgets(
       'single AI keeps the buck selector visible but clears it by default',
       (tester) async {
@@ -131,24 +102,6 @@ void main() {
     expect(adapter.actionRequests, isEmpty);
     expect(find.text('请选择种公兔'), findsOneWidget);
   });
-
-  testWidgets('batch natural mating disables confirmation without a valid male',
-      (tester) async {
-    final adapter = _MatingAdapter();
-    final repository = _reproRepository(adapter);
-
-    await tester.pumpWidget(
-      _batchApp(
-        repository: repository,
-        rabbits: const [],
-      ),
-    );
-    await _open(tester, const ValueKey('open-batch-mating'));
-
-    final submit = find.byKey(const ValueKey('batch-mating-confirm'));
-    expect(tester.widget<ElevatedButton>(submit).onPressed, isNull);
-    expect(adapter.actionRequests, isEmpty);
-  });
 }
 
 Future<void> _open(WidgetTester tester, Key key) async {
@@ -164,38 +117,6 @@ ReproRepository _reproRepository(_MatingAdapter adapter) {
   // Disposing the client after the test avoids leaking its Dio resources.
   addTearDown(client.dispose);
   return ReproRepository(client);
-}
-
-Widget _batchApp({
-  required ReproRepository repository,
-  required List<Rabbit> rabbits,
-}) {
-  return ProviderScope(
-    overrides: [
-      reproRepositoryProvider.overrideWithValue(repository),
-      allActiveHouseRabbitsProvider(8).overrideWith((_) async => rabbits),
-    ],
-    child: MaterialApp(
-      theme: buildAppTheme(),
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => Center(
-            child: ElevatedButton(
-              key: const ValueKey('open-batch-mating'),
-              onPressed: () => showBatchMatingSheet(
-                context: context,
-                houseId: 8,
-                batchId: 9,
-                rabbitIds: const [101],
-                requestId: 'batch-ai-request',
-              ),
-              child: const Text('打开批量配种'),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 Widget _singleApp({
@@ -262,9 +183,7 @@ class _MatingAdapter implements HttpClientAdapter {
   List<Map<String, dynamic>> get actionRequests {
     return requests
         .where(
-          (request) =>
-              request['path'] == '/api/repro/tasks/bulk-actions' ||
-              request['path'] == '/api/repro/cycles/301/actions',
+          (request) => request['path'] == '/api/repro/cycles/301/actions',
         )
         .map((request) => request['body'] as Map<String, dynamic>)
         .toList();
@@ -282,31 +201,6 @@ class _MatingAdapter implements HttpClientAdapter {
           ? Map<String, dynamic>.from(options.data as Map)
           : <String, dynamic>{},
     });
-    if (options.path.startsWith('/api/tasks')) {
-      return _json({
-        'total': 1,
-        'page': 1,
-        'size': 50,
-        'items': [
-          {
-            'id': 701,
-            'taskType': 'MATING',
-            'taskLabel': '待配种',
-            'action': 'MATING',
-            'cycleId': 301,
-            'rabbitId': 101,
-          },
-        ],
-      });
-    }
-    if (options.path == '/api/repro/tasks/bulk-actions') {
-      return _json({
-        'total': 1,
-        'succeeded': 1,
-        'failed': 0,
-        'items': [],
-      });
-    }
     return _json({'cycleId': 301});
   }
 

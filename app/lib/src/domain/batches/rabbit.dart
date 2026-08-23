@@ -66,21 +66,25 @@ class BatchRabbitItem {
   final int batchWeanedKits;
   final DateTime? batchLastOperationAt;
 
-  /// 界面上该显示的状态文字：优先用实时阶段，没有才回退到旧快照。
+  /// 界面上该显示的状态文字。
+  ///
+  /// 批次接口的 [currentStage] 只描述该批次内的开放周期。标签仍在、但
+  /// 当前批次已没有开放周期时，母兔可能在别处开始了下一轮待催情；那条
+  /// 全局周期不属于本批次，必须显示为活动已结束。
   String get displayStatus {
+    if (batchRole == 'breeding' && !isActivityActive) {
+      return '活动已结束';
+    }
     final stage = ReproStage.tryParse(currentStage);
     if (stage != null) {
       return stage.label;
-    }
-    if (batchRole == 'breeding' && batchCycleCount > 0) {
-      return '周期已结束';
     }
     return currentStatus.isEmpty ? '未入轨' : currentStatus;
   }
 
   bool get isNursing => currentNursingKits > 0;
 
-  /// 繁殖标签的活动性由该批次是否仍有开放周期决定；商品兔沿用在栏标签状态。
+  /// 繁殖标签只有在标签有效且该批次存在开放周期时才是活动状态。
   bool get isActivityActive => batchRole == 'breeding'
       ? isActive && (currentStage?.trim().isNotEmpty ?? false)
       : isActive;

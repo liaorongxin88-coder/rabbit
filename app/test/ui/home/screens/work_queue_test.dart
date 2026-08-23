@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/home/screens/overview.dart';
@@ -268,6 +269,66 @@ void main() {
     expect(find.text('今日提醒'), findsOneWidget);
     expect(find.text('筛选任务'), findsOneWidget);
     expect(find.text('提醒事件'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('replacement event requires control permission', (tester) async {
+    final event = EventItem(
+      recordId: 41,
+      category: '后备成熟',
+      eventType: '后备兔成熟',
+      eventDate: DateTime.now(),
+      batchId: null,
+      rabbitId: 501,
+      status: 'due',
+      sourceHouseId: 8,
+      sourceHouseName: '测试兔舍',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 8,
+                name: '测试兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => [event]),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'edit', isAdmin: false),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final replacementTab = find.descendant(
+      of: find.byType(TabBar),
+      matching: find.text('后备兔'),
+    );
+    await tester.ensureVisible(replacementTab);
+    await tester.tap(replacementTab);
+    await tester.pumpAndSettle();
+
+    final action = find.byKey(const ValueKey('production-event-rabbit-501'));
+    expect(action, findsOneWidget);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前权限无法将后备兔转为种兔'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('production-event-form-list')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

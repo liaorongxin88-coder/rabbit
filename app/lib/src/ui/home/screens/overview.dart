@@ -314,9 +314,15 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     if (!mounted) {
       return;
     }
-    if (!permission.canEdit) {
+    final canOperate =
+        event.isReplacement ? permission.canControl : permission.canEdit;
+    if (!canOperate) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前为只读权限，无法执行生产操作')),
+        SnackBar(
+          content: Text(
+            event.isReplacement ? '当前权限无法将后备兔转为种兔' : '当前为只读权限，无法执行生产操作',
+          ),
+        ),
       );
       return;
     }

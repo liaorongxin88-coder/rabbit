@@ -25,9 +25,7 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 /// 批量选择模式。
 ///
-/// 旧模型把催情分成「开始」与「完成」两个动作，中间多出一个「催情中」状态；
-/// doe-breeding-v2 取消了这个中间态，待催情一步直接推到待配种，
-/// 所以这里只剩一个催情动作（批量配种走单独的 _matingSelection 开关）。
+/// 批次页面只保留批量催情；配种必须从单只母兔的生产动作进入。
 enum _BulkMode { estrus }
 
 class HouseBatchDetailScreen extends ConsumerStatefulWidget {
@@ -49,12 +47,11 @@ class _HouseBatchDetailScreenState
     extends ConsumerState<HouseBatchDetailScreen> {
   static const _all = '__ALL__';
   static const _active = '__ACTIVE__';
-  static const _exited = '__EXITED__';
+  static const _ended = '__ENDED__';
 
   final _searchController = TextEditingController();
   final _selectedRabbitIds = <int>{};
   final _batchActionRequest = BatchWriteRequestController();
-  final _matingRequest = BatchWriteRequestController();
   final _completeRequest = BatchWriteRequestController();
 
   String _query = '';
@@ -62,7 +59,6 @@ class _HouseBatchDetailScreenState
   String _status = _all;
   String _activity = _active;
   _BulkMode? _selectionAction;
-  var _matingSelection = false;
   bool _saving = false;
 
   BatchDetailRequest get _request => BatchDetailRequest(
@@ -77,9 +73,7 @@ class _HouseBatchDetailScreenState
   }
 
   Future<void> _refresh({bool includePermission = false}) async {
-    if (_selectedRabbitIds.isNotEmpty ||
-        _selectionAction != null ||
-        _matingSelection) {
+    if (_selectedRabbitIds.isNotEmpty || _selectionAction != null) {
       setState(_resetSelectionState);
     }
     ref.invalidate(batchDetailProvider(_request));
@@ -108,18 +102,10 @@ class _HouseBatchDetailScreenState
   void _resetSelectionState() {
     _selectedRabbitIds.clear();
     _selectionAction = null;
-    _matingSelection = false;
   }
 
-  void _clearSelection({bool rotateRequest = true}) {
-    setState(() {
-      if (rotateRequest) {
-        _resetSelectionState();
-      } else {
-        _selectedRabbitIds.clear();
-        _selectionAction = null;
-      }
-    });
+  void _clearSelection() {
+    setState(_resetSelectionState);
   }
 
   @override
@@ -172,9 +158,7 @@ class _HouseBatchDetailScreenState
         if (mounted && _status != effectiveStatus) {
           setState(() {
             _status = effectiveStatus;
-            if (_selectedRabbitIds.isNotEmpty ||
-                _selectionAction != null ||
-                _matingSelection) {
+            if (_selectedRabbitIds.isNotEmpty || _selectionAction != null) {
               _resetSelectionState();
             }
           });
@@ -183,12 +167,12 @@ class _HouseBatchDetailScreenState
     }
     final filtered = _filterMembers(allMembers, status: effectiveStatus);
     final selected = allMembers
-        .where((item) =>
-            _selectedRabbitIds.contains(item.rabbitId) &&
-            (_matingSelection
-                ? _isMatingSelectable(item)
-                : _selectionAction == _BulkMode.estrus &&
-                    _isEstrusSelectable(item)))
+        .where(
+          (item) =>
+              _selectedRabbitIds.contains(item.rabbitId) &&
+              _selectionAction == _BulkMode.estrus &&
+              _isEstrusSelectable(item),
+        )
         .toList();
     if (selected.length != _selectedRabbitIds.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -204,7 +188,6 @@ class _HouseBatchDetailScreenState
           _selectedRabbitIds.removeAll(staleIds);
           if (_selectedRabbitIds.isEmpty) {
             _selectionAction = null;
-            _matingSelection = false;
           }
         });
       });
@@ -265,18 +248,13 @@ class _HouseBatchDetailScreenState
                       visible: filtered,
                       selected: selected,
                       selectionAction: _selectionAction,
-                      matingSelection: _matingSelection,
                       saving: _saving,
                       onSelect: () => _selectVisible(filtered),
-                      onSelectMating: () => _selectMatingVisible(filtered),
                       onClear:
                           _selectedRabbitIds.isEmpty ? null : _clearSelection,
                       onSubmit: selected.isEmpty || _selectionAction == null
                           ? null
                           : () => _submitAphrodisiac(selected),
-                      onSubmitMating: selected.isEmpty || !_matingSelection
-                          ? null
-                          : () => _submitMating(selected),
                     )
                   : const _ReadOnlyNotice();
           }
@@ -299,13 +277,7 @@ class _HouseBatchDetailScreenState
           }
 
           final item = filtered[index - 7];
-          // A selection mode owns the row checkboxes. Do not expose an
-          // aphrodisiac checkbox while the user is preparing a mating batch.
-          final action = !_matingSelection && _isEstrusSelectable(item)
-              ? _BulkMode.estrus
-              : null;
-          final matingSelectable =
-              _matingSelection && _isMatingSelectable(item);
+          final action = _isEstrusSelectable(item) ? _BulkMode.estrus : null;
           return Padding(
             padding: const EdgeInsets.only(top: 10),
             child: _BatchMemberCard(
@@ -313,14 +285,11 @@ class _HouseBatchDetailScreenState
               item: item,
               canEdit: canEdit,
               selectableAction: action,
-              matingSelectable: matingSelectable,
               selected: _selectedRabbitIds.contains(item.rabbitId),
               saving: _saving,
-              onSelectionChanged: matingSelectable
-                  ? (selected) => _toggleMatingSelection(item, selected)
-                  : action == null
-                      ? null
-                      : (selected) => _toggleSelection(item, action, selected),
+              onSelectionChanged: action == null
+                  ? null
+                  : (selected) => _toggleSelection(item, action, selected),
               onAction: canEdit && _memberIsActionable(item)
                   ? () => _handleMemberAction(item)
                   : null,
@@ -360,9 +329,7 @@ class _HouseBatchDetailScreenState
   void _updateFilter(VoidCallback update) {
     setState(() {
       update();
-      if (_selectedRabbitIds.isNotEmpty ||
-          _selectionAction != null ||
-          _matingSelection) {
+      if (_selectedRabbitIds.isNotEmpty || _selectionAction != null) {
         _resetSelectionState();
       }
     });
@@ -386,7 +353,7 @@ class _HouseBatchDetailScreenState
       if (_activity == _active && !item.isActivityActive) {
         return false;
       }
-      if (_activity == _exited && item.isActivityActive) {
+      if (_activity == _ended && item.isActivityActive) {
         return false;
       }
       if (query.isEmpty) {
@@ -417,9 +384,7 @@ class _HouseBatchDetailScreenState
       _role = _all;
       _status = _all;
       _activity = _active;
-      if (_selectedRabbitIds.isNotEmpty ||
-          _selectionAction != null ||
-          _matingSelection) {
+      if (_selectedRabbitIds.isNotEmpty || _selectionAction != null) {
         _resetSelectionState();
       }
     });
@@ -429,32 +394,7 @@ class _HouseBatchDetailScreenState
     final ids =
         visible.where(_isEstrusSelectable).map((item) => item.rabbitId).toSet();
     setState(() {
-      _matingSelection = false;
       _selectionAction = ids.isEmpty ? null : _BulkMode.estrus;
-      _selectedRabbitIds
-        ..clear()
-        ..addAll(ids);
-    });
-  }
-
-  void _selectMatingVisible(List<BatchRabbitItem> visible) {
-    final ids =
-        visible.where(_isMatingSelectable).map((item) => item.rabbitId).toSet();
-    if (ids.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前筛选结果没有可配种母兔')),
-      );
-      return;
-    }
-    if (ids.length > 1000) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('单次最多批量配种 1000 只母兔，请缩小筛选范围')),
-      );
-      return;
-    }
-    setState(() {
-      _matingSelection = true;
-      _selectionAction = null;
       _selectedRabbitIds
         ..clear()
         ..addAll(ids);
@@ -467,7 +407,6 @@ class _HouseBatchDetailScreenState
     bool selected,
   ) {
     setState(() {
-      _matingSelection = false;
       if (_selectionAction != null && _selectionAction != action) {
         _selectedRabbitIds.clear();
       }
@@ -479,20 +418,6 @@ class _HouseBatchDetailScreenState
       }
       if (_selectedRabbitIds.isEmpty) {
         _selectionAction = null;
-      }
-    });
-  }
-
-  void _toggleMatingSelection(BatchRabbitItem item, bool selected) {
-    if (!_matingSelection || !_isMatingSelectable(item)) return;
-    setState(() {
-      if (selected) {
-        _selectedRabbitIds.add(item.rabbitId);
-      } else {
-        _selectedRabbitIds.remove(item.rabbitId);
-      }
-      if (_selectedRabbitIds.isEmpty) {
-        _matingSelection = false;
       }
     });
   }
@@ -607,34 +532,6 @@ class _HouseBatchDetailScreenState
       if (mounted) {
         setState(() => _saving = false);
       }
-    }
-  }
-
-  Future<void> _submitMating(List<BatchRabbitItem> selected) async {
-    if (!_matingSelection || selected.isEmpty || _saving) return;
-    // 按实时阶段拆成两类：待配种的直接推进待办，哺乳中的需要先开新周期（血配）。
-    final nursing = selected
-        .where(
-          (item) =>
-              ReproStage.tryParse(item.currentStage) == ReproStage.awaitWeaning,
-        )
-        .map((item) => item.rabbitId)
-        .toList();
-    final matable = selected
-        .map((item) => item.rabbitId)
-        .where((id) => !nursing.contains(id))
-        .toList();
-    final completed = await showBatchMatingSheet(
-      context: context,
-      houseId: widget.houseId,
-      batchId: widget.batchId,
-      rabbitIds: matable,
-      nursingRabbitIds: nursing,
-      writeRequest: _matingRequest,
-    );
-    if (completed && mounted) {
-      _clearSelection();
-      _refresh();
     }
   }
 
@@ -947,14 +844,6 @@ class _HouseBatchDetailScreenState
     }
   }
 
-  /// 可配种包含两类：已到待配种的，以及还在哺乳、准备血配的。
-  /// 后者没有配种待办（哺乳周期不占流水线），提交时会先为她另开一个新周期。
-  static bool _isMatingSelectable(BatchRabbitItem item) {
-    if (!item.isActive || item.batchRole != 'breeding') return false;
-    final stage = ReproStage.tryParse(item.currentStage);
-    return stage == ReproStage.awaitMating || stage == ReproStage.awaitWeaning;
-  }
-
   /// 能不能对这只母兔执行催情。
   ///
   /// 判据是服务端维护的实时阶段，而不是旧的中文状态快照——
@@ -1093,12 +982,10 @@ class _BatchMetrics extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = members.where((item) => item.isActivityActive).length;
     final mothers = members
-        .where((item) =>
-            item.isActivityActive && item.batchRole == 'breeding')
+        .where((item) => item.isActivityActive && item.batchRole == 'breeding')
         .length;
     final commodity = members
-        .where((item) =>
-            item.isActivityActive && item.batchRole == 'fattening')
+        .where((item) => item.isActivityActive && item.batchRole == 'fattening')
         .length;
     final nursing = members.fold<int>(
       0,
@@ -1270,17 +1157,17 @@ class _MemberFilters extends StatelessWidget {
             key: const ValueKey('batch-member-activity-filter'),
             value: activity,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: '兔子状态'),
+            decoration: const InputDecoration(labelText: '批次活动'),
             items: const [
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._active,
-                  child: Text('活跃兔子')),
+                  child: Text('活动进行中')),
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._all,
-                  child: Text('全部兔子')),
+                  child: Text('全部标签')),
               DropdownMenuItem(
-                  value: _HouseBatchDetailScreenState._exited,
-                  child: Text('仅已退出兔子')),
+                  value: _HouseBatchDetailScreenState._ended,
+                  child: Text('活动已结束')),
             ],
             onChanged: (value) {
               if (value != null) onActivityChanged(value);
@@ -1314,31 +1201,23 @@ class _BatchSelectionBar extends StatelessWidget {
     required this.visible,
     required this.selected,
     required this.selectionAction,
-    required this.matingSelection,
     required this.saving,
     required this.onSelect,
-    required this.onSelectMating,
     required this.onClear,
     required this.onSubmit,
-    required this.onSubmitMating,
   });
 
   final List<BatchRabbitItem> visible;
   final List<BatchRabbitItem> selected;
   final _BulkMode? selectionAction;
-  final bool matingSelection;
   final bool saving;
   final VoidCallback onSelect;
-  final VoidCallback onSelectMating;
   final VoidCallback? onClear;
   final VoidCallback? onSubmit;
-  final VoidCallback? onSubmitMating;
 
   @override
   Widget build(BuildContext context) {
     final estrusCount = visible.where(_estrusSelectable).length;
-    final matingCount = visible.where(_matingSelectable).length;
-    const label = '催情';
 
     return SectionCard(
       child: Column(
@@ -1351,13 +1230,6 @@ class _BatchSelectionBar extends StatelessWidget {
             onPressed: saving || estrusCount == 0 ? null : onSelect,
             icon: const Icon(Icons.play_arrow),
             label: Text('选择当前待催情（$estrusCount）'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            key: const ValueKey('batch-select-mating-visible'),
-            onPressed: saving || matingCount == 0 ? null : onSelectMating,
-            icon: const Icon(Icons.favorite_border),
-            label: Text('选择当前可配种（$matingCount）'),
           ),
           if (selected.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -1372,29 +1244,15 @@ class _BatchSelectionBar extends StatelessWidget {
               ],
             ),
             FilledButton.icon(
-              key: ValueKey(
-                matingSelection
-                    ? 'batch-mating-submit'
-                    : 'batch-selected-submit',
-              ),
-              onPressed: saving
-                  ? null
-                  : matingSelection
-                      ? onSubmitMating
-                      : onSubmit,
+              key: const ValueKey('batch-selected-submit'),
+              onPressed: saving ? null : onSubmit,
               icon: saving
                   ? const SizedBox.square(
                       dimension: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(
-                      matingSelection ? Icons.favorite : Icons.play_arrow,
-                    ),
-              label: Text(
-                matingSelection
-                    ? '批量配种 ${selected.length} 只'
-                    : '批量$label ${selected.length} 只',
-              ),
+                  : const Icon(Icons.play_arrow),
+              label: Text('批量催情 ${selected.length} 只'),
             ),
           ],
         ],
@@ -1405,12 +1263,6 @@ class _BatchSelectionBar extends StatelessWidget {
   static bool _estrusSelectable(BatchRabbitItem item) {
     if (!item.isActive || item.batchRole != 'breeding') return false;
     return ReproStage.tryParse(item.currentStage) == ReproStage.awaitEstrus;
-  }
-
-  static bool _matingSelectable(BatchRabbitItem item) {
-    if (!item.isActive || item.batchRole != 'breeding') return false;
-    final stage = ReproStage.tryParse(item.currentStage);
-    return stage == ReproStage.awaitMating || stage == ReproStage.awaitWeaning;
   }
 }
 
@@ -1469,7 +1321,6 @@ class _BatchMemberCard extends StatelessWidget {
     required this.item,
     required this.canEdit,
     required this.selectableAction,
-    required this.matingSelectable,
     required this.selected,
     required this.saving,
     required this.onSelectionChanged,
@@ -1484,7 +1335,6 @@ class _BatchMemberCard extends StatelessWidget {
   final BatchRabbitItem item;
   final bool canEdit;
   final _BulkMode? selectableAction;
-  final bool matingSelectable;
   final bool selected;
   final bool saving;
   final ValueChanged<bool>? onSelectionChanged;
@@ -1506,7 +1356,7 @@ class _BatchMemberCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              if (canEdit && (selectableAction != null || matingSelectable))
+              if (canEdit && selectableAction != null)
                 Checkbox(
                   value: selected,
                   onChanged: saving
@@ -1570,7 +1420,8 @@ class _BatchMemberCard extends StatelessWidget {
               const _LabelChip(label: '批次标签'),
               Text(_roleLabel(item.batchRole)),
               if (item.cageId != null) Text('笼 #${item.cageId}'),
-              if (!item.isActive) const Text('已退出'),
+              if (!item.isActive && item.batchRole != 'breeding')
+                const Text('已退出'),
             ],
           ),
           if (_nextEventTypeFor(item).isNotEmpty ||

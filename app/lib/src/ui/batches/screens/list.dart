@@ -201,7 +201,7 @@ class _BatchListContentState extends State<_BatchListContent> {
         .where((status) => status.isNotEmpty)
         .toSet()
         .toList();
-    const priority = ['计划中', '进行中', '已完成'];
+    const priority = ['进行中', '已完成'];
     statuses.sort((left, right) {
       final leftIndex = priority.indexOf(left);
       final rightIndex = priority.indexOf(right);
@@ -634,8 +634,6 @@ class _BatchListCard extends StatelessWidget {
 
   _BatchStatusColors _statusColors(AppPalette palette, String status) {
     switch (status) {
-      case '计划中':
-        return _BatchStatusColors(palette.warningSoft, palette.warning);
       case '进行中':
         return _BatchStatusColors(palette.primarySoft, palette.primary);
       case '已完成':

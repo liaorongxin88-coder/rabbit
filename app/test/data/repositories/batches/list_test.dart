@@ -70,9 +70,9 @@ class _PagedBatchesAdapter implements HttpClientAdapter {
         'id': id,
         'houseId': 8,
         'batchCode': 'B-${id.toString().padLeft(4, '0')}',
-        'status': id.isEven ? '进行中' : '计划中',
+        'status': id.isEven ? '进行中' : '已完成',
         'startDate': '2026-08-14T00:00:00',
-        'endDate': null,
+        'endDate': id.isEven ? null : '2026-09-14T00:00:00',
         'remark': '分页测试 Batch $id',
       };
     });

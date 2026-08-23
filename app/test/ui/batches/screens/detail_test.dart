@@ -477,7 +477,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('batch mating selects current eligible mothers as one draft',
+  testWidgets('batch detail removes bulk mating but retains single mating',
       (tester) async {
     const request = BatchDetailRequest(houseId: 8, batchId: 16);
     await tester.pumpWidget(
@@ -502,29 +502,9 @@ void main() {
                 rabbitId: 1601,
                 currentStatus: '待配种',
                 currentStage: 'AWAIT_MATING',
+                currentCycleId: 901,
                 nextEventType: '配种',
                 batchRole: 'breeding',
-                isActive: true,
-              ),
-              BatchRabbitItem(
-                id: 2,
-                batchId: 16,
-                rabbitId: 1602,
-                currentStatus: '哺乳中',
-                currentStage: 'AWAIT_WEANING',
-                nextEventType: '配种',
-                batchRole: 'breeding',
-                isActive: true,
-              ),
-              BatchRabbitItem(
-                id: 3,
-                batchId: 16,
-                rabbitId: 1603,
-                currentStatus: '已配种',
-                currentStage: 'AWAIT_PALPATION',
-                nextEventType: '摸胎',
-                batchRole: 'breeding',
-                isActive: true,
               ),
             ],
           ),
@@ -540,35 +520,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final select = find.byKey(const ValueKey('batch-select-mating-visible'));
-    await _scrollDetailUntilVisible(tester, select);
-    expect(select, findsOneWidget);
-    expect(tester.widget<OutlinedButton>(select).onPressed, isNotNull);
-    await tester.tap(select);
-    await tester.pumpAndSettle();
-
-    expect(find.text('已选择 2 只母兔'), findsOneWidget);
-    expect(find.byKey(const ValueKey('batch-mating-submit')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('batch-select-mating-visible')),
+      findsNothing,
+    );
+    expect(find.text('批量配种'), findsNothing);
     await _scrollDetailUntilVisible(
       tester,
       find.byKey(const ValueKey('batch-member-1601')),
     );
-    expect(find.byKey(const ValueKey('batch-member-1601')), findsOneWidget);
-    await _scrollDetailUntilVisible(
-      tester,
-      find.byKey(const ValueKey('batch-member-1602')),
-    );
-    expect(find.byKey(const ValueKey('batch-member-1602')), findsOneWidget);
-    await _scrollDetailUntilVisible(
-      tester,
-      find.byKey(const ValueKey('batch-member-1603')),
-    );
     expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('batch-member-1603')),
-        matching: find.byType(Checkbox),
-      ),
-      findsNothing,
+      find.byKey(const ValueKey('batch-member-action-1601')),
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });

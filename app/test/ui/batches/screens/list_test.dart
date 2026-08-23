@@ -72,7 +72,7 @@ void main() {
     await tester.tap(find.text('已完成').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('显示 333 / 1001 个批次'), findsOneWidget);
+    expect(find.text('显示 500 / 1001 个批次'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     tester.view.physicalSize = const Size(412, 915);
@@ -358,7 +358,7 @@ const _house = RabbitHouse(
 );
 
 List<Batch> _batches(int count) {
-  const statuses = ['计划中', '进行中', '已完成'];
+  const statuses = ['进行中', '已完成'];
   return List.generate(
     count,
     (index) => Batch(
@@ -367,7 +367,7 @@ List<Batch> _batches(int count) {
       batchCode: 'B-${(index + 1).toString().padLeft(4, '0')}',
       status: statuses[index % statuses.length],
       startDate: DateTime(2026, 1, 1).add(Duration(days: index)),
-      endDate: index % statuses.length == 2
+      endDate: index % statuses.length == 1
           ? DateTime(2026, 2, 1).add(Duration(days: index))
           : null,
       remark: '第 ${index + 1} 个规模测试 Batch',
