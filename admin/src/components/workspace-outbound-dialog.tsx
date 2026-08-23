@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangleIcon, CheckCircle2Icon, ShieldCheckIcon, TruckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -59,12 +59,12 @@ export function WorkspaceOutboundDialog({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const open = controlledOpen ?? uncontrolledOpen
 
-  function setOpen(nextOpen: boolean) {
+  const setOpen = useCallback((nextOpen: boolean) => {
     if (controlledOpen === undefined) {
       setUncontrolledOpen(nextOpen)
     }
     onOpenChange?.(nextOpen)
-  }
+  }, [controlledOpen, onOpenChange])
   const [phase, setPhase] = useState<Phase>('select')
   const [task, setTask] = useState<OutboundTask | null>(null)
   const [selected, setSelected] = useState<Record<number, OutboundSelectedItem>>({})
@@ -79,7 +79,7 @@ export function WorkspaceOutboundDialog({
 
   const selectedItems = useMemo(() => Object.values(selected), [selected])
 
-  async function startTask() {
+  const startTask = useCallback(async () => {
     if (!houseId || initialized.current) return
     initialized.current = true
     setBusy(true)
@@ -101,13 +101,13 @@ export function WorkspaceOutboundDialog({
     } finally {
       setBusy(false)
     }
-  }
+  }, [houseId, setOpen])
 
   useEffect(() => {
     if (controlledOpen && houseId) {
       void startTask()
     }
-  }, [controlledOpen, houseId])
+  }, [controlledOpen, houseId, startTask])
 
   async function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
