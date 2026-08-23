@@ -26,7 +26,7 @@ public class CommodityDailyCareReminderJob {
         this.reminderService = reminderService;
     }
 
-    @Scheduled(cron = "0 5 0 * * ?")
+    @Scheduled(cron = "0 5 0 * * ?", zone = "Asia/Shanghai")
     public void scanDaily() {
         List<RabbitHouse> houses = rabbitHouseMapper.selectAllActive();
         Date now = DateUtil.now();
