@@ -1,4 +1,5 @@
-import type { Rabbit, RabbitSaleRequest } from '@/types/api'
+import type { Rabbit } from '@/types/api'
+import type { RabbitSaleRequest } from '@/types/rabbit-sale'
 
 export type RabbitSaleDraft = Omit<RabbitSaleRequest, 'requestId'>
 

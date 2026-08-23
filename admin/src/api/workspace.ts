@@ -26,7 +26,6 @@ import type {
   ProductionBatch,
   Rabbit,
   RabbitDepartureRequest,
-  RabbitSaleRequest,
   RabbitHouse,
   ReproActionResult,
   ReproBulkResult,
@@ -37,6 +36,7 @@ import type {
   WorkspaceUserProfile,
   SmsCodeDelivery,
 } from '@/types/api'
+import type { RabbitSaleRequest } from '@/types/rabbit-sale'
 
 export function requestId() {
   return crypto.randomUUID()

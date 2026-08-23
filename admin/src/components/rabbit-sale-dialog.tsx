@@ -17,7 +17,8 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
-import type { Rabbit, RabbitSaleRequest } from '@/types/api'
+import type { Rabbit } from '@/types/api'
+import type { RabbitSaleRequest } from '@/types/rabbit-sale'
 
 export function RabbitSaleDialog({
   rabbit,
