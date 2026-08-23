@@ -259,6 +259,16 @@ public class KitPlacementService {
                 "商品兔成熟后可进入出售流程",
                 command.operator()
             ));
+            workTaskWriter.scheduleDailyForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
+                record.getHouseId(),
+                TaskType.COMMODITY_ADAPTATION_CARE,
+                kit.getId(),
+                record.getBatchId(),
+                kit.getCageId(),
+                command.separatedAt(),
+                TaskType.COMMODITY_ADAPTATION_CARE.commodityDailyCareContent(),
+                command.operator()
+            ));
         }
         for (int from = 0; from < links.size(); from += BULK_WRITE_SIZE) {
             int to = Math.min(from + BULK_WRITE_SIZE, links.size());

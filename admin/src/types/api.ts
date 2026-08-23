@@ -241,6 +241,33 @@ export interface ProductionBatch {
   createTime?: string | null
 }
 
+export interface PendingWeaningRecord {
+  id: number
+  batchId: number
+  breedingCycleId?: number | null
+  rabbitId: number
+  weaningDate: string | number
+  weaningCount: number
+  waitingCount: number
+  maleCount?: number | null
+  femaleCount?: number | null
+  avgWeight?: number | null
+  allocSummary?: string | null
+}
+
+export interface WeaningSeparationRequest {
+  allocations: Array<{ cageId: number; count: number }>
+  requestId: string
+}
+
+export interface WeaningSeparationResult {
+  weaningRecordId: number
+  separatedCount: number
+  waitingCount: number
+  generatedRabbitIds: number[]
+  replayed: boolean
+}
+
 export interface BatchRabbit {
   id: number
   batchId: number

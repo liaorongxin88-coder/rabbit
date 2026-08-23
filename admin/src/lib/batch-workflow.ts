@@ -136,3 +136,11 @@ export function getOrCreateBatchActionRequest(
 export function batchActionPath(batchId: number, action: string) {
   return `/api/batches/${batchId}/${action}`
 }
+
+export function pendingWeaningRecordsPath(batchId: number) {
+  return `/api/batches/${batchId}/weaning-records`
+}
+
+export function weaningSeparationPath(batchId: number, weaningRecordId: number) {
+  return `/api/batches/${batchId}/weaning-records/${weaningRecordId}/separation`
+}

@@ -4,7 +4,12 @@ import {
   workspacePostJson,
   workspacePutJson,
 } from '@/lib/request'
-import { batchActionPath, rabbitEventPath } from '@/lib/batch-workflow'
+import {
+  batchActionPath,
+  pendingWeaningRecordsPath,
+  rabbitEventPath,
+  weaningSeparationPath,
+} from '@/lib/batch-workflow'
 import type {
   BatchRabbit,
   BreedingCycle,
@@ -17,6 +22,7 @@ import type {
   OutboundSelectedItem,
   OutboundSubmitResult,
   OutboundTask,
+  PendingWeaningRecord,
   ProductionBatch,
   Rabbit,
   RabbitDepartureRequest,
@@ -25,6 +31,8 @@ import type {
   ReproActionResult,
   ReproBulkResult,
   ReproTaskPage,
+  WeaningSeparationRequest,
+  WeaningSeparationResult,
   WorkspaceSession,
   WorkspaceUserProfile,
   SmsCodeDelivery,
@@ -264,6 +272,23 @@ export function listBreedingCycles(houseId: number, batchId: number) {
   return workspaceGetJson<BreedingCycle[]>(`/api/batches/${batchId}/breeding-cycles`, {
     houseId,
   })
+}
+
+export function listPendingWeaningRecords(houseId: number, batchId: number) {
+  return workspaceGetJson<PendingWeaningRecord[]>(pendingWeaningRecordsPath(batchId), { houseId })
+}
+
+export function separateWeaningRecord(
+  houseId: number,
+  batchId: number,
+  weaningRecordId: number,
+  data: WeaningSeparationRequest,
+) {
+  return workspacePostJson<WeaningSeparationResult>(
+    weaningSeparationPath(batchId, weaningRecordId),
+    data,
+    { houseId },
+  )
 }
 
 export function submitRabbitDeparture(

@@ -10,7 +10,9 @@ import {
   normalizeBatchActionPayload,
   normalizeParturitionCounts,
   normalizeParturitionPayload,
+  pendingWeaningRecordsPath,
   rabbitEventPath,
+  weaningSeparationPath,
 } from '../src/lib/batch-workflow.ts'
 
 test('normalizes active and completed batch statuses only', () => {
@@ -61,6 +63,14 @@ test('normalizes generic batch action payloads before comparing retries', () => 
   assert.equal(batchActionPath(21, 'aphrodisiac/start'), '/api/batches/21/aphrodisiac/start')
 })
 
+test('builds deferred weaning separation paths', () => {
+  assert.equal(pendingWeaningRecordsPath(21), '/api/batches/21/weaning-records')
+  assert.equal(
+    weaningSeparationPath(21, 34),
+    '/api/batches/21/weaning-records/34/separation',
+  )
+})
+
 test('reuses generic batch action requestId only for the same batch action draft', () => {
   let sequence = 0
   const createRequestId = () => `action-${++sequence}`
@@ -101,4 +111,24 @@ test('reuses generic batch action requestId only for the same batch action draft
   assert.equal(changedAction.requestId, 'action-3')
   assert.equal(changedBatch.requestId, 'action-4')
   assert.equal(afterSuccessClear.requestId, 'action-5')
+
+  const separation = getOrCreateBatchActionRequest(null, {
+    batchId: 34,
+    action: 'separation',
+    payload: { allocations: [{ cageId: 8, count: 3 }] },
+  }, createRequestId)
+  const separationRetry = getOrCreateBatchActionRequest(separation, {
+    batchId: 34,
+    action: 'separation',
+    payload: { allocations: [{ count: 3, cageId: 8 }] },
+  }, createRequestId)
+  const separationChanged = getOrCreateBatchActionRequest(separationRetry, {
+    batchId: 34,
+    action: 'separation',
+    payload: { allocations: [{ cageId: 8, count: 2 }] },
+  }, createRequestId)
+
+  assert.equal(separation.requestId, 'action-6')
+  assert.equal(separationRetry.requestId, 'action-6')
+  assert.equal(separationChanged.requestId, 'action-7')
 })

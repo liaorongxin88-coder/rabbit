@@ -79,6 +79,9 @@ public class BatchWeaningSeparationService {
         if (batch == null) {
             throw new BizException(404, "批次不存在");
         }
+        if ("已完成".equals(batch.getStatus())) {
+            throw new BizException(400, "批次已完成");
+        }
 
         List<WeaningRecordAllocation> allocations = allocations(weaningRecordId, request);
         RequestDedupService.BeginResult dedup = requestDedupService.begin(

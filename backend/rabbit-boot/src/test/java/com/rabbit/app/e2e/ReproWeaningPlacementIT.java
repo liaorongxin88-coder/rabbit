@@ -50,8 +50,15 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
         Scenario scenario = nursingScenario("partial", 1, 7);
         long cycleId = scenario.cycleIds().get(0);
         long motherId = scenario.doeIds().get(0);
+        Long sireCage = jdbc.queryForObject(
+            "select id from cages where house_id = ? and id <> ? and rabbit_count = 0"
+                + " order by id limit 1",
+            Long.class,
+            scenario.houseId(),
+            scenario.spareCage()
+        );
         long sireId = createRabbit(
-            scenario.owner(), scenario.houseId(), scenario.spareCage(), "0", "1", "partial_sire"
+            scenario.owner(), scenario.houseId(), sireCage, "0", "1", "partial_sire"
         );
         jdbc.update("update breeding_cycles set male_rabbit_id = ? where id = ?", sireId, cycleId);
 
@@ -92,10 +99,44 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             scenario.batchId()
         ));
         Assertions.assertEquals(7, count(
+            "select count(*) from work_tasks where batch_id = ?"
+                + " and task_type = 'COMMODITY_ADAPTATION_CARE' and status = 'PENDING'",
+            scenario.batchId()
+        ));
+        Assertions.assertEquals(7, count(
             "select alloc_count from weaning_record_allocations where weaning_record_id = ? and cage_id = ?",
             recordId, scenario.spareCage()
         ));
-        assertCageCountMatchesReality(scenario.spareCage(), 8);
+        assertCageCountMatchesReality(scenario.spareCage(), 7);
+    }
+
+    @Test
+    void completedBatchRejectsDeferredSeparation() {
+        Scenario scenario = nursingScenario("completed", 1, 3);
+        long cycleId = scenario.cycleIds().get(0);
+        long recordId = wean(
+            scenario, cycleId, 3, 1, 2, scenario.spareCage(), "completed_wean"
+        ).get("weaningRecordId").asLong();
+        jdbc.update("update batches set status = '已完成', end_date = now() where id = ?", scenario.batchId());
+
+        api.expectError(
+            separationPath(scenario.batchId(), recordId),
+            HttpMethod.POST,
+            scenario.owner().token,
+            scenario.houseId(),
+            obj(
+                "allocations", List.of(allocation(scenario.spareCage(), 3)),
+                "requestId", requestId("completed_separation")
+            ),
+            400,
+            "批次已完成"
+        );
+        Assertions.assertEquals(3, count(
+            "select waiting_count from weaning_records where id = ?", recordId
+        ));
+        Assertions.assertEquals(0, count(
+            "select count(*) from rabbits where birth_cycle_id = ?", cycleId
+        ));
     }
 
     @Test
@@ -201,8 +242,8 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             second.owner().token,
             second.houseId(),
             obj("allocations", List.of(allocation(second.spareCage(), 1)), "requestId", requestId("scope_cross")),
-            403,
-            "权限"
+            404,
+            "批次不存在"
         );
 
         Scenario zero = nursingScenario("zero", 1, 0);

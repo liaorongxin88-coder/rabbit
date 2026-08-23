@@ -17,8 +17,10 @@ import {
   listBatches,
   listBreedingCycles,
   listCages,
+  listPendingWeaningRecords,
   listRabbits,
   listReproStageActions,
+  separateWeaningRecord,
   submitBatchAction,
   submitRabbitDeparture,
   submitReproAction,
@@ -62,6 +64,7 @@ import type {
   BatchRabbit,
   BreedingCycle,
   Cage,
+  PendingWeaningRecord,
   ProductionBatch,
   Rabbit,
   RabbitDepartureRequest,
@@ -82,6 +85,7 @@ type BatchWorkflowAction =
   | 'prepartum'
   | 'delivery'
   | 'weaning'
+  | 'separation'
   | 'abortion'
   | 'departure'
   | 'complete'
@@ -92,7 +96,8 @@ const actionLabels: Record<BatchWorkflowAction, string> = {
   palpation: '记录摸胎',
   prepartum: '完成备产',
   delivery: '记录分娩',
-  weaning: '记录分笼',
+  weaning: '记录断奶',
+  separation: '执行分笼',
   abortion: '记录流产',
   departure: '登记离场',
   complete: '完成批次',
@@ -539,7 +544,10 @@ function BatchActionDialog({
   const [weaningCount, setWeaningCount] = useState('0')
   const [maleCount, setMaleCount] = useState('0')
   const [femaleCount, setFemaleCount] = useState('0')
-  const [targetCageId, setTargetCageId] = useState('')
+  const [pendingWeaningRecords, setPendingWeaningRecords] = useState<PendingWeaningRecord[]>([])
+  const [weaningRecordId, setWeaningRecordId] = useState('')
+  const [separationCageId, setSeparationCageId] = useState('')
+  const [separationCount, setSeparationCount] = useState('1')
   const [avgWeight, setAvgWeight] = useState('')
   const [force, setForce] = useState(false)
   const [departureType, setDepartureType] = useState<RabbitDepartureType>('cull')
@@ -567,7 +575,10 @@ function BatchActionDialog({
     setWeaningCount('0')
     setMaleCount('0')
     setFemaleCount('0')
-    setTargetCageId('')
+    setPendingWeaningRecords([])
+    setWeaningRecordId('')
+    setSeparationCageId('')
+    setSeparationCount('1')
     setAvgWeight('')
     setForce(false)
     setDepartureType('cull')
@@ -585,14 +596,19 @@ function BatchActionDialog({
     void Promise.allSettled([
       listBatchRabbits(houseId, batch.id),
       listBreedingCycles(houseId, batch.id),
+      listPendingWeaningRecords(houseId, batch.id),
     ])
-      .then(([itemsResult, cyclesResult]) => {
+      .then(([itemsResult, cyclesResult, weaningResult]) => {
         if (!active) return
         if (itemsResult.status === 'fulfilled') {
           setBatchRabbits(itemsResult.value)
           setRabbitId(String(itemsResult.value.find((item) => item.isActive && item.batchRole === 'breeding')?.rabbitId ?? ''))
         }
         if (cyclesResult.status === 'fulfilled') setBreedingCycles(cyclesResult.value)
+        if (weaningResult.status === 'fulfilled') {
+          setPendingWeaningRecords(weaningResult.value)
+          setWeaningRecordId(String(weaningResult.value[0]?.id ?? ''))
+        }
       })
     return () => {
       active = false
@@ -606,6 +622,14 @@ function BatchActionDialog({
   const activeBatchRabbits = useMemo(
     () => batchRabbits.filter((item) => item.isActive && item.batchRole === 'breeding'),
     [batchRabbits],
+  )
+  const selectedWeaningRecord = useMemo(
+    () => pendingWeaningRecords.find((record) => String(record.id) === weaningRecordId) ?? null,
+    [pendingWeaningRecords, weaningRecordId],
+  )
+  const commodityCages = useMemo(
+    () => cages.filter((cage) => cage.isEnabled && (cage.status === '0' || cage.status === '3')),
+    [cages],
   )
   // 阶段字典是业务常量，开一次弹窗拉一次即可。
   useEffect(() => {
@@ -702,6 +726,44 @@ function BatchActionDialog({
       }
       return
     }
+    if (action === 'separation') {
+      const recordId = Number(weaningRecordId)
+      const cageId = Number(separationCageId)
+      const count = Number(separationCount)
+      if (!recordId || !cageId || !Number.isInteger(count) || count <= 0) {
+        toast.error('请选择待分笼记录、目标笼位和有效数量')
+        return
+      }
+      if (!selectedWeaningRecord || count > selectedWeaningRecord.waitingCount) {
+        toast.error('分笼数量不能超过待分笼数量')
+        return
+      }
+      const payload = { allocations: [{ cageId, count }] }
+      const request = getOrCreateBatchActionRequest(
+        pendingBatchActionRequest.current,
+        { batchId: recordId, action, payload },
+        () => crypto.randomUUID(),
+      )
+      pendingBatchActionRequest.current = request
+      setSaving(true)
+      try {
+        const separated = await separateWeaningRecord(
+          houseId,
+          batch.id,
+          recordId,
+          { ...payload, requestId: request.requestId },
+        )
+        pendingBatchActionRequest.current = null
+        toast.success(`已分笼 ${separated.separatedCount} 只，剩余 ${separated.waitingCount} 只`)
+        onOpenChange(false)
+        await onSaved()
+      } catch {
+        // 保留 requestId，让未改动载荷的重试保持幂等。
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     const reproAction = reproActionByWorkflow[action]
     let data: Record<string, unknown>
     if (reproAction) {
@@ -767,7 +829,6 @@ function BatchActionDialog({
             weanedCount: Number(weaningCount),
             maleCount: Number(maleCount),
             femaleCount: Number(femaleCount),
-            targetCageId: targetCageId ? Number(targetCageId) : undefined,
             avgWeaningWeight: avgWeight ? Number(avgWeight) : undefined,
             remark: remark.trim(),
           }
@@ -823,9 +884,9 @@ function BatchActionDialog({
     }
   }
 
-  const requiresRabbit = action !== 'complete'
-  // 所有生产动作现在都记录发生时间（occurredAt），不再有无日期的动作。
-  const usesDate = true
+  const requiresRabbit = action !== 'complete' && action !== 'separation'
+  // 分笼使用服务端执行时间；其它生产动作记录用户选择的业务日期。
+  const usesDate = action !== 'separation'
   const batchCompleted = isCompletedBatchStatus(batch?.status)
 
   return (
@@ -841,7 +902,7 @@ function BatchActionDialog({
               <FieldLabel htmlFor="batch-action">操作类型</FieldLabel>
               <Select value={action} onValueChange={(value) => setAction(value as BatchWorkflowAction)}>
                 <SelectTrigger id="batch-action"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup>{Object.entries(actionLabels).filter(([value]) => (value !== 'departure' || canRabbitEdit) && (value !== 'abortion' || abortionAllowed)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
+                <SelectContent><SelectGroup>{Object.entries(actionLabels).filter(([value]) => (value !== 'departure' || canRabbitEdit) && (value !== 'abortion' || abortionAllowed) && (value !== 'separation' || pendingWeaningRecords.length > 0)).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectGroup></SelectContent>
               </Select>
             </Field>
             {requiresRabbit ? (
@@ -1001,6 +1062,51 @@ function BatchActionDialog({
                 </div>
               </>
             ) : null}
+            {action === 'separation' ? (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="pending-weaning-record">待分笼记录</FieldLabel>
+                  <Select value={weaningRecordId} onValueChange={(value) => {
+                    setWeaningRecordId(value)
+                    setSeparationCount('1')
+                    pendingBatchActionRequest.current = null
+                  }}>
+                    <SelectTrigger id="pending-weaning-record"><SelectValue placeholder="选择断奶记录" /></SelectTrigger>
+                    <SelectContent><SelectGroup>{pendingWeaningRecords.map((record) => (
+                      <SelectItem key={record.id} value={String(record.id)}>
+                        母兔 #{record.rabbitId} · 待分笼 {record.waitingCount} 只 · {formatDate(String(record.weaningDate))}
+                      </SelectItem>
+                    ))}</SelectGroup></SelectContent>
+                  </Select>
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="separation-cage">商品兔笼位</FieldLabel>
+                    <Select value={separationCageId} onValueChange={(value) => {
+                      setSeparationCageId(value)
+                      pendingBatchActionRequest.current = null
+                    }}>
+                      <SelectTrigger id="separation-cage"><SelectValue placeholder="选择笼位" /></SelectTrigger>
+                      <SelectContent><SelectGroup>{commodityCages.map((cage) => (
+                        <SelectItem key={cage.id} value={String(cage.id)}>
+                          {cage.cageNumber} · 当前 {cage.rabbitCount ?? 0} 只
+                        </SelectItem>
+                      ))}</SelectGroup></SelectContent>
+                    </Select>
+                  </Field>
+                  <NumberInput
+                    id="separation-count"
+                    label={`分笼数量${selectedWeaningRecord ? `（剩余 ${selectedWeaningRecord.waitingCount}）` : ''}`}
+                    value={separationCount}
+                    onChange={(value) => {
+                      setSeparationCount(value)
+                      pendingBatchActionRequest.current = null
+                    }}
+                  />
+                </div>
+                {selectedWeaningRecord?.allocSummary ? <p className="text-xs text-muted-foreground">已分配：{selectedWeaningRecord.allocSummary}</p> : null}
+              </>
+            ) : null}
             {action === 'weaning' ? (
               <>
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -1008,19 +1114,11 @@ function BatchActionDialog({
                   <NumberInput id="weaning-male" label="公兔数" value={maleCount} onChange={setMaleCount} />
                   <NumberInput id="weaning-female" label="母兔数" value={femaleCount} onChange={setFemaleCount} />
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="target-cage">目标笼位</FieldLabel>
-                    <Select value={targetCageId} onValueChange={setTargetCageId}>
-                      <SelectTrigger id="target-cage"><SelectValue placeholder="不调整" /></SelectTrigger>
-                      <SelectContent><SelectGroup>{cages.filter((cage) => cage.isEnabled).map((cage) => <SelectItem key={cage.id} value={String(cage.id)}>{cage.cageNumber}</SelectItem>)}</SelectGroup></SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="average-weight">平均体重（kg）</FieldLabel>
-                    <Input id="average-weight" type="number" min={0} step="0.01" value={avgWeight} onChange={(event) => setAvgWeight(event.target.value)} />
-                  </Field>
-                </div>
+                <Field>
+                  <FieldLabel htmlFor="average-weight">平均体重（kg）</FieldLabel>
+                  <Input id="average-weight" type="number" min={0} step="0.01" value={avgWeight} onChange={(event) => setAvgWeight(event.target.value)} />
+                </Field>
+                <p className="text-xs text-muted-foreground">断奶后只登记待分笼数量，不会立即创建商品兔或占用笼位。</p>
               </>
             ) : null}
             {action === 'complete' ? (
@@ -1053,7 +1151,8 @@ function BatchActionDialog({
                 batchCompleted ||
                 (requiresRabbit && !rabbitId) ||
                 (action === 'mating' && !maleRabbitId) ||
-                (action === 'departure' && (!departureReason.trim() || !departureConfirmed))
+                (action === 'departure' && (!departureReason.trim() || !departureConfirmed)) ||
+                (action === 'separation' && (!weaningRecordId || !separationCageId || Number(separationCount) <= 0))
               }
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
