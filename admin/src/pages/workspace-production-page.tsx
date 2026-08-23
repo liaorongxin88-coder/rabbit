@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   CalendarClockIcon,
   ChevronLeftIcon,
@@ -19,7 +20,6 @@ import {
   listRabbits,
   listReproStageActions,
   submitBatchAction,
-  submitBulkMating,
   submitRabbitDeparture,
   submitReproAction,
   type ReproActionName,
@@ -32,11 +32,8 @@ import {
   batchStatusLabel,
   BATCH_MOTHER_PAGE_SIZE,
   getOrCreateBatchActionRequest,
-  getOrCreateBulkMatingRequest,
   getOrCreateRabbitDepartureRequest,
-  isBulkMatingEligible,
   isCompletedBatchStatus,
-  MAX_BULK_MATING_MOTHERS,
   normalizeParturitionPayload,
   type PendingBatchActionRequest,
 } from '@/lib/batch-workflow'
@@ -63,7 +60,6 @@ import { Textarea } from '@/components/ui/textarea'
 import type {
   BatchRabbit,
   BreedingCycle,
-  BulkMatingRequest,
   Cage,
   ProductionBatch,
   Rabbit,
@@ -81,7 +77,6 @@ import type {
 type BatchWorkflowAction =
   | 'estrus'
   | 'mating'
-  | 'mating/bulk'
   | 'palpation'
   | 'prepartum'
   | 'delivery'
@@ -93,7 +88,6 @@ type BatchWorkflowAction =
 const actionLabels: Record<BatchWorkflowAction, string> = {
   estrus: '记录催情',
   mating: '记录配种',
-  'mating/bulk': '批量配种',
   palpation: '记录摸胎',
   prepartum: '完成备产',
   delivery: '记录分娩',
@@ -107,7 +101,6 @@ const actionLabels: Record<BatchWorkflowAction, string> = {
 const reproActionByWorkflow: Partial<Record<BatchWorkflowAction, ReproActionName>> = {
   estrus: 'ESTRUS',
   mating: 'MATING',
-  'mating/bulk': 'MATING',
   palpation: 'PALPATION',
   prepartum: 'PREPARTUM',
   delivery: 'DELIVERY',
@@ -117,6 +110,7 @@ const reproActionByWorkflow: Partial<Record<BatchWorkflowAction, ReproActionName
 
 export function WorkspaceProductionPage() {
   const workspace = useWorkspace()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [batches, setBatches] = useState<ProductionBatch[]>([])
   const [batchMotherCounts, setBatchMotherCounts] = useState<Record<number, number | null>>({})
   const [rabbits, setRabbits] = useState<Rabbit[]>([])
@@ -128,6 +122,19 @@ export function WorkspaceProductionPage() {
   const canRabbitEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
   const canOutboundEdit = hasPermission(workspace.permission, 'rabbit:outbound:edit')
   const canControl = hasPermission(workspace.permission, 'rabbit:rabbits:control')
+  const outboundOpen = searchParams.get('outbound') === '1'
+
+  const setOutboundOpen = useCallback((open: boolean) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (open) {
+        next.set('outbound', '1')
+      } else {
+        next.delete('outbound')
+      }
+      return next
+    })
+  }, [setSearchParams])
 
   const load = useCallback(async () => {
     if (!workspace.selectedHouse) {
@@ -190,7 +197,9 @@ export function WorkspaceProductionPage() {
               houseId={workspace.selectedHouse?.id ?? null}
               disabled={!canOutboundEdit}
               canControl={canControl}
+              onOpenChange={setOutboundOpen}
               onSaved={load}
+              open={outboundOpen}
             />
             <CreateBatchDialog
               open={createOpen}
@@ -514,10 +523,6 @@ function BatchActionDialog({
   const [motherSearch, setMotherSearch] = useState('')
   const [motherPage, setMotherPage] = useState(1)
   const [maleRabbitId, setMaleRabbitId] = useState('')
-  const [bulkSelectedIds, setBulkSelectedIds] = useState<number[]>([])
-  const [bulkSearch, setBulkSearch] = useState('')
-  const [bulkStatus, setBulkStatus] = useState<'all' | '待配种' | '哺乳中'>('all')
-  const [bulkPage, setBulkPage] = useState(1)
   const [date, setDate] = useState(formatLocalDate())
   const [result, setResult] = useState('怀孕')
   const [totalKits, setTotalKits] = useState('0')
@@ -534,7 +539,6 @@ function BatchActionDialog({
   const [departureConfirmed, setDepartureConfirmed] = useState(false)
   const [remark, setRemark] = useState('')
   const [saving, setSaving] = useState(false)
-  const pendingBulkRequest = useRef<BulkMatingRequest | null>(null)
   const pendingDepartureRequest = useRef<RabbitDepartureRequest | null>(null)
   const pendingBatchActionRequest = useRef<PendingBatchActionRequest | null>(null)
 
@@ -547,10 +551,6 @@ function BatchActionDialog({
     setMotherSearch('')
     setMotherPage(1)
     setMaleRabbitId('')
-    setBulkSelectedIds([])
-    setBulkSearch('')
-    setBulkStatus('all')
-    setBulkPage(1)
     setDate(formatLocalDate())
     setResult('怀孕')
     setTotalKits('0')
@@ -566,7 +566,6 @@ function BatchActionDialog({
     setDepartureReason('')
     setDepartureConfirmed(false)
     setRemark('')
-    pendingBulkRequest.current = null
     pendingDepartureRequest.current = null
     pendingBatchActionRequest.current = null
 
@@ -653,94 +652,10 @@ function BatchActionDialog({
     (motherPage - 1) * BATCH_MOTHER_PAGE_SIZE,
     motherPage * BATCH_MOTHER_PAGE_SIZE,
   )
-  const eligibleBulkMothers = useMemo(
-    () => activeBatchRabbits.filter(isBulkMatingEligible),
-    [activeBatchRabbits],
-  )
-  const filteredBulkMothers = useMemo(() => {
-    const keyword = bulkSearch.trim().toLowerCase()
-    return eligibleBulkMothers.filter((item) => {
-      if (bulkStatus !== 'all' && item.currentStatus?.trim() !== bulkStatus) return false
-      if (!keyword) return true
-      return String(item.rabbitId).includes(keyword)
-        || String(item.cageId ?? '').includes(keyword)
-        || item.currentStatus?.toLowerCase().includes(keyword)
-    })
-  }, [bulkSearch, bulkStatus, eligibleBulkMothers])
-  const bulkPageCount = Math.max(1, Math.ceil(filteredBulkMothers.length / BATCH_MOTHER_PAGE_SIZE))
-  const visibleBulkMothers = filteredBulkMothers.slice(
-    (bulkPage - 1) * BATCH_MOTHER_PAGE_SIZE,
-    bulkPage * BATCH_MOTHER_PAGE_SIZE,
-  )
-
-  function toggleBulkMother(rabbitId: number) {
-    setBulkSelectedIds((current) => {
-      if (current.includes(rabbitId)) return current.filter((id) => id !== rabbitId)
-      if (current.length >= MAX_BULK_MATING_MOTHERS) {
-        toast.error(`单次最多选择 ${MAX_BULK_MATING_MOTHERS} 只母兔`)
-        return current
-      }
-      return [...current, rabbitId]
-    })
-  }
-
-  function toggleVisibleBulkMothers() {
-    const visibleIds = visibleBulkMothers.map((item) => item.rabbitId)
-    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => bulkSelectedIds.includes(id))
-    if (allVisibleSelected) {
-      setBulkSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)))
-      return
-    }
-    setBulkSelectedIds((current) => {
-      const newIds = visibleIds.filter((id) => !current.includes(id))
-      const available = MAX_BULK_MATING_MOTHERS - current.length
-      if (newIds.length > available) {
-        toast.error(`已达到单次 ${MAX_BULK_MATING_MOTHERS} 只上限`)
-      }
-      return [...current, ...newIds.slice(0, available)]
-    })
-  }
-
-  function selectAllFilteredBulkMothers() {
-    setBulkSelectedIds((current) => {
-      const merged = [...new Set([...current, ...filteredBulkMothers.map((item) => item.rabbitId)])]
-      if (merged.length > MAX_BULK_MATING_MOTHERS) {
-        toast.error(`单次最多选择 ${MAX_BULK_MATING_MOTHERS} 只母兔`)
-      }
-      return merged.slice(0, MAX_BULK_MATING_MOTHERS)
-    })
-  }
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!batch || !houseId || isCompletedBatchStatus(batch.status)) return
     const timestamp = new Date(`${date}T00:00:00`).getTime()
-    if (action === 'mating/bulk') {
-      if (bulkSelectedIds.length === 0 || !maleRabbitId) return
-      const request = getOrCreateBulkMatingRequest(
-        pendingBulkRequest.current,
-        {
-          femaleRabbitIds: bulkSelectedIds,
-          maleRabbitId: Number(maleRabbitId),
-          matingDate: timestamp,
-        },
-        () => crypto.randomUUID(),
-      )
-      pendingBulkRequest.current = request
-      setSaving(true)
-      try {
-        const result = await submitBulkMating(houseId, batch.id, request)
-        pendingBulkRequest.current = null
-        toast.success(`批量配种已保存，共 ${result.count} 只母兔`)
-        onOpenChange(false)
-        await onSaved()
-      } catch {
-        // Keep the requestId so an unchanged retry remains idempotent.
-      } finally {
-        setSaving(false)
-      }
-      return
-    }
     if (action === 'departure') {
       if (!canRabbitEdit) return
       const reason = departureReason.trim()
@@ -900,7 +815,7 @@ function BatchActionDialog({
     }
   }
 
-  const requiresRabbit = action !== 'complete' && action !== 'mating/bulk'
+  const requiresRabbit = action !== 'complete'
   // 所有生产动作现在都记录发生时间（occurredAt），不再有无日期的动作。
   const usesDate = true
   const batchCompleted = isCompletedBatchStatus(batch?.status)
@@ -993,83 +908,7 @@ function BatchActionDialog({
                 <p className="text-xs text-muted-foreground">共 {selectedMotherCycles.length} 个周期；重叠哺乳与妊娠时可明确指定。</p>
               </Field>
             ) : null}
-            {action === 'mating/bulk' ? (
-              <Field>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="min-w-52 flex-1">
-                    <FieldLabel htmlFor="bulk-mating-search">搜索可配种母兔</FieldLabel>
-                    <div className="relative mt-2">
-                      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                      <Input
-                        id="bulk-mating-search"
-                        className="pl-9"
-                        value={bulkSearch}
-                        placeholder="兔只 ID、笼位或状态"
-                        onChange={(event) => {
-                          setBulkSearch(event.target.value)
-                          setBulkPage(1)
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="w-full sm:w-40">
-                    <FieldLabel htmlFor="bulk-mating-status">繁殖状态</FieldLabel>
-                    <Select
-                      value={bulkStatus}
-                      onValueChange={(value) => {
-                        setBulkStatus(value as typeof bulkStatus)
-                        setBulkPage(1)
-                      }}
-                    >
-                      <SelectTrigger id="bulk-mating-status" className="mt-2"><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectGroup><SelectItem value="all">全部可配种</SelectItem><SelectItem value="待配种">待配种</SelectItem><SelectItem value="哺乳中">哺乳中</SelectItem></SelectGroup></SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="mt-3 overflow-hidden rounded-md border">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-secondary/50 px-3 py-2">
-                    <span className="text-sm text-muted-foreground">
-                      可选 {filteredBulkMothers.length} 只 · 已选 {bulkSelectedIds.length}/{MAX_BULK_MATING_MOTHERS}
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" size="sm" disabled={filteredBulkMothers.length === 0} onClick={selectAllFilteredBulkMothers}>选择筛选结果</Button>
-                      <Button type="button" variant="outline" size="sm" disabled={visibleBulkMothers.length === 0} onClick={toggleVisibleBulkMothers}>
-                        {visibleBulkMothers.length > 0 && visibleBulkMothers.every((item) => bulkSelectedIds.includes(item.rabbitId)) ? '取消本页' : '选择本页'}
-                      </Button>
-                      <Button type="button" variant="ghost" size="sm" disabled={bulkSelectedIds.length === 0} onClick={() => setBulkSelectedIds([])}>清空已选</Button>
-                    </div>
-                  </div>
-                  <div className="max-h-64 divide-y overflow-y-auto">
-                    {visibleBulkMothers.map((item) => (
-                      <label key={item.id} className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-secondary/50">
-                        <input
-                          className="size-5 shrink-0"
-                          type="checkbox"
-                          checked={bulkSelectedIds.includes(item.rabbitId)}
-                          onChange={() => toggleBulkMother(item.rabbitId)}
-                        />
-                        <span className="min-w-0 flex-1 truncate">兔 #{item.rabbitId} · 笼位 #{item.cageId ?? '-'}</span>
-                        <Badge variant="secondary">{item.currentStatus?.trim() || '批次中'}</Badge>
-                        {(item.currentNursingKits ?? 0) > 0 ? <span className="hidden text-xs text-muted-foreground sm:inline">哺乳 {item.currentNursingKits} 只</span> : null}
-                      </label>
-                    ))}
-                    {visibleBulkMothers.length === 0 ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">没有匹配的可配种母兔</p> : null}
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
-                    <span className="text-xs text-muted-foreground">第 {bulkPage}/{bulkPageCount} 页，每页最多 {BATCH_MOTHER_PAGE_SIZE} 只</span>
-                    <div className="flex gap-2">
-                      <Button type="button" variant="outline" size="sm" disabled={bulkPage <= 1} onClick={() => setBulkPage((current) => Math.max(1, current - 1))}>
-                        <ChevronLeftIcon data-icon="inline-start" />上一页
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" disabled={bulkPage >= bulkPageCount} onClick={() => setBulkPage((current) => Math.min(bulkPageCount, current + 1))}>
-                        下一页<ChevronRightIcon data-icon="inline-end" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Field>
-            ) : null}
-            {action === 'mating' || action === 'mating/bulk' ? (
+            {action === 'mating' ? (
               <Field>
                 <FieldLabel htmlFor="male-rabbit">种公兔</FieldLabel>
                 <Select value={maleRabbitId} onValueChange={setMaleRabbitId}>
@@ -1190,7 +1029,7 @@ function BatchActionDialog({
                 <Input id="batch-action-date" type="date" value={date} required onChange={(event) => setDate(event.target.value)} />
               </Field>
             ) : null}
-            {!['mating', 'mating/bulk'].includes(action) ? (
+            {action !== 'mating' ? (
               <Field>
                 <FieldLabel htmlFor="batch-action-remark">备注</FieldLabel>
                 <Textarea id="batch-action-remark" value={remark} onChange={(event) => setRemark(event.target.value)} />
@@ -1205,13 +1044,12 @@ function BatchActionDialog({
                 saving ||
                 batchCompleted ||
                 (requiresRabbit && !rabbitId) ||
-                ((action === 'mating' || action === 'mating/bulk') && !maleRabbitId) ||
-                (action === 'mating/bulk' && bulkSelectedIds.length === 0) ||
+                (action === 'mating' && !maleRabbitId) ||
                 (action === 'departure' && (!departureReason.trim() || !departureConfirmed))
               }
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              {action === 'mating/bulk' ? `提交 ${bulkSelectedIds.length} 只配种` : action === 'departure' ? '确认离场' : '保存记录'}
+              {action === 'departure' ? '确认离场' : '保存记录'}
             </Button>
           </DialogFooter>
         </form>

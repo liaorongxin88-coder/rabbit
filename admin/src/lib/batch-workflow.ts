@@ -1,19 +1,12 @@
-import type {
-  BatchRabbit,
-  BulkMatingRequest,
-  RabbitDepartureRequest,
-} from '@/types/api'
+import type { RabbitDepartureRequest } from '@/types/api'
 
 export type BatchStatusInput = string | null | undefined
 
-export const MAX_BULK_MATING_MOTHERS = 1000
 export const BATCH_MOTHER_PAGE_SIZE = 50
 
 const batchStatusAliases: Record<string, string> = {
-  PLANNED: '计划中',
   ACTIVE: '进行中',
   COMPLETED: '已完成',
-  CANCELLED: '已取消',
 }
 
 /** Normalize persisted batch statuses before comparing or rendering them. */
@@ -49,46 +42,6 @@ export function normalizeParturitionPayload(
   }
 }
 
-export function isBulkMatingEligible(
-  rabbit: Pick<BatchRabbit, 'isActive' | 'rabbitType' | 'rabbitGender' | 'currentStatus'>,
-) {
-  const status = rabbit.currentStatus?.trim()
-  return rabbit.isActive
-    && rabbit.rabbitType === '0'
-    && rabbit.rabbitGender === '0'
-    && (status === '待配种' || status === '哺乳中')
-}
-
-type BulkMatingPayload = Omit<BulkMatingRequest, 'requestId'>
-
-function sameNumberList(left: number[], right: number[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index])
-}
-
-export function normalizeBulkMatingPayload(payload: BulkMatingPayload): BulkMatingPayload {
-  return {
-    ...payload,
-    femaleRabbitIds: [...new Set(payload.femaleRabbitIds)].sort((left, right) => left - right),
-  }
-}
-
-export function getOrCreateBulkMatingRequest(
-  current: BulkMatingRequest | null,
-  payload: BulkMatingPayload,
-  createRequestId: () => string,
-): BulkMatingRequest {
-  const normalized = normalizeBulkMatingPayload(payload)
-  if (
-    current
-    && current.maleRabbitId === normalized.maleRabbitId
-    && current.matingDate === normalized.matingDate
-    && sameNumberList(current.femaleRabbitIds, normalized.femaleRabbitIds)
-  ) {
-    return current
-  }
-  return { ...normalized, requestId: createRequestId() }
-}
-
 type RabbitDeparturePayload = Omit<RabbitDepartureRequest, 'requestId'>
 
 export function getOrCreateRabbitDepartureRequest(
@@ -114,38 +67,58 @@ export function rabbitEventPath() {
   return '/api/rabbits/events'
 }
 
+type BatchActionValue =
+  | string
+  | number
+  | boolean
+  | null
+  | BatchActionValue[]
+  | { [key: string]: BatchActionValue }
+
+type BatchActionPayload = Record<string, BatchActionValue>
+
 export interface PendingBatchActionRequest {
   batchId: number
   action: string
-  payload: Record<string, unknown>
+  payload: BatchActionPayload
   requestId: string
 }
 
-function normalizeBatchActionValue(key: string, value: unknown): unknown {
+function normalizeBatchActionValue(
+  key: string,
+  value: unknown,
+): BatchActionValue | undefined {
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+    return value as string | number | boolean | null
+  }
   if (Array.isArray(value)) {
-    const normalized = value.map((item) => normalizeBatchActionValue('', item))
+    const normalized = value
+      .map((item) => normalizeBatchActionValue('', item))
+      .filter((item): item is BatchActionValue => item !== undefined)
     if (key.endsWith('Ids') && normalized.every((item) => typeof item === 'number')) {
-      return [...new Set(normalized as number[])].sort((left, right) => left - right)
+      return [...new Set(normalized)].sort((left, right) => left - right)
     }
     return normalized
   }
   if (value && typeof value === 'object') {
     return normalizeBatchActionPayload(value as Record<string, unknown>)
   }
-  return value
+  return undefined
 }
 
-export function normalizeBatchActionPayload(payload: Record<string, unknown>) {
-  return Object.keys(payload).sort().reduce<Record<string, unknown>>((normalized, key) => {
-    const value = payload[key]
-    if (value !== undefined) normalized[key] = normalizeBatchActionValue(key, value)
+export function normalizeBatchActionPayload(
+  payload: Record<string, unknown>,
+): BatchActionPayload {
+  return Object.keys(payload).sort().reduce<BatchActionPayload>((normalized, key) => {
+    const value = normalizeBatchActionValue(key, payload[key])
+    if (value !== undefined) normalized[key] = value
     return normalized
   }, {})
 }
 
 export function getOrCreateBatchActionRequest(
   current: PendingBatchActionRequest | null,
-  draft: Omit<PendingBatchActionRequest, 'requestId'>,
+  draft: { batchId: number; action: string; payload: Record<string, unknown> },
   createRequestId: () => string,
 ): PendingBatchActionRequest {
   const payload = normalizeBatchActionPayload(draft.payload)

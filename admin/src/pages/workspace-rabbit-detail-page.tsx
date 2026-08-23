@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeftIcon,
   ArrowLeftRightIcon,
+  ArrowUpRightIcon,
   Edit3Icon,
   HeartCrackIcon,
   RabbitIcon,
@@ -13,6 +14,7 @@ import { HousePermissionBadge } from '@/components/permission-badge'
 import {
   RabbitDepartureDialog,
   RabbitFormDialog,
+  RabbitPromotionDialog,
   RabbitTransferDialog,
 } from '@/components/rabbit-operation-dialogs'
 import { Badge } from '@/components/ui/badge'
@@ -39,8 +41,10 @@ export function WorkspaceRabbitDetailPage() {
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+  const [promotionOpen, setPromotionOpen] = useState(false)
   const [departureOpen, setDepartureOpen] = useState(false)
   const canEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
+  const canControl = hasPermission(workspace.permission, 'rabbit:rabbits:control')
   const canReadRepro = hasPermission(workspace.permission, 'rabbit:batches:query')
 
   const load = useCallback(async () => {
@@ -121,6 +125,7 @@ export function WorkspaceRabbitDetailPage() {
 
   const cage = cages.find((item) => item.id === rabbit.cageId)
   const stageSummary = rabbitStageSummary(rabbit, reproStageLabels)
+  const isMatureReplacement = rabbit.isActive && rabbit.type === '1' && rabbit.growthStage === 'MATURE'
 
   return (
     <>
@@ -148,6 +153,12 @@ export function WorkspaceRabbitDetailPage() {
               <ArrowLeftRightIcon data-icon="inline-start" />
               换笼
             </Button>
+            {isMatureReplacement ? (
+              <Button variant="outline" disabled={!canControl} onClick={() => setPromotionOpen(true)}>
+                <ArrowUpRightIcon data-icon="inline-start" />
+                转为种兔
+              </Button>
+            ) : null}
             <Button
               variant="destructive"
               disabled={!canEdit || !rabbit.isActive}
@@ -244,6 +255,12 @@ export function WorkspaceRabbitDetailPage() {
         cages={cages}
         houseId={workspace.selectedHouse.id}
         onOpenChange={setTransferOpen}
+        onSaved={load}
+      />
+      <RabbitPromotionDialog
+        rabbit={promotionOpen ? rabbit : null}
+        houseId={workspace.selectedHouse.id}
+        onOpenChange={setPromotionOpen}
         onSaved={load}
       />
       <RabbitDepartureDialog

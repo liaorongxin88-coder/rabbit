@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRightIcon, HeartCrackIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, ArrowUpRightIcon, HeartCrackIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createRabbit,
+  promoteReplacementRabbit,
+  requestId,
   submitRabbitDeparture,
   transferRabbitCage,
   updateRabbit,
@@ -132,7 +134,7 @@ export function RabbitFormDialog({
   function resetReproductiveStage(nextType: string, nextGender: string) {
     const options = reproductiveOptions(nextType, nextGender)
     setReproductiveStage((current) =>
-      options.some(([value]) => value === current) ? current : options[0]?.[0] ?? '',
+      options.some((option) => option[0] === current) ? current : options[0]?.[0] ?? '',
     )
   }
 
@@ -605,6 +607,64 @@ export function RabbitTransferDialog({
           <Button disabled={saving || !targetCageId} onClick={() => void handleSubmit()}>
             {saving ? <Spinner data-icon="inline-start" /> : <ArrowLeftRightIcon data-icon="inline-start" />}
             确认换笼
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function RabbitPromotionDialog({
+  rabbit,
+  houseId,
+  onOpenChange,
+  onSaved,
+}: {
+  rabbit: Rabbit | null
+  houseId: number | null
+  onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const pendingRequestId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!rabbit) return
+    pendingRequestId.current = null
+  }, [rabbit])
+
+  async function handleSubmit() {
+    if (!rabbit || !houseId) return
+    const promotionRequestId = pendingRequestId.current ?? requestId()
+    pendingRequestId.current = promotionRequestId
+    setSaving(true)
+    try {
+      await promoteReplacementRabbit(houseId, rabbit.id, promotionRequestId)
+      pendingRequestId.current = null
+      toast.success(`兔 #${rabbit.id} 已转为种兔`)
+      onOpenChange(false)
+      await onSaved()
+    } catch {
+      // 共享请求层会展示失败原因；参数未变化时保留 requestId 以支持幂等重试。
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={Boolean(rabbit)} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>后备兔转种兔</DialogTitle>
+          <DialogDescription>
+            兔 #{rabbit?.id ?? ''} 将转为种兔，当前笼位会同步设为种兔笼。符合条件的母兔会进入待催情生产周期。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>取消</Button>
+          <Button disabled={saving} onClick={() => void handleSubmit()}>
+            {saving ? <Spinner data-icon="inline-start" /> : <ArrowUpRightIcon data-icon="inline-start" />}
+            确认转种
           </Button>
         </DialogFooter>
       </DialogContent>

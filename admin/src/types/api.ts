@@ -259,18 +259,6 @@ export interface BatchRabbit {
   cageId?: number | null
 }
 
-export interface BulkMatingRequest {
-  femaleRabbitIds: number[]
-  maleRabbitId: number
-  matingDate: number
-  requestId: string
-}
-
-export interface BulkMatingResult {
-  requestId: string
-  count: number
-}
-
 /** 一次生产动作的结果。 */
 export interface ReproActionResult {
   cycleId: number

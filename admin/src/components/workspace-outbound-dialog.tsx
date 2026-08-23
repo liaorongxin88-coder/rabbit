@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangleIcon, CheckCircle2Icon, ShieldCheckIcon, TruckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -45,14 +45,26 @@ export function WorkspaceOutboundDialog({
   houseId,
   disabled,
   canControl,
+  onOpenChange,
   onSaved,
+  open: controlledOpen,
 }: {
   houseId: number | null
   disabled: boolean
   canControl: boolean
+  onOpenChange?: (open: boolean) => void
   onSaved: () => Promise<void>
+  open?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+
+  function setOpen(nextOpen: boolean) {
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(nextOpen)
+    }
+    onOpenChange?.(nextOpen)
+  }
   const [phase, setPhase] = useState<Phase>('select')
   const [task, setTask] = useState<OutboundTask | null>(null)
   const [selected, setSelected] = useState<Record<number, OutboundSelectedItem>>({})
@@ -63,23 +75,13 @@ export function WorkspaceOutboundDialog({
   const [remark, setRemark] = useState('')
   const [result, setResult] = useState<OutboundSubmitResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const initialized = useRef(false)
 
   const selectedItems = useMemo(() => Object.values(selected), [selected])
 
-  async function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) {
-      setOpen(false)
-      if (
-        task &&
-        result?.status !== 'COMPLETED' &&
-        !['COMPLETED', 'CANCELLED'].includes(task.status)
-      ) {
-        void cancelOutboundTask(task.houseId, task.taskId).catch(() => undefined)
-      }
-      return
-    }
-    if (!houseId) return
-    setOpen(true)
+  async function startTask() {
+    if (!houseId || initialized.current) return
+    initialized.current = true
     setBusy(true)
     setPhase('select')
     setTask(null)
@@ -94,10 +96,35 @@ export function WorkspaceOutboundDialog({
       setTask(nextTask)
       setSelected(Object.fromEntries(nextTask.selectedItems.map((item) => [item.rabbitId, item])))
     } catch {
+      initialized.current = false
       setOpen(false)
     } finally {
       setBusy(false)
     }
+  }
+
+  useEffect(() => {
+    if (controlledOpen && houseId) {
+      void startTask()
+    }
+  }, [controlledOpen, houseId])
+
+  async function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      initialized.current = false
+      setOpen(false)
+      if (
+        task &&
+        result?.status !== 'COMPLETED' &&
+        !['COMPLETED', 'CANCELLED'].includes(task.status)
+      ) {
+        void cancelOutboundTask(task.houseId, task.taskId).catch(() => undefined)
+      }
+      return
+    }
+    if (!houseId) return
+    setOpen(true)
+    await startTask()
   }
 
   function toggleRabbit(rabbitId: number) {

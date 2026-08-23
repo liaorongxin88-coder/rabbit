@@ -8,8 +8,6 @@ import { batchActionPath, rabbitEventPath } from '@/lib/batch-workflow'
 import type {
   BatchRabbit,
   BreedingCycle,
-  BulkMatingRequest,
-  BulkMatingResult,
   Cage,
   DashboardSummary,
   HouseInvitationRequest,
@@ -157,6 +155,18 @@ export function getRabbit(houseId: number, rabbitId: number) {
   return workspaceGetJson<Rabbit>(`/api/rabbits/${rabbitId}`, { houseId })
 }
 
+export function promoteReplacementRabbit(
+  houseId: number,
+  rabbitId: number,
+  promotionRequestId: string,
+) {
+  return workspacePostJson<void>(
+    `/api/rabbits/${rabbitId}/promote-breeder`,
+    { requestId: promotionRequestId },
+    { houseId },
+  )
+}
+
 export interface RabbitWriteInput {
   cageId: number
   motherId?: number
@@ -249,44 +259,6 @@ export function listBreedingCycles(houseId: number, batchId: number) {
   return workspaceGetJson<BreedingCycle[]>(`/api/batches/${batchId}/breeding-cycles`, {
     houseId,
   })
-}
-
-/**
- * 批量配种。
- *
- * 界面选的是母兔，而批量接口收的是待办 id，所以这里先把母兔解析成待配种任务。
- * 只能推进「已经处于待配种」的母兔；选中但当下没有待配种任务的会被自然跳过
- * （比如别人已经配过了），返回的 count 是真实成功的数量而不是选中数量。
- */
-export async function submitBulkMating(
-  houseId: number,
-  batchId: number,
-  data: BulkMatingRequest,
-): Promise<BulkMatingResult> {
-  const wanted = new Set(data.femaleRabbitIds)
-  // 拉到足够远的将来，否则默认只能看到「今日及逆期」，
-  // 提前安排的配种会惄无声息地漏掉。
-  const page = await listReproTasks(houseId, {
-    batchId,
-    type: 'MATING',
-    dueBefore: Date.now() + 3650 * 24 * 3600 * 1000,
-    size: 500,
-  })
-  const taskIds = page.items
-    .filter((task) => task.rabbitId != null && wanted.has(task.rabbitId))
-    .map((task) => task.id)
-  if (taskIds.length === 0) {
-    return { requestId: data.requestId, count: 0 }
-  }
-  const result = await submitReproBulkAction(houseId, {
-    action: 'MATING',
-    occurredAt: data.matingDate,
-    maleRabbitId: data.maleRabbitId,
-    matingMethod: 'NATURAL',
-    taskIds,
-    requestId: data.requestId,
-  })
-  return { requestId: data.requestId, count: result.succeeded }
 }
 
 export function submitRabbitDeparture(

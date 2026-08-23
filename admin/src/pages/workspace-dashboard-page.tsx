@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ActivityIcon,
   BabyIcon,
   MarsIcon,
   RabbitIcon,
   RefreshCwIcon,
+  TruckIcon,
   VenusIcon,
   WarehouseIcon,
 } from 'lucide-react'
-import { getDashboard } from '@/api/workspace'
+import { getDashboard, listReproTasks } from '@/api/workspace'
 import { MetricCard } from '@/components/metric-card'
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
@@ -17,23 +19,30 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { DashboardSummary } from '@/types/api'
+import type { DashboardSummary, ReproTask, ReproTaskPage } from '@/types/api'
 
 export function WorkspaceDashboardPage() {
   const workspace = useWorkspace()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [saleTasks, setSaleTasks] = useState<ReproTaskPage | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!workspace.selectedHouse) {
       setSummary(null)
+      setSaleTasks(null)
       return
     }
+    setSummary(null)
+    setSaleTasks(null)
     setLoading(true)
     try {
-      setSummary(await getDashboard(workspace.selectedHouse.id))
-    } catch {
-      setSummary(null)
+      const [summaryResult, saleTasksResult] = await Promise.allSettled([
+        getDashboard(workspace.selectedHouse.id),
+        listReproTasks(workspace.selectedHouse.id, { type: 'SALE_READY', size: 1 }),
+      ])
+      setSummary(summaryResult.status === 'fulfilled' ? summaryResult.value : null)
+      setSaleTasks(saleTasksResult.status === 'fulfilled' ? saleTasksResult.value : null)
     } finally {
       setLoading(false)
     }
@@ -89,6 +98,43 @@ export function WorkspaceDashboardPage() {
             <MetricCard title="未在周期中" value={summary.readyForBreeding} icon={ActivityIcon} />
             <MetricCard title="窝数" value={summary.litters} icon={BabyIcon} />
             <MetricCard title="哺乳仔兔" value={summary.nursingKits} icon={BabyIcon} />
+          </section>
+
+          <section>
+            <Card>
+              <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-1.5">
+                  <CardTitle>商品兔出售提醒</CardTitle>
+                  <CardDescription>当前兔舍已到期的商品兔出售待办。</CardDescription>
+                </div>
+                {saleTasks && saleTasks.total > 0 ? (
+                  <Button asChild>
+                    <Link to="/workspace/production?outbound=1">
+                      <TruckIcon data-icon="inline-start" />
+                      前往出库
+                    </Link>
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {saleTasks ? (
+                  saleTasks.total > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-2xl font-semibold">{saleTasks.total} 只待出售</p>
+                      {saleTasks.items[0] ? (
+                        <p className="text-sm text-muted-foreground">
+                          最早到期：兔 #{saleTasks.items[0].rabbitId ?? '-'} · {formatTaskDue(saleTasks.items[0])}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">当前没有到期的商品兔出售待办。</p>
+                  )
+                ) : (
+                  <p className="text-sm text-muted-foreground">出售提醒暂时无法加载，请刷新重试。</p>
+                )}
+              </CardContent>
+            </Card>
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
@@ -151,6 +197,13 @@ export function WorkspaceDashboardPage() {
       )}
     </>
   )
+}
+
+function formatTaskDue(task: ReproTask) {
+  const value = task.dueTime ?? task.dueDate
+  if (!value) return '日期待定'
+  const due = new Date(value)
+  return Number.isNaN(due.getTime()) ? '日期待定' : due.toLocaleDateString('zh-CN')
 }
 
 function StructureRow({ label, value, total }: { label: string; value: number; total: number }) {
