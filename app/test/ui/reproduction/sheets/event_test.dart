@@ -164,8 +164,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-repro-task')));
     await tester.pumpAndSettle();
 
-    expect(find.text('断奶并放入笼位'), findsWidgets);
-    expect(find.textContaining('批次'), findsNothing);
+    expect(find.text('确认断奶'), findsOneWidget);
+    expect(find.textContaining('断奶仅记录待分笼数量'), findsOneWidget);
+    expect(find.textContaining('批次 #'), findsNothing);
     await _expectReminderLabel(
       tester,
       key: const ValueKey('weaning-next-reminder-stage-label'),

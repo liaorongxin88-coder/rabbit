@@ -117,15 +117,15 @@ void main() {
   );
 
   testWidgets(
-    'weaning sheet hides raw cage error and can close on narrow large text',
+    'weaning sheet records waiting inventory without loading cages',
     (tester) async {
       await _setSurface(tester, const Size(360, 800));
-      final firstAttempt = Completer<List<Cage>>();
+      final cageRequest = Completer<List<Cage>>();
 
       await tester.pumpWidget(
         _testApp(
           overrides: [
-            houseCagesProvider(8).overrideWith((_) => firstAttempt.future),
+            houseCagesProvider(8).overrideWith((_) => cageRequest.future),
           ],
           onOpen: (context) => showWeaningSheet(
             context: context,
@@ -135,21 +135,15 @@ void main() {
       );
       await _openSheet(tester);
 
-      _expectLoadingState(tester, '正在加载可用笼位');
-      firstAttempt.completeError(
-        StateError('database connection detail'),
-        StackTrace.current,
-      );
-      await tester.pumpAndSettle();
-
-      _expectErrorActions(tester);
-      expect(find.text('无法加载笼位信息，请检查网络后重试。'), findsOneWidget);
-      expect(find.textContaining('database connection detail'), findsNothing);
-      expect(tester.takeException(), isNull);
-
-      await tester.tap(find.byKey(const ValueKey('batch-sheet-error-close')));
-      await tester.pumpAndSettle();
+      expect(cageRequest.isCompleted, isFalse);
+      expect(find.byKey(const ValueKey('batch-sheet-loading')), findsNothing);
       expect(find.byKey(const ValueKey('batch-sheet-error')), findsNothing);
+      expect(
+        find.textContaining('断奶仅记录待分笼数量'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('weaning-submit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 }

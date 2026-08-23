@@ -77,7 +77,7 @@ void main() {
       find.byKey(const ValueKey('batch-detail-member-list')),
     );
     expect(list.childrenDelegate, isA<SliverChildBuilderDelegate>());
-    expect(list.childrenDelegate.estimatedChildCount, 1008);
+    expect(list.childrenDelegate.estimatedChildCount, members.length + 9);
     expect(find.byKey(const ValueKey('batch-member-2000')), findsNothing);
 
     await _scrollDetailUntilVisible(

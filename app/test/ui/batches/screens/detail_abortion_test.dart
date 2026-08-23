@@ -176,8 +176,12 @@ void main() {
     await tester.tap(find.text('活动已结束').last);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('batch-member-2401')), findsOneWidget);
-    expect(find.text('活动已结束'), findsOneWidget);
+    final member = find.byKey(const ValueKey('batch-member-2401'));
+    expect(member, findsOneWidget);
+    expect(
+      find.descendant(of: member, matching: find.text('活动已结束')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('batch-member-action-2401')),
       findsNothing,
