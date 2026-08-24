@@ -124,6 +124,7 @@ jobs:
       CI: "true"
       TAG_NAME: ${{ github.ref_name }}
       APP_PROD_API_BASE_URL: ${{ vars.APP_PROD_API_BASE_URL }}
+      APP_BUILD_NUMBER_OFFSET: ${{ vars.APP_BUILD_NUMBER_OFFSET }}
       KEYSTORE_BASE64: ${{ secrets.RABBIT_ANDROID_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.RABBIT_ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.RABBIT_ANDROID_KEY_ALIAS }}
@@ -161,28 +162,52 @@ jobs:
             "$APP_PROD_API_BASE_URL" > app/config/env/prod.env
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rabbit-release.keystore"
           chmod 600 "$RUNNER_TEMP/rabbit-release.keystore"
-          build_offset="${{ vars.APP_BUILD_NUMBER_OFFSET }}"
-          build_offset="${build_offset:-4003}"
+          build_offset="${APP_BUILD_NUMBER_OFFSET:-4003}"
           [[ "$build_offset" =~ ^[0-9]+$ ]]
           echo "build_number=$((build_offset + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
 
-      - name: Build signed AAB
+      - name: Build signed AAB and APK
         working-directory: app
         env:
           RABBIT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/rabbit-release.keystore
           RABBIT_ANDROID_KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASSWORD }}
           RABBIT_ANDROID_KEY_ALIAS: ${{ env.KEY_ALIAS }}
           RABBIT_ANDROID_KEY_PASSWORD: ${{ env.KEY_PASSWORD }}
+          BUILD_NUMBER: ${{ steps.prepare.outputs.build_number }}
         run: |
           version_name="${TAG_NAME#v}"
-          ./rabbit release aab "--build-name=$version_name" "--build-number=${{ steps.prepare.outputs.build_number }}"
+          build_number="$BUILD_NUMBER"
+          ./rabbit release aab "--build-name=$version_name" "--build-number=$build_number"
+          ./rabbit apk prod --release \
+            "--build-name=$version_name" \
+            "--build-number=$build_number" \
+            "--split-debug-info=build/symbols/prod"
 
       - name: Package and checksum Android artifacts
+        env:
+          BUILD_NUMBER: ${{ steps.prepare.outputs.build_number }}
         run: |
           mkdir -p release
           cp app/build/app/outputs/bundle/prodRelease/app-prod-release.aab "release/rabbit-app-$TAG_NAME.aab"
+          cp app/build/app/outputs/flutter-apk/app-prod-release.apk "release/rabbit-app-$TAG_NAME.apk"
           tar -C app/build/symbols/prod -czf "release/rabbit-app-symbols-$TAG_NAME.tar.gz" .
-          sha256sum "release/rabbit-app-$TAG_NAME.aab" "release/rabbit-app-symbols-$TAG_NAME.tar.gz" > release/SHA256SUMS-android
+          sha256sum \
+            "release/rabbit-app-$TAG_NAME.aab" \
+            "release/rabbit-app-$TAG_NAME.apk" \
+            "release/rabbit-app-symbols-$TAG_NAME.tar.gz" \
+            > release/SHA256SUMS-android
+          apk="release/rabbit-app-$TAG_NAME.apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          [[ -x "$apksigner" && -x "$aapt" ]]
+          "$apksigner" verify --verbose --print-certs "$apk"
+          badging="$("$aapt" dump badging "$apk")"
+          package_name="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$badging")"
+          version_name="$(sed -n "s/^package:.* versionName='\([^']*\)'.*/\1/p" <<<"$badging")"
+          version_code="$(sed -n "s/^package:.* versionCode='\([^']*\)'.*/\1/p" <<<"$badging")"
+          [[ "$package_name" == "com.rabbit.app.flutter" ]]
+          [[ "$version_name" == "${TAG_NAME#v}" ]]
+          [[ "$version_code" == "$BUILD_NUMBER" ]]
 
       - name: Attest Android artifacts
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
