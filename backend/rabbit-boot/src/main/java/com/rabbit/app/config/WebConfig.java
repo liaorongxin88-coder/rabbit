@@ -43,7 +43,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/sms/login",
                         "/api/auth/sms/reset-password",
                         "/api/auth/phone-one-tap-login",
-                        "/api/auth/wechat-login"
+                        "/api/auth/wechat-login",
+                        "/api/app/updates/check",
+                        "/api/app/updates/*/apk"
                 );
         registry.addInterceptor(new AuthorizationInterceptor(accessControlService))
                 .addPathPatterns("/api/**")
@@ -55,7 +57,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/sms/login",
                         "/api/auth/sms/reset-password",
                         "/api/auth/phone-one-tap-login",
-                        "/api/auth/wechat-login"
+                        "/api/auth/wechat-login",
+                        "/api/app/updates/check",
+                        "/api/app/updates/*/apk"
                 );
     }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -150,6 +151,26 @@ void main() {
 
     expect(unauthorizedEvents, 0);
     await subscription.cancel();
+    client.dispose();
+  });
+
+  test('downloadFile rejects a JSON error payload', () async {
+    final client = _clientFor(
+      statusCode: 200,
+      body: {'code': 404, 'message': '安装包不存在或尚未发布', 'data': null},
+    );
+    final file = File('${Directory.systemTemp.path}/rabbit-download-test.apk');
+    addTearDown(() {
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+    });
+
+    await expectLater(
+      client.downloadFile('/api/app/updates/missing/apk', savePath: file.path),
+      throwsA(isA<ApiException>()),
+    );
+
     client.dispose();
   });
 

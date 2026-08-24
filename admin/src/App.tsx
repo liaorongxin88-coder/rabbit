@@ -16,6 +16,7 @@ import { WorkspaceShell } from '@/components/workspace-shell'
 import { WorkspaceProvider } from '@/components/workspace-context'
 import { Spinner } from '@/components/ui/spinner'
 import { AccountsPage } from '@/pages/accounts-page'
+import { AppReleasesPage } from '@/pages/app-releases-page'
 import { DashboardPage } from '@/pages/dashboard-page'
 import { FarmDetailPage } from '@/pages/farm-detail-page'
 import { FarmsPage } from '@/pages/farms-page'
@@ -106,6 +107,16 @@ function ShellRoutes() {
         <Route path="/farms" element={<FarmsPage />} />
         <Route path="/farms/:farmId" element={<FarmDetailPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route
+          path="/app-releases"
+          element={
+            hasPermission(session, 'platform:app-releases:list') ? (
+              <AppReleasesPage session={session} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
         <Route path="/merchants" element={<Navigate to="/farms" replace />} />
         <Route path="/merchants/:legacyId" element={<Navigate to="/farms" replace />} />
         <Route

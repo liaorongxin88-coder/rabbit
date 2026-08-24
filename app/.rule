@@ -114,6 +114,12 @@ Data 和 Domain 层使用业务能力命名；`home`、`dashboard` 这类界面�
 - `GET /api/houses`
 - `POST /api/houses`
 - `GET /api/events?onlyUnnotified=true`
+- `GET /api/app/updates/check`
+- `GET /api/app/updates/{id}/apk`
+
+软件内升级按 `RABBIT_BUILD_ENV` 映射渠道：`dev` → `dev`，`test` → `test`，`prod`/`release` → `prod`。
+Android flavor 必须和这个环境一起打：`test` 环境对应 `staging` flavor 和 `com.rabbit.app.flutter.test`。
+只选 flavor、不注入 `RABBIT_BUILD_ENV` 时，客户端会按默认 `dev` 渠道检查，并在包名对不上时拒绝更新。
 
 需要幂等的写请求使用 `uuid` 生成 `requestId`。生产 UI 不写死 mock 响应；无数据时使用空态或错误态。
 

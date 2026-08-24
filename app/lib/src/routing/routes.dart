@@ -28,6 +28,7 @@ import 'package:rabbit_flutter/src/ui/settings/screens/account.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/app.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/production.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/reminders.dart';
+import 'package:rabbit_flutter/src/ui/settings/screens/about.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -353,6 +354,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/settings/reminders',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: ReminderSettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/about',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: AboutScreen(),
             ),
           ),
         ],

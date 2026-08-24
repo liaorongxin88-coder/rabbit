@@ -67,6 +67,7 @@ Core jobs:
 - Inspect rabbit-farm scale through cage, rabbit, production, member, and audit previews.
 - Switch among rabbit farms available to the signed-in business user.
 - Manage rabbit farms, cages, rabbits, production batches, and member roles when the effective permission allows it.
+- Upload, publish, or revoke Flutter APK versions so installed apps can upgrade without redistributing packages by hand.
 
 Non-goals:
 

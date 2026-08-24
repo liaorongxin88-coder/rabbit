@@ -29,6 +29,7 @@ backend/rabbit-boot/src/main/resources/db/migration/
   `request_id`，让商品兔留后备接口可以幂等返回生成的后备记录 ID。
 - V36 将离场兔遗留的 `PENDING` 待办改为 `CANCELLED`。离场事务会同步取消兔只名下待办，
   待办和治疗复查查询也只返回仍在场的兔只。
+- V41 增加 `app_releases`，保存 Flutter 各渠道 APK 的版本元数据和磁盘存储键，供软件内升级。
 
 ## 参考文件
 

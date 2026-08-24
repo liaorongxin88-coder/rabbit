@@ -51,13 +51,18 @@ function createRequestClient(
     baseURL: API_BASE_URL,
     requestAdapter: adapterFetch(),
     beforeRequest(method) {
+      const headers: Record<string, string> = {
+        ...(method.config.headers as Record<string, string> | undefined),
+      }
+      if (method.data instanceof FormData) {
+        delete headers['Content-Type']
+        delete headers['content-type']
+      }
       const accessToken = token()
       if (accessToken) {
-        method.config.headers = {
-          ...method.config.headers,
-          Authorization: `Bearer ${accessToken}`,
-        }
+        headers.Authorization = `Bearer ${accessToken}`
       }
+      method.config.headers = headers
     },
     responded: {
       async onSuccess(response) {
@@ -107,12 +112,54 @@ export function postJson<T>(url: string, data?: JsonBody) {
   return alova.Post<T>(url, data)
 }
 
+export function postForm<T>(url: string, data: FormData) {
+  return alova.Post<T>(url, data)
+}
+
 export function putJson<T>(url: string, data?: JsonBody) {
   return alova.Put<T>(url, data)
 }
 
 export function deleteJson<T>(url: string) {
   return alova.Delete<T>(url)
+}
+
+export async function downloadAdminFile(path: string, fileName: string) {
+  const token = getToken()
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  const contentType = response.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    const payload = (await response.json()) as ApiResponse<unknown>
+    const message = payload.message || '下载失败'
+    if (payload.code !== 0) {
+      if (shouldClearRequestSession('admin', payload.code, message)) {
+        const hadSession = Boolean(token)
+        clearSession()
+        if (hadSession) {
+          toast.error(message)
+        }
+      } else {
+        toast.error(message)
+      }
+      throw new Error(message)
+    }
+  }
+  if (!response.ok) {
+    const message = '下载安装包失败'
+    toast.error(message)
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = fileName
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(objectUrl)
 }
 
 interface WorkspaceRequestOptions {

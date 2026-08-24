@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
     private var carrierAuthChannel: CarrierAuthChannel? = null
+    private var apkInstallerChannel: ApkInstallerChannel? = null
     private var pendingEvent: Map<String, Any>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +42,10 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             UnavailableCarrierAuthAdapter(),
         )
+        apkInstallerChannel = ApkInstallerChannel(
+            this,
+            flutterEngine.dartExecutor.binaryMessenger,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -52,6 +57,8 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         carrierAuthChannel?.dispose()
         carrierAuthChannel = null
+        apkInstallerChannel?.dispose()
+        apkInstallerChannel = null
         super.onDestroy()
     }
 

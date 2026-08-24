@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+String _posixPath(String path) => path.replaceAll(r'\', '/');
+
 void main() {
   test('unit and widget tests follow source ownership', () {
     const topLevelOwners = {
@@ -22,7 +24,7 @@ void main() {
         continue;
       }
 
-      final segments = entity.path.split('/');
+      final segments = _posixPath(entity.path).split('/');
       final owner = segments.length > 1 ? segments[1] : null;
       if (owner == null || !topLevelOwners.contains(owner)) {
         violations.add(entity.path);
@@ -89,7 +91,7 @@ void main() {
         continue;
       }
 
-      final segments = entity.path.split('/');
+      final segments = _posixPath(entity.path).split('/');
       final owner = segments.length > 1 ? segments[1] : null;
       if (segments.length < 3 || !businessOwners.contains(owner)) {
         violations.add(entity.path);
@@ -228,7 +230,7 @@ void main() {
       if (entity is! File || !entity.path.endsWith('.dart')) {
         continue;
       }
-      final segments = entity.path.split('/');
+      final segments = _posixPath(entity.path).split('/');
       final uiIndex = segments.indexOf('ui');
       final hasFeatureAndType = uiIndex >= 0 && segments.length > uiIndex + 2;
       final feature = hasFeatureAndType ? segments[uiIndex + 1] : null;

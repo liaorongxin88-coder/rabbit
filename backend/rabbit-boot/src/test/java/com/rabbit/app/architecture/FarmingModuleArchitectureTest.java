@@ -27,7 +27,8 @@ class FarmingModuleArchitectureTest {
             "com.rabbit.app.security",
             MODULES_PACKAGE + ".auth",
             MODULES_PACKAGE + ".house",
-            MODULES_PACKAGE + ".workspace"
+            MODULES_PACKAGE + ".workspace",
+            MODULES_PACKAGE + ".apprelease"
     );
     private static final Set<String> PRODUCTION_PACKAGES = Set.of(
             MODULES_PACKAGE + ".batch",

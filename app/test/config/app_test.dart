@@ -15,6 +15,26 @@ void main() {
     await AppConfig.load();
 
     expect(AppConfig.carrierAuthEnabled, isFalse);
+    expect(
+      AppConfig.updateChannel,
+      AppConfig.buildEnv == 'prod' || AppConfig.buildEnv == 'release'
+          ? 'prod'
+          : AppConfig.buildEnv == 'test'
+              ? 'test'
+              : 'dev',
+    );
+    expect(
+      AppConfig.expectedApplicationIdFor('dev'),
+      'com.rabbit.app.flutter.dev',
+    );
+    expect(
+      AppConfig.expectedApplicationIdFor('test'),
+      'com.rabbit.app.flutter.test',
+    );
+    expect(
+      AppConfig.expectedApplicationIdFor('prod'),
+      'com.rabbit.app.flutter',
+    );
 
     if (definedBaseUrl.trim().isNotEmpty) {
       expect(AppConfig.defaultBaseUrl, definedBaseUrl);
