@@ -127,6 +127,40 @@ class ApiClient {
     );
   }
 
+  Future<void> downloadFile(
+    String path, {
+    required String savePath,
+    void Function(int received, int total)? onReceiveProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final options = await _options();
+    try {
+      final response = await _dio.download(
+        path,
+        savePath,
+        cancelToken: cancelToken,
+        onReceiveProgress: onReceiveProgress,
+        options: options.copyWith(
+          receiveTimeout: const Duration(minutes: 10),
+          sendTimeout: const Duration(minutes: 2),
+        ),
+      );
+      final contentType = response.headers.value(Headers.contentTypeHeader) ?? '';
+      if (contentType.contains('json')) {
+        throw const ApiException('安装包下载失败，请稍后重试');
+      }
+    } on DioException catch (error) {
+      final exception = ApiException(
+        _dioMessage(error),
+        statusCode: error.response?.statusCode,
+      );
+      if (exception.invalidatesSession) {
+        _unauthorizedController.add(null);
+      }
+      throw exception;
+    }
+  }
+
   Future<T> delete<T>(
     String path, {
     int? houseId,
@@ -231,6 +265,7 @@ class ApiClient {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
         return '连接超时，请检查后端服务是否可访问';
       case DioExceptionType.badResponse:
         if (error.response?.statusCode == 401) {

@@ -1,0 +1,23 @@
+CREATE TABLE app_releases (
+  id VARCHAR(64) PRIMARY KEY,
+  channel VARCHAR(16) NOT NULL,
+  version_name VARCHAR(32) NOT NULL,
+  version_code INT NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  content_type VARCHAR(64) NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  sha256 CHAR(64) NOT NULL,
+  storage_key VARCHAR(255) NOT NULL,
+  release_notes VARCHAR(2000) NULL,
+  force_update TINYINT(1) NOT NULL DEFAULT 0,
+  status VARCHAR(16) NOT NULL,
+  request_id VARCHAR(64) NOT NULL,
+  published_at DATETIME NULL,
+  create_by VARCHAR(64),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by VARCHAR(64),
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_app_releases_channel_code (channel, version_code),
+  UNIQUE KEY uk_app_releases_operator_request (create_by, request_id),
+  KEY idx_app_releases_channel_status (channel, status, version_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

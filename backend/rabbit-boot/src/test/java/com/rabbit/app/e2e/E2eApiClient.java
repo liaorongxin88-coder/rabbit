@@ -51,6 +51,23 @@ public class E2eApiClient {
         return root(exchange(path, HttpMethod.POST, headers, body));
     }
 
+    public JsonNode uploadMultipart(
+            String path,
+            String token,
+            Long houseId,
+            MultiValueMap<String, Object> fields
+    ) {
+        HttpHeaders headers = headers(token, houseId);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        ResponseEntity<String> response = restTemplate.exchange(
+                baseUrl + path,
+                HttpMethod.POST,
+                new HttpEntity<MultiValueMap<String, Object>>(fields, headers),
+                String.class
+        );
+        return expectOk(response);
+    }
+
     public JsonNode uploadImage(
             String path,
             String token,
@@ -102,7 +119,11 @@ public class E2eApiClient {
         HttpHeaders headers = headers(token, houseId);
         ResponseEntity<byte[]> resp = restTemplate.exchange(baseUrl + path, HttpMethod.GET, new HttpEntity<Object>(headers), byte[].class);
         Assertions.assertTrue(resp.getStatusCode().is2xxSuccessful(), "HTTP status for download " + path);
-        return new Download(resp.getHeaders().getContentType(), resp.getBody() == null ? new byte[0] : resp.getBody());
+        return new Download(
+                resp.getHeaders().getContentType(),
+                resp.getBody() == null ? new byte[0] : resp.getBody(),
+                resp.getHeaders().getCacheControl()
+        );
     }
 
     private ResponseEntity<String> exchange(String path, HttpMethod method, String token, Long houseId, Object body) {
@@ -152,10 +173,12 @@ public class E2eApiClient {
     public static class Download {
         public final MediaType contentType;
         public final byte[] bytes;
+        public final String cacheControl;
 
-        Download(MediaType contentType, byte[] bytes) {
+        Download(MediaType contentType, byte[] bytes, String cacheControl) {
             this.contentType = contentType;
             this.bytes = bytes;
+            this.cacheControl = cacheControl;
         }
 
         public String utf8() {

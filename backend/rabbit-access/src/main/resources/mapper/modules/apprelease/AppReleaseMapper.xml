@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.apprelease.mapper.AppReleaseMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.apprelease.entity.AppRelease">
+        <id column="id" property="id"/>
+        <result column="channel" property="channel"/>
+        <result column="version_name" property="versionName"/>
+        <result column="version_code" property="versionCode"/>
+        <result column="file_name" property="fileName"/>
+        <result column="content_type" property="contentType"/>
+        <result column="size_bytes" property="sizeBytes"/>
+        <result column="sha256" property="sha256"/>
+        <result column="storage_key" property="storageKey"/>
+        <result column="release_notes" property="releaseNotes"/>
+        <result column="force_update" property="forceUpdate"/>
+        <result column="status" property="status"/>
+        <result column="request_id" property="requestId"/>
+        <result column="published_at" property="publishedAt"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, channel, version_name, version_code, file_name, content_type, size_bytes, sha256,
+        storage_key, release_notes, force_update, status, request_id, published_at,
+        create_by, create_time, update_by, update_time
+    </sql>
+
+    <insert id="insert">
+        insert into app_releases (
+            id, channel, version_name, version_code, file_name, content_type, size_bytes, sha256,
+            storage_key, release_notes, force_update, status, request_id, create_by, update_by
+        ) values (
+            #{id}, #{channel}, #{versionName}, #{versionCode}, #{fileName}, #{contentType}, #{sizeBytes}, #{sha256},
+            #{storageKey}, #{releaseNotes}, #{forceUpdate}, #{status}, #{requestId}, #{createBy}, #{updateBy}
+        )
+    </insert>
+
+    <select id="selectById" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        where id = #{id}
+        limit 1
+    </select>
+
+    <select id="selectByOperatorAndRequestId" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        where create_by = #{createBy}
+          and request_id = #{requestId}
+        limit 1
+    </select>
+
+    <select id="selectByChannelAndVersionCode" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        where channel = #{channel}
+          and version_code = #{versionCode}
+        limit 1
+    </select>
+
+    <select id="selectLatestPublished" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        where channel = #{channel}
+          and status = 'PUBLISHED'
+        order by version_code desc
+        limit 1
+    </select>
+
+    <select id="selectLatestPublishedNewerThan" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        where channel = #{channel}
+          and status = 'PUBLISHED'
+          and version_code &gt; #{versionCode}
+        order by version_code desc
+        limit 1
+    </select>
+
+    <select id="countForcedPublishedNewerThan" resultType="int">
+        select count(*)
+        from app_releases
+        where channel = #{channel}
+          and status = 'PUBLISHED'
+          and force_update = 1
+          and version_code &gt; #{versionCode}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(*)
+        from app_releases
+        <where>
+            <if test="channel != null">
+                and channel = #{channel}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <select id="selectPage" resultMap="Map">
+        select <include refid="Columns"/>
+        from app_releases
+        <where>
+            <if test="channel != null">
+                and channel = #{channel}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>
+        order by version_code desc, create_time desc, id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <update id="updateStatus">
+        update app_releases
+        set status = #{status},
+            published_at = #{publishedAt},
+            update_by = #{updateBy}
+        where id = #{id}
+    </update>
+
+    <update id="updateMeta">
+        update app_releases
+        set release_notes = #{releaseNotes},
+            force_update = #{forceUpdate},
+            update_by = #{updateBy}
+        where id = #{id}
+    </update>
+
+</mapper>

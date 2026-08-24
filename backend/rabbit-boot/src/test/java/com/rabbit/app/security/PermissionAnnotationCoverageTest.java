@@ -22,7 +22,9 @@ class PermissionAnnotationCoverageTest {
             "AuthController#phoneLogin",
             "AuthController#resetPasswordBySms",
             "AuthController#phoneOneTapLogin",
-            "AuthController#wechatLogin"
+            "AuthController#wechatLogin",
+            "AppUpdateController#check",
+            "AppUpdateController#download"
     );
 
     @Test

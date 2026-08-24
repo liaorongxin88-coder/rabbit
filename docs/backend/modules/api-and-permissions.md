@@ -72,8 +72,8 @@ house_users.role grants requested permission
 - 查看兔场生产概览。
 - 不直接编辑笼位、兔只、投喂、用药、繁殖或销售数据。
 
-平台接口和权限码以账号与兔场为资源，例如 `platform:users:*`、`platform:farms:*` 和
-`platform:accounts:*`。
+平台接口和权限码以账号与兔场为资源，例如 `platform:users:*`、`platform:farms:*`、
+`platform:app-releases:*` 和 `platform:accounts:*`。
 
 ## 幂等
 
@@ -131,9 +131,20 @@ house_users.role grants requested permission
 生产图片上传与读取都属于兔场域：上传要求编辑权限，读取要求查看权限，且文件必须与
 `X-House-Id` 属于同一兔场。生产动作只能关联当前兔场已上传的图片 ID。
 
+应用升级（公开，无需登录）：
+
+- `GET /api/app/updates/check?channel=dev|test|prod&versionCode=`
+- `GET /api/app/updates/{id}/apk`
+
 平台管理：
 
 - `POST /api/admin/auth/login`
 - `GET /api/admin/users`
 - `GET /api/admin/farms`
 - `GET /api/admin/accounts`
+- `GET /api/admin/app-releases`
+- `POST /api/admin/app-releases`
+- `PUT /api/admin/app-releases/{id}`
+- `POST /api/admin/app-releases/{id}/publish`
+- `POST /api/admin/app-releases/{id}/revoke`
+- `GET /api/admin/app-releases/{id}/apk`

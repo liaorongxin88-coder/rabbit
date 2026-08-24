@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   CircleAlertIcon,
   CircleCheckIcon,
+  SmartphoneIcon,
   UserCogIcon,
   UsersIcon,
   WarehouseIcon,
@@ -113,6 +114,9 @@ export function DashboardPage({ session }: { session: AdminSession }) {
             <div className="flex flex-col gap-2">
               <Button className="justify-start" variant="outline" asChild><Link to="/farms"><WarehouseIcon data-icon="inline-start" />兔场管理</Link></Button>
               <Button className="justify-start" variant="outline" asChild><Link to="/users"><UsersIcon data-icon="inline-start" />业务用户</Link></Button>
+              {hasPermission(session, 'platform:app-releases:list') ? (
+                <Button className="justify-start" variant="outline" asChild><Link to="/app-releases"><SmartphoneIcon data-icon="inline-start" />应用发布</Link></Button>
+              ) : null}
               {hasPermission(session, 'platform:accounts:list') ? (
                 <Button className="justify-start" variant="outline" asChild><Link to="/accounts"><UserCogIcon data-icon="inline-start" />管理员账号</Link></Button>
               ) : null}

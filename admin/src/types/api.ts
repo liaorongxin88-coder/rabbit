@@ -478,6 +478,26 @@ export interface AuditLog {
   createTime?: string | null
 }
 
+export type AppReleaseChannel = 'dev' | 'test' | 'prod'
+export type AppReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'REVOKED'
+
+export interface AppRelease {
+  id: string
+  channel: AppReleaseChannel
+  versionName: string
+  versionCode: number
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  releaseNotes?: string | null
+  forceUpdate: boolean
+  status: AppReleaseStatus
+  publishedAt?: string | null
+  createTime?: string | null
+  updateTime?: string | null
+}
+
 export interface FarmOverview {
   farm: AdminFarm
   memberCount: number

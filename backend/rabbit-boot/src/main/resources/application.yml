@@ -5,8 +5,8 @@ server:
 spring:
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 160MB
+      max-request-size: 165MB
   datasource:
     url: jdbc:mysql://localhost:3306/rabbit_app?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
@@ -23,6 +23,9 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  release:
+    storage-path: ${APP_RELEASE_STORAGE_PATH:${java.io.tmpdir}/rabbit-app-releases}
+    max-bytes: ${APP_RELEASE_MAX_BYTES:157286400}
   # 母兔生产流程 V2（doe-breeding-v2）。
   # P2/P3 期间默认关闭，因为新旧写路径操作同一批业务行，
   # 两边同时对外开放等于把并发一致性交给运气。

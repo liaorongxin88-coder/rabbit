@@ -18,6 +18,7 @@ docker compose up -d --build
 - MySQL 只暴露在 Compose 网络中，不映射宿主机端口。
 - Redis 和 Valkey 只有启用对应 profile 时才启动，宿主机端口默认只绑定回环地址。
 - MySQL 数据保存在 `rabbit_mysql_data` volume。
+- Flutter 安装包保存在 `rabbit_app_releases` volume，路径由 `APP_RELEASE_STORAGE_PATH` 指定，不进数据库。
 
 只更新 backend 并保留数据库：
 

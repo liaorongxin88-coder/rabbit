@@ -37,6 +37,22 @@ class AppConfig {
     };
   }
 
+  static String get updateChannel {
+    return switch (buildEnv) {
+      'prod' || 'release' => 'prod',
+      'test' => 'test',
+      _ => 'dev',
+    };
+  }
+
+  static String expectedApplicationIdFor(String channel) {
+    return switch (channel) {
+      'prod' => 'com.rabbit.app.flutter',
+      'test' => 'com.rabbit.app.flutter.test',
+      _ => 'com.rabbit.app.flutter.dev',
+    };
+  }
+
   static bool get carrierAuthEnabled {
     final defined = _boolValue(_definedCarrierAuthEnabled);
     if (defined != null) {

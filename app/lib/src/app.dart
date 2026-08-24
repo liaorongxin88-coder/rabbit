@@ -16,6 +16,8 @@ import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/pending_sync.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/local.dart';
+import 'package:rabbit_flutter/src/ui/settings/view_models/update.dart';
+import 'package:rabbit_flutter/src/ui/settings/widgets/prompt.dart';
 
 class RabbitManagerApp extends ConsumerStatefulWidget {
   const RabbitManagerApp({super.key});
@@ -42,6 +44,9 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
     );
     Future.microtask(_initializeNfc);
     Future.microtask(() => ref.read(nfcPendingSyncControllerProvider));
+    Future.microtask(
+      () => ref.read(appUpdateControllerProvider.notifier).checkSilently(),
+    );
     _pendingSyncTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _syncPendingBindings(),
@@ -57,6 +62,7 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_syncPendingBindings());
+      unawaited(ref.read(appUpdateControllerProvider.notifier).checkSilently());
     }
   }
 
@@ -158,7 +164,9 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: settings?.themeMode ?? ThemeMode.system,
-      builder: (context, child) => _SystemUiFrame(child: child),
+      builder: (context, child) => AppUpdatePrompt(
+        child: _SystemUiFrame(child: child),
+      ),
       routerConfig: router,
     );
   }

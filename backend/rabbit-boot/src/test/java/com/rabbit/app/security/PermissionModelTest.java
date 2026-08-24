@@ -36,6 +36,8 @@ class PermissionModelTest {
 
         assertTrue(platformAdmin.contains("platform:farms:list"));
         assertTrue(platformAdmin.contains("platform:users:list"));
+        assertTrue(platformAdmin.contains("platform:app-releases:list"));
+        assertTrue(platformAdmin.contains("platform:app-releases:add"));
         assertFalse(platformAdmin.contains("platform:accounts:list"));
         assertTrue(superAdmin.contains("platform:accounts:list"));
         assertTrue(Arrays.stream(PermissionCode.values())

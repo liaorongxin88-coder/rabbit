@@ -2,6 +2,7 @@ import {
   LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
+  SmartphoneIcon,
   UserCogIcon,
   UsersIcon,
   WarehouseIcon,
@@ -20,6 +21,12 @@ const navItems = [
   { to: '/dashboard', label: '运营概览', icon: LayoutDashboardIcon },
   { to: '/farms', label: '兔场管理', icon: WarehouseIcon },
   { to: '/users', label: '业务用户', icon: UsersIcon },
+  {
+    to: '/app-releases',
+    label: '应用发布',
+    icon: SmartphoneIcon,
+    permission: 'platform:app-releases:list',
+  },
   {
     to: '/accounts',
     label: '管理员账号',

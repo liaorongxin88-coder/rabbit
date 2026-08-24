@@ -15,6 +15,7 @@ Admin 包含两个相互隔离的界面：
 - `house_users` 直接成员关系、成员角色、成员状态和共同 `OWNER`。
 - 业务账号登录后在 `/workspace/**` 选择有权访问的兔场。
 - 按当前兔场权限处理笼位、兔只、生产批次和成员。
+- 上传、发布和撤回 Flutter APK，让已安装的手机端在软件内升级。
 
 不在当前范围：
 
@@ -56,6 +57,10 @@ Admin 包含两个相互隔离的界面：
   不通过平台兔场资料接口修改。
 - `PUT /api/admin/farms/{farmId}/status` 独立启用或停用兔场；启用前必须存在至少一名有效
   `OWNER`。
+- `POST /api/admin/app-releases` 上传某一渠道的 APK 草稿。发布后，
+  `GET /api/app/updates/check` 对低于该内部版本号的客户端返回下载地址。
+- 公开下载只提供该渠道当前最新已发布包；历史已发布版本仍参与强制更新判断，但不能用旧 ID 下载。
+- `PUT /api/admin/app-releases/{id}` 可改更新说明和强制更新。`GET /api/admin/app-releases/{id}/apk` 供管理员核对安装包。
 
 ## UI 和工程规则
 

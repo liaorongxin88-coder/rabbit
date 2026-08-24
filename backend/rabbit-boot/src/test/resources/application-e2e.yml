@@ -22,6 +22,9 @@ mybatis:
     map-underscore-to-camel-case: true
 
 app:
+  release:
+    storage-path: ${APP_RELEASE_STORAGE_PATH:./target/app-releases-e2e}
+    max-bytes: 1048576
   cache:
     provider: redis
     host: 127.0.0.1

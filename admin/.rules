@@ -28,6 +28,7 @@ First-version scope stays narrow:
 - Business-user lookup and status inspection, including masked phone identity and accessible rabbit-farm count.
 - Rabbit-farm membership roles. A business user may join multiple rabbit farms, and every rabbit farm retains at least one enabled OWNER; multiple co-owners are allowed.
 - Read-only rabbit-farm overview for cages, rabbits, production data, members, and recent audit records.
+- Flutter APK version upload, publish, and revoke so installed apps can upgrade in place.
 
 Business-workspace scope includes:
 
