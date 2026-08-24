@@ -220,6 +220,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       TAG_NAME: ${{ github.ref_name }}
       BACKEND_IMAGE: ${{ needs.backend_image.outputs.image }}
       BACKEND_DIGEST: ${{ needs.backend_image.outputs.digest }}
