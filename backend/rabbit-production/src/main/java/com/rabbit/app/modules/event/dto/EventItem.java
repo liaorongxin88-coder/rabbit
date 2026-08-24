@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.event.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.util.Date;
 
 public class EventItem {
@@ -54,6 +55,7 @@ public class EventItem {
         this.eventType = eventType;
     }
 
+    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "Asia/Shanghai")
     public Date getEventDate() {
         return eventDate;
     }

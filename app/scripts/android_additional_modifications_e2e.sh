@@ -34,15 +34,15 @@ fi
 if [[ -z "$DEVICE_ID" ]]; then
   DEVICE_ID="$($ADB_BIN devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
 fi
-if [[ -z "$DEVICE_ID" ]] || \
-   [[ "$($ADB_BIN -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
+if [[ -z "$DEVICE_ID" ]] ||
+  [[ "$($ADB_BIN -s "$DEVICE_ID" get-state 2>/dev/null)" != "device" ]]; then
   echo "A connected Android emulator is required" >&2
   exit 69
 fi
 
 fixture_file="$REPO_DIR/backend/src/test/resources/fixtures/additional_client_modifications_fixture.sql"
 fixture_output=$(docker exec -e MYSQL_PWD="$DB_PASSWORD" -i "$DB_CONTAINER" \
-  mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" < "$fixture_file")
+  mysql --default-character-set=utf8mb4 -u"$DB_USER" "$DB_NAME" <"$fixture_file")
 
 run_id=$(awk 'NR == 2 { print $1 }' <<<"$fixture_output")
 house_id=$(awk 'NR == 2 { print $2 }' <<<"$fixture_output")
@@ -65,9 +65,9 @@ done
 
 artifact_dir="$PROJECT_DIR/build/android-e2e/additional-modifications-$run_id"
 mkdir -p "$artifact_dir"
-printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
+printf '%s\n' "$fixture_output" >"$artifact_dir/fixture.txt"
 printf 'device=%s\napi=%s\nrun_id=%s\nhouse_id=%s\n' \
-  "$DEVICE_ID" "$DEVICE_API_URL" "$run_id" "$house_id" > "$artifact_dir/environment.txt"
+  "$DEVICE_ID" "$DEVICE_API_URL" "$run_id" "$house_id" >"$artifact_dir/environment.txt"
 export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
 
 original_rotation="$($ADB_BIN -s "$DEVICE_ID" shell settings get system accelerometer_rotation | tr -d '\r')"
@@ -126,13 +126,13 @@ for screenshot in "${screenshots[@]}"; do
     exit 1
   fi
 done
-printf '%s.png\n' "${screenshots[@]}" > "$artifact_dir/screenshots.txt"
+printf '%s.png\n' "${screenshots[@]}" >"$artifact_dir/screenshots.txt"
 
 read -r breeder_inactive sale_rows replacement_active waiting_count kits target_state \
-        batch_links sale_ready_tasks daily_care_tasks \
+  batch_links sale_ready_tasks daily_care_tasks \
   <<<"$(
-  docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
-    mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
+    docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
+      mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
       SELECT
         (SELECT COUNT(*) FROM rabbits WHERE id = $breeder_id AND is_active = FALSE),
         (SELECT COUNT(*) FROM sale_order_items WHERE rabbit_id = $breeder_id),
@@ -152,7 +152,7 @@ read -r breeder_inactive sale_rows replacement_active waiting_count kits target_
            WHERE r.mother_id = $mother_id AND wt.task_type = 'COMMODITY_ADAPTATION_CARE'
              AND wt.status = 'PENDING');
     "
-)"
+  )"
 
 actual="$breeder_inactive $sale_rows $replacement_active $waiting_count $kits $target_state $batch_links $sale_ready_tasks $daily_care_tasks"
 expected="1 1 1 2 2 3:2 2 2 2"

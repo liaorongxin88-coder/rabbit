@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -78,7 +78,7 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: '24'
+          node-version: "24"
 
       - name: Enable pinned pnpm
         run: corepack enable && corepack prepare pnpm@11.22.0 --activate
@@ -121,7 +121,7 @@ jobs:
       id-token: write
       attestations: write
     env:
-      CI: 'true'
+      CI: "true"
       TAG_NAME: ${{ github.ref_name }}
       APP_PROD_API_BASE_URL: ${{ vars.APP_PROD_API_BASE_URL }}
       KEYSTORE_BASE64: ${{ secrets.RABBIT_ANDROID_KEYSTORE_BASE64 }}
@@ -136,7 +136,7 @@ jobs:
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: gradle
           cache-dependency-path: |
             app/android/build.gradle

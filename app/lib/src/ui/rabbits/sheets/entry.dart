@@ -614,6 +614,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   late String _type;
   var _gender = '0';
   var _arrivalMethod = '0';
+  DateTime? _arrivalDate;
   String? _growthStage;
   String? _reproductiveStage;
 
@@ -634,6 +635,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   void initState() {
     super.initState();
     final rabbit = widget.rabbit;
+    _arrivalDate = rabbit?.arrivalDate == null
+        ? _dateOnly(DateTime.now())
+        : _dateOnly(rabbit!.arrivalDate!);
     if (rabbit == null) {
       _type = widget.initialType;
       _growthStage = null;
@@ -816,6 +820,14 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             ),
             if (!_isEdit) const SizedBox.shrink(),
           ],
+        ),
+        const SizedBox(height: 12),
+        _buildDateField(
+          key: const ValueKey('rabbit-arrival-date'),
+          label: '入场日期',
+          value: _arrivalDate,
+          enabled: !_isEdit,
+          onPicked: (value) => setState(() => _arrivalDate = value),
         ),
         const SizedBox(height: 12),
         _ResponsiveFieldRow(
@@ -1044,13 +1056,14 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     required String label,
     required DateTime? value,
     required ValueChanged<DateTime> onPicked,
+    bool enabled = true,
   }) {
     final text = value == null ? '未选择' : DateFormat('yyyy-MM-dd').format(value);
     return InputDecorator(
       key: key,
       decoration: InputDecoration(labelText: label),
       child: InkWell(
-        onTap: _saving
+        onTap: _saving || !enabled
             ? null
             : () async {
                 final picked = await showDatePicker(
@@ -1139,7 +1152,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               motherId: _rabbit.motherId,
               breed: _breedController.text,
               arrivalMethod: _arrivalMethod,
-              arrivalDate: _rabbit.arrivalDate,
+              arrivalDate: _arrivalDate,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
               reproductiveStage: _reproductiveStage,
@@ -1152,6 +1165,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               gender: _gender,
               breed: _breedController.text,
               arrivalMethod: _arrivalMethod,
+              arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
               reproductiveStage: _reproductiveStage,

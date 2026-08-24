@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { ShoppingCartIcon } from 'lucide-react'
-import { toast } from 'sonner'
-import { createRabbitSale } from '@/api/workspace'
-import { getOrCreateRabbitSaleRequest } from '@/lib/rabbit-sale'
-import { formatLocalDate } from '@/lib/date'
-import { Button } from '@/components/ui/button'
+import { useEffect, useRef, useState } from "react";
+import { ShoppingCartIcon } from "lucide-react";
+import { toast } from "sonner";
+import { createRabbitSale } from "@/api/workspace";
+import { getOrCreateRabbitSaleRequest } from "@/lib/rabbit-sale";
+import { formatLocalDate } from "@/lib/date";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,13 +12,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
-import type { Rabbit } from '@/types/api'
-import type { RabbitSaleRequest } from '@/types/rabbit-sale'
+} from "@/components/ui/dialog";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import type { Rabbit } from "@/types/api";
+import type { RabbitSaleRequest } from "@/types/rabbit-sale";
 
 export function RabbitSaleDialog({
   rabbit,
@@ -26,51 +26,54 @@ export function RabbitSaleDialog({
   onOpenChange,
   onSaved,
 }: {
-  rabbit: Rabbit | null
-  houseId: number | null
-  onOpenChange: (open: boolean) => void
-  onSaved: () => Promise<void>
+  rabbit: Rabbit | null;
+  houseId: number | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => Promise<void>;
 }) {
-  const [saleDate, setSaleDate] = useState('')
-  const [totalWeight, setTotalWeight] = useState('')
-  const [unitPrice, setUnitPrice] = useState('')
-  const [customer, setCustomer] = useState('')
-  const [remark, setRemark] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const pendingRequest = useRef<RabbitSaleRequest | null>(null)
+  const [saleDate, setSaleDate] = useState("");
+  const [totalWeight, setTotalWeight] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [customer, setCustomer] = useState("");
+  const [remark, setRemark] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const pendingRequest = useRef<RabbitSaleRequest | null>(null);
 
   useEffect(() => {
-    if (!rabbit) return
-    setSaleDate(formatLocalDate())
-    setTotalWeight(rabbit.weight == null ? '' : rabbit.weight.toFixed(2))
-    setUnitPrice('')
-    setCustomer('')
-    setRemark('')
-    setConfirmed(false)
-    pendingRequest.current = null
-  }, [rabbit])
+    if (!rabbit) return;
+    setSaleDate(formatLocalDate());
+    setTotalWeight(rabbit.weight == null ? "" : rabbit.weight.toFixed(2));
+    setUnitPrice("");
+    setCustomer("");
+    setRemark("");
+    setConfirmed(false);
+    pendingRequest.current = null;
+  }, [rabbit]);
 
   async function handleSubmit() {
-    if (!rabbit || !houseId) return
-    const normalizedWeight = Number(totalWeight)
-    const normalizedPrice = unitPrice.trim() ? Number(unitPrice) : undefined
-    const saleTime = new Date(`${saleDate}T12:00:00`).getTime()
+    if (!rabbit || !houseId) return;
+    const normalizedWeight = Number(totalWeight);
+    const normalizedPrice = unitPrice.trim() ? Number(unitPrice) : undefined;
+    const saleTime = new Date(`${saleDate}T12:00:00`).getTime();
     if (!Number.isFinite(saleTime)) {
-      toast.error('请选择出售日期')
-      return
+      toast.error("请选择出售日期");
+      return;
     }
     if (!Number.isFinite(normalizedWeight) || normalizedWeight <= 0) {
-      toast.error('请填写大于 0 的销售重量')
-      return
+      toast.error("请填写大于 0 的销售重量");
+      return;
     }
-    if (normalizedPrice != null && (!Number.isFinite(normalizedPrice) || normalizedPrice < 0)) {
-      toast.error('单价不能小于 0')
-      return
+    if (
+      normalizedPrice != null &&
+      (!Number.isFinite(normalizedPrice) || normalizedPrice < 0)
+    ) {
+      toast.error("单价不能小于 0");
+      return;
     }
     if (!confirmed) {
-      toast.error('请确认出售出栏的影响')
-      return
+      toast.error("请确认出售出栏的影响");
+      return;
     }
 
     const request = getOrCreateRabbitSaleRequest(
@@ -84,19 +87,21 @@ export function RabbitSaleDialog({
         remark: remark.trim() || undefined,
       },
       () => crypto.randomUUID(),
-    )
-    pendingRequest.current = request
-    setSaving(true)
+    );
+    pendingRequest.current = request;
+    setSaving(true);
     try {
-      await createRabbitSale(houseId, request)
-      pendingRequest.current = null
-      toast.success(`兔 #${rabbit.id} 已出售出栏`)
-      onOpenChange(false)
-      await onSaved()
+      await createRabbitSale(houseId, request);
+      pendingRequest.current = null;
+      toast.success(`兔 #${rabbit.id} 已出售出栏`);
+      onOpenChange(false);
+      await onSaved();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '出售失败，请稍后重试')
+      toast.error(
+        error instanceof Error ? error.message : "出售失败，请稍后重试",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -106,7 +111,8 @@ export function RabbitSaleDialog({
         <DialogHeader>
           <DialogTitle>出售出栏</DialogTitle>
           <DialogDescription>
-            兔 #{rabbit?.id ?? ''} 将写入销售单并标记为出售出栏，同时退出活跃批次和生产周期。
+            兔 #{rabbit?.id ?? ""}{" "}
+            将写入销售单并标记为出售出栏，同时退出活跃批次和生产周期。
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>
@@ -159,7 +165,10 @@ export function RabbitSaleDialog({
             />
           </Field>
           <Field>
-            <label className="flex items-start gap-3 text-sm" htmlFor="rabbit-sale-confirm">
+            <label
+              className="flex items-start gap-3 text-sm"
+              htmlFor="rabbit-sale-confirm"
+            >
               <input
                 id="rabbit-sale-confirm"
                 type="checkbox"
@@ -178,13 +187,19 @@ export function RabbitSaleDialog({
           </Field>
         </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
           <Button disabled={saving} onClick={() => void handleSubmit()}>
-            {saving ? <Spinner data-icon="inline-start" /> : <ShoppingCartIcon data-icon="inline-start" />}
+            {saving ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <ShoppingCartIcon data-icon="inline-start" />
+            )}
             确认出售
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

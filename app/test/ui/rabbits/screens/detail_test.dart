@@ -34,6 +34,7 @@ void main() {
     expect(find.text('在栏'), findsOneWidget);
     expect(find.text('商品兔'), findsWidgets);
     expect(find.text('1-2-1'), findsWidgets);
+    expect(find.text('2025-08-23'), findsOneWidget);
     final outbound = find.byKey(
       const ValueKey('rabbit-detail-outbound-31'),
     );
@@ -235,7 +236,7 @@ const _cage = Cage(
   isEnabled: true,
 );
 
-const _activeRabbit = Rabbit(
+final _activeRabbit = Rabbit(
   id: 31,
   houseId: 8,
   cageId: 12,
@@ -244,7 +245,7 @@ const _activeRabbit = Rabbit(
   gender: '0',
   breed: '新西兰白兔',
   arrivalMethod: '0',
-  arrivalDate: null,
+  arrivalDate: DateTime(2025, 8, 23),
   weight: 2.5,
   isActive: true,
 );

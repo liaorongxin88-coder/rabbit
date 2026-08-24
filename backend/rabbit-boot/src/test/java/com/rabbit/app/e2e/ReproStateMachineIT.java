@@ -167,6 +167,63 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
+    void everyOperationSynchronizesStageTimeAndNextReminder() {
+        Fixture fixture = fixture("repro_time_sync");
+        ReproResult opened = openAtEstrus(fixture, "time_sync_open");
+
+        Date estrusAt = new Date();
+        ReproResult estrus = apply(
+            fixture, opened.cycleId(), ReproAction.ESTRUS, "time_sync_estrus",
+            b -> b.occurredAt(estrusAt)
+        );
+        assertTransitionTiming(opened.cycleId(), estrusAt, estrus, 2);
+
+        Date matingAt = new Date();
+        ReproResult mating = apply(
+            fixture, opened.cycleId(), ReproAction.MATING, "time_sync_mating",
+            b -> b.occurredAt(matingAt)
+                .maleRabbitId(fixture.sireId)
+                .matingMethod(MatingMethod.NATURAL)
+        );
+        assertTransitionTiming(opened.cycleId(), matingAt, mating, 12);
+
+        Date palpationAt = new Date();
+        ReproResult palpation = apply(
+            fixture, opened.cycleId(), ReproAction.PALPATION, "time_sync_palpation",
+            b -> b.occurredAt(palpationAt)
+                .outcome(PalpationResult.PREGNANT.name())
+                .palpationResult(PalpationResult.PREGNANT)
+        );
+        assertTransitionTiming(opened.cycleId(), palpationAt, palpation, 15);
+
+        Date prepartumAt = new Date();
+        ReproResult prepartum = apply(
+            fixture, opened.cycleId(), ReproAction.PREPARTUM, "time_sync_prepartum",
+            b -> b.occurredAt(prepartumAt)
+        );
+        assertTransitionTiming(opened.cycleId(), prepartumAt, prepartum, 0);
+
+        Date deliveryAt = new Date();
+        ReproResult delivery = apply(
+            fixture, opened.cycleId(), ReproAction.DELIVERY, "time_sync_delivery",
+            b -> b.occurredAt(deliveryAt)
+                .outcome(DeliveryOutcome.BORN.name())
+                .totalKits(8)
+                .liveKits(7)
+                .keptKits(7)
+        );
+        assertTransitionTiming(opened.cycleId(), deliveryAt, delivery, 30);
+
+        Date weaningAt = new Date();
+        ReproResult weaning = apply(
+            fixture, opened.cycleId(), ReproAction.WEANING, "time_sync_weaning",
+            b -> b.occurredAt(weaningAt).weanedCount(7)
+        );
+        Assertions.assertNotNull(weaning.followUpCycleId());
+        assertTransitionTiming(weaning.followUpCycleId(), weaningAt, weaning, 10);
+    }
+
+    @Test
     void pastReminderOverrideIsRejectedWithoutAdvancing() {
         Fixture fixture = fixture("repro_due_past");
         ReproResult opened = openAtEstrus(fixture, "due_past_open");
@@ -599,6 +656,28 @@ public class ReproStateMachineIT extends E2eTestSupport {
     private Date dateOf(Long cycleId, String column) {
         return jdbc.queryForObject(
             "select " + column + " from breeding_cycles where id = ?", Date.class, cycleId
+        );
+    }
+
+    private void assertTransitionTiming(
+        Long cycleId,
+        Date occurredAt,
+        ReproResult result,
+        int expectedDueDays
+    ) {
+        Date stageEnteredAt = dateOf(cycleId, "stage_entered_at");
+        Assertions.assertTrue(
+            Math.abs(occurredAt.getTime() - stageEnteredAt.getTime()) < 1000,
+            "阶段时间必须同步为操作时间"
+        );
+        Assertions.assertEquals(expectedDueDays, daysBetween(occurredAt, result.nextDueTime()));
+        Date taskDue = jdbc.queryForObject(
+            "select due_time from work_tasks where id = ?",
+            Date.class, result.nextTaskId()
+        );
+        Assertions.assertTrue(
+            Math.abs(result.nextDueTime().getTime() - taskDue.getTime()) < 1000,
+            "返回的提醒时间必须与待办落库时间一致"
         );
     }
 

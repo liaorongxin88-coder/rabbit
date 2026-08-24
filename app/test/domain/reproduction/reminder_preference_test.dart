@@ -20,6 +20,20 @@ void main() {
     expect(preference.includes(_event('配种', status: 'overdue')), isFalse);
   });
 
+  test('date-only reminder response keeps the selected calendar day', () {
+    final event = EventItem.fromJson({
+      'recordId': 8,
+      'category': '生产',
+      'eventType': '出售',
+      'eventDate': '2026-08-23',
+      'rabbitId': 23,
+      'status': 'due',
+    });
+
+    expect(event.eventDate, DateTime(2026, 8, 23));
+    expect(event.dateLabel, '08月23日');
+  });
+
   test('reminder due bound includes the configured number of full days', () {
     const preference = ReminderPreference(
       id: 1,

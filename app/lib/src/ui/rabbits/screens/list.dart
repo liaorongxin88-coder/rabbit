@@ -485,6 +485,14 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
                 ),
               ],
               if (stage != null) _RabbitDetailFact(label: '生产阶段', value: stage),
+              if (rabbit.stageEnteredAt != null)
+                _RabbitDetailFact(
+                  label: '阶段开始日期',
+                  value: _dateLabel(
+                    rabbit.stageEnteredAt,
+                    fallback: '未填写',
+                  ),
+                ),
             ],
           ),
         ],

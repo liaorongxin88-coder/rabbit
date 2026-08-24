@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
@@ -154,6 +155,7 @@ class RabbitRepository {
     required String gender,
     required String breed,
     required String arrivalMethod,
+    required DateTime arrivalDate,
     required double? weight,
     String? growthStage,
     String? reproductiveStage,
@@ -168,7 +170,7 @@ class RabbitRepository {
       'type': type,
       'gender': gender,
       'arrivalMethod': arrivalMethod,
-      'arrivalDate': DateTime.now().millisecondsSinceEpoch,
+      'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
       'requestId': _uuid.v4(),
     };
     // 录入时直接入轨：建兔与开周期必须同事务，否则存栏里有这只母兔、
@@ -260,7 +262,7 @@ class RabbitRepository {
       body['motherId'] = motherId;
     }
     if (arrivalDate != null) {
-      body['arrivalDate'] = arrivalDate.millisecondsSinceEpoch;
+      body['arrivalDate'] = DateFormat('yyyy-MM-dd').format(arrivalDate);
     }
     final trimmedBreed = breed.trim();
     if (trimmedBreed.isNotEmpty) {
