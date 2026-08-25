@@ -8,16 +8,32 @@
         <result column="weaning_record_id" property="weaningRecordId"/>
         <result column="cage_id" property="cageId"/>
         <result column="alloc_count" property="allocCount"/>
+        <result column="male_count" property="maleCount"/>
+        <result column="female_count" property="femaleCount"/>
         <result column="create_time" property="createTime"/>
     </resultMap>
 
     <insert id="insertBatch">
-        insert into weaning_record_allocations (weaning_record_id, cage_id, alloc_count)
+        insert into weaning_record_allocations (
+            weaning_record_id, cage_id, alloc_count, male_count, female_count
+        )
         values
         <foreach collection="rows" item="r" separator=",">
-            (#{r.weaningRecordId}, #{r.cageId}, #{r.allocCount})
+            (
+                #{r.weaningRecordId}, #{r.cageId}, #{r.allocCount},
+                #{r.maleCount}, #{r.femaleCount}
+            )
         </foreach>
-        on duplicate key update alloc_count = alloc_count + values(alloc_count)
+        on duplicate key update
+            alloc_count = alloc_count + values(alloc_count),
+            male_count = case
+                when male_count is null or values(male_count) is null then null
+                else male_count + values(male_count)
+            end,
+            female_count = case
+                when female_count is null or values(female_count) is null then null
+                else female_count + values(female_count)
+            end
     </insert>
 
     <select id="selectByWeaningRecordId" resultMap="Map">

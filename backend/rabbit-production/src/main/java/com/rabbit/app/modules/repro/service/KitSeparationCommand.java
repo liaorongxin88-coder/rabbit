@@ -10,7 +10,8 @@ public record KitSeparationCommand(
     Long userId,
     String operator,
     WeaningRecord weaningRecord,
-    Long sireRabbitId,
+    Long motherRabbitId,
+    Long fatherRabbitId,
     List<WeaningRecordAllocation> allocations,
     Date separatedAt,
     String requestId

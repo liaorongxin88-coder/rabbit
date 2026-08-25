@@ -12,6 +12,7 @@
         <result column="payload_hash" property="payloadHash"/>
         <result column="status" property="status"/>
         <result column="error_message" property="errorMessage"/>
+        <result column="response_payload" property="responsePayload"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
@@ -40,6 +41,18 @@
         update request_dedup
         set status = #{status},
             error_message = #{errorMessage},
+            update_time = now()
+        where house_id = #{houseId}
+          and user_id = #{userId}
+          and api = #{api}
+          and request_id = #{requestId}
+    </update>
+
+    <update id="updateStatusWithResponse">
+        update request_dedup
+        set status = #{status},
+            error_message = null,
+            response_payload = #{responsePayload},
             update_time = now()
         where house_id = #{houseId}
           and user_id = #{userId}

@@ -7,10 +7,11 @@ export const rabbitTypeLabels: Record<string, string> = {
 }
 
 export const growthStageLabels: Record<string, string> = {
-  JUVENILE: '幼兔',
+  JUVENILE: '适应期',
+  ADAPTATION: '适应期',
   GROWING: '成长期',
   FATTENING: '育肥期',
-  MATURE: '成熟',
+  MATURE: '成熟可售',
 }
 
 const reproductiveStageLabels: Record<string, string> = {
@@ -23,7 +24,12 @@ const reproductiveStageLabels: Record<string, string> = {
   READY: '可配',
 }
 
-export const growthStageOptions = Object.entries(growthStageLabels)
+export const growthStageOptions = [
+  ['ADAPTATION', growthStageLabels.ADAPTATION],
+  ['GROWING', growthStageLabels.GROWING],
+  ['FATTENING', growthStageLabels.FATTENING],
+  ['MATURE', growthStageLabels.MATURE],
+] as const
 
 const buckReproductiveStageOptions = [
   ['READY', '可配'],
@@ -45,7 +51,7 @@ export function rabbitGenderLabel(gender: string) {
 
 export function rabbitArrivalMethodLabel(arrivalMethod?: string | null) {
   if (arrivalMethod === '0') return '购入'
-  if (arrivalMethod === '1') return '出生'
+  if (arrivalMethod === '1') return '场内生产'
   return arrivalMethod || '-'
 }
 

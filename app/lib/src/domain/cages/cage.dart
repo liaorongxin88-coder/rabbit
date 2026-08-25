@@ -106,6 +106,11 @@ class Cage {
 
   bool get isCommodityCage => status == '0' || status == '3';
 
+  bool get isProductionIntakeCage =>
+      isEnabled &&
+      ((status == '0' && rabbitCount == 0) || status == '3') &&
+      commodityRemainingCapacity > 0;
+
   /// Only the server's actual active breeding-rabbit lookup classifies a
   /// breeding cage by sex. Do not infer this from cage status or occupancy.
   bool get isDoeBreedingCage => breedingOccupantGender == '0';

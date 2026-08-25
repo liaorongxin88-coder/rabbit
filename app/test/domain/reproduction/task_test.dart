@@ -114,6 +114,19 @@ void main() {
     expect(result.followUpCycleId, 303);
   });
 
+  test('numeric task dates remain UTC API instants', () {
+    final instant = DateTime.utc(2026, 8, 19, 16, 30);
+    final task = ReproTask.fromJson({
+      'id': 1,
+      'taskType': 'MATING',
+      'taskLabel': '待配种',
+      'dueTime': instant.millisecondsSinceEpoch,
+    });
+
+    expect(task.dueTime, instant);
+    expect(task.dueTime!.isUtc, isTrue);
+  });
+
   test('action result keeps null or missing current cycle nullable', () {
     final explicitNull = ReproActionResult.fromJson({
       'cycleId': 401,

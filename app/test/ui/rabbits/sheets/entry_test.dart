@@ -1,16 +1,112 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({
+      'userId': 7,
+      'userName': 'operator',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'operator-token'});
+  });
+
+  testWidgets('cage intake chooses source before purchase type',
+      (tester) async {
+    await tester.pumpWidget(
+      _sourceTestApp(
+        permission: const HousePermission(
+          perms: 'edit',
+          isAdmin: false,
+          permissions: ['rabbit:rabbits:add'],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-intake-sheet')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择兔只来源'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('rabbit-intake-purchase')), findsOneWidget);
+    final production = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('rabbit-intake-production')),
+    );
+    expect(production.onPressed, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('rabbit-intake-purchase')));
+    await tester.pumpAndSettle();
+    expect(find.text('请选择录入兔子类型'), findsOneWidget);
+  });
+
+  testWidgets('production source requires query and edit permissions',
+      (tester) async {
+    await tester.pumpWidget(
+      _sourceTestApp(
+        permission: const HousePermission(
+          perms: 'edit',
+          isAdmin: false,
+          permissions: [
+            'rabbit:rabbits:add',
+            'rabbit:batches:query',
+            'rabbit:batches:edit',
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-intake-sheet')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final production = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('rabbit-intake-production')),
+    );
+    expect(production.onPressed, isNotNull);
+  });
+
+  testWidgets('purchase creation always sends arrivalMethod zero',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    await tester.pumpWidget(
+      _commodityEntryTestApp(repository: _repository(adapter)),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('场内生产'), findsNothing);
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    expect(adapter.requests.single.body['arrivalMethod'], '0');
+    expect(adapter.requests.single.body.containsKey('batchId'), isFalse);
+  });
 
   testWidgets(
     'breeding intake stages follow sex and keep actions above dynamic keyboards',
@@ -146,6 +242,137 @@ void main() {
     );
   });
 
+  testWidgets('repro entry requires an active batch before create',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+    await tester.pumpWidget(
+      _entryTestAppWithOverrides(
+        repository: repository,
+        batches: const [_activeBatch, _completedBatch],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final stage = find.byKey(const ValueKey('rabbit-repro-stage'));
+    await tester.ensureVisible(stage);
+    await tester.tap(stage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('待催情').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('rabbit-repro-batch')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rabbit-entry-submit')),
+    );
+    await tester.tap(find.byKey(const ValueKey('rabbit-entry-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请选择进行中的批次'), findsWidgets);
+    expect(adapter.requests, isEmpty);
+  });
+
+  testWidgets('repro entry selects only an active batch and sends its id',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+    await tester.pumpWidget(
+      _entryTestAppWithOverrides(
+        repository: repository,
+        batches: const [_activeBatch, _completedBatch],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final stage = find.byKey(const ValueKey('rabbit-repro-stage'));
+    await tester.ensureVisible(stage);
+    await tester.tap(stage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('待催情').last);
+    await tester.pumpAndSettle();
+
+    final batch = find.byKey(const ValueKey('rabbit-repro-batch'));
+    await tester.ensureVisible(batch);
+    await tester.tap(batch);
+    await tester.pumpAndSettle();
+    expect(find.text(_activeBatch.batchCode), findsWidgets);
+    expect(find.text(_completedBatch.batchCode), findsNothing);
+    await tester.tap(find.text(_activeBatch.batchCode).last);
+    await tester.pumpAndSettle();
+
+    // Leaving and re-entering tracking must not retain the earlier batch.
+    await tester.tap(stage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('暂不入轨').last);
+    await tester.pumpAndSettle();
+    await tester.tap(stage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('待催情').last);
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('请选择进行中的批次'), findsWidgets);
+    expect(adapter.requests, isEmpty);
+
+    await tester.ensureVisible(batch);
+    await tester.tap(batch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(_activeBatch.batchCode).last);
+    await tester.pumpAndSettle();
+
+    final submitAfterReselection =
+        find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submitAfterReselection);
+    await tester.tap(submitAfterReselection);
+    await _waitForCapturedRequest(tester, adapter);
+
+    final body = adapter.requests.single.body;
+    expect(adapter.requests, hasLength(1));
+    expect(body['reproStage'], 'AWAIT_ESTRUS');
+    expect(body['batchId'], _activeBatch.id);
+    expect(
+        body['requestId'],
+        isA<String>().having(
+          (value) => value.isNotEmpty,
+          'non-empty',
+          true,
+        ));
+  });
+
+  testWidgets('no batch is valid when create stays outside repro tracking',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+    await tester.pumpWidget(
+      _entryTestAppWithOverrides(
+        repository: repository,
+        batches: const <Batch>[],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    expect(adapter.requests, hasLength(1));
+    expect(adapter.requests.single.body.containsKey('reproStage'), isFalse);
+    expect(adapter.requests.single.body.containsKey('batchId'), isFalse);
+  });
+
   testWidgets('entry flow future completes only after the form closes',
       (tester) async {
     var finished = false;
@@ -162,6 +389,56 @@ void main() {
     await tester.tap(find.text('取消').last);
     await tester.pumpAndSettle();
     expect(finished, isTrue, reason: '表单关闭后调用方才能刷列表');
+  });
+
+  testWidgets('create rechecks capacity and house ownership before request',
+      (tester) async {
+    final cases = <({Cage cage, String message})>[
+      (
+        cage: _commodityCage.copyWith(rabbitCount: Cage.commodityCapacity),
+        message: '该商品兔笼已满（最多 ${Cage.commodityCapacity} 只）',
+      ),
+      (
+        cage: _commodityCage.copyWith(houseId: 9),
+        message: '目标笼位不属于当前兔舍，请重新选择',
+      ),
+    ];
+
+    for (final testCase in cases) {
+      final adapter = _CapturingAdapter();
+      final repository = _repository(adapter);
+      await tester.pumpWidget(
+        _commodityEntryTestApp(
+          repository: repository,
+          refreshedCages: [testCase.cage],
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('rabbit-entry-submit')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(testCase.message), findsOneWidget);
+      expect(adapter.requests, isEmpty);
+      await tester.tap(find.text('取消').last);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('historical juvenile commodity stage displays adaptation',
+      (tester) async {
+    await tester.pumpWidget(_historicalCommodityEditTestApp());
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-edit-sheet')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('适应期'), findsOneWidget);
+    expect(find.text('幼兔'), findsNothing);
   });
 
   testWidgets('replacement locks to reserve and commodity omits reproduction',
@@ -195,19 +472,59 @@ void main() {
   });
 }
 
+Widget _sourceTestApp({required HousePermission permission}) {
+  return _testApp(
+    refreshedCages: const [_commodityCage],
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-intake-sheet'),
+        onPressed: () => showRabbitIntakeSheet(
+          context: context,
+          houseId: 8,
+          cage: _commodityCage,
+          permission: permission,
+        ),
+        child: const Text('录入'),
+      ),
+    ),
+  );
+}
+
 Widget _entryTestApp({VoidCallback? onFlowFinished}) {
   return _testApp(
     child: Builder(
       builder: (context) => FilledButton(
         key: const ValueKey('open-rabbit-entry-sheet'),
         onPressed: () async {
-          await showRabbitEntryTypeSheet(
+          await showRabbitPurchaseEntrySheet(
             context: context,
             houseId: 8,
             cage: _breedingCage,
           );
           onFlowFinished?.call();
         },
+        child: const Text('录入'),
+      ),
+    ),
+  );
+}
+
+Widget _entryTestAppWithOverrides({
+  required RabbitRepository repository,
+  required List<Batch> batches,
+}) {
+  return _testApp(
+    repository: repository,
+    refreshedCages: const [_breedingCage],
+    batches: batches,
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-entry-sheet'),
+        onPressed: () => showRabbitPurchaseEntrySheet(
+          context: context,
+          houseId: 8,
+          cage: _breedingCage,
+        ),
         child: const Text('录入'),
       ),
     ),
@@ -231,12 +548,17 @@ Widget _replacementEditTestApp() {
   );
 }
 
-Widget _commodityEntryTestApp() {
+Widget _commodityEntryTestApp({
+  RabbitRepository? repository,
+  List<Cage>? refreshedCages,
+}) {
   return _testApp(
+    repository: repository,
+    refreshedCages: refreshedCages,
     child: Builder(
       builder: (context) => FilledButton(
         key: const ValueKey('open-rabbit-entry-sheet'),
-        onPressed: () => showRabbitEntryTypeSheet(
+        onPressed: () => showRabbitPurchaseEntrySheet(
           context: context,
           houseId: 8,
           cage: _commodityCage,
@@ -247,9 +569,39 @@ Widget _commodityEntryTestApp() {
   );
 }
 
-Widget _testApp({required Widget child}) {
+Widget _historicalCommodityEditTestApp() {
+  return _testApp(
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-edit-sheet'),
+        onPressed: () => showRabbitEditSheet(
+          context: context,
+          houseId: 8,
+          rabbit: _historicalCommodityRabbit,
+          cages: const [_commodityCage],
+        ),
+        child: const Text('编辑'),
+      ),
+    ),
+  );
+}
+
+Widget _testApp({
+  required Widget child,
+  RabbitRepository? repository,
+  List<Cage>? refreshedCages,
+  List<Batch> batches = const [_activeBatch],
+}) {
   return ProviderScope(
     overrides: [
+      if (repository != null)
+        rabbitRepositoryProvider.overrideWithValue(repository),
+      houseCagesProvider(8).overrideWith(
+        (_) async =>
+            refreshedCages ??
+            const [_breedingCage, _replacementCage, _commodityCage],
+      ),
+      houseBatchesProvider(8).overrideWith((_) async => batches),
       // 入轨字典来自服务端；组件测试里用一份与后端 EntryPoint 表一致的子集。
       reproEntryPointsProvider.overrideWith(
         (ref, houseId) async => const [
@@ -293,6 +645,26 @@ Widget _testApp({required Widget child}) {
   );
 }
 
+const _activeBatch = Batch(
+  id: 61,
+  houseId: 8,
+  batchCode: 'BREED-61',
+  status: '进行中',
+  startDate: null,
+  endDate: null,
+  remark: '',
+);
+
+const _completedBatch = Batch(
+  id: 62,
+  houseId: 8,
+  batchCode: 'BREED-CLOSED',
+  status: '已完成',
+  startDate: null,
+  endDate: null,
+  remark: '',
+);
+
 const _breedingCage = Cage(
   id: 11,
   houseId: 8,
@@ -320,6 +692,20 @@ const _commodityCage = Cage(
   isEnabled: true,
 );
 
+final _historicalCommodityRabbit = Rabbit.fromJson({
+  'id': 802,
+  'houseId': 8,
+  'cageId': 13,
+  'type': '2',
+  'gender': '0',
+  'breed': '新西兰白兔',
+  'arrivalMethod': '0',
+  'arrivalDate': '2025-08-23',
+  'weight': 2.4,
+  'isActive': true,
+  'growthStage': 'JUVENILE',
+});
+
 final _replacementRabbit = Rabbit(
   id: 801,
   houseId: 8,
@@ -329,9 +715,105 @@ final _replacementRabbit = Rabbit(
   gender: '0',
   breed: '新西兰白兔',
   arrivalMethod: '0',
-  arrivalDate: DateTime(2025, 8, 23),
+  arrivalDate: DateTime.utc(2025, 8, 22, 16, 30),
   weight: 3.2,
   isActive: true,
   growthStage: 'GROWING',
   reproductiveStage: null,
 );
+
+Future<void> _waitForCapturedRequest(
+  WidgetTester tester,
+  _CapturingAdapter adapter,
+) async {
+  for (var attempt = 0;
+      attempt < 30 && adapter.requests.isEmpty;
+      attempt += 1) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pump(const Duration(milliseconds: 500));
+  if (adapter.requests.isEmpty) {
+    final visibleText = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .where((text) => text.trim().isNotEmpty)
+        .join(' | ');
+    fail('No repository request. Visible text: $visibleText');
+  }
+}
+
+RabbitRepository _repository(_CapturingAdapter adapter) {
+  final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
+    ..httpClientAdapter = adapter;
+  final client = ApiClient(SessionStore(), dio: dio);
+  addTearDown(client.dispose);
+  return RabbitRepository(client);
+}
+
+class _CapturedRequest {
+  const _CapturedRequest({required this.path, required this.body});
+
+  final String path;
+  final Map<String, dynamic> body;
+}
+
+class _CapturingAdapter implements HttpClientAdapter {
+  final requests = <_CapturedRequest>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(
+      _CapturedRequest(
+        path: options.path,
+        body: Map<String, dynamic>.from(options.data as Map),
+      ),
+    );
+    return ResponseBody.fromString(
+      jsonEncode({
+        'code': 0,
+        'message': 'ok',
+        'data': {
+          'id': 900,
+          'houseId': 8,
+          'cageId': 13,
+          'type': '2',
+          'gender': '0',
+          'isActive': true,
+        },
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+extension on Cage {
+  Cage copyWith({int? houseId, int? rabbitCount}) {
+    return Cage(
+      id: id,
+      houseId: houseId ?? this.houseId,
+      cageNumber: cageNumber,
+      rowCode: rowCode,
+      layerIndex: layerIndex,
+      positionIndex: positionIndex,
+      breedingOccupantGender: breedingOccupantGender,
+      status: status,
+      rabbitCount: rabbitCount ?? this.rabbitCount,
+      isEnabled: isEnabled,
+      isFed: isFed,
+    );
+  }
+}

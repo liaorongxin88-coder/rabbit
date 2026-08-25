@@ -61,6 +61,32 @@ public class BatchOutboundIT extends E2eTestSupport {
     }
 
     @Test
+    void matureCommodityWithoutActiveBatchPassesPrecheckWithReadableStage() {
+        UserSession owner = register("outbound_mature_without_batch");
+        long houseId = createHouse(owner, "无批次成熟商品兔舍", 1, 1, 1);
+        long rabbitId = createRabbit(
+                owner, houseId, cageIds(owner, houseId).getFirst(), "2", "0", "mature_without_batch");
+        jdbc.update(
+                "update rabbits set growth_stage = 'MATURE' where house_id = ? and id = ?",
+                houseId,
+                rabbitId
+        );
+
+        JsonNode task = api.postOk("/api/outbound/tasks", owner.token, houseId, obj(
+                "entryType", "RABBIT",
+                "rabbitId", rabbitId,
+                "resumeExisting", false
+        ));
+
+        Assertions.assertEquals(1, task.get("summary").get("normal").asInt());
+        Assertions.assertEquals(1, task.get("selectedItems").size());
+        JsonNode rabbit = task.get("rabbits").get(0);
+        Assertions.assertEquals("成熟可售", rabbit.get("stage").asText());
+        Assertions.assertTrue(rabbit.get("batchId") == null || rabbit.get("batchId").isNull());
+        Assertions.assertEquals("ELIGIBLE", rabbit.get("reasonCode").asText());
+    }
+
+    @Test
     void mixedEligibilitySubmitRetryAndPayloadMismatch() {
         UserSession owner = register("outbound_owner");
         long houseId = createHouse(owner, "outbound_house", 1, 2, 1);
@@ -186,9 +212,9 @@ public class BatchOutboundIT extends E2eTestSupport {
                 "resumeExisting", true
         ));
         Assertions.assertEquals(2, task.get("summary").get("normal").asInt());
-        Assertions.assertEquals(1, task.get("summary").get("earlySale").asInt());
+        Assertions.assertEquals(2, task.get("summary").get("earlySale").asInt());
         Assertions.assertEquals(1, task.get("summary").get("needsAction").asInt());
-        Assertions.assertEquals(5, task.get("summary").get("blocked").asInt());
+        Assertions.assertEquals(4, task.get("summary").get("blocked").asInt());
         Assertions.assertEquals(2, task.get("selectedItems").size());
         Assertions.assertTrue(selectedContains(task, normalRowOne));
         Assertions.assertTrue(selectedContains(task, normalRowTwo));
@@ -198,7 +224,7 @@ public class BatchOutboundIT extends E2eTestSupport {
         Assertions.assertEquals("RABBIT_IN_TREATMENT", reasonCode(task, inTreatment));
         Assertions.assertEquals("RABBIT_ABNORMAL_UNRESOLVED", reasonCode(task, unresolvedAbnormal));
         Assertions.assertEquals("RABBIT_NOT_COMMODITY", reasonCode(task, nonCommodity));
-        Assertions.assertEquals("COMMODITY_STAGE_MISSING", reasonCode(task, missingStage));
+        Assertions.assertEquals("EARLY_SALE_CONFIRMATION_REQUIRED", reasonCode(task, missingStage));
         Assertions.assertEquals("CAGE_DISABLED", reasonCode(task, disabledCageRabbit));
 
         long firstVersion = version(task, normalRowOne);
@@ -537,6 +563,12 @@ public class BatchOutboundIT extends E2eTestSupport {
         long batchId = jdbc.queryForObject("select id from batches where house_id = ? and request_id = ?", Long.class, houseId, requestId);
         jdbc.update("insert into batch_rabbits (batch_id, rabbit_id, join_reason, batch_role, current_status, next_event_date, next_event_type, is_active, join_date, create_by, update_by) values (?, ?, '断奶', 'fattening', '成长期', timestampadd(day, ?, now()), '出售', true, now(), 'e2e', 'e2e')",
                 batchId, rabbitId, daysFromNow);
+        jdbc.update(
+                "update rabbits set growth_stage = ? where house_id = ? and id = ?",
+                daysFromNow <= 0 ? "MATURE" : "GROWING",
+                houseId,
+                rabbitId
+        );
         return batchId;
     }
 

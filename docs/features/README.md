@@ -5,6 +5,7 @@
 ## 专题
 
 - [兔只业务状态与批次操作](rabbit-lifecycle/README.md)
+- [兔舍统一入笼与生产分笼](cage-rabbit-intake/README.md)
 - [批量出库](batch-outbound/README.md)
 - [母兔生产流程 V2](reproduction-v2/README.md)
 

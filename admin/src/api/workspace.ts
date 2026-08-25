@@ -10,6 +10,7 @@ import {
   rabbitEventPath,
   weaningSeparationPath,
 } from "@/lib/batch-workflow";
+import { rabbitReplacementPath } from '@/lib/rabbit-replacement'
 import type {
   BatchRabbit,
   BreedingCycle,
@@ -27,6 +28,8 @@ import type {
   Rabbit,
   RabbitDepartureRequest,
   RabbitHouse,
+  RabbitReplacementRequest,
+  RabbitReplacementResult,
   ReproActionResult,
   ReproBulkResult,
   ReproTaskPage,
@@ -177,6 +180,13 @@ export function getRabbit(houseId: number, rabbitId: number) {
   return workspaceGetJson<Rabbit>(`/api/rabbits/${rabbitId}`, { houseId });
 }
 
+export function retainRabbitsAsReplacement(
+  houseId: number,
+  data: RabbitReplacementRequest,
+) {
+  return workspacePostJson<RabbitReplacementResult>(rabbitReplacementPath(), data, { houseId })
+}
+
 export function createRabbitSale(houseId: number, data: RabbitSaleRequest) {
   return workspacePostJson<void>("/api/sales", data, { houseId });
 }
@@ -214,6 +224,7 @@ export interface RabbitWriteInput {
  */
 export interface RabbitReproEntryInput {
   reproStage?: string;
+  batchId?: number;
   stageEnteredAt?: string;
   matingDate?: string;
   birthDate?: string;

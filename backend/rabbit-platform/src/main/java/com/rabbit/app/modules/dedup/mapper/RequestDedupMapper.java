@@ -21,4 +21,11 @@ public interface RequestDedupMapper {
                      @Param("requestId") String requestId,
                      @Param("status") String status,
                      @Param("errorMessage") String errorMessage);
+
+    int updateStatusWithResponse(@Param("houseId") Long houseId,
+                                 @Param("userId") Long userId,
+                                 @Param("api") String api,
+                                 @Param("requestId") String requestId,
+                                 @Param("status") String status,
+                                 @Param("responsePayload") String responsePayload);
 }

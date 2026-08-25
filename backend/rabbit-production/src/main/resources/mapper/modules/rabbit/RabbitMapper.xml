@@ -274,7 +274,7 @@
                 r.growth_stage_entered_at,
                 interval gs.adaptation_days day
               ) &lt;= #{now} then 'GROWING'
-              else 'JUVENILE'
+              else 'ADAPTATION'
             end,
             r.state_version = r.state_version + 1,
             r.update_by = #{updateBy},
@@ -296,7 +296,7 @@
                 r.growth_stage_entered_at,
                 interval gs.adaptation_days day
               ) &lt;= #{now} then 'GROWING'
-              else 'JUVENILE'
+              else 'ADAPTATION'
             end
     </update>
 

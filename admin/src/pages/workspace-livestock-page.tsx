@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Edit3Icon,
@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import {
   createCage,
   deleteCage,
+  listBatches,
   listCages,
   listRabbits,
   listReproEntryPoints,
@@ -27,7 +28,7 @@ import { CageAttentionLegend, CageMap } from '@/components/cage-map'
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
 import { RabbitFormDialog } from '@/components/rabbit-operation-dialogs'
-import { buildCageLayout } from '@/lib/cage-map'
+import { buildCageLayout, cageAcceptsMoreRabbits } from '@/lib/cage-map'
 import { rabbitStageSummary, rabbitTypeLabel } from '@/lib/rabbits'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
 import { Badge } from '@/components/ui/badge'
@@ -49,7 +50,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import type { Cage, Rabbit } from '@/types/api'
+import type { Cage, ProductionBatch, Rabbit } from '@/types/api'
 
 const cageStatusLabels: Record<string, string> = {
   '0': '空闲',
@@ -73,6 +74,7 @@ export function WorkspaceLivestockPage() {
   const [breedingCageFilter, setBreedingCageFilter] = useState<BreedingCageFilter>('all')
   const [cageDialog, setCageDialog] = useState<{ open: boolean; cage: Cage | null }>({ open: false, cage: null })
   const [rabbitCreateOpen, setRabbitCreateOpen] = useState(false)
+  const [rabbitInitialCageId, setRabbitInitialCageId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Cage | null>(null)
   const [cageDetail, setCageDetail] = useState<Cage | null>(null)
   /** 笼位区默认看分层地图；列表保留，大兔场按编号翻找时更好用。 */
@@ -81,6 +83,8 @@ export function WorkspaceLivestockPage() {
   /** 阶段→中文名。服务端下发，客户端不再自带一张会漂移的对照表。 */
   const [reproStageLabels, setReproStageLabels] = useState<Record<string, string>>({})
   const [entryPoints, setEntryPoints] = useState<ReproEntryPoint[]>([])
+  const [batches, setBatches] = useState<ProductionBatch[]>([])
+  const reproLoadVersion = useRef(0)
   const canEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
   const canControl = hasPermission(workspace.permission, 'rabbit:cages:edit')
   const canReadRepro = hasPermission(workspace.permission, 'rabbit:batches:query')
@@ -108,22 +112,30 @@ export function WorkspaceLivestockPage() {
   }, [workspace.selectedHouse])
 
   const loadReproDictionaries = useCallback(async () => {
+    const loadVersion = ++reproLoadVersion.current
+    setReproStageLabels({})
+    setEntryPoints([])
+    setBatches([])
     if (!workspace.selectedHouse || !canReadRepro) {
-      setReproStageLabels({})
-      setEntryPoints([])
       return
     }
+    const houseId = workspace.selectedHouse.id
     try {
-      const [stages, entries] = await Promise.all([
-        listReproStageActions(workspace.selectedHouse.id),
-        listReproEntryPoints(workspace.selectedHouse.id),
+      const [stages, entries, nextBatches] = await Promise.all([
+        listReproStageActions(houseId),
+        listReproEntryPoints(houseId),
+        listBatches(houseId),
       ])
+      if (loadVersion !== reproLoadVersion.current) return
       setReproStageLabels(Object.fromEntries(stages.map((item) => [item.stage, item.stageLabel])))
       setEntryPoints(entries)
+      setBatches(nextBatches)
     } catch {
+      if (loadVersion !== reproLoadVersion.current) return
       // 字典拿不到时退回英文枚举与旧阶段字段，列表不应该因此变成空页。
       setReproStageLabels({})
       setEntryPoints([])
+      setBatches([])
     }
   }, [canReadRepro, workspace.selectedHouse])
 
@@ -219,7 +231,13 @@ export function WorkspaceLivestockPage() {
                   <CardTitle>兔只</CardTitle>
                   <CardDescription>维护入场信息、笼位、品种和体重。</CardDescription>
                 </div>
-                <Button onClick={() => setRabbitCreateOpen(true)} disabled={!canEdit || cages.length === 0}>
+                <Button
+                  onClick={() => {
+                    setRabbitInitialCageId(null)
+                    setRabbitCreateOpen(true)
+                  }}
+                  disabled={!canEdit || cages.length === 0}
+                >
                   <PlusIcon data-icon="inline-start" />
                   录入兔只
                 </Button>
@@ -407,10 +425,15 @@ export function WorkspaceLivestockPage() {
       <RabbitFormDialog
         open={rabbitCreateOpen}
         rabbit={null}
-        onOpenChange={setRabbitCreateOpen}
+        onOpenChange={(open) => {
+          setRabbitCreateOpen(open)
+          if (!open) setRabbitInitialCageId(null)
+        }}
         houseId={workspace.selectedHouse?.id ?? null}
         cages={cages}
         entryPoints={entryPoints}
+        batches={batches}
+        initialCageId={rabbitInitialCageId}
         onSaved={load}
       />
       <DeleteCageDialog cage={deleteTarget} houseId={workspace.selectedHouse?.id ?? null} onOpenChange={(open) => !open && setDeleteTarget(null)} onDeleted={load} />
@@ -418,6 +441,12 @@ export function WorkspaceLivestockPage() {
         cage={cageDetail}
         rabbits={rabbits}
         stageLabels={reproStageLabels}
+        canCreateRabbit={canEdit}
+        onCreateRabbit={(cageId) => {
+          setCageDetail(null)
+          setRabbitInitialCageId(cageId)
+          setRabbitCreateOpen(true)
+        }}
         onOpenChange={(open) => !open && setCageDetail(null)}
       />
     </>
@@ -559,11 +588,15 @@ function CageRabbitsDialog({
   cage,
   rabbits,
   stageLabels,
+  canCreateRabbit,
+  onCreateRabbit,
   onOpenChange,
 }: {
   cage: Cage | null
   rabbits: Rabbit[]
   stageLabels: Record<string, string>
+  canCreateRabbit: boolean
+  onCreateRabbit: (cageId: number) => void
   onOpenChange: (open: boolean) => void
 }) {
   const members = useMemo(
@@ -607,6 +640,13 @@ function CageRabbitsDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+          <Button
+            disabled={!cage || !canCreateRabbit || !cageAcceptsMoreRabbits(cage)}
+            onClick={() => cage && onCreateRabbit(cage.id)}
+          >
+            <PlusIcon data-icon="inline-start" />
+            录入兔只
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

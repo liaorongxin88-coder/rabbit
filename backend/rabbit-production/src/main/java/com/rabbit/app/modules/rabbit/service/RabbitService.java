@@ -2,6 +2,7 @@ package com.rabbit.app.modules.rabbit.service;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
+import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
@@ -21,6 +22,7 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionItem;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
+import com.rabbit.app.modules.rabbit.domain.CommodityGrowthStage;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
@@ -47,9 +49,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RabbitService {
-    private static final Set<String> GROWTH_STAGES = Set.of(
-            "JUVENILE", "GROWING", "FATTENING", "MATURE"
-    );
     private static final Set<String> REPRODUCTIVE_STAGES = Set.of(
             "RESERVE", "EMPTY", "MATED", "PREGNANT", "LACTATING", "RESTING", "READY"
     );
@@ -116,6 +115,7 @@ public class RabbitService {
      */
     public record ReproEntry(
         String stage,
+        Long batchId,
         Date stageEnteredAt,
         Date matingDate,
         Date birthDate,
@@ -156,6 +156,7 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
+            lockReproBatchIfRequested(houseId, reproEntry);
 
             // A locking read is current under MySQL REPEATABLE READ. Every manual entry
             // serializes on its destination cage before it observes capacity/count state.
@@ -948,28 +949,6 @@ public class RabbitService {
             history.setUpdateBy(operator);
             rabbitStatusHistoryMapper.insert(history);
 
-            if (!"1".equals(rabbit.getGender())) {
-                reproStateMachineService.openCycleAt(new OpenCycleCommand(
-                    houseId,
-                    userId,
-                    operatorNameResolver.resolve(userId),
-                    rabbitId,
-                    null,
-                    ReproStage.AWAIT_ESTRUS,
-                    now,
-                    now,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    "后备成熟转种",
-                    ReproRequestIds.derive(requestId, "repro")
-                ));
-            }
             requestDedupService.markDone(houseId, userId, api, requestId);
         } catch (RuntimeException e) {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
@@ -1041,6 +1020,22 @@ public class RabbitService {
      * <p>只对种母兔生效；其他类型传了就直接报错，而不是静默忽略——静默忽略会让
      * 用户以为已经入轨，实际上这只兔永远不会出现在待办里。
      */
+    private void lockReproBatchIfRequested(Long houseId, ReproEntry entry) {
+        if (entry == null || entry.stage() == null || entry.stage().isBlank()) {
+            return;
+        }
+        if (entry.batchId() == null) {
+            throw new BizException(400, "生产批次不能为空");
+        }
+        Batch batch = batchMapper.selectByIdForUpdate(houseId, entry.batchId());
+        if (batch == null) {
+            throw new BizException(400, "生产批次不存在");
+        }
+        if (!"进行中".equals(batch.getStatus())) {
+            throw new BizException(409, "生产批次不在进行中");
+        }
+    }
+
     private void openReproEntryIfRequested(
         Long userId,
         Long houseId,
@@ -1061,7 +1056,7 @@ public class RabbitService {
             userId,
             operatorNameResolver.resolve(userId),
             rabbit.getId(),
-            null,
+            entry.batchId(),
             target,
             enteredAt,
             enteredAt,
@@ -1083,10 +1078,14 @@ public class RabbitService {
         String growthStage = normalizeStage(rabbit.getGrowthStage());
         String reproductiveStage = normalizeStage(rabbit.getReproductiveStage());
         if ("2".equals(type) && growthStage == null) {
-            growthStage = "JUVENILE";
+            growthStage = CommodityGrowthStage.ADAPTATION.name();
         }
-        if (growthStage != null && !GROWTH_STAGES.contains(growthStage)) {
-            throw new BizException(400, "growthStage不支持");
+        if (growthStage != null) {
+            try {
+                growthStage = CommodityGrowthStage.normalizeCode(growthStage);
+            } catch (IllegalArgumentException e) {
+                throw new BizException(400, "growthStage不支持");
+            }
         }
         if (reproductiveStage != null && !REPRODUCTIVE_STAGES.contains(reproductiveStage)) {
             throw new BizException(400, "reproductiveStage不支持");
@@ -1250,7 +1249,7 @@ public class RabbitService {
             // 否则兔子已离场而周期仍 OPEN，她会永久占着 uk_bc_pipeline，
             // 待办也永远停在 PENDING，今日清单里一直有一只不存在的兔子。
             //
-            // 散养母兔（不属任何批次）同样需要结清，所以放在批次判断之外。
+            // 无开放周期的母兔也要走同一离场入口，所以放在批次判断之外。
             reproActionService.retireMother(
                 houseId,
                 userId,

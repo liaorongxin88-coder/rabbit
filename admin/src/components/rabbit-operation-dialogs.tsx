@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRightIcon, ArrowUpRightIcon, HeartCrackIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, ArrowUpRightIcon, HeartCrackIcon, SproutIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createRabbit,
   promoteReplacementRabbit,
+  retainRabbitsAsReplacement,
   requestId,
   submitRabbitDeparture,
   transferRabbitCage,
@@ -20,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -34,14 +35,32 @@ import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { getOrCreateRabbitDepartureRequest } from '@/lib/batch-workflow'
 import { buildCageLayout, cageAcceptsMoreRabbits } from '@/lib/cage-map'
-import { formatDateInput } from '@/lib/date'
+import { farmBusinessDateToIso, formatDateInput } from '@/lib/date'
+import {
+  buildRabbitReproEntryInput,
+  inProgressProductionBatches,
+  keepValidProductionBatchId,
+} from '@/lib/rabbit-repro-entry'
+import {
+  isReplacementTargetCage,
+  preferredRabbitTypeForCage,
+  rabbitCageValidationMessage,
+} from '@/lib/rabbit-cage'
+import { getOrCreateRabbitReplacementRequest } from '@/lib/rabbit-replacement'
 import {
   defaultReproductiveStage,
   growthStageOptions,
   rabbitTypeLabels,
   reproductiveOptions,
 } from '@/lib/rabbits'
-import type { Cage, Rabbit, RabbitDepartureRequest, RabbitDepartureType } from '@/types/api'
+import type {
+  Cage,
+  Rabbit,
+  ProductionBatch,
+  RabbitDepartureRequest,
+  RabbitDepartureType,
+  RabbitReplacementRequest,
+} from '@/types/api'
 
 const cageStatusLabels: Record<string, string> = {
   '0': '空闲',
@@ -65,10 +84,6 @@ function cageUsageLabel(cage: Cage) {
   return cageStatusLabels[cage.status ?? ''] ?? cage.status ?? '-'
 }
 
-function toIsoDate(value: string) {
-  return value ? new Date(`${value}T00:00:00`).toISOString() : undefined
-}
-
 export function RabbitFormDialog({
   open,
   rabbit,
@@ -76,6 +91,8 @@ export function RabbitFormDialog({
   houseId,
   cages,
   entryPoints,
+  batches,
+  initialCageId,
   onSaved,
 }: {
   open: boolean
@@ -84,6 +101,8 @@ export function RabbitFormDialog({
   houseId: number | null
   cages: Cage[]
   entryPoints: ReproEntryPoint[]
+  batches: ProductionBatch[]
+  initialCageId?: number | null
   onSaved: () => Promise<void>
 }) {
   const [cageId, setCageId] = useState('')
@@ -96,6 +115,7 @@ export function RabbitFormDialog({
   const [growthStage, setGrowthStage] = useState('')
   const [reproductiveStage, setReproductiveStage] = useState('')
   const [reproStage, setReproStage] = useState(NO_REPRO_ENTRY)
+  const [batchId, setBatchId] = useState('')
   const [stageEnteredAt, setStageEnteredAt] = useState('')
   const [matingDate, setMatingDate] = useState('')
   const [birthDate, setBirthDate] = useState('')
@@ -104,8 +124,14 @@ export function RabbitFormDialog({
 
   useEffect(() => {
     if (!open) return
-    setCageId(String(rabbit?.cageId ?? cages.find((cage) => cage.isEnabled)?.id ?? ''))
-    const nextType = rabbit?.type ?? '0'
+    const initialCage = cages.find(
+      (cage) => cage.id === initialCageId && cage.isEnabled && cage.houseId === houseId,
+    )
+    const defaultCage = initialCage ?? cages.find(
+      (cage) => cage.isEnabled && cage.houseId === houseId,
+    )
+    setCageId(String(rabbit?.cageId ?? defaultCage?.id ?? ''))
+    const nextType = rabbit?.type ?? preferredRabbitTypeForCage(defaultCage)
     const nextGender = rabbit?.gender ?? '0'
     setType(nextType)
     setGender(nextGender)
@@ -118,18 +144,32 @@ export function RabbitFormDialog({
       rabbit?.reproductiveStage ?? (rabbit ? '' : defaultReproductiveStage(nextType, nextGender)),
     )
     setReproStage(NO_REPRO_ENTRY)
+    setBatchId('')
     setStageEnteredAt(formatDateInput(new Date().toISOString()))
     setMatingDate('')
     setBirthDate('')
     setLiveKits('')
-  }, [cages, open, rabbit])
+  }, [cages, houseId, initialCageId, open, rabbit])
+
+  const availableBatches = useMemo(() => inProgressProductionBatches(batches), [batches])
+
+  useEffect(() => {
+    if (!open) return
+    setBatchId((current) => keepValidProductionBatchId(current, availableBatches))
+  }, [availableBatches, houseId, open])
 
   const reproductiveStageOptions = reproductiveOptions(type, gender)
   const canOpenReproEntry = !rabbit && type === '0' && gender === '0'
-  const selectedEntry = entryPoints.find((entry) => entry.stage === reproStage) ?? null
+  const selectedEntry = canOpenReproEntry
+    ? entryPoints.find((entry) => entry.stage === reproStage) ?? null
+    : null
   const requiredFacts = new Set(selectedEntry?.requiredFacts.map((fact) => fact.fact) ?? [])
   const needsMatingDate = requiredFacts.has('MATING_DATE') || requiredFacts.has('GESTATION_ANCHOR')
   const currentCage = cages.find((cage) => cage.id === rabbit?.cageId)
+  const selectedCage = cages.find((cage) => cage.id === Number(cageId))
+  const cageValidationMessage = !rabbit && cageId && houseId
+    ? rabbitCageValidationMessage(selectedCage, type, houseId)
+    : null
 
   function resetReproductiveStage(nextType: string, nextGender: string) {
     const options = reproductiveOptions(nextType, nextGender)
@@ -141,37 +181,57 @@ export function RabbitFormDialog({
   function handleTypeChange(nextType: string) {
     setType(nextType)
     resetReproductiveStage(nextType, gender)
+    if (nextType !== '0' || gender !== '0') {
+      setReproStage(NO_REPRO_ENTRY)
+      setBatchId('')
+    }
   }
 
   function handleGenderChange(nextGender: string) {
     setGender(nextGender)
     resetReproductiveStage(type, nextGender)
+    if (type !== '0' || nextGender !== '0') {
+      setReproStage(NO_REPRO_ENTRY)
+      setBatchId('')
+    }
+  }
+
+  function handleReproStageChange(nextStage: string) {
+    setReproStage(nextStage)
+    if (nextStage === NO_REPRO_ENTRY) {
+      setBatchId('')
+    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!houseId || !cageId) return
+    if (!houseId || !cageId || cageValidationMessage) return
     const data = {
       cageId: Number(cageId),
       type,
       gender,
       breed: breed.trim(),
       arrivalMethod,
-      arrivalDate: arrivalDate ? new Date(`${arrivalDate}T00:00:00`).toISOString() : undefined,
+      arrivalDate: farmBusinessDateToIso(arrivalDate),
       weight: weight ? Number(weight) : undefined,
       growthStage: growthStage || undefined,
       reproductiveStage: reproductiveStageOptions.length === 0
         ? undefined
         : reproductiveStage || undefined,
     }
+    if (selectedEntry && !batchId) {
+      toast.error('选择生产阶段后，请选择当前进行中的批次')
+      return
+    }
     const entry = canOpenReproEntry && selectedEntry
-      ? {
+      ? buildRabbitReproEntryInput({
         reproStage: selectedEntry.stage,
-        stageEnteredAt: toIsoDate(stageEnteredAt),
-        matingDate: toIsoDate(matingDate),
-        birthDate: toIsoDate(birthDate),
+        batchId: Number(batchId),
+        stageEnteredAt,
+        matingDate,
+        birthDate,
         liveKits: liveKits ? Number(liveKits) : undefined,
-      }
+      })
       : {}
     if (selectedEntry) {
       const missing = selectedEntry.requiredFacts.find((fact) => {
@@ -224,7 +284,9 @@ export function RabbitFormDialog({
                   <SelectTrigger id="rabbit-cage"><SelectValue placeholder="选择笼位" /></SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {cages.filter((cage) => cage.isEnabled).map((cage) => (
+                      {cages.filter(
+                        (cage) => cage.isEnabled && cage.houseId === houseId,
+                      ).map((cage) => (
                         <SelectItem key={cage.id} value={String(cage.id)}>
                           {cage.cageNumber} · {cage.rabbitCount} 只
                         </SelectItem>
@@ -233,6 +295,11 @@ export function RabbitFormDialog({
                   </SelectContent>
                 </Select>
               )}
+              {cageValidationMessage ? (
+                <FieldDescription className="text-destructive">
+                  {cageValidationMessage}
+                </FieldDescription>
+              ) : null}
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
@@ -303,7 +370,7 @@ export function RabbitFormDialog({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor="rabbit-repro-stage">生产阶段</FieldLabel>
-                    <Select value={reproStage} onValueChange={setReproStage}>
+                    <Select value={reproStage} onValueChange={handleReproStageChange}>
                       <SelectTrigger id="rabbit-repro-stage"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -329,7 +396,34 @@ export function RabbitFormDialog({
                   </Field>
                 </div>
                 {selectedEntry ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="rabbit-production-batch">生产批次</FieldLabel>
+                      <Select
+                        value={batchId}
+                        onValueChange={setBatchId}
+                        disabled={availableBatches.length === 0}
+                      >
+                        <SelectTrigger id="rabbit-production-batch">
+                          <SelectValue placeholder={availableBatches.length === 0 ? '当前没有进行中的批次' : '选择批次'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {availableBatches.map((batch) => (
+                              <SelectItem key={batch.id} value={String(batch.id)}>
+                                {batch.batchCode}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        {availableBatches.length === 0
+                          ? '请先到生产管理创建批次，或选择“暂不入轨”。'
+                          : '选择生产阶段后必须绑定进行中的批次；“暂不入轨”不需要选择。'}
+                      </FieldDescription>
+                    </Field>
+                    <div className="grid gap-4 sm:grid-cols-2">
                     {needsMatingDate ? (
                       <Field>
                         <FieldLabel htmlFor="rabbit-mating-date">配种日期</FieldLabel>
@@ -364,7 +458,8 @@ export function RabbitFormDialog({
                         />
                       </Field>
                     ) : null}
-                  </div>
+                    </div>
+                  </>
                 ) : null}
               </>
             ) : null}
@@ -414,7 +509,10 @@ export function RabbitFormDialog({
           </FieldGroup>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-            <Button type="submit" disabled={saving || !cageId}>
+            <Button
+              type="submit"
+              disabled={saving || !cageId || Boolean(cageValidationMessage) || Boolean(selectedEntry && !batchId)}
+            >
               {saving ? <Spinner data-icon="inline-start" /> : null}
               保存
             </Button>
@@ -607,6 +705,110 @@ export function RabbitTransferDialog({
           <Button disabled={saving || !targetCageId} onClick={() => void handleSubmit()}>
             {saving ? <Spinner data-icon="inline-start" /> : <ArrowLeftRightIcon data-icon="inline-start" />}
             确认换笼
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function RabbitReplacementDialog({
+  rabbit,
+  cages,
+  houseId,
+  onOpenChange,
+  onSaved,
+}: {
+  rabbit: Rabbit | null
+  cages: Cage[]
+  houseId: number | null
+  onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void>
+}) {
+  const [targetCageId, setTargetCageId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const pendingRequest = useRef<RabbitReplacementRequest | null>(null)
+  const targetCages = useMemo(
+    () => houseId ? cages.filter((cage) => isReplacementTargetCage(cage, houseId)) : [],
+    [cages, houseId],
+  )
+
+  useEffect(() => {
+    if (!rabbit) {
+      setTargetCageId('')
+      pendingRequest.current = null
+      return
+    }
+    setTargetCageId((current) => targetCages.some(
+      (cage) => cage.id === Number(current),
+    ) ? current : String(targetCages[0]?.id ?? ''))
+    pendingRequest.current = null
+  }, [rabbit, targetCages])
+
+  async function handleSubmit() {
+    if (!rabbit || !houseId || !targetCageId || saving) return
+    const request = getOrCreateRabbitReplacementRequest(
+      pendingRequest.current,
+      {
+        rabbitIds: [rabbit.id],
+        forceExitBatch: true,
+        targetCageId: Number(targetCageId),
+      },
+      requestId,
+    )
+    pendingRequest.current = request
+    setSaving(true)
+    try {
+      await retainRabbitsAsReplacement(houseId, request)
+      pendingRequest.current = null
+      toast.success(`兔 #${rabbit.id} 已留种并转为后备兔`)
+      onOpenChange(false)
+      await onSaved()
+    } catch {
+      // 共享请求层会展示失败原因；草稿未变化时保留 requestId 以支持幂等重试。
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={Boolean(rabbit)} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>留种转后备</DialogTitle>
+          <DialogDescription>
+            兔 #{rabbit?.id ?? ''} 会退出当前活跃批次、转为后备兔，并移入所选后备兔笼。
+          </DialogDescription>
+        </DialogHeader>
+        <Field>
+          <FieldLabel htmlFor="replacement-target-cage">目标笼位</FieldLabel>
+          <Select
+            value={targetCageId}
+            onValueChange={setTargetCageId}
+            disabled={saving || targetCages.length === 0}
+          >
+            <SelectTrigger id="replacement-target-cage">
+              <SelectValue placeholder="选择空闲笼位" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {targetCages.map((cage) => (
+                  <SelectItem key={cage.id} value={String(cage.id)}>
+                    {cage.cageNumber} · {cageUsageLabel(cage)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          {targetCages.length === 0 ? (
+            <FieldDescription>当前兔场没有启用且空闲的后备兔笼或空笼。</FieldDescription>
+          ) : null}
+        </Field>
+        <DialogFooter>
+          <Button variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>取消</Button>
+          <Button disabled={saving || !targetCageId} onClick={() => void handleSubmit()}>
+            {saving ? <Spinner data-icon="inline-start" /> : <SproutIcon data-icon="inline-start" />}
+            确认留种
           </Button>
         </DialogFooter>
       </DialogContent>

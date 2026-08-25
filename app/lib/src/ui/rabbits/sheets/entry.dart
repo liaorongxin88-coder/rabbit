@@ -7,23 +7,29 @@ import 'package:intl/intl.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
+import 'package:rabbit_flutter/src/ui/batches/sheets/separation.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/cage_target.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 const _growthStageOptions = <_StageOption>[
-  _StageOption('JUVENILE', '幼兔'),
+  _StageOption('ADAPTATION', '适应期'),
   _StageOption('GROWING', '成长期'),
   _StageOption('FATTENING', '育肥期'),
-  _StageOption('MATURE', '成熟'),
+  _StageOption('MATURE', '成熟可售'),
 ];
 
 const _buckReproductiveStageOptions = <_StageOption>[
@@ -35,31 +41,213 @@ const _replacementReproductiveStageOptions = <_StageOption>[
   _StageOption('RESERVE', '后备'),
 ];
 
-/// 录入兔只的两步流程：先选类型，再填详情。
-///
-/// 两步都在这里 await，因为调用方（笼位详情页）要靠这个 Future 决定何时刷列表。
-/// 早先的写法是类型页 pop 后在 post-frame 回调里另开表单而不等，于是调用方的
-/// 刷新回调在兔子创建之前就跑完了，新录入的兔子要退出重进页面才看得见。
-Future<void> showRabbitEntryTypeSheet({
+List<Batch> _inProgressBatches(Iterable<Batch> batches) {
+  final result = batches
+      .where((batch) => batch.id > 0 && batch.status.trim() == '进行中')
+      .toList();
+  result.sort((left, right) => right.id.compareTo(left.id));
+  return result;
+}
+
+Future<void> showRabbitIntakeSheet({
+  required BuildContext context,
+  required int houseId,
+  required Cage cage,
+  required HousePermission permission,
+}) async {
+  final choice = await showAppModalSheet<_RabbitIntakeChoice>(
+    context: context,
+    builder: (_) => _RabbitSourceSheet(
+      houseId: houseId,
+      cage: cage,
+      permission: permission,
+    ),
+  );
+  if (choice == null || !context.mounted) {
+    return;
+  }
+
+  if (choice.source == _RabbitIntakeSource.purchase) {
+    await showRabbitPurchaseEntrySheet(
+      context: context,
+      houseId: houseId,
+      cage: choice.cage,
+    );
+    return;
+  }
+
+  final result = await showProductionWeaningSeparationSheet(
+    context: context,
+    houseId: houseId,
+    currentCage: choice.cage,
+  );
+  if (result != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '已分笼 ${result.separatedCount} 只，剩余 ${result.waitingCount} 只',
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> showRabbitPurchaseEntrySheet({
   required BuildContext context,
   required int houseId,
   required Cage cage,
 }) async {
   final type = await showAppModalSheet<String>(
     context: context,
-    builder: (sheetContext) => _RabbitTypeSheet(cage: cage),
+    builder: (_) => _RabbitTypeSheet(cage: cage),
   );
   if (type == null || !context.mounted) {
     return;
   }
   await showAppModalSheet<void>(
     context: context,
-    builder: (sheetContext) => _CreateRabbitSheet(
+    builder: (_) => _CreateRabbitSheet(
       houseId: houseId,
       cage: cage,
       initialType: type,
     ),
   );
+}
+
+enum _RabbitIntakeSource { purchase, production }
+
+class _RabbitIntakeChoice {
+  const _RabbitIntakeChoice({required this.source, required this.cage});
+
+  final _RabbitIntakeSource source;
+  final Cage cage;
+}
+
+class _RabbitSourceSheet extends ConsumerStatefulWidget {
+  const _RabbitSourceSheet({
+    required this.houseId,
+    required this.cage,
+    required this.permission,
+  });
+
+  final int houseId;
+  final Cage cage;
+  final HousePermission permission;
+
+  @override
+  ConsumerState<_RabbitSourceSheet> createState() => _RabbitSourceSheetState();
+}
+
+class _RabbitSourceSheetState extends ConsumerState<_RabbitSourceSheet> {
+  AsyncValue<Cage?> _productionCage = const AsyncValue.data(null);
+
+  bool get _canUseProduction =>
+      widget.permission.canQueryBatches && widget.permission.canEditBatches;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_canUseProduction) {
+      _productionCage = const AsyncValue.loading();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refreshProductionCage();
+      });
+    }
+  }
+
+  Future<void> _refreshProductionCage() async {
+    setState(() => _productionCage = const AsyncValue.loading());
+    try {
+      final cages =
+          await ref.refresh(houseCagesProvider(widget.houseId).future);
+      final cage = cages.where((item) => item.id == widget.cage.id).firstOrNull;
+      if (!mounted) return;
+      setState(() => _productionCage = AsyncValue.data(cage));
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      setState(
+        () => _productionCage = AsyncValue.error(error, stackTrace),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final freshCage = _productionCage.valueOrNull;
+    final productionEnabled =
+        _canUseProduction && freshCage?.isProductionIntakeCage == true;
+    final cageName = widget.cage.cageNumber.isEmpty
+        ? '#${widget.cage.id}'
+        : widget.cage.cageNumber;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('选择兔只来源', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 6),
+            Text(
+              '$cageName · ${widget.cage.usageLabel} · ${widget.cage.rabbitCount} 只',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              key: const ValueKey('rabbit-intake-purchase'),
+              onPressed: widget.permission.canAddRabbit
+                  ? () => Navigator.of(context).pop(
+                        _RabbitIntakeChoice(
+                          source: _RabbitIntakeSource.purchase,
+                          cage: freshCage ?? widget.cage,
+                        ),
+                      )
+                  : null,
+              icon: const Icon(Icons.add_business_outlined),
+              label: const Text('购入兔只'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const ValueKey('rabbit-intake-production'),
+              onPressed: productionEnabled
+                  ? () => Navigator.of(context).pop(
+                        _RabbitIntakeChoice(
+                          source: _RabbitIntakeSource.production,
+                          cage: freshCage!,
+                        ),
+                      )
+                  : null,
+              icon: _productionCage.isLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.call_split_outlined),
+              label: const Text('场内生产'),
+            ),
+            if (!_canUseProduction) ...[
+              const SizedBox(height: 8),
+              const Text('场内生产需要批次查看和编辑权限。'),
+            ] else if (_productionCage.hasError) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                key: const ValueKey('rabbit-intake-cage-retry'),
+                onPressed: _refreshProductionCage,
+                icon: const Icon(Icons.refresh),
+                label: const Text('笼位刷新失败，重新读取'),
+              ),
+            ] else if (!_productionCage.isLoading && !productionEnabled) ...[
+              const SizedBox(height: 8),
+              const Text('场内生产仅可进入启用且有容量的通用空笼或商品兔笼。'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> showRabbitEditSheet({
@@ -122,6 +310,7 @@ class _ExistingRabbitReproEntrySheetState
     extends ConsumerState<_ExistingRabbitReproEntrySheet> {
   final _liveKitsController = TextEditingController();
   String? _stage;
+  int? _batchId;
   DateTime? _stageEnteredAt;
   DateTime? _matingDate;
   DateTime? _birthDate;
@@ -132,7 +321,7 @@ class _ExistingRabbitReproEntrySheetState
     super.initState();
     _stage = widget.initialStage;
     if (_stage != null) {
-      _stageEnteredAt = _dateOnly(DateTime.now());
+      _stageEnteredAt = _farmToday();
     }
   }
 
@@ -145,6 +334,7 @@ class _ExistingRabbitReproEntrySheetState
   @override
   Widget build(BuildContext context) {
     final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
+    final batchesAsync = ref.watch(houseBatchesProvider(widget.houseId));
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     return AnimatedPadding(
@@ -174,7 +364,7 @@ class _ExistingRabbitReproEntrySheetState
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '母兔 #${widget.rabbit.id} · 批次可稍后关联',
+                            '母兔 #${widget.rabbit.id} · 入轨前请选择进行中的批次',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium,
@@ -206,7 +396,7 @@ class _ExistingRabbitReproEntrySheetState
                       icon: Icons.error_outline,
                       text: '生产阶段读取失败：$error',
                     ),
-                    data: _buildEntryFields,
+                    data: (entries) => _buildEntryFields(entries, batchesAsync),
                   ),
                 ),
               ),
@@ -218,7 +408,10 @@ class _ExistingRabbitReproEntrySheetState
     );
   }
 
-  Widget _buildEntryFields(List<ReproEntryPoint> entries) {
+  Widget _buildEntryFields(
+    List<ReproEntryPoint> entries,
+    AsyncValue<List<Batch>> batchesAsync,
+  ) {
     if (entries.isEmpty) {
       return const InfoNotice(
         icon: Icons.info_outline,
@@ -251,14 +444,11 @@ class _ExistingRabbitReproEntrySheetState
                 child: Text(entry.stageLabel),
               ),
           ],
-          onChanged: _saving
-              ? null
-              : (value) => setState(() {
-                    _stage = value;
-                    _stageEnteredAt ??= _dateOnly(DateTime.now());
-                  }),
+          onChanged: _saving ? null : _setStage,
         ),
         if (selected != null) ...[
+          const SizedBox(height: 12),
+          _buildBatchField(batchesAsync),
           const SizedBox(height: 12),
           _buildDateField(
             key: const ValueKey('existing-rabbit-stage-entered-at'),
@@ -315,9 +505,9 @@ class _ExistingRabbitReproEntrySheetState
             : () async {
                 final picked = await showDatePicker(
                   context: context,
-                  initialDate: value ?? _dateOnly(DateTime.now()),
+                  initialDate: value == null ? _farmToday() : _dateOnly(value),
                   firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
+                  lastDate: _farmToday().add(const Duration(days: 1)),
                   helpText: label,
                   cancelText: '取消',
                   confirmText: '确定',
@@ -330,13 +520,62 @@ class _ExistingRabbitReproEntrySheetState
           children: [
             Expanded(
               child: Text(
-                value == null ? '未选择' : DateFormat('yyyy-MM-dd').format(value),
+                value == null
+                    ? '未选择'
+                    : DateFormat('yyyy-MM-dd').format(_dateOnly(value)),
               ),
             ),
             const Icon(Icons.calendar_today_outlined, size: 18),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBatchField(AsyncValue<List<Batch>> batchesAsync) {
+    return batchesAsync.when(
+      loading: () => const InfoNotice(
+        icon: Icons.hourglass_empty,
+        text: '正在读取进行中的批次…',
+      ),
+      error: (_, __) => const InfoNotice(
+        icon: Icons.error_outline,
+        text: '批次读取失败，请刷新后重试。',
+      ),
+      data: (batches) {
+        final activeBatches = _inProgressBatches(batches);
+        if (activeBatches.isEmpty) {
+          return const InfoNotice(
+            icon: Icons.info_outline,
+            text: '当前没有进行中的批次，请先创建批次再入轨。',
+          );
+        }
+        final selectedId = activeBatches.any((batch) => batch.id == _batchId)
+            ? _batchId
+            : null;
+        return DropdownButtonFormField<int>(
+          key: const ValueKey('existing-rabbit-repro-batch'),
+          value: selectedId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '批次',
+            hintText: '请选择进行中的批次',
+          ),
+          items: [
+            for (final batch in activeBatches)
+              DropdownMenuItem(
+                value: batch.id,
+                child: Text(
+                  batch.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged:
+              _saving ? null : (value) => setState(() => _batchId = value),
+        );
+      },
     );
   }
 
@@ -386,6 +625,11 @@ class _ExistingRabbitReproEntrySheetState
       _showMessage('请选择生产阶段');
       return;
     }
+    final batchId = _selectedInProgressBatchId();
+    if (batchId == null) {
+      _showMessage('请选择进行中的批次');
+      return;
+    }
     final missing = _missingEntryFact(selected);
     if (missing != null) {
       _showMessage(missing);
@@ -397,6 +641,7 @@ class _ExistingRabbitReproEntrySheetState
       final result = await ref.read(reproRepositoryProvider).openCycle(
             houseId: widget.houseId,
             motherRabbitId: widget.rabbit.id,
+            batchId: batchId,
             stage: stage,
             occurredAt: _stageEnteredAt,
             matingDate: _matingDate,
@@ -433,6 +678,30 @@ class _ExistingRabbitReproEntrySheetState
         setState(() => _saving = false);
       }
     }
+  }
+
+  void _setStage(String? value) {
+    setState(() {
+      if (_stage != value) {
+        _batchId = null;
+        _matingDate = null;
+        _birthDate = null;
+        _liveKitsController.clear();
+      }
+      _stage = value;
+      _stageEnteredAt = value == null ? null : _farmToday();
+    });
+  }
+
+  int? _selectedInProgressBatchId() {
+    final batchId = _batchId;
+    final batches = ref.read(houseBatchesProvider(widget.houseId)).valueOrNull;
+    if (batchId == null || batches == null) {
+      return null;
+    }
+    return _inProgressBatches(batches).any((batch) => batch.id == batchId)
+        ? batchId
+        : null;
   }
 
   ReproEntryPoint? _selectedEntryPoint(List<ReproEntryPoint> entries) {
@@ -620,6 +889,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
 
   /// 录入时直接入轨的生产阶段（飞书 recvsrnEJ8bKrk）。null 表示暂不入轨。
   String? _reproStage;
+  int? _batchId;
   DateTime? _stageEnteredAt;
   DateTime? _matingDate;
   DateTime? _birthDate;
@@ -636,7 +906,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     super.initState();
     final rabbit = widget.rabbit;
     _arrivalDate = rabbit?.arrivalDate == null
-        ? _dateOnly(DateTime.now())
+        ? _farmToday()
         : _dateOnly(rabbit!.arrivalDate!);
     if (rabbit == null) {
       _type = widget.initialType;
@@ -833,18 +1103,19 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _ResponsiveFieldRow(
           children: [
             DropdownButtonFormField<String>(
-              value: _arrivalMethod,
+              value: _isEdit ? _arrivalMethod : '0',
               isExpanded: true,
               decoration: const InputDecoration(labelText: '来源'),
-              items: const [
-                DropdownMenuItem(value: '0', child: Text('购入')),
-                DropdownMenuItem(value: '1', child: Text('出生')),
+              items: [
+                const DropdownMenuItem(value: '0', child: Text('购入')),
+                if (_isEdit)
+                  const DropdownMenuItem(value: '1', child: Text('场内生产')),
               ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(
+              onChanged: _isEdit && !_saving
+                  ? (value) => setState(
                         () => _arrivalMethod = value ?? _arrivalMethod,
-                      ),
+                      )
+                  : null,
             ),
             TextFormField(
               controller: _weightController,
@@ -947,6 +1218,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   /// 而「从这个阶段入轨要补录什么」由服务端字典决定，客户端不拄第二份。
   Widget _buildReproEntryFields(BuildContext context) {
     final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
+    final batchesAsync = ref.watch(houseBatchesProvider(widget.houseId));
     return entriesAsync.when(
       loading: () => const InfoNotice(
         icon: Icons.hourglass_empty,
@@ -987,14 +1259,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                     child: Text(entry.stageLabel),
                   ),
               ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                        _reproStage = value;
-                        _stageEnteredAt ??= _dateOnly(DateTime.now());
-                      }),
+              onChanged: _saving ? null : _setReproStage,
             ),
             if (selected != null) ...[
+              const SizedBox(height: 12),
+              _buildReproBatchField(batchesAsync),
               const SizedBox(height: 12),
               _buildDateField(
                 key: const ValueKey('rabbit-stage-entered-at'),
@@ -1038,6 +1307,77 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     );
   }
 
+  Widget _buildReproBatchField(AsyncValue<List<Batch>> batchesAsync) {
+    return batchesAsync.when(
+      loading: () => const InfoNotice(
+        icon: Icons.hourglass_empty,
+        text: '正在读取进行中的批次…',
+      ),
+      error: (_, __) => const InfoNotice(
+        icon: Icons.error_outline,
+        text: '批次读取失败，请刷新后重试。',
+      ),
+      data: (batches) {
+        final activeBatches = _inProgressBatches(batches);
+        if (activeBatches.isEmpty) {
+          return const InfoNotice(
+            icon: Icons.info_outline,
+            text: '当前没有进行中的批次；可选择“暂不入轨”后先录入兔只。',
+          );
+        }
+        final selectedId = activeBatches.any((batch) => batch.id == _batchId)
+            ? _batchId
+            : null;
+        return DropdownButtonFormField<int>(
+          key: const ValueKey('rabbit-repro-batch'),
+          value: selectedId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '批次',
+            hintText: '请选择进行中的批次',
+          ),
+          items: [
+            for (final batch in activeBatches)
+              DropdownMenuItem(
+                value: batch.id,
+                child: Text(
+                  batch.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged:
+              _saving ? null : (value) => setState(() => _batchId = value),
+        );
+      },
+    );
+  }
+
+  void _setReproStage(String? value) {
+    setState(() {
+      if (_reproStage != value) {
+        _batchId = null;
+        _matingDate = null;
+        _birthDate = null;
+        _liveKitsController.clear();
+      }
+      _reproStage = value;
+      _stageEnteredAt = value == null ? null : _farmToday();
+    });
+  }
+
+  int? _selectedInProgressBatchId() {
+    final batchId = _batchId;
+    final batches = ref.read(houseBatchesProvider(widget.houseId)).valueOrNull;
+    if (batchId == null || batches == null) {
+      return null;
+    }
+    return _inProgressBatches(batches).any((batch) => batch.id == batchId)
+        ? batchId
+        : null;
+  }
+
   ReproEntryPoint? _selectedEntryPoint(List<ReproEntryPoint> entries) {
     final stage = _reproStage;
     if (stage == null) {
@@ -1058,7 +1398,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     required ValueChanged<DateTime> onPicked,
     bool enabled = true,
   }) {
-    final text = value == null ? '未选择' : DateFormat('yyyy-MM-dd').format(value);
+    final normalizedValue = value == null ? null : _dateOnly(value);
+    final text = normalizedValue == null
+        ? '未选择'
+        : DateFormat('yyyy-MM-dd').format(normalizedValue);
     return InputDecorator(
       key: key,
       decoration: InputDecoration(labelText: label),
@@ -1068,9 +1411,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             : () async {
                 final picked = await showDatePicker(
                   context: context,
-                  initialDate: value ?? _dateOnly(DateTime.now()),
+                  initialDate: normalizedValue ?? _farmToday(),
                   firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 1)),
+                  lastDate: _farmToday().add(const Duration(days: 1)),
                   helpText: label,
                   cancelText: '取消',
                   confirmText: '确定',
@@ -1135,6 +1478,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     // 阶段中文名要在表单关闭前取，提示里要告知「已入轨」：
     // 否则人不知道还要不要再去生产流程里手工开一轮。
     final enteredStageLabel = _selectedEntryStageLabel();
+    final batchId = _reproStage == null ? null : _selectedInProgressBatchId();
     final missingFact = _missingEntryFact();
     if (missingFact != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1144,6 +1488,24 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     }
     setState(() => _saving = true);
     try {
+      if (!_isEdit) {
+        final freshCages = await _refreshCreateCages();
+        if (freshCages == null || !mounted) {
+          return;
+        }
+        final validation = validateRabbitCageTarget(
+          cages: freshCages,
+          houseId: widget.houseId,
+          cageId: _createCage.id,
+          rabbitType: _type,
+        );
+        if (!validation.isValid) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(validation.message!)),
+          );
+          return;
+        }
+      }
       if (_isEdit) {
         await ref.read(rabbitRepositoryProvider).updateRabbit(
               houseId: widget.houseId,
@@ -1164,12 +1526,13 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               type: _type,
               gender: _gender,
               breed: _breedController.text,
-              arrivalMethod: _arrivalMethod,
+              arrivalMethod: '0',
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
               reproductiveStage: _reproductiveStage,
               reproStage: _canOpenReproEntry ? _reproStage : null,
+              batchId: _canOpenReproEntry ? batchId : null,
               stageEnteredAt: _stageEnteredAt,
               matingDate: _matingDate,
               birthDate: _birthDate,
@@ -1197,6 +1560,19 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       if (mounted) {
         setState(() => _saving = false);
       }
+    }
+  }
+
+  Future<List<Cage>?> _refreshCreateCages() async {
+    try {
+      return await ref.refresh(houseCagesProvider(widget.houseId).future);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('笼位状态刷新失败，请检查网络后重试')),
+        );
+      }
+      return null;
     }
   }
 
@@ -1258,6 +1634,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (!_canOpenReproEntry || _reproStage == null) {
       return null;
     }
+    if (_selectedInProgressBatchId() == null) {
+      return '请选择进行中的批次';
+    }
     final entries =
         ref.read(reproEntryPointsProvider(widget.houseId)).valueOrNull;
     final selected = entries == null ? null : _selectedEntryPoint(entries);
@@ -1283,7 +1662,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (value == null || value.isEmpty) {
       return null;
     }
-    return options.any((option) => option.value == value) ? value : null;
+    final normalized = value == 'JUVENILE' ? 'ADAPTATION' : value;
+    return options.any((option) => option.value == normalized)
+        ? normalized
+        : null;
   }
 
   String _createCageName() {
@@ -1306,8 +1688,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   }
 }
 
-DateTime _dateOnly(DateTime value) =>
-    DateTime(value.year, value.month, value.day);
+DateTime _dateOnly(DateTime value) => localDateOnly(value);
+
+DateTime _farmToday() => localDateOnly(DateTime.now().toUtc());
 
 class _StageOption {
   const _StageOption(this.value, this.label);

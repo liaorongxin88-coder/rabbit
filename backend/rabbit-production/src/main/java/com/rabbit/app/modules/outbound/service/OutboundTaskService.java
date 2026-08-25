@@ -193,7 +193,7 @@ public class OutboundTaskService {
         item.setRowCodeSnapshot(row.getRowCode() == null ? "LEGACY" : row.getRowCode());
         item.setLayerIndexSnapshot(row.getLayerIndex());
         item.setPositionIndexSnapshot(row.getPositionIndex());
-        item.setStageSnapshot(row.getStage());
+        item.setStageSnapshot(eligibilityService.displayStage(row));
         item.setBatchIdSnapshot(row.getBatchId());
         return item;
     }

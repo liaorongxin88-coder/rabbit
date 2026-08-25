@@ -8,14 +8,16 @@ import {
   HeartCrackIcon,
   RabbitIcon,
   ShoppingCartIcon,
+  SproutIcon,
 } from 'lucide-react'
-import { getRabbit, listCages, listReproStageActions } from '@/api/workspace'
+import { getRabbit, listBatches, listCages, listReproStageActions } from '@/api/workspace'
 import { PageHeader } from '@/components/page-header'
 import { HousePermissionBadge } from '@/components/permission-badge'
 import {
   RabbitDepartureDialog,
   RabbitFormDialog,
   RabbitPromotionDialog,
+  RabbitReplacementDialog,
   RabbitTransferDialog,
 } from '@/components/rabbit-operation-dialogs'
 import { RabbitSaleDialog } from '@/components/rabbit-sale-dialog'
@@ -24,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatRecordDate } from '@/lib/date'
 import { isIndividualSaleRabbit } from '@/lib/rabbit-sale'
 import { hasPermission, useWorkspace } from '@/lib/workspace'
 import {
@@ -32,7 +35,7 @@ import {
   rabbitStageSummary,
   rabbitTypeLabel,
 } from '@/lib/rabbits'
-import type { Cage, Rabbit } from '@/types/api'
+import type { Cage, ProductionBatch, Rabbit } from '@/types/api'
 
 export function WorkspaceRabbitDetailPage() {
   const workspace = useWorkspace()
@@ -41,10 +44,12 @@ export function WorkspaceRabbitDetailPage() {
   const [rabbit, setRabbit] = useState<Rabbit | null>(null)
   const [cages, setCages] = useState<Cage[]>([])
   const [reproStageLabels, setReproStageLabels] = useState<Record<string, string>>({})
+  const [batches, setBatches] = useState<ProductionBatch[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [promotionOpen, setPromotionOpen] = useState(false)
+  const [replacementOpen, setReplacementOpen] = useState(false)
   const [saleOpen, setSaleOpen] = useState(false)
   const [departureOpen, setDepartureOpen] = useState(false)
   const canEdit = hasPermission(workspace.permission, 'rabbit:rabbits:edit')
@@ -57,6 +62,7 @@ export function WorkspaceRabbitDetailPage() {
       setRabbit(null)
       setCages([])
       setReproStageLabels({})
+      setBatches([])
       setLoading(false)
       return
     }
@@ -72,18 +78,25 @@ export function WorkspaceRabbitDetailPage() {
 
       if (canReadRepro) {
         try {
-          const stages = await listReproStageActions(workspace.selectedHouse.id)
+          const [stages, nextBatches] = await Promise.all([
+            listReproStageActions(workspace.selectedHouse.id),
+            listBatches(workspace.selectedHouse.id),
+          ])
           setReproStageLabels(Object.fromEntries(stages.map((item) => [item.stage, item.stageLabel])))
+          setBatches(nextBatches)
         } catch {
           setReproStageLabels({})
+          setBatches([])
         }
       } else {
         setReproStageLabels({})
+        setBatches([])
       }
     } catch {
       setRabbit(null)
       setCages([])
       setReproStageLabels({})
+      setBatches([])
     } finally {
       setLoading(false)
     }
@@ -131,6 +144,7 @@ export function WorkspaceRabbitDetailPage() {
   const cage = cages.find((item) => item.id === rabbit.cageId)
   const stageSummary = rabbitStageSummary(rabbit, reproStageLabels)
   const isMatureReplacement = rabbit.isActive && rabbit.type === '1' && rabbit.growthStage === 'MATURE'
+  const canRetainAsReplacement = canControl && rabbit.isActive && rabbit.type === '2'
   const isIndividualSaleTarget = rabbit.isActive && isIndividualSaleRabbit(rabbit)
 
   return (
@@ -159,6 +173,12 @@ export function WorkspaceRabbitDetailPage() {
               <ArrowLeftRightIcon data-icon="inline-start" />
               换笼
             </Button>
+            {canRetainAsReplacement ? (
+              <Button variant="outline" onClick={() => setReplacementOpen(true)}>
+                <SproutIcon data-icon="inline-start" />
+                留种转后备
+              </Button>
+            ) : null}
             {isMatureReplacement ? (
               <Button variant="outline" disabled={!canControl} onClick={() => setPromotionOpen(true)}>
                 <ArrowUpRightIcon data-icon="inline-start" />
@@ -260,6 +280,7 @@ export function WorkspaceRabbitDetailPage() {
         houseId={workspace.selectedHouse.id}
         cages={cages}
         entryPoints={[]}
+        batches={batches}
         onSaved={load}
       />
       <RabbitTransferDialog
@@ -267,6 +288,13 @@ export function WorkspaceRabbitDetailPage() {
         cages={cages}
         houseId={workspace.selectedHouse.id}
         onOpenChange={setTransferOpen}
+        onSaved={load}
+      />
+      <RabbitReplacementDialog
+        rabbit={replacementOpen ? rabbit : null}
+        cages={cages}
+        houseId={workspace.selectedHouse.id}
+        onOpenChange={setReplacementOpen}
         onSaved={load}
       />
       <RabbitPromotionDialog
@@ -298,10 +326,4 @@ function DetailField({ label, children }: { label: string; children: React.React
       <div className="mt-1 break-words text-sm font-medium">{children}</div>
     </div>
   )
-}
-
-function formatRecordDate(value?: string | null) {
-  if (!value) return '-'
-  const date = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  return date ? `${date[1]}-${date[2]}-${date[3]}` : value
 }

@@ -92,6 +92,7 @@ void main() {
             (_) async => const HousePermission(
               perms: 'control',
               isAdmin: false,
+              permissions: ['rabbit:rabbits:add'],
             ),
           ),
           rabbitBatchMembershipsProvider(

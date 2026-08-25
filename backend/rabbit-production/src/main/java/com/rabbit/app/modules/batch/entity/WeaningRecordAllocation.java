@@ -7,6 +7,8 @@ public class WeaningRecordAllocation {
     private Long weaningRecordId;
     private Long cageId;
     private Integer allocCount;
+    private Integer maleCount;
+    private Integer femaleCount;
     private Date createTime;
 
     public Long getId() {
@@ -39,6 +41,22 @@ public class WeaningRecordAllocation {
 
     public void setAllocCount(Integer allocCount) {
         this.allocCount = allocCount;
+    }
+
+    public Integer getMaleCount() {
+        return maleCount;
+    }
+
+    public void setMaleCount(Integer maleCount) {
+        this.maleCount = maleCount;
+    }
+
+    public Integer getFemaleCount() {
+        return femaleCount;
+    }
+
+    public void setFemaleCount(Integer femaleCount) {
+        this.femaleCount = femaleCount;
     }
 
     public Date getCreateTime() {

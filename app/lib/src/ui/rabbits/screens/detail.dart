@@ -20,6 +20,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/screens/list.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/bind_batch.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/move.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/replacement.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/sale.dart';
 
 class RabbitDetailScreen extends ConsumerWidget {
@@ -141,6 +142,8 @@ class _RabbitDetailContent extends ConsumerWidget {
     final cageDisplay = _cageDisplay(cageItems, rabbit.cageId);
     final canEdit = currentPermission.canEdit;
     final canOperate = canEdit && rabbit.isActive;
+    final canConvertToReplacement =
+        currentPermission.canControl && rabbit.isActive && rabbit.type == '2';
     final canSell = rabbit.isActive &&
         (rabbit.type == '0' || rabbit.type == '1') &&
         currentPermission.canAddSales;
@@ -202,6 +205,18 @@ class _RabbitDetailContent extends ConsumerWidget {
                 '/houses/${request.houseId}/outbound'
                 '?entryType=RABBIT&rabbitId=${rabbit.id}',
               )
+          : null,
+      onConvertToReplacement: canConvertToReplacement
+          ? () async {
+              final converted = await showRabbitReplacementSheet(
+                context: context,
+                houseId: request.houseId,
+                rabbit: rabbit,
+              );
+              if (converted && context.mounted) {
+                onRefresh();
+              }
+            }
           : null,
       onOpenBatch: (batchId) => context.push(
         '/houses/${request.houseId}/batches/$batchId',

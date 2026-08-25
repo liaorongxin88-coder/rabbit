@@ -21,6 +21,12 @@ class HousePermission {
 
   bool get canAddSales => isAdmin || hasPermission('rabbit:sales:add');
 
+  bool get canAddRabbit => isAdmin || hasPermission('rabbit:rabbits:add');
+
+  bool get canQueryBatches => isAdmin || hasPermission('rabbit:batches:query');
+
+  bool get canEditBatches => isAdmin || hasPermission('rabbit:batches:edit');
+
   bool get canEditHouse => isAdmin || hasPermission('rabbit:houses:edit');
 
   bool get canManageMembers =>

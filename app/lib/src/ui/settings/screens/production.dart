@@ -249,7 +249,7 @@ class _ProductionSettingsFormState
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-growing-days'),
-                  label: '生长期时长',
+                  label: '成长期时长',
                   controller: _growingController,
                   min: 15,
                   max: 18,

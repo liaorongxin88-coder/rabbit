@@ -28,8 +28,8 @@ public class ReproLifecycleIT extends E2eTestSupport {
     /**
      * 接替 {@code BreedingCycleAcrossBatchIT}：母兔换批次后周期编号如何延续。
      *
-     * <p>编号按 (house, batch, mother) 计。自动接续进入无批次作用域，显式换到新批次
-     * 也进入新的编号作用域，因此两者都从 1 起算。
+     * <p>编号按 (house, batch, mother) 计。自动接续继承原批次并递增，显式换到
+     * 新批次后进入新的编号作用域，从 1 起算。
      */
     @Test
     void cycleNumberRestartsPerBatchButIncrementsWithinOne() {
@@ -38,7 +38,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
 
         long first = advanceToMating(f, doe, "b1c1");
         Assertions.assertEquals(1, intOf("select cycle_no from breeding_cycles where id = ?", first));
-        // 空怀关掉第一轮，自动接续进入无批次作用域。
+        // 空怀关掉第一轮，自动接续仍在原批次编号作用域。
         act(f, first, "b1c1_mate", obj("action", "MATING", "occurredAt", oneMinuteAgo(),
             "maleRabbitId", f.buckId, "matingMethod", "NATURAL"));
         act(f, first, "b1c1_empty", obj("action", "PALPATION", "occurredAt", oneMinuteAgo(),
@@ -47,17 +47,14 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Long reopened = jdbc.queryForObject(
             "select id from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
             Long.class, doe);
-        Assertions.assertEquals(1, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
-            "无批次接续应在自己的编号作用域从 1 开始");
-        Assertions.assertNull(jdbc.queryForObject(
+        Assertions.assertEquals(2, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
+            "同批次接续周期应递增编号");
+        Assertions.assertEquals(f.batchId, jdbc.queryForObject(
             "select batch_id from breeding_cycles where id = ?", Long.class, reopened
         ));
 
-        // 换到新批次：编号重新从 1 起算。
-        //
-        // 新批次用另一头母兔建，而不是把本头写进去：旧的 batch_rabbits 会以
-        // 「母兔已在活跃批次中」拒绝。而新模型里批次归属本就由 breeding_cycles.batch_id
-        // 推导（batch_rabbits 待 V28 退役），所以直接拿新 batchId 开周期才是新路径的真实用法。
+        // 换到新批次：编号重新从 1 起算。先用另一头母兔创建批次，避免建批路径
+        // 自动为本用例的母兔开周期；关闭接续周期后再显式选择新批次入轨。
         long spare = createRabbit(f.owner, f.houseId,
             cageIds(f.owner, f.houseId).get(2), "0", "0", "across_spare");
         long otherBatch = createBatch(f, List.of(spare), "across_b2");
@@ -228,28 +225,51 @@ public class ReproLifecycleIT extends E2eTestSupport {
                 "母兔投影列要同步，否则笼位与兔卡看不到阶段");
         }
 
-        // 已有流水线周期的母兔入批时不得被再开一条。
-        //
-        // 用散养母兔（batch_id 为空）构造这个场景：她不在任何活跃批次里，
-        // 因此能绕过旧的 batch_rabbits 「母兔已在活跃批次中」拦截，真正走到入轨判断。
-        // 这也是真实用法：先录入存栏母兔，之后再组织进某个繁殖批次。
-        long freeRange = createRabbit(f.owner, f.houseId,
-            cageIds(f.owner, f.houseId).get(4), "0", "0", "intake_free");
+        // 直接入轨同样必须选择批次。批次先建空壳时，状态机会在同一事务里补上
+        // 繁殖成员关系，不能留下只有周期、没有批次成员的半套数据。
+        long directDoe = createRabbit(f.owner, f.houseId,
+            cageIds(f.owner, f.houseId).get(4), "0", "0", "intake_direct");
+        long directBatch = createBatch(f, List.of(), "intake_b2");
         api.postOk("/api/repro/cycles", f.owner.token, f.houseId, obj(
-            "motherRabbitId", freeRange,
+            "motherRabbitId", directDoe,
+            "batchId", directBatch,
             "stage", "AWAIT_MATING",
             "occurredAt", oneMinuteAgo(),
-            "requestId", requestId("intake_free_open")
+            "requestId", requestId("intake_direct_open")
         ));
-        createBatch(f, List.of(freeRange), "intake_b2");
         Assertions.assertEquals(1, intOf(
-            "select count(*) from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
-            freeRange),
-            "已在流水线上的母兔入批时不得凭空多出一条周期");
-        Assertions.assertEquals("AWAIT_MATING", strOf(
-            "select stage from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
-            freeRange),
-            "入批不应把她从待配种打回待催情");
+            "select count(*) from breeding_cycles where mother_rabbit_id = ?"
+                + " and batch_id = ? and lifecycle = 'OPEN'",
+            directDoe, directBatch),
+            "直接入轨必须绑定所选批次");
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from batch_rabbits where rabbit_id = ? and batch_id = ?"
+                + " and batch_role = 'breeding' and is_active = true",
+            directDoe, directBatch),
+            "直接入轨必须同时创建活跃繁殖成员关系");
+    }
+
+    @Test
+    void cannotRemoveBreedingMemberWhileItsBatchCycleIsOpen() {
+        Fixture f = fixture("remove_open_member", 1);
+        long doe = f.doeIds.get(0);
+
+        api.expectError(
+            "/api/batches/" + f.batchId + "/members/" + doe
+                + "?requestId=" + requestId("remove_open_member"),
+            org.springframework.http.HttpMethod.DELETE,
+            f.owner.token,
+            f.houseId,
+            null,
+            409,
+            "进行中生产周期"
+        );
+
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and is_active = true",
+            f.batchId, doe
+        ));
     }
 
     /**

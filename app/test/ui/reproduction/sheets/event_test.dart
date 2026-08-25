@@ -8,15 +8,19 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
@@ -183,6 +187,69 @@ void main() {
     expect(body.containsKey('nextRemindAt'), isFalse);
   });
 
+  testWidgets(
+      'batched weaning records pending inventory without opening separation',
+      (tester) async {
+    final reproHarness = _RepositoryHarness();
+    final pendingHarness = _PendingWeaningHarness();
+    addTearDown(reproHarness.dispose);
+    addTearDown(pendingHarness.dispose);
+
+    await tester.pumpWidget(
+      _productionApp(
+        repository: reproHarness.repository,
+        task: _batchedWeaningTask,
+        batchRepository: pendingHarness.repository,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-repro-task')));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('weaning-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(pendingHarness.adapter.loads, 0);
+    expect(find.text('确认断奶'), findsNothing);
+    expect(find.byKey(const ValueKey('production-cage')), findsNothing);
+    expect(
+      find.textContaining('请前往笼位详情选择场内生产'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('weaning does not query pending inventory after success',
+      (tester) async {
+    final reproHarness = _RepositoryHarness();
+    final pendingHarness = _PendingWeaningHarness(fail: true);
+    addTearDown(reproHarness.dispose);
+    addTearDown(pendingHarness.dispose);
+
+    await tester.pumpWidget(
+      _productionApp(
+        repository: reproHarness.repository,
+        task: _batchedWeaningTask,
+        batchRepository: pendingHarness.repository,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-repro-task')));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('weaning-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(reproHarness.adapter.requests, hasLength(1));
+    expect(pendingHarness.adapter.loads, 0);
+    expect(find.text('确认断奶'), findsNothing);
+    expect(
+      find.textContaining('请前往笼位详情选择场内生产'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('weaning custom reminder sends postpartum suggestion',
       (tester) async {
     final harness = _RepositoryHarness();
@@ -211,13 +278,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final nextRemindAt = harness.adapter.requests.single['nextRemindAt'];
-    final today = DateTime.now();
-    final expected = DateTime(today.year, today.month, today.day).add(
+    final expected = localDateOnly(DateTime.now()).add(
       Duration(days: GlobalSetting.defaults().postpartumDays),
     );
     expect(
-      DateTime.fromMillisecondsSinceEpoch(nextRemindAt as int),
-      expected,
+      nextRemindAt,
+      farmDateTimeToEpochMilliseconds(expected),
     );
   });
 
@@ -445,6 +511,9 @@ void main() {
           rabbitReproTasksProvider(taskRequest).overrideWith(
             (_) async => [_weaningTask],
           ),
+          houseBatchesProvider(8).overrideWith(
+            (_) async => const [_activeBatch],
+          ),
           reproEntryPointsProvider.overrideWith(
             (ref, houseId) async => const [
               ReproEntryPoint(
@@ -486,6 +555,14 @@ void main() {
     );
     await tester.tap(entry);
     await tester.pumpAndSettle();
+    final batch = find.byKey(
+      const ValueKey('existing-rabbit-repro-batch'),
+    );
+    await tester.ensureVisible(batch);
+    await tester.tap(batch);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(_activeBatch.batchCode).last);
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('existing-rabbit-repro-submit')),
     );
@@ -494,10 +571,11 @@ void main() {
     expect(harness.adapter.requests, hasLength(1));
     expect(harness.adapter.requests.single['stage'], 'AWAIT_ESTRUS');
     expect(harness.adapter.requests.single['motherRabbitId'], 31);
+    expect(harness.adapter.requests.single['batchId'], _activeBatch.id);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('existing doe without batch can open a breeding cycle',
+  testWidgets('existing doe cannot open a breeding cycle without a batch',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     tester.platformDispatcher.textScaleFactorTestValue = 2;
@@ -523,6 +601,9 @@ void main() {
           ),
           rabbitReproTasksProvider(taskRequest).overrideWith(
             (_) async => const <ReproTask>[],
+          ),
+          houseBatchesProvider(8).overrideWith(
+            (_) async => const [_activeBatch],
           ),
           reproEntryPointsProvider.overrideWith(
             (ref, houseId) async => const [
@@ -571,12 +652,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(harness.adapter.requests, hasLength(1));
-    final body = harness.adapter.requests.single;
-    expect(body['motherRabbitId'], 31);
-    expect(body['stage'], 'AWAIT_ESTRUS');
-    expect(body.containsKey('batchId'), isFalse);
-    expect(find.textContaining('已从【待催情】入轨'), findsOneWidget);
+    expect(harness.adapter.requests, isEmpty);
+    expect(find.text('请选择进行中的批次'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -711,10 +788,13 @@ Widget _rabbitDetailApp({
 Widget _productionApp({
   required ReproRepository repository,
   required ReproTask task,
+  BatchRepository? batchRepository,
 }) {
   return ProviderScope(
     overrides: [
       reproRepositoryProvider.overrideWithValue(repository),
+      if (batchRepository != null)
+        batchRepositoryProvider.overrideWithValue(batchRepository),
       allActiveHouseRabbitsProvider(8).overrideWith(
         (_) async => const <Rabbit>[],
       ),
@@ -763,6 +843,61 @@ class _RepositoryHarness {
   void dispose() => client.dispose();
 }
 
+class _PendingWeaningHarness {
+  _PendingWeaningHarness({bool fail = false})
+      : adapter = _PendingWeaningAdapter(fail: fail) {
+    final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
+      ..httpClientAdapter = adapter;
+    client = ApiClient(SessionStore(), dio: dio);
+    repository = BatchRepository(client);
+  }
+
+  final _PendingWeaningAdapter adapter;
+  late final ApiClient client;
+  late final BatchRepository repository;
+
+  void dispose() => client.dispose();
+}
+
+class _PendingWeaningAdapter implements HttpClientAdapter {
+  _PendingWeaningAdapter({required this.fail});
+
+  final bool fail;
+  var loads = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    expect(options.path, '/api/batches/61/weaning-records');
+    loads += 1;
+    if (fail) {
+      return ResponseBody.fromString(
+        jsonEncode({'code': 500, 'message': 'pending refresh failed'}),
+        503,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    }
+    return _ReproActionAdapter._json([
+      {
+        'id': 91,
+        'batchId': 61,
+        'rabbitId': 31,
+        'breedingCycleId': 701,
+        'weaningCount': 8,
+        'waitingCount': 8,
+      },
+    ]);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 class _ReproActionAdapter implements HttpClientAdapter {
   _ReproActionAdapter({Map<String, dynamic>? response})
       : response = response ??
@@ -799,6 +934,28 @@ class _ReproActionAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+const _activeBatch = Batch(
+  id: 61,
+  houseId: 8,
+  batchCode: 'BREED-61',
+  status: '进行中',
+  startDate: null,
+  endDate: null,
+  remark: '',
+);
+
+final _batchedWeaningTask = ReproTask(
+  id: 814,
+  taskType: 'WEANING',
+  taskLabel: '待断奶',
+  action: ReproAction.weaning,
+  cycleId: 701,
+  rabbitId: 31,
+  batchId: 61,
+  dueTime: DateTime(2026, 2, 10),
+  status: 'PENDING',
+);
 
 final _weaningTask = ReproTask(
   id: 804,

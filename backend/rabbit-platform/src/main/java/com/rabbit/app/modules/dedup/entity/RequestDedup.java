@@ -11,6 +11,7 @@ public class RequestDedup {
     private String payloadHash;
     private String status;
     private String errorMessage;
+    private String responsePayload;
     private Date createTime;
     private Date updateTime;
 
@@ -76,6 +77,14 @@ public class RequestDedup {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public String getResponsePayload() {
+        return responsePayload;
+    }
+
+    public void setResponsePayload(String responsePayload) {
+        this.responsePayload = responsePayload;
     }
 
     public Date getCreateTime() {

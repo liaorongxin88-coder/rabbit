@@ -54,5 +54,56 @@ DateTime reminderInitialDate({
       : candidate;
 }
 
-DateTime localDateOnly(DateTime value) =>
-    DateTime(value.year, value.month, value.day);
+const _farmUtcOffset = Duration(hours: 8);
+
+/// Converts API instants to the farm's Asia/Shanghai wall clock.
+///
+/// Local values come from date-only pickers, so their calendar components must
+/// be preserved instead of being interpreted through the device time zone.
+DateTime farmLocalDateTime(DateTime value) {
+  if (!value.isUtc) {
+    return value;
+  }
+  final farmValue = value.add(_farmUtcOffset);
+  return DateTime(
+    farmValue.year,
+    farmValue.month,
+    farmValue.day,
+    farmValue.hour,
+    farmValue.minute,
+    farmValue.second,
+    farmValue.millisecond,
+    farmValue.microsecond,
+  );
+}
+
+DateTime localDateOnly(DateTime value) {
+  final farmValue = farmLocalDateTime(value);
+  return DateTime(farmValue.year, farmValue.month, farmValue.day);
+}
+
+/// Interprets a picker value as an Asia/Shanghai wall-clock time.
+///
+/// Picker values have no time-zone identity. Converting them with [DateTime.toUtc]
+/// would use the device zone and can move the selected farm date to another day.
+DateTime farmDateTimeToUtc(DateTime value) {
+  if (value.isUtc) {
+    return value;
+  }
+  return DateTime.utc(
+    value.year,
+    value.month,
+    value.day,
+    value.hour,
+    value.minute,
+    value.second,
+    value.millisecond,
+    value.microsecond,
+  ).subtract(_farmUtcOffset);
+}
+
+int farmDateTimeToEpochMilliseconds(DateTime value) =>
+    farmDateTimeToUtc(value).millisecondsSinceEpoch;
+
+String farmDateTimeToIso(DateTime value) =>
+    farmDateTimeToUtc(value).toIso8601String();

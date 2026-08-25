@@ -31,6 +31,20 @@ const _reserveRabbitId = int.fromEnvironment('RABBIT_E2E_RESERVE_RABBIT_ID');
 const _commodityARabbitId = int.fromEnvironment('RABBIT_E2E_COMM_A_RABBIT_ID');
 const _commodityBRabbitId = int.fromEnvironment('RABBIT_E2E_COMM_B_RABBIT_ID');
 const _commodityCRabbitId = int.fromEnvironment('RABBIT_E2E_COMM_C_RABBIT_ID');
+const _weaningRecordId = int.fromEnvironment(
+  'RABBIT_E2E_WEANING_RECORD_ID',
+  defaultValue: 0,
+);
+const _devicePhysicalWidth = int.fromEnvironment(
+  'RABBIT_E2E_DEVICE_PHYSICAL_WIDTH',
+);
+const _devicePhysicalHeight = int.fromEnvironment(
+  'RABBIT_E2E_DEVICE_PHYSICAL_HEIGHT',
+);
+const _devicePixelRatioValue = String.fromEnvironment(
+  'RABBIT_E2E_DEVICE_PIXEL_RATIO',
+);
+double get _devicePixelRatio => double.tryParse(_devicePixelRatioValue) ?? 0;
 
 /// fixture 的六个笼位是一条 INSERT 连号插入的，第 N 列的 id = 首列 id + (N-1)。
 const _firstCageId = int.fromEnvironment('RABBIT_E2E_FIRST_CAGE_ID');
@@ -52,15 +66,23 @@ void main() {
     'Android real-backend cage-level departure, cage swap/append and doe intake',
     (tester) async {
       _assertFixtureDefines();
-      await _assertEntryPointDictionaryIsServed();
-      _assertPortrait(tester);
+      _ensurePhysicalTestView(tester);
+      debugPrint('[cage-e2e] clear local state');
       await _clearLocalAppState();
+      debugPrint('[cage-e2e] start app');
       await app.main();
       await binding.convertFlutterSurfaceToImage();
+      debugPrint('[cage-e2e] test surface ready');
 
       await _waitFor(tester, find.byKey(const ValueKey('login-mode-selector')));
+      debugPrint('[cage-e2e] login page ready');
+      _assertPortrait(tester);
+      debugPrint('[cage-e2e] backend preflight');
+      await tester.runAsync(_assertEntryPointDictionaryIsServed);
       await _login(tester, _controlUser);
+      debugPrint('[cage-e2e] login complete');
       await _openHouseDetail(tester);
+      debugPrint('[cage-e2e] house detail ready');
       // 落地页的原样截图（不滚动）：进入各个模块的入口能不能一眼看到，
       // 只能看真机的真屏，小屏模拟不算。
       await _takeScreenshot(binding, tester, '00-house-detail');
@@ -101,7 +123,7 @@ void main() {
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-departure-submit')));
-      // 批次详情之外也能登记，说明 batchId 已经不是必填。
+      // 从兔只详情直接发起离场，并保留真机表单证据。
       expect(find.text('登记离场'), findsWidgets);
       await _takeScreenshot(binding, tester, '03-departure-sheet');
 
@@ -183,10 +205,59 @@ void main() {
       await _waitFor(tester, find.textContaining('已换至'));
       await _takeScreenshot(binding, tester, '10-append-done');
 
-      // ── 四、录入种母兔并直接入轨（recvsrnEJ8bKrk / recvsrpMlvu2SC）
+      // 场景四：fixture 追加了待分笼记录时，从当前笼位先选“场内生产”。
+      // 旧 fixture 没有待分库存，保持可运行且不猜记录 ID。
+      if (_weaningRecordId > 0) {
+        await _backToCageGrid(tester);
+        await _openCageAt(tester, 4);
+        await _tapAndSettle(tester, const ValueKey('cage-rabbit-entry'));
+        await _waitFor(tester, find.text('选择兔只来源'));
+        await tester.tap(
+          find.byKey(const ValueKey('rabbit-intake-production')),
+        );
+        await _waitFor(
+          tester,
+          find.byKey(const ValueKey('production-batch')),
+        );
+        await tester.tap(find.byKey(const ValueKey('production-batch')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('CAGEOPS').last);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('production-weaning-record')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(
+            const ValueKey('production-record-option-$_weaningRecordId'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('production-current-cage')),
+          findsOneWidget,
+        );
+        expect(find.text('不关联'), findsNWidgets(2), reason: '父母关联必须默认不选');
+        await _takeScreenshot(
+          binding,
+          tester,
+          '10b-cage-first-production-form',
+        );
+        await _tapSubmit(tester, const ValueKey('production-submit'));
+        await _waitFor(tester, find.textContaining('已分笼'));
+        await _takeScreenshot(
+          binding,
+          tester,
+          '10c-cage-first-production-done',
+        );
+      }
+
+      // ── 五、录入种母兔并直接入轨（recvsrnEJ8bKrk / recvsrpMlvu2SC）
       await _backToCageGrid(tester);
       await _openCageAt(tester, 6);
       await _tapAndSettle(tester, const ValueKey('cage-rabbit-entry'));
+      await _waitFor(tester, find.text('选择兔只来源'));
+      await tester.tap(find.byKey(const ValueKey('rabbit-intake-purchase')));
       await _waitFor(tester, find.text('请选择录入兔子类型'));
       await tester.tap(find.text('种公兔/种母兔'));
       await tester.pumpAndSettle();
@@ -209,6 +280,18 @@ void main() {
       // 阶段名来自服务端字典，写死在客户端就会漂移。
       await tester.tap(find.text('待摸胎').last);
       await tester.pumpAndSettle();
+
+      // 入轨必须绑定 fixture 创建的进行中批次，批次代码带 CAGEOPS 便于真机辨认。
+      final reproBatch = find.byKey(const ValueKey('rabbit-repro-batch'));
+      await _waitFor(tester, reproBatch);
+      await tester.ensureVisible(reproBatch);
+      await tester.tap(reproBatch);
+      await tester.pumpAndSettle();
+      final cageOpsBatch = find.textContaining('CAGEOPS');
+      await _waitFor(tester, cageOpsBatch);
+      await tester.tap(cageOpsBatch.last);
+      await tester.pumpAndSettle();
+
       // 待摸胎要补录配种日期，字段随字典出现。
       final matingDate = find.byKey(const ValueKey('rabbit-mating-date'));
       expect(matingDate, findsOneWidget, reason: '待摸胎必须要求配种日期');
@@ -220,7 +303,13 @@ void main() {
       await _waitFor(tester, pickerConfirm);
       await tester.tap(pickerConfirm.last);
       await tester.pumpAndSettle();
-      await _takeScreenshot(binding, tester, '12-doe-intake-stage-picked');
+      await tester.ensureVisible(reproBatch);
+      await tester.pumpAndSettle();
+      await _takeScreenshot(
+        binding,
+        tester,
+        '12-doe-intake-stage-batch-picked',
+      );
 
       await _enterField(
         tester,
@@ -298,6 +387,7 @@ void main() {
         'departedRabbitId': _commodityARabbitId,
         'swappedRabbitIds': [_doeRabbitId, _reserveRabbitId],
         'appendedRabbitId': _commodityCRabbitId,
+        if (_weaningRecordId > 0) 'weaningRecordId': _weaningRecordId,
         'nfcMovedRabbitId': _reserveRabbitId,
         'nfcTagUid': _c5TagUid,
         'logicalSize': _logicalSize(tester).toString(),
@@ -340,41 +430,50 @@ void _assertFixtureDefines() {
 /// 录入表单靠这个字典决定要填哪些日期；端点不在（旧镜像）时界面会静默退化，
 /// 所以先直接问一次后端，把「跑的是旧后端」和「界面坏了」区分开。
 Future<void> _assertEntryPointDictionaryIsServed() async {
-  final dio = Dio(BaseOptions(
-    baseUrl: _apiBaseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 20),
-    headers: const {'Content-Type': 'application/json'},
-  ));
-  try {
-    final login = await dio.post<Map<String, dynamic>>(
-      '/api/auth/login',
-      data: {'userName': _controlUser, 'password': _password},
-    );
-    expect(login.data?['code'], 0,
-        reason: 'fixture user must be able to log in');
-    final token = Map<String, dynamic>.from(login.data!['data'] as Map)['token']
-        as String;
-    final response = await dio.get<Map<String, dynamic>>(
-      '/api/repro/entry-points',
-      options: Options(headers: {
-        'Authorization': 'Bearer $token',
-        'X-House-Id': '$_houseId',
-      }),
-    );
-    expect(response.data?['code'], 0,
-        reason: 'GET /api/repro/entry-points must be served by the backend');
-    final rows = List<Map<String, dynamic>>.from(
-      (response.data!['data'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map)),
-    );
-    expect(
-      rows.map((row) => row['stage']),
-      contains('AWAIT_PALPATION'),
-      reason: '待摸胎必须是入轨点，否则录入表单选不到它',
-    );
-  } finally {
-    dio.close(force: true);
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    final dio = Dio(BaseOptions(
+      baseUrl: _apiBaseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 20),
+      headers: const {'Content-Type': 'application/json'},
+    ));
+    try {
+      final login = await dio.post<Map<String, dynamic>>(
+        '/api/auth/login',
+        data: {'userName': _controlUser, 'password': _password},
+      );
+      expect(login.data?['code'], 0,
+          reason: 'fixture user must be able to log in');
+      final token =
+          Map<String, dynamic>.from(login.data!['data'] as Map)['token']
+              as String;
+      final response = await dio.get<Map<String, dynamic>>(
+        '/api/repro/entry-points',
+        options: Options(headers: {
+          'Authorization': 'Bearer $token',
+          'X-House-Id': '$_houseId',
+        }),
+      );
+      expect(response.data?['code'], 0,
+          reason: 'GET /api/repro/entry-points must be served by the backend');
+      final rows = List<Map<String, dynamic>>.from(
+        (response.data!['data'] as List)
+            .map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+      expect(
+        rows.map((row) => row['stage']),
+        contains('AWAIT_PALPATION'),
+        reason: '待摸胎必须是入轨点，否则录入表单选不到它',
+      );
+      return;
+    } on DioException {
+      if (attempt == 3) {
+        rethrow;
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    } finally {
+      dio.close(force: true);
+    }
   }
 }
 
@@ -658,8 +757,12 @@ Future<void> _waitFor(
   Duration timeout = const Duration(seconds: 25),
 }) async {
   final deadline = DateTime.now().add(timeout);
+  var attempts = 0;
   while (DateTime.now().isBefore(deadline)) {
+    if (attempts == 0) debugPrint('[cage-e2e] wait first pump: $finder');
     await tester.pump(const Duration(milliseconds: 100));
+    if (attempts == 0) debugPrint('[cage-e2e] wait first pump complete');
+    attempts += 1;
     if (finder.evaluate().isNotEmpty) return;
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
@@ -711,6 +814,30 @@ Future<void> _takeScreenshot(
   );
   await tester.pump();
   await binding.takeScreenshot(name);
+}
+
+void _ensurePhysicalTestView(WidgetTester tester) {
+  final view = tester.view;
+  if (view.physicalSize.width > 0 && view.physicalSize.height > 0) {
+    return;
+  }
+  expect(_devicePhysicalWidth, greaterThan(0),
+      reason: 'RABBIT_E2E_DEVICE_PHYSICAL_WIDTH is required');
+  expect(_devicePhysicalHeight, greaterThan(0),
+      reason: 'RABBIT_E2E_DEVICE_PHYSICAL_HEIGHT is required');
+  expect(_devicePixelRatio, greaterThan(0),
+      reason: 'RABBIT_E2E_DEVICE_PIXEL_RATIO is required');
+  addTearDown(view.resetPhysicalSize);
+  addTearDown(view.resetDevicePixelRatio);
+  view.devicePixelRatio = _devicePixelRatio;
+  view.physicalSize = Size(
+    _devicePhysicalWidth.toDouble(),
+    _devicePhysicalHeight.toDouble(),
+  );
+  debugPrint(
+    '[cage-e2e] restored physical view '
+    '${_devicePhysicalWidth}x$_devicePhysicalHeight @ $_devicePixelRatio',
+  );
 }
 
 Size _logicalSize(WidgetTester tester) {

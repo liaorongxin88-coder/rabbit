@@ -148,6 +148,17 @@ if [[ "$KEEP_DEVICE_AWAKE" == "1" ]]; then
   "$ADB_BIN" -s "$DEVICE_ID" shell wm dismiss-keyguard >/dev/null 2>&1 || true
 fi
 
+keyguard_policy="$($ADB_BIN -s "$DEVICE_ID" shell dumpsys window policy 2>/dev/null || true)"
+if awk '
+  /KeyguardServiceDelegate/ { in_keyguard = 1 }
+  in_keyguard && /showing=true/ { showing = 1 }
+  in_keyguard && /secure=true/ { secure = 1 }
+  END { exit !(showing && secure) }
+' <<<"$keyguard_policy"; then
+  echo "Device $DEVICE_ID is securely locked. Unlock it before running cage-ops E2E." >&2
+  exit 69
+fi
+
 # 锁竖屏。手机平放在桌上被自动旋转转成横屏后，逻辑视口只剩 ~360px 高，
 # ListView 里靠下的卡片压根不会被构建，用例会以一连串「Found 0 widgets」
 # 报错——看起来像界面坏了，其实只是手机躺歪了。截图证据在横屏下也没法看。
@@ -156,6 +167,24 @@ original_accelerometer_rotation="$(
 )"
 "$ADB_BIN" -s "$DEVICE_ID" shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
 "$ADB_BIN" -s "$DEVICE_ID" shell settings put system user_rotation 0 >/dev/null 2>&1 || true
+
+device_physical_size="$(
+  "$ADB_BIN" -s "$DEVICE_ID" shell wm size \
+    | awk -F': ' '/Physical size/ { gsub(/\r/, "", $2); print $2; exit }'
+)"
+device_density="$(
+  "$ADB_BIN" -s "$DEVICE_ID" shell wm density \
+    | awk -F': ' '/Physical density/ { gsub(/\r/, "", $2); print $2; exit }'
+)"
+device_physical_width="${device_physical_size%x*}"
+device_physical_height="${device_physical_size#*x}"
+if [[ ! "$device_physical_width" =~ ^[0-9]+$ || \
+      ! "$device_physical_height" =~ ^[0-9]+$ || \
+      ! "$device_density" =~ ^[0-9]+$ ]]; then
+  echo "Unable to read physical display metrics from device $DEVICE_ID" >&2
+  exit 69
+fi
+device_pixel_ratio="$(awk -v density="$device_density" 'BEGIN { printf "%.6f", density / 160 }')"
 
 fixture_file="$REPO_DIR/backend/src/test/resources/fixtures/cage_ops_fixture.sql"
 if [[ ! -f "$fixture_file" ]]; then
@@ -175,10 +204,13 @@ comm_b_id=$(awk '$2 == "CAGEOPS-COMM-B" { print $3 }' <<<"$fixture_output")
 comm_c_id=$(awk '$2 == "CAGEOPS-COMM-C" { print $3 }' <<<"$fixture_output")
 # 1-5-1 上预先绑好的标签 UID（fixture 首块第五列），用来模拟碰一下。
 c5_tag_uid=$(awk 'NR == 2 { print $5 }' <<<"$fixture_output")
+batch_id=$(awk '$1 == "BATCH" { print $3; exit }' <<<"$fixture_output")
+# 新 fixture 以追加行输出待分笼记录；旧 fixture 没有时不猜 ID，跳过该场景。
+weaning_record_id=$(awk '$1 == "WEANING" { print $2; exit }' <<<"$fixture_output")
 
 if [[ -z "$run_id" || -z "$house_id" || -z "$first_cage_id" || -z "$doe_id" || \
       -z "$reserve_id" || -z "$comm_a_id" || -z "$comm_b_id" || -z "$comm_c_id" || \
-      -z "$c5_tag_uid" ]]; then
+      -z "$c5_tag_uid" || -z "$batch_id" ]]; then
   echo "Unable to parse cage-ops fixture output" >&2
   printf '%s\n' "$fixture_output" >&2
   exit 65
@@ -187,9 +219,10 @@ fi
 artifact_dir="$PROJECT_DIR/build/android-e2e/cage-ops-$run_id"
 mkdir -p "$artifact_dir"
 printf '%s\n' "$fixture_output" > "$artifact_dir/fixture.txt"
-printf 'device=%s\napi=%s\nrun_id=%s\nhouse_id=%s\nfirst_cage_id=%s\nc5_tag_uid=%s\n' \
+printf 'device=%s\napi=%s\nrun_id=%s\nhouse_id=%s\nfirst_cage_id=%s\nc5_tag_uid=%s\nbatch_id=%s\nweaning_record_id=%s\nphysical_size=%sx%s\npixel_ratio=%s\n' \
   "$DEVICE_ID" "$DEVICE_API_URL" "$run_id" "$house_id" "$first_cage_id" "$c5_tag_uid" \
-  > "$artifact_dir/environment.txt"
+  "$batch_id" "${weaning_record_id:-none}" "$device_physical_width" \
+  "$device_physical_height" "$device_pixel_ratio" > "$artifact_dir/environment.txt"
 
 export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_dir"
 
@@ -211,7 +244,11 @@ set +e
   --dart-define=RABBIT_E2E_COMM_A_RABBIT_ID="$comm_a_id" \
   --dart-define=RABBIT_E2E_COMM_B_RABBIT_ID="$comm_b_id" \
   --dart-define=RABBIT_E2E_COMM_C_RABBIT_ID="$comm_c_id" \
+  --dart-define=RABBIT_E2E_WEANING_RECORD_ID="${weaning_record_id:-0}" \
   --dart-define=RABBIT_E2E_C5_TAG_UID="$c5_tag_uid" \
+  --dart-define=RABBIT_E2E_DEVICE_PHYSICAL_WIDTH="$device_physical_width" \
+  --dart-define=RABBIT_E2E_DEVICE_PHYSICAL_HEIGHT="$device_physical_height" \
+  --dart-define=RABBIT_E2E_DEVICE_PIXEL_RATIO="$device_pixel_ratio" \
   2>&1 | tee "$artifact_dir/flutter-drive.log"
 drive_status=${PIPESTATUS[0]}
 set -e
@@ -236,13 +273,19 @@ screenshots=(
   09-move-sheet-append-target
   10-append-done
   11-doe-intake-form
-  12-doe-intake-stage-picked
+  12-doe-intake-stage-batch-picked
   13-doe-intake-done
   14-nfc-waiting
   15-nfc-target-picked
   16-nfc-move-done
   17-nfc-jump-to-cage
 )
+if [[ -n "$weaning_record_id" ]]; then
+  screenshots+=(
+    10b-cage-first-production-form
+    10c-cage-first-production-done
+  )
+fi
 for screenshot in "${screenshots[@]}"; do
   if [[ ! -s "$artifact_dir/$screenshot.png" ]]; then
     echo "Missing cage-ops E2E screenshot: $screenshot.png" >&2
@@ -263,7 +306,7 @@ c6=$((first_cage_id + 5))
 
 read -r departed departure_rows comm_b_active doe_cage reserve_cage active_swapped \
         c1_state c2_state comm_c_cage c3_state c4_state new_doe_stage open_cycles pending_tasks \
-        c5_state \
+        active_batch_membership c5_state \
   <<<"$(
   docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
     mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
@@ -285,15 +328,21 @@ read -r departed departure_rows comm_b_active doe_cage reserve_cage active_swapp
            WHERE house_id = $house_id AND cage_id = $c6 AND is_active = TRUE),
         (SELECT COUNT(*) FROM breeding_cycles bc
            INNER JOIN rabbits r ON r.id = bc.mother_rabbit_id
-           WHERE r.house_id = $house_id AND r.cage_id = $c6 AND bc.closed_at IS NULL),
+           WHERE r.house_id = $house_id AND r.cage_id = $c6
+             AND bc.lifecycle = 'OPEN' AND bc.batch_id = $batch_id),
         (SELECT COUNT(*) FROM work_tasks wt
            INNER JOIN rabbits r ON r.id = wt.rabbit_id
            WHERE r.house_id = $house_id AND r.cage_id = $c6 AND wt.status = 'PENDING'),
+        (SELECT COUNT(*) FROM batch_rabbits br
+           INNER JOIN rabbits r ON r.id = br.rabbit_id
+           WHERE r.house_id = $house_id AND r.cage_id = $c6
+             AND br.batch_id = $batch_id AND br.batch_role = 'breeding'
+             AND br.is_active = TRUE),
         (SELECT CONCAT(status, ':', rabbit_count) FROM cages WHERE id = $c5);
     "
 )"
 
-actual="$departed $departure_rows $comm_b_active $doe_cage $reserve_cage $active_swapped $c1_state $c2_state $comm_c_cage $c3_state $c4_state $new_doe_stage $open_cycles $pending_tasks $c5_state"
+actual="$departed $departure_rows $comm_b_active $doe_cage $reserve_cage $active_swapped $c1_state $c2_state $comm_c_cage $c3_state $c4_state $new_doe_stage $open_cycles $pending_tasks $active_batch_membership $c5_state"
 # 对调后：种母兔落在原后备笼($c2，状态转 '1')、后备兔落在原种兔笼($c1)。
 # 并笼后 $c3 恢复 2 只、$c4 空且状态归 '0'。
 #
@@ -301,7 +350,32 @@ actual="$departed $departure_rows $comm_b_active $doe_cage $reserve_cage $active
 # reserve_cage=$c5、$c1 空了（'0:0'）、$c5 变后备兔笼（'2:1'）。
 # 对调把后备兔放进 $c1 这一半的证据在用例里：场景 5 是从 $c1 的笼位详情
 # 里找到这只后备兔才能开换笼表单的（并有显式断言）。
-expected="1 1 1 $c2 $c5 2 0:0 1:1 $c3 3:2 0:0 AWAIT_PALPATION 1 1 2:1"
+expected_c4_state="0:0"
+if [[ -n "$weaning_record_id" ]]; then
+  read -r separated_rabbits allocation_count unlinked_parents <<<"$(
+    docker exec -e MYSQL_PWD="$DB_PASSWORD" "$DB_CONTAINER" \
+      mysql -N -B -u"$DB_USER" -D "$DB_NAME" -e "
+        SELECT
+          (SELECT COUNT(*) FROM rabbits
+             WHERE house_id = $house_id AND cage_id = $c4
+               AND birth_batch_id = $batch_id AND birth_cycle_id IS NOT NULL),
+          (SELECT COALESCE(SUM(alloc_count), 0) FROM weaning_record_allocations
+             WHERE weaning_record_id = $weaning_record_id AND cage_id = $c4),
+          (SELECT COUNT(*) FROM rabbits
+             WHERE house_id = $house_id AND cage_id = $c4
+               AND birth_batch_id = $batch_id AND birth_cycle_id IS NOT NULL
+               AND mother_id IS NULL AND father_id IS NULL);
+      "
+  )"
+  if [[ "$separated_rabbits" -le 0 || "$allocation_count" != "$separated_rabbits" || \
+        "$unlinked_parents" != "$separated_rabbits" ]]; then
+    echo "Cage-first production database assertions failed" >&2
+    echo "rabbits=$separated_rabbits allocation=$allocation_count unlinked=$unlinked_parents" >&2
+    exit 1
+  fi
+  expected_c4_state="3:$separated_rabbits"
+fi
+expected="1 1 1 $c2 $c5 2 0:0 1:1 $c3 3:2 $expected_c4_state AWAIT_PALPATION 1 1 1 2:1"
 printf 'expected=%s\nactual=%s\n' "$expected" "$actual" | tee "$artifact_dir/database_assertions.txt"
 if [[ "$actual" != "$expected" ]]; then
   echo "Cage-ops E2E database assertions failed" >&2

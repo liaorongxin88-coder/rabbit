@@ -76,7 +76,13 @@
           and lifecycle = 'OPEN'
     </select>
 
-
-
+    <select id="countOpenLifecycleByBatchAndMother" resultType="int">
+        select count(1)
+        from breeding_cycles
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and lifecycle = 'OPEN'
+    </select>
 
 </mapper>

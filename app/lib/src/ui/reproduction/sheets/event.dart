@@ -786,7 +786,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       final reminderTitle =
           stage == null ? '下次提醒' : reminderTitleForStage(stage);
       parts.add(
-          '$reminderTitle：${DateFormat('yyyy-MM-dd').format(nextDueTime)}');
+        '$reminderTitle：${DateFormat('yyyy-MM-dd').format(farmLocalDateTime(nextDueTime))}',
+      );
     }
     return parts.join(' · ');
   }

@@ -186,9 +186,15 @@ public class ReproDeliveryIT extends E2eTestSupport {
         long houseId = createHouse(owner, prefix + "_house", 1, 6, 1);
         List<Long> cages = cageIds(owner, houseId);
         long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", prefix + "_doe");
+        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", prefix + "-batch",
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId(prefix + "_batch")
+        )).get("id").asLong();
 
         long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
             "motherRabbitId", doeId,
+            "batchId", batchId,
             "stage", "AWAIT_DELIVERY",
             "occurredAt", now(),
             "matingDate", now() - 30L * 24 * 3600 * 1000,

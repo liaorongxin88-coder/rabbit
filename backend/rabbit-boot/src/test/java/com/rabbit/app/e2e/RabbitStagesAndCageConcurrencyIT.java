@@ -23,6 +23,11 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
         UserSession owner = register("rabbit_stage");
         long houseId = createHouse(owner, "阶段录入兔舍", 1, 2, 1);
         long cageId = cageIds(owner, houseId).get(0);
+        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
+                "batchCode", "STAGE-ENTRY",
+                "femaleRabbitIds", List.of(),
+                "requestId", requestId("stage_batch")
+        )).get("id").asLong();
 
         JsonNode rabbit = api.postOk("/api/rabbits", owner.token, houseId, obj(
                 "cageId", cageId,
@@ -31,6 +36,7 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "growthStage", "MATURE",
                 // doe-breeding-v2：种母兔的阶段改由生产流程维护，录入时给的是生产阶段。
                 "reproStage", "AWAIT_PALPATION",
+                "batchId", batchId,
                 "matingDate", now(),
                 "arrivalMethod", "1",
                 "arrivalDate", now(),
@@ -48,14 +54,23 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
         Assertions.assertEquals(
                 "AWAIT_PALPATION",
                 jdbc.queryForObject(
-                        "select stage from breeding_cycles where house_id = ? and mother_rabbit_id = ? and lifecycle = 'OPEN'",
-                        String.class, houseId, doeId
+                        "select stage from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
+                                + " and batch_id = ? and lifecycle = 'OPEN'",
+                        String.class, houseId, doeId, batchId
                 )
         );
         Assertions.assertEquals(
                 "AWAIT_PALPATION",
                 jdbc.queryForObject(
                         "select current_stage from rabbits where id = ?", String.class, doeId
+                )
+        );
+        Assertions.assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                                + " and batch_role = 'breeding' and is_active = true",
+                        Integer.class, batchId, doeId
                 )
         );
         Assertions.assertEquals(
@@ -98,6 +113,39 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "reproductiveStage", "PREGNANT",
                 "requestId", requestId("commodity_stage")
         ), 400, "商品兔不能录入繁殖阶段");
+    }
+
+    @Test
+    void commodityCreateDefaultsToAdaptationAndNormalizesLegacyJuvenileInput() {
+        UserSession owner = register("commodity_growth_stage");
+        long houseId = createHouse(owner, "商品兔阶段录入兔舍", 1, 2, 1);
+        List<Long> cages = cageIds(owner, houseId);
+
+        JsonNode defaultStage = api.postOk("/api/rabbits", owner.token, houseId, obj(
+                "cageId", cages.get(0),
+                "type", "2",
+                "gender", "0",
+                "arrivalMethod", "1",
+                "arrivalDate", now(),
+                "requestId", requestId("commodity_default_stage")
+        ));
+        JsonNode legacyStage = api.postOk("/api/rabbits", owner.token, houseId, obj(
+                "cageId", cages.get(1),
+                "type", "2",
+                "gender", "1",
+                "growthStage", "JUVENILE",
+                "arrivalMethod", "1",
+                "arrivalDate", now(),
+                "requestId", requestId("commodity_legacy_stage")
+        ));
+
+        Assertions.assertEquals("ADAPTATION", defaultStage.get("growthStage").asText());
+        Assertions.assertEquals("ADAPTATION", legacyStage.get("growthStage").asText());
+        Assertions.assertEquals(2, jdbc.queryForObject(
+                "select count(*) from rabbits where house_id = ? and growth_stage = 'ADAPTATION'",
+                Integer.class,
+                houseId
+        ));
     }
 
     @Test

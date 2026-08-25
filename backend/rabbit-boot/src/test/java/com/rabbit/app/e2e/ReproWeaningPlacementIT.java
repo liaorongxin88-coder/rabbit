@@ -46,56 +46,67 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
     }
 
     @Test
-    void partialThenFinalSeparationDrainsWaitingCountWithLineageGenderLinksAndTasks() {
+    void countOnlyPartialSeparationCreatesUnknownKitsWithoutAutomaticParents() {
         Scenario scenario = nursingScenario("partial", 1, 7);
         long cycleId = scenario.cycleIds().get(0);
-        long motherId = scenario.doeIds().get(0);
-        Long sireCage = jdbc.queryForObject(
-            "select id from cages where house_id = ? and id <> ? and rabbit_count = 0"
-                + " order by id limit 1",
-            Long.class,
-            scenario.houseId(),
-            scenario.spareCage()
-        );
-        long sireId = createRabbit(
-            scenario.owner(), scenario.houseId(), sireCage, "0", "1", "partial_sire"
-        );
-        jdbc.update("update breeding_cycles set male_rabbit_id = ? where id = ?", sireId, cycleId);
+        long recordId = wean(
+            scenario, cycleId, 7, 3, 4, scenario.spareCage(), "partial_wean"
+        ).get("weaningRecordId").asLong();
 
-        long recordId = wean(scenario, cycleId, 7, 3, 4, scenario.spareCage(), "partial_wean")
-            .get("weaningRecordId").asLong();
-        JsonNode first = separate(scenario, recordId, List.of(allocation(scenario.spareCage(), 3)), "partial_first");
+        JsonNode first = separate(
+            scenario, recordId, List.of(allocation(scenario.spareCage(), 3)), "partial_first"
+        );
         Assertions.assertEquals(3, first.get("separatedCount").asInt());
         Assertions.assertEquals(4, first.get("waitingCount").asInt());
-        Assertions.assertEquals(3, count("select count(*) from rabbits where birth_cycle_id = ?", cycleId));
-        Assertions.assertEquals(4, count("select waiting_count from weaning_records where id = ?", recordId));
+        JsonNode pending = api.getOk(
+            "/api/batches/" + scenario.batchId() + "/weaning-records",
+            scenario.owner().token,
+            scenario.houseId()
+        ).get(0);
+        Assertions.assertTrue(pending.get("waitingMaleCount").isNull());
+        Assertions.assertTrue(pending.get("waitingFemaleCount").isNull());
+        api.expectError(
+            separationPath(scenario.batchId(), recordId),
+            HttpMethod.POST,
+            scenario.owner().token,
+            scenario.houseId(),
+            obj(
+                "allocations", List.of(obj(
+                    "cageId", scenario.spareCage(),
+                    "count", 1,
+                    "maleCount", 0,
+                    "femaleCount", 1
+                )),
+                "requestId", requestId("partial_untrusted_sex")
+            ),
+            400,
+            "不可信"
+        );
 
         JsonNode finalResult = separate(
             scenario, recordId, List.of(allocation(scenario.spareCage(), 4)), "partial_final"
         );
         Assertions.assertEquals(4, finalResult.get("separatedCount").asInt());
         Assertions.assertEquals(0, finalResult.get("waitingCount").asInt());
-        Assertions.assertEquals(7, count("select count(*) from rabbits where birth_cycle_id = ?", cycleId));
-        Assertions.assertEquals(3, count(
-            "select count(*) from rabbits where birth_cycle_id = ? and gender = '1'", cycleId
-        ));
-        Assertions.assertEquals(4, count(
-            "select count(*) from rabbits where birth_cycle_id = ? and gender = '0'", cycleId
+        Assertions.assertEquals(7, count(
+            "select count(*) from rabbits where birth_cycle_id = ? and birth_batch_id = ?"
+                + " and mother_id is null and father_id is null and gender = '2'"
+                + " and cage_id = ? and growth_stage = 'ADAPTATION'",
+            cycleId, scenario.batchId(), scenario.spareCage()
         ));
         Assertions.assertEquals(7, count(
-            "select count(*) from rabbits where birth_cycle_id = ? and mother_id = ? and father_id = ?",
-            cycleId, motherId, sireId
-        ));
-        Assertions.assertEquals(7, count(
-            "select count(*) from batch_rabbits where batch_id = ? and batch_role = 'fattening' and is_active = true",
+            "select count(*) from batch_rabbits where batch_id = ? and batch_role = 'fattening'"
+                + " and is_active = true",
             scenario.batchId()
         ));
         Assertions.assertEquals(7, count(
-            "select count(*) from rabbit_status_history where related_record_id = ? and related_record_table = 'weaning_records'",
+            "select count(*) from rabbit_status_history where related_record_id = ?"
+                + " and related_record_table = 'weaning_records'",
             recordId
         ));
         Assertions.assertEquals(7, count(
-            "select count(*) from work_tasks where batch_id = ? and task_type = 'SALE_READY' and status = 'PENDING'",
+            "select count(*) from work_tasks where batch_id = ? and task_type = 'SALE_READY'"
+                + " and status = 'PENDING'",
             scenario.batchId()
         ));
         Assertions.assertEquals(7, count(
@@ -104,7 +115,9 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             scenario.batchId()
         ));
         Assertions.assertEquals(7, count(
-            "select alloc_count from weaning_record_allocations where weaning_record_id = ? and cage_id = ?",
+            "select alloc_count from weaning_record_allocations"
+                + " where weaning_record_id = ? and cage_id = ?"
+                + " and male_count is null and female_count is null",
             recordId, scenario.spareCage()
         ));
         assertCageCountMatchesReality(scenario.spareCage(), 7);
@@ -221,12 +234,65 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             obj("allocations", List.of(allocation(idempotent.spareCage(), 2)), "requestId", duplicateRequestId)
         );
         Assertions.assertEquals(2, first.get("separatedCount").asInt());
+        Assertions.assertEquals(first.get("weaningRecordId"), replay.get("weaningRecordId"));
+        Assertions.assertEquals(first.get("separatedCount"), replay.get("separatedCount"));
+        Assertions.assertEquals(first.get("waitingCount"), replay.get("waitingCount"));
+        Assertions.assertEquals(first.get("generatedRabbitIds"), replay.get("generatedRabbitIds"));
         Assertions.assertTrue(replay.get("replayed").asBoolean());
         Assertions.assertEquals(2, count(
             "select count(*) from rabbits where birth_cycle_id = ?", idempotent.cycleIds().get(0)
         ));
         Assertions.assertEquals(0, count("select waiting_count from weaning_records where id = ?", idempotentRecord));
         Assertions.assertTrue(successfulRecord == firstRecord || successfulRecord == secondRecord);
+    }
+
+    @Test
+    void concurrentRequestsCannotOverdrawOneWaitingRecord() throws Exception {
+        Scenario scenario = nursingScenario("waiting_race", 1, 6);
+        long recordId = wean(
+            scenario,
+            scenario.cycleIds().get(0),
+            6,
+            3,
+            3,
+            scenario.spareCage(),
+            "waiting_race_wean"
+        ).get("weaningRecordId").asLong();
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        List<Future<Integer>> futures = new ArrayList<>();
+        for (int index = 0; index < 2; index++) {
+            String requestId = requestId("waiting_race_" + index);
+            futures.add(pool.submit(() -> {
+                start.await();
+                return api.postResponse(
+                    separationPath(scenario.batchId(), recordId),
+                    scenario.owner().token,
+                    scenario.houseId(),
+                    obj(
+                        "allocations", List.of(allocation(scenario.spareCage(), 4)),
+                        "requestId", requestId
+                    )
+                ).get("code").asInt();
+            }));
+        }
+        start.countDown();
+        List<Integer> responseCodes = new ArrayList<>();
+        for (Future<Integer> future : futures) {
+            responseCodes.add(future.get(60, TimeUnit.SECONDS));
+        }
+        pool.shutdown();
+        responseCodes.sort(Integer::compareTo);
+
+        Assertions.assertEquals(List.of(0, 400), responseCodes);
+        Assertions.assertEquals(2, count(
+            "select waiting_count from weaning_records where id = ?", recordId
+        ));
+        Assertions.assertEquals(4, count(
+            "select count(*) from rabbits where birth_cycle_id = ?",
+            scenario.cycleIds().get(0)
+        ));
+        assertCageCountMatchesReality(scenario.spareCage(), 4);
     }
 
     @Test

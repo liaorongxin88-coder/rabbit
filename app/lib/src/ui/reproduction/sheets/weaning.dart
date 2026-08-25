@@ -312,7 +312,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
             'nextRemindAt': formatBatchWriteDate(nextRemindAt),
         }),
       );
-      // 断奶只推进周期并保留待分笼记录；批次详情的分笼操作才会创建商品兔。
+      // 断奶只推进周期并保留待分笼记录；选定目标笼位后才会创建商品兔。
       final cycleId = widget.breedingCycleId;
       if (cycleId <= 0) {
         _showMessage('未找到对应的生产周期，请刷新后重试');
@@ -334,6 +334,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       if (!mounted) {
         return;
       }
+
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
       _invalidateBatchProviders();
@@ -341,7 +342,9 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       Navigator.of(context).pop(result);
       messenger?.showSnackBar(
         SnackBar(
-          content: Text('母兔 #${widget.rabbitId} 断奶完成（$count 只待分笼）'),
+          content: Text(
+            '母兔 #${widget.rabbitId} 断奶完成（$count 只待分笼），请前往笼位详情选择场内生产。',
+          ),
         ),
       );
     } catch (error) {

@@ -65,7 +65,7 @@ class RequestDedupServiceTest {
         );
 
         assertEquals(409, error.getCode());
-        assertEquals("requestId已用于不同的批量配种请求", error.getMessage());
+        assertEquals("requestId已用于不同的请求载荷", error.getMessage());
     }
 
     @Test
@@ -86,6 +86,37 @@ class RequestDedupServiceTest {
         assertEquals(RequestDedupService.BeginResult.DONE, result);
     }
 
+    @Test
+    void storesAndReadsTheOriginalResponseForReplay() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.selected = item(RequestDedupService.STATUS_PROCESSING);
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        service.markDone(8L, 3L, "nfc:cage:bind", "request-1", "{\"id\":9}");
+
+        assertEquals(
+            "{\"id\":9}",
+            service.getResponsePayload(8L, 3L, "nfc:cage:bind", "request-1")
+        );
+    }
+
+    @Test
+    void rejectsAResponseThatCannotBePersisted() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.responseUpdateResult = 0;
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        BizException error = assertThrows(
+            BizException.class,
+            () -> service.markDone(
+                8L, 3L, "nfc:cage:bind", "request-1", "{\"id\":9}"
+            )
+        );
+
+        assertEquals(500, error.getCode());
+        assertEquals("幂等响应保存失败", error.getMessage());
+    }
+
     private static RequestDedup item(String status) {
         RequestDedup item = new RequestDedup();
         item.setHouseId(8L);
@@ -99,6 +130,7 @@ class RequestDedupServiceTest {
     private static class FakeRequestDedupMapper implements RequestDedupMapper {
         int insertResult;
         int selectCalls;
+        int responseUpdateResult = 1;
         RequestDedup selected;
 
         @Override
@@ -127,6 +159,22 @@ class RequestDedupServiceTest {
                 String errorMessage
         ) {
             return 1;
+        }
+
+        @Override
+        public int updateStatusWithResponse(
+                Long houseId,
+                Long userId,
+                String api,
+                String requestId,
+                String status,
+                String responsePayload
+        ) {
+            if (selected != null) {
+                selected.setStatus(status);
+                selected.setResponsePayload(responsePayload);
+            }
+            return responseUpdateResult;
         }
     }
 }

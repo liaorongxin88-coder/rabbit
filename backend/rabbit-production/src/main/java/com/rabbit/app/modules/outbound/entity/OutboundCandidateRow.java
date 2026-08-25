@@ -19,8 +19,11 @@ public class OutboundCandidateRow {
     private Long stateVersion;
     private Long batchId;
     private String stage;
+    private String growthStage;
     private Date nextEventDate;
     private String nextEventType;
+    private Boolean saleReadyTask;
+    private Boolean saleReadyTaskDue;
     private Boolean openTreatment;
     private Boolean unresolvedAbnormal;
 
@@ -56,10 +59,16 @@ public class OutboundCandidateRow {
     public void setBatchId(Long batchId) { this.batchId = batchId; }
     public String getStage() { return stage; }
     public void setStage(String stage) { this.stage = stage; }
+    public String getGrowthStage() { return growthStage; }
+    public void setGrowthStage(String growthStage) { this.growthStage = growthStage; }
     public Date getNextEventDate() { return nextEventDate; }
     public void setNextEventDate(Date nextEventDate) { this.nextEventDate = nextEventDate; }
     public String getNextEventType() { return nextEventType; }
     public void setNextEventType(String nextEventType) { this.nextEventType = nextEventType; }
+    public Boolean getSaleReadyTask() { return saleReadyTask; }
+    public void setSaleReadyTask(Boolean saleReadyTask) { this.saleReadyTask = saleReadyTask; }
+    public Boolean getSaleReadyTaskDue() { return saleReadyTaskDue; }
+    public void setSaleReadyTaskDue(Boolean saleReadyTaskDue) { this.saleReadyTaskDue = saleReadyTaskDue; }
     public Boolean getOpenTreatment() { return openTreatment; }
     public void setOpenTreatment(Boolean openTreatment) { this.openTreatment = openTreatment; }
     public Boolean getUnresolvedAbnormal() { return unresolvedAbnormal; }

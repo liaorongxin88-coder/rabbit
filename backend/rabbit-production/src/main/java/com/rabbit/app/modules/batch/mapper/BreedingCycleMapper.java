@@ -37,7 +37,10 @@ public interface BreedingCycleMapper {
      */
     int countOpenLifecycleByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId);
 
-
-
+    int countOpenLifecycleByBatchAndMother(
+        @Param("houseId") Long houseId,
+        @Param("batchId") Long batchId,
+        @Param("motherRabbitId") Long motherRabbitId
+    );
 
 }

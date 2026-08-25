@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
 import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 final batchRepositoryProvider = Provider<BatchRepository>((ref) {
   return BatchRepository(ref.watch(apiClientProvider));
@@ -113,24 +114,27 @@ class BatchRepository {
     );
   }
 
-  Future<void> separatePendingWeaning({
+  Future<WeaningSeparationResult> separatePendingWeaning({
     required int houseId,
     required int batchId,
     required int weaningRecordId,
-    required int cageId,
-    required int count,
+    required List<CageAllocation> allocations,
+    int? motherRabbitId,
+    int? fatherRabbitId,
     String? requestId,
   }) {
-    return _api.post<void>(
+    return _api.post<WeaningSeparationResult>(
       '/api/batches/$batchId/weaning-records/$weaningRecordId/separation',
       houseId: houseId,
       body: {
-        'allocations': [
-          {'cageId': cageId, 'count': count},
-        ],
+        'allocations': allocations.map((item) => item.toJson()).toList(),
+        if (motherRabbitId != null) 'motherRabbitId': motherRabbitId,
+        if (fatherRabbitId != null) 'fatherRabbitId': fatherRabbitId,
         'requestId': requestId ?? _uuid.v4(),
       },
-      decode: (_) {},
+      decode: (data) => WeaningSeparationResult.fromJson(
+        requireJsonObject(data, message: '分笼结果格式不正确'),
+      ),
     );
   }
 
@@ -282,8 +286,7 @@ String formatBatchWriteDate(DateTime date) {
   return '$y-$m-$d';
 }
 
-String formatBatchWriteDateTime(DateTime date) =>
-    date.toUtc().toIso8601String();
+String formatBatchWriteDateTime(DateTime date) => farmDateTimeToIso(date);
 
 List<int> _sortedUniqueIds(Iterable<int> ids) {
   return ids.toSet().toList()..sort();

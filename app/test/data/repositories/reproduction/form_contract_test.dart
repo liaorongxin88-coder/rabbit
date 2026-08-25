@@ -48,7 +48,41 @@ void main() {
       (request) => request.path == '/api/repro/cycles/9/kept-kits-adjustments',
     );
     expect(adjustment.body['sourceMotherRabbitId'], 22);
-    expect(adjustment.body['occurredAt'], isA<int>());
+    expect(
+      adjustment.body['occurredAt'],
+      DateTime.utc(2026, 8, 21, 6, 30).millisecondsSinceEpoch,
+    );
+  });
+
+  test('open cycle sends its selected batch and stable request id', () async {
+    final adapter = _FormContractAdapter();
+    final repository = _repository(adapter);
+
+    await repository.openCycle(
+      houseId: 8,
+      motherRabbitId: 31,
+      batchId: 61,
+      stage: ReproStage.awaitPalpation,
+      occurredAt: DateTime(2026, 8, 21),
+      matingDate: DateTime(2026, 8, 20),
+      requestId: 'open-cycle-61',
+    );
+
+    final request = adapter.jsonRequests.singleWhere(
+      (item) => item.path == '/api/repro/cycles',
+    );
+    expect(request.body['motherRabbitId'], 31);
+    expect(request.body['batchId'], 61);
+    expect(request.body['stage'], 'AWAIT_PALPATION');
+    expect(
+      request.body['occurredAt'],
+      DateTime.utc(2026, 8, 20, 16).millisecondsSinceEpoch,
+    );
+    expect(
+      request.body['matingDate'],
+      DateTime.utc(2026, 8, 19, 16).millisecondsSinceEpoch,
+    );
+    expect(request.body['requestId'], 'open-cycle-61');
   });
 
   test('image upload uses multipart and returns the server file id', () async {
