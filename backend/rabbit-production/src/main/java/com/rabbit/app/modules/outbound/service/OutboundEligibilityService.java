@@ -3,6 +3,7 @@ package com.rabbit.app.modules.outbound.service;
 import com.rabbit.app.modules.outbound.dto.OutboundDtos;
 import com.rabbit.app.modules.outbound.entity.OutboundCandidateRow;
 import com.rabbit.app.modules.outbound.mapper.OutboundCandidateMapper;
+import com.rabbit.app.modules.rabbit.domain.CommodityGrowthStage;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -46,7 +47,7 @@ public class OutboundEligibilityService {
         return new OutboundDtos.RabbitEligibilityView(
                 row.getRabbitId(), row.getCageId(), empty(row.getCageNumber(), "#" + row.getCageId()),
                 empty(row.getRowCode(), "LEGACY"), row.getLayerIndex(), row.getPositionIndex(),
-                row.getRabbitType(), row.getGender(), row.getWeight(), empty(row.getStage(), "未分配"),
+                row.getRabbitType(), row.getGender(), row.getWeight(), displayStage(row),
                 row.getBatchId(), row.getStateVersion() == null ? 0L : row.getStateVersion(),
                 decision.eligibility, decision.code, decision.message, decision.action,
                 NORMAL.equals(decision.eligibility)
@@ -91,20 +92,38 @@ public class OutboundEligibilityService {
         if (Boolean.TRUE.equals(row.getUnresolvedAbnormal())) {
             return new Decision(NEEDS_ACTION, "RABBIT_ABNORMAL_UNRESOLVED", "兔只有未处理异常", "处理异常后重新预检");
         }
-        String stage = empty(row.getStage(), "");
-        if (stage.isEmpty() || stage.contains("待分配")) {
-            return blocked("COMMODITY_STAGE_MISSING", "商品兔缺少有效生产阶段", "补齐生产批次或阶段");
+        CommodityGrowthStage growthStage = CommodityGrowthStage.fromCodeOrNull(row.getGrowthStage());
+        if (growthStage == CommodityGrowthStage.MATURE) {
+            return new Decision(NORMAL, "ELIGIBLE", "可正常出库", "纳入或移出本次出库");
         }
-        boolean saleDue = row.getNextEventType() != null && row.getNextEventType().contains("出售")
+        if (growthStage != null) {
+            return new Decision(EARLY_SALE, "EARLY_SALE_CONFIRMATION_REQUIRED", "当前阶段仅允许提前出售", "逐兔填写提前出售原因");
+        }
+
+        String stage = empty(row.getStage(), "");
+        boolean batchSaleEvent = row.getNextEventType() != null && row.getNextEventType().contains("出售");
+        boolean saleDue = batchSaleEvent
                 && row.getNextEventDate() != null && !row.getNextEventDate().after(new Date());
+        saleDue = saleDue || Boolean.TRUE.equals(row.getSaleReadyTaskDue());
         if (stage.contains("可出售") || stage.contains("待出售") || saleDue) {
             return new Decision(NORMAL, "ELIGIBLE", "可正常出库", "纳入或移出本次出库");
         }
         if (stage.contains("适应") || stage.contains("生长") || stage.contains("育肥")
-                || (row.getNextEventType() != null && row.getNextEventType().contains("出售"))) {
+                || batchSaleEvent || Boolean.TRUE.equals(row.getSaleReadyTask())) {
             return new Decision(EARLY_SALE, "EARLY_SALE_CONFIRMATION_REQUIRED", "当前阶段仅允许提前出售", "逐兔填写提前出售原因");
         }
+        if (stage.isEmpty() || stage.contains("待分配")) {
+            return blocked("COMMODITY_STAGE_MISSING", "商品兔缺少有效生产阶段", "补齐商品兔生长阶段");
+        }
         return blocked("COMMODITY_STAGE_BLOCKED", "当前生产阶段不允许出库", "继续当前生产流程");
+    }
+
+    String displayStage(OutboundCandidateRow row) {
+        CommodityGrowthStage growthStage = CommodityGrowthStage.fromCodeOrNull(row.getGrowthStage());
+        if (growthStage != null) {
+            return growthStage.label();
+        }
+        return empty(row.getStage(), "阶段未设置");
     }
 
     private Decision blocked(String code, String message, String action) {

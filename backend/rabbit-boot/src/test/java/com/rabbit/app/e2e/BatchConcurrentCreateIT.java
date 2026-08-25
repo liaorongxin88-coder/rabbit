@@ -99,7 +99,7 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
     }
 
     @Test
-    void batchTagsCanBeRemovedAndAddedAgain() {
+    void secondaryBatchTagsCanBeRemovedAndAddedAgain() {
         UserSession owner = register("batch_tag_remove");
         long houseId = createHouse(owner, "批次标签增删兔舍", 1, 2, 1);
         long rabbitId = createRabbit(
@@ -117,22 +117,22 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
         addRabbitTag(owner, houseId, batchB, rabbitId, "add-b-1");
         Assertions.assertEquals(2, activeTagCount(rabbitId));
 
-        String removeRequestId = requestId("remove-a");
+        String removeRequestId = requestId("remove-b");
         api.deleteOk(
-            "/api/batches/" + batchA + "/members/" + rabbitId
+            "/api/batches/" + batchB + "/members/" + rabbitId
                 + "?requestId=" + removeRequestId,
             owner.token,
             houseId
         );
         api.deleteOk(
-            "/api/batches/" + batchA + "/members/" + rabbitId
+            "/api/batches/" + batchB + "/members/" + rabbitId
                 + "?requestId=" + removeRequestId,
             owner.token,
             houseId
         );
         Assertions.assertEquals(1, activeTagCount(rabbitId));
 
-        addRabbitTag(owner, houseId, batchA, rabbitId, "add-a-2");
+        addRabbitTag(owner, houseId, batchB, rabbitId, "add-b-2");
         Assertions.assertEquals(2, activeTagCount(rabbitId));
         Assertions.assertEquals(
             3,

@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
@@ -280,6 +281,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
     this.onEdit,
     this.onSale,
     this.onOutbound,
+    this.onConvertToReplacement,
     this.onChanged,
     this.onOpenBatch,
     this.onBindBatch,
@@ -295,6 +297,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onSale;
   final VoidCallback? onOutbound;
+  final VoidCallback? onConvertToReplacement;
   final VoidCallback? onChanged;
   final ValueChanged<int>? onOpenBatch;
   final VoidCallback? onBindBatch;
@@ -727,6 +730,13 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           onPressed: widget.onOutbound,
           icon: const Icon(Icons.local_shipping_outlined),
           label: const Text('单兔出库'),
+        ),
+      if (widget.onConvertToReplacement != null)
+        OutlinedButton.icon(
+          key: ValueKey('rabbit-detail-replacement-${widget.rabbit.id}'),
+          onPressed: widget.onConvertToReplacement,
+          icon: const Icon(Icons.change_circle_outlined),
+          label: const Text('留种转后备'),
         ),
       if (widget.onMove != null)
         OutlinedButton.icon(
@@ -1222,7 +1232,7 @@ String _arrivalMethodLabel(String value) {
     case '0':
       return '购入';
     case '1':
-      return '出生';
+      return '场内生产';
     default:
       return value.trim().isEmpty ? '未填写' : value.trim();
   }
@@ -1266,7 +1276,9 @@ String _membershipStageLabel(RabbitBatchMembership membership) {
 }
 
 String _dateLabel(DateTime? value, {required String fallback}) {
-  return value == null ? fallback : DateFormat('yyyy-MM-dd').format(value);
+  return value == null
+      ? fallback
+      : DateFormat('yyyy-MM-dd').format(farmLocalDateTime(value));
 }
 
 class _RabbitListHeader extends StatelessWidget {

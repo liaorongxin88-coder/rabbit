@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
@@ -139,7 +140,7 @@ class _AbortionSheetState extends ConsumerState<_AbortionSheet> {
           'action': 'abortion',
           'houseId': widget.houseId,
           'cycleId': widget.cycleId,
-          'occurredAt': _occurredAt.toUtc().toIso8601String(),
+          'occurredAt': farmDateTimeToIso(_occurredAt),
           'stillbirthCount': stillbirth,
           'remark': remark,
           'imageNames': _images.map((image) => image.name).toList(),

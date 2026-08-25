@@ -276,11 +276,11 @@ public class ReplacementPromotionIT extends E2eTestSupport {
                 + " and task_type = 'REPLACEMENT_MATURE'",
             String.class, houseId, rabbitId
         ));
-        Assertions.assertEquals(1, jdbc.queryForObject(
+        Assertions.assertEquals(0, jdbc.queryForObject(
             "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
-                + " and batch_id is null and lifecycle = 'OPEN' and stage = 'AWAIT_ESTRUS'",
+                + " and lifecycle = 'OPEN'",
             Integer.class, houseId, rabbitId
-        ));
+        ), "后备母兔转种后要先选择生产批次，再由入批路径开启周期");
     }
 
     @Test

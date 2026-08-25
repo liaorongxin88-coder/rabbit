@@ -39,6 +39,18 @@ SET @house_id = LAST_INSERT_ID();
 INSERT INTO house_users (house_id, user_id, role, status, perms, is_admin, create_by, update_by)
 VALUES (@house_id, @user_control, 'OWNER', 'ENABLED', 'control', TRUE, @actor, @actor);
 
+-- 真机录入种母兔并从生产阶段入轨时必须选择一个进行中批次。
+-- 批次代码固定，便于应用在本次 fixture 兔舍内按 CAGEOPS 明确选中。
+SET @batch_code = 'CAGEOPS';
+INSERT INTO batches (
+    house_id, batch_code, status, start_date, request_id, remark, create_by, update_by
+)
+VALUES (
+    @house_id, @batch_code, '进行中', CURDATE(),
+    CONCAT('cage-ops-batch-', @run_id), CONCAT(@prefix, ':repro-batch'), @actor, @actor
+);
+SET @batch_id = LAST_INSERT_ID();
+
 -- status: '0' 空笼 / '1' 种兔笼 / '2' 后备兔笼 / '3' 商品兔笼
 --
 -- is_fed / is_enabled 在这里是有意安排的：分层地图按「关注度」着色，
@@ -66,6 +78,7 @@ SET @c3 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-
 SET @c4 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-4-1');
 SET @c5 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-5-1');
 SET @c6 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-6-1');
+SET @c7 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-7-1');
 
 -- type: '0' 种兔 / '1' 后备兔 / '2' 商品兔；gender: '0' 母 / '1' 公
 -- 种母兔的 current_stage 由生产流程投影，这里直接给一个在轨阶段，验的正是列表能读到它。
@@ -91,6 +104,74 @@ VALUES
     (@house_id, @c4, '2', '0', 'CAGEOPS-COMM-C', '0', NOW() - INTERVAL 45 DAY, 2.70,
      'FATTENING', NULL, NULL, NULL,
      0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-COMM-C'), @actor, @actor);
+
+SET @doe_id = (
+    SELECT id FROM rabbits
+    WHERE house_id = @house_id AND request_id = CONCAT('cage-ops-rabbit-', @run_id, '-DOE')
+);
+INSERT INTO breeding_cycles (
+    house_id, batch_id, mother_rabbit_id, cycle_no, stage, stage_entered_at,
+    lifecycle, state_version, request_id, create_by, update_by
+)
+VALUES (
+    @house_id, @batch_id, @doe_id, 1, 'AWAIT_MATING', NOW() - INTERVAL 3 DAY,
+    'OPEN', 0, CONCAT('cage-ops-cycle-', @run_id, '-DOE'), @actor, @actor
+);
+SET @doe_cycle_id = LAST_INSERT_ID();
+
+INSERT INTO batch_rabbits (
+    batch_id, rabbit_id, latest_cycle_id, join_reason, batch_role, current_status,
+    last_event_date, is_active, join_date, create_by, update_by
+)
+VALUES (
+    @batch_id, @doe_id, @doe_cycle_id, '生产入轨', 'breeding', '待配种',
+    NOW() - INTERVAL 3 DAY, TRUE, NOW() - INTERVAL 3 DAY, @actor, @actor
+);
+
+INSERT INTO work_tasks (
+    house_id, task_type, subject_type, subject_id, cycle_id, rabbit_id, batch_id,
+    cage_id, due_date, due_time, status, dedup_key, remark, create_by, update_by
+)
+VALUES (
+    @house_id, 'MATING', 'CYCLE', @doe_cycle_id, @doe_cycle_id, @doe_id, @batch_id,
+    @c1, CURDATE(), NOW(), 'PENDING', CONCAT('cycle:', @doe_cycle_id, ':MATING'),
+    '夹具种母兔待配种', @actor, @actor
+);
+
+-- 同一母兔保留一轮已断奶历史，供笼位入口验证“场内生产”。父兔已离场，
+-- 用于证明父母候选可以展示历史档案，但表单仍默认不关联。
+INSERT INTO rabbits (
+    house_id, cage_id, type, gender, breed, arrival_method, arrival_date,
+    state_version, is_active, is_quarantined, request_id, create_by, update_by
+)
+VALUES (
+    @house_id, @c7, '0', '1', 'CAGEOPS-SIRE', '0', NOW() - INTERVAL 300 DAY,
+    0, FALSE, FALSE, CONCAT('cage-ops-parent-', @run_id, '-SIRE'), @actor, @actor
+);
+SET @sire_id = LAST_INSERT_ID();
+
+INSERT INTO breeding_cycles (
+    house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
+    stage, stage_entered_at, lifecycle, result, weaning_date, weaned_kits,
+    closed_at, request_id, create_by, update_by
+)
+VALUES (
+    @house_id, @batch_id, @doe_id, @sire_id, 2,
+    'AWAIT_WEANING', NOW() - INTERVAL 30 DAY, 'CLOSED', 'WEANED', CURDATE(), 2,
+    NOW(), CONCAT('cage-ops-cycle-', @run_id, '-WEANED'), @actor, @actor
+);
+SET @weaning_cycle_id = LAST_INSERT_ID();
+
+INSERT INTO weaning_records (
+    house_id, batch_id, breeding_cycle_id, rabbit_id, weaning_date,
+    weaning_count, waiting_count, male_count, female_count, avg_weight,
+    remark, create_by, update_by
+)
+VALUES (
+    @house_id, @batch_id, @weaning_cycle_id, @doe_id, NOW(),
+    2, 2, 1, 1, 1.10, CONCAT(@prefix, ':pending-weaning'), @actor, @actor
+);
+SET @weaning_record_id = LAST_INSERT_ID();
 
 -- 1-5-1 预先贴好并绑定 NFC 标签：真实养殖场里标签是早就贴在笼上的，
 -- 换笼时“碰一下目标笼位”碰到的就是已绑定的标签。
@@ -133,3 +214,11 @@ FROM rabbits r
 INNER JOIN cages c ON c.id = r.cage_id
 WHERE r.request_id LIKE CONCAT('cage-ops-rabbit-', @run_id, '-%')
 ORDER BY r.breed;
+
+-- 兼容旧调用方：原有三个结果集保持不变，新元数据只在末尾追加。
+SELECT
+    'BATCH' AS kind, @batch_code AS name, @batch_id AS id, '进行中' AS status, 0 AS cnt
+UNION ALL
+SELECT
+    'WEANING' AS kind, CAST(@weaning_record_id AS CHAR) AS name,
+    @batch_id AS id, '待分笼' AS status, 2 AS cnt;

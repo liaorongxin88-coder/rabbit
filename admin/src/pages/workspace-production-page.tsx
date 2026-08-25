@@ -43,7 +43,10 @@ import {
   BATCH_CODE_MAX_LENGTH,
   batchCodeDraftForDialog,
 } from "@/lib/batch-code";
-import { formatLocalDate } from "@/lib/date";
+import {
+  farmBusinessDateToTimestamp,
+  formatFarmBusinessDate,
+} from "@/lib/date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -735,7 +738,7 @@ function BatchActionDialog({
   const [motherSearch, setMotherSearch] = useState("");
   const [motherPage, setMotherPage] = useState(1);
   const [maleRabbitId, setMaleRabbitId] = useState("");
-  const [date, setDate] = useState(formatLocalDate());
+  const [date, setDate] = useState(formatFarmBusinessDate());
   const [result, setResult] = useState("怀孕");
   const [totalKits, setTotalKits] = useState("0");
   const [liveKits, setLiveKits] = useState("0");
@@ -771,7 +774,7 @@ function BatchActionDialog({
     setMotherSearch("");
     setMotherPage(1);
     setMaleRabbitId("");
-    setDate(formatLocalDate());
+    setDate(formatFarmBusinessDate());
     setResult("怀孕");
     setTotalKits("0");
     setLiveKits("0");
@@ -916,7 +919,11 @@ function BatchActionDialog({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!batch || !houseId || isCompletedBatchStatus(batch.status)) return;
-    const timestamp = new Date(`${date}T00:00:00`).getTime();
+    const timestamp = farmBusinessDateToTimestamp(date);
+    if (timestamp === undefined) {
+      toast.error("请选择有效日期");
+      return;
+    }
     if (action === "departure") {
       if (!canRabbitEdit) return;
       const reason = departureReason.trim();

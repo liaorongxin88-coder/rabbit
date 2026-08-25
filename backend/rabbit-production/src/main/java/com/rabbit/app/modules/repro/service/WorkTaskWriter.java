@@ -172,6 +172,19 @@ public class WorkTaskWriter {
         }
     }
 
+    public void cancelForRabbit(
+        Long houseId,
+        Long rabbitId,
+        TaskType taskType,
+        String operator
+    ) {
+        for (WorkTask task : pendingBySubject(houseId, TaskSubjectType.RABBIT, rabbitId)) {
+            if (taskType.name().equals(task.getTaskType())) {
+                workTaskMapper.cancel(houseId, task.getId(), operator);
+            }
+        }
+    }
+
     private WorkTask scheduleRabbitTask(RabbitTaskScheduleRequest request, String dedupKey) {
         if (request.rabbitId() == null) {
             throw new IllegalArgumentException("兔只任务的 rabbitId 不能为空: " + request.taskType());

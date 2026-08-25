@@ -392,10 +392,10 @@ String _str(Object? value) => value == null ? '' : value.toString();
 
 DateTime? _date(Object? value) {
   if (value is int) {
-    return DateTime.fromMillisecondsSinceEpoch(value);
+    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
   }
   if (value is num) {
-    return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    return DateTime.fromMillisecondsSinceEpoch(value.toInt(), isUtc: true);
   }
   if (value is String && value.isNotEmpty) {
     return DateTime.tryParse(value);

@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/domain/cages/transfer.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/replacement.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
   return RabbitRepository(ref.watch(apiClientProvider));
@@ -35,7 +36,19 @@ class RabbitRepository {
     int houseId, {
     CancelToken? cancelToken,
   }) {
-    return _listAllActiveRabbits(
+    return _listAllRabbits(
+      houseId,
+      rabbitType: '0',
+      active: true,
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<List<Rabbit>> listAllBreedingRabbits(
+    int houseId, {
+    CancelToken? cancelToken,
+  }) {
+    return _listAllRabbits(
       houseId,
       rabbitType: '0',
       cancelToken: cancelToken,
@@ -45,6 +58,20 @@ class RabbitRepository {
   Future<List<Rabbit>> _listAllActiveRabbits(
     int houseId, {
     String? rabbitType,
+    CancelToken? cancelToken,
+  }) {
+    return _listAllRabbits(
+      houseId,
+      rabbitType: rabbitType,
+      active: true,
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<List<Rabbit>> _listAllRabbits(
+    int houseId, {
+    String? rabbitType,
+    bool? active,
     CancelToken? cancelToken,
   }) async {
     const pageSize = 200;
@@ -57,6 +84,7 @@ class RabbitRepository {
         page: page,
         pageSize: pageSize,
         rabbitType: rabbitType,
+        active: active,
         cancelToken: cancelToken,
       );
       rabbits.addAll(batch);
@@ -72,13 +100,14 @@ class RabbitRepository {
     required int page,
     required int pageSize,
     String? rabbitType,
+    bool? active = true,
     CancelToken? cancelToken,
   }) {
     return _api.get<List<Rabbit>>(
       '/api/rabbits',
       houseId: houseId,
       query: {
-        'active': true,
+        if (active != null) 'active': active,
         if (rabbitType != null) 'type': rabbitType,
         'page': page,
         'pageSize': pageSize,
@@ -160,10 +189,12 @@ class RabbitRepository {
     String? growthStage,
     String? reproductiveStage,
     String? reproStage,
+    int? batchId,
     DateTime? stageEnteredAt,
     DateTime? matingDate,
     DateTime? birthDate,
     int? liveKits,
+    String? requestId,
   }) {
     final body = <String, dynamic>{
       'cageId': cageId,
@@ -171,21 +202,25 @@ class RabbitRepository {
       'gender': gender,
       'arrivalMethod': arrivalMethod,
       'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
-      'requestId': _uuid.v4(),
+      'requestId': requestId ?? _uuid.v4(),
     };
     // 录入时直接入轨：建兔与开周期必须同事务，否则存栏里有这只母兔、
     // 待办里却没有，她会永远不被提醒。
     final trimmedReproStage = reproStage?.trim();
     if (trimmedReproStage != null && trimmedReproStage.isNotEmpty) {
       body['reproStage'] = trimmedReproStage;
+      if (batchId != null && batchId > 0) {
+        body['batchId'] = batchId;
+      }
       if (stageEnteredAt != null) {
-        body['stageEnteredAt'] = stageEnteredAt.millisecondsSinceEpoch;
+        body['stageEnteredAt'] =
+            farmDateTimeToEpochMilliseconds(stageEnteredAt);
       }
       if (matingDate != null) {
-        body['matingDate'] = matingDate.millisecondsSinceEpoch;
+        body['matingDate'] = farmDateTimeToEpochMilliseconds(matingDate);
       }
       if (birthDate != null) {
-        body['birthDate'] = birthDate.millisecondsSinceEpoch;
+        body['birthDate'] = farmDateTimeToEpochMilliseconds(birthDate);
       }
       if (liveKits != null && liveKits >= 0) {
         body['liveKits'] = liveKits;

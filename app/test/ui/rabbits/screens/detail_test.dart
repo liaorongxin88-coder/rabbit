@@ -39,6 +39,10 @@ void main() {
       const ValueKey('rabbit-detail-outbound-31'),
     );
     expect(outbound, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsOneWidget,
+    );
     expect(tester.widget(outbound), isA<OutlinedButton>());
     expect(
       find.byKey(const ValueKey('rabbit-detail-move-31')),
@@ -89,12 +93,40 @@ void main() {
     expect(find.byKey(const ValueKey('rabbit-detail-sale-31')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('rabbit-detail-outbound-31')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
 
     await tester.pumpWidget(_app(router: router, rabbit: _activeReplacement));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rabbit-detail-sale-31')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('rabbit-detail-outbound-31')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('commodity replacement action requires control permission',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        router: router,
+        rabbit: _activeRabbit,
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
   });
 
   testWidgets('existing batch tags can be extended or removed', (tester) async {
@@ -173,6 +205,10 @@ void main() {
       find.byKey(const ValueKey('rabbit-detail-outbound-31')),
       findsNothing,
     );
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 }
@@ -181,6 +217,10 @@ Widget _app({
   required GoRouter router,
   required Rabbit rabbit,
   List<RabbitBatchMembership> memberships = const [],
+  HousePermission permission = const HousePermission(
+    perms: 'control',
+    isAdmin: true,
+  ),
 }) {
   const detailRequest = RabbitDetailRequest(houseId: 8, rabbitId: 31);
   const membershipRequest = RabbitBatchMembershipRequest(
@@ -191,12 +231,7 @@ Widget _app({
     overrides: [
       rabbitDetailProvider(detailRequest).overrideWith((_) async => rabbit),
       houseCagesProvider(8).overrideWith((_) async => const [_cage]),
-      housePermissionProvider(8).overrideWith(
-        (_) async => const HousePermission(
-          perms: 'control',
-          isAdmin: true,
-        ),
-      ),
+      housePermissionProvider(8).overrideWith((_) async => permission),
       rabbitBatchMembershipsProvider(membershipRequest).overrideWith(
         (_) async => memberships,
       ),
@@ -245,7 +280,7 @@ final _activeRabbit = Rabbit(
   gender: '0',
   breed: '新西兰白兔',
   arrivalMethod: '0',
-  arrivalDate: DateTime(2025, 8, 23),
+  arrivalDate: DateTime.utc(2025, 8, 22, 16),
   weight: 2.5,
   isActive: true,
 );

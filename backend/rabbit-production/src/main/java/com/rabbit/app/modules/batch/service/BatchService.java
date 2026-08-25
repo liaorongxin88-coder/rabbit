@@ -396,11 +396,11 @@ public class BatchService {
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
-            Batch batch = batchMapper.selectById(houseId, batchId);
+            Batch batch = batchMapper.selectByIdForUpdate(houseId, batchId);
             if (batch == null) {
                 throw new BizException(404, "批次不存在");
             }
-            if ("已完成".equals(batch.getStatus())) {
+            if (!"进行中".equals(batch.getStatus())) {
                 throw new BizException(409, "批次已结束，无法再加入兔只");
             }
             List<Rabbit> rabbits = lockAndValidateRabbits(houseId, rabbitIds);
@@ -437,13 +437,19 @@ public class BatchService {
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
-            if (batchMapper.selectById(houseId, batchId) == null) {
+            if (batchMapper.selectByIdForUpdate(houseId, batchId) == null) {
                 throw new BizException(404, "批次不存在");
             }
             BatchRabbit link = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
                 houseId, batchId, rabbitId
             );
             if (link != null) {
+                if ("breeding".equals(link.getBatchRole())
+                    && breedingCycleMapper.countOpenLifecycleByBatchAndMother(
+                        houseId, batchId, rabbitId
+                    ) > 0) {
+                    throw new BizException(409, "母兔仍有绑定该批次的进行中生产周期，无法移除");
+                }
                 int updated = batchRabbitMapper.deactivateIfActive(
                     houseId,
                     link.getId(),
@@ -471,20 +477,9 @@ public class BatchService {
         String requestId
     ) {
         String operatorName = operatorNameResolver.resolve(userId);
-        String operator = operatorName == null || operatorName.isBlank()
-            ? String.valueOf(userId)
-            : operatorName;
         for (Rabbit r : females) {
             ReproCycle existing = reproCycleMapper.selectOpenPipelineForUpdate(houseId, r.getId());
             if (existing != null) {
-                if (existing.getBatchId() == null
-                    && reproCycleMapper.assignBatchIfUnbound(
-                        houseId, existing.getId(), batchId, operator
-                    ) > 0) {
-                    workTaskWriter.assignPendingCycleTasksToBatch(
-                        houseId, existing.getId(), batchId, operator
-                    );
-                }
                 continue;
             }
             OpenCycleCommand command = new OpenCycleCommand(

@@ -83,6 +83,34 @@ void main() {
     );
   });
 
+  test('UTC instant uses the Asia Shanghai calendar day', () {
+    final instant = DateTime.utc(2026, 8, 19, 16, 45);
+
+    expect(farmLocalDateTime(instant), DateTime(2026, 8, 20, 0, 45));
+    expect(localDateOnly(instant), DateTime(2026, 8, 20));
+    expect(
+      localDateOnly(DateTime(2026, 8, 19, 23, 30)),
+      DateTime(2026, 8, 19),
+      reason: 'date-only picker values keep their entered components',
+    );
+  });
+
+  test('picker wall-clock values serialize in the farm timezone', () {
+    final selected = DateTime(2026, 8, 20, 9, 30);
+
+    expect(farmDateTimeToUtc(selected), DateTime.utc(2026, 8, 20, 1, 30));
+    expect(
+      farmDateTimeToEpochMilliseconds(selected),
+      DateTime.utc(2026, 8, 20, 1, 30).millisecondsSinceEpoch,
+    );
+    expect(farmDateTimeToIso(selected), '2026-08-20T01:30:00.000Z');
+    expect(
+      farmDateTimeToUtc(DateTime.utc(2026, 8, 20, 1, 30)),
+      DateTime.utc(2026, 8, 20, 1, 30),
+      reason: 'true API instants must not be shifted twice',
+    );
+  });
+
   test('日历初始日期不会落到今天以前', () {
     expect(
       reminderInitialDate(

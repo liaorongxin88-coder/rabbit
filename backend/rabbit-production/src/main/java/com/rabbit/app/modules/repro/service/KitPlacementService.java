@@ -7,6 +7,7 @@ import com.rabbit.app.modules.batch.entity.WeaningRecordAllocation;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.mapper.WeaningRecordMapper;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
+import com.rabbit.app.modules.rabbit.domain.CommodityGrowthStage;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
@@ -143,27 +144,37 @@ public class KitPlacementService {
                 throw new BizException(409, "笼位状态或容量已变化，请刷新后重试");
             }
             for (int offset = 0; offset < add; offset++) {
-                kits.add(newKit(command, allocation.getCageId(), index++));
+                kits.add(newKit(
+                    command,
+                    allocation.getCageId(),
+                    index++,
+                    allocationGender(allocation, offset)
+                ));
             }
         }
         return kits;
     }
 
-    private Rabbit newKit(KitSeparationCommand command, Long cageId, int index) {
+    private Rabbit newKit(
+        KitSeparationCommand command,
+        Long cageId,
+        int index,
+        String gender
+    ) {
         WeaningRecord record = command.weaningRecord();
         Rabbit kit = new Rabbit();
         kit.setHouseId(record.getHouseId());
         kit.setCageId(cageId);
-        kit.setMotherId(record.getRabbitId());
-        kit.setFatherId(command.sireRabbitId());
+        kit.setMotherId(command.motherRabbitId());
+        kit.setFatherId(command.fatherRabbitId());
         kit.setBirthBatchId(record.getBatchId());
         kit.setBirthCycleId(record.getBreedingCycleId());
         kit.setType("2");
-        kit.setGender(pickGender(index, orZero(record.getMaleCount()), orZero(record.getFemaleCount())));
+        kit.setGender(gender);
         kit.setArrivalMethod("1");
         kit.setArrivalDate(command.separatedAt());
         kit.setWeight(record.getAvgWeight());
-        kit.setGrowthStage("JUVENILE");
+        kit.setGrowthStage(CommodityGrowthStage.ADAPTATION.name());
         kit.setGrowthStageEnteredAt(command.separatedAt());
         kit.setIsActive(Boolean.TRUE);
         kit.setIsQuarantined(Boolean.FALSE);
@@ -173,11 +184,11 @@ public class KitPlacementService {
         return kit;
     }
 
-    private static String pickGender(int index, int maleCount, int femaleCount) {
-        if (maleCount + femaleCount == 0) {
-            return "0";
+    private static String allocationGender(WeaningRecordAllocation allocation, int offset) {
+        if (allocation.getMaleCount() == null || allocation.getFemaleCount() == null) {
+            return "2";
         }
-        return index < maleCount ? "1" : "0";
+        return offset < allocation.getMaleCount() ? "1" : "0";
     }
 
     private void insertKitsAndHydrateIds(List<Rabbit> kits) {

@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS breeding_cycles (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   tenant_id BIGINT,
   house_id BIGINT NOT NULL,
-  -- V26 起可空：散养母兔不归属任何批次（业务裁定 2026-08-16）。
+  -- V42 起仅历史 CLOSED 周期可空；OPEN 周期必须归属进行中的生产批次。
   batch_id BIGINT,
   mother_rabbit_id BIGINT NOT NULL,
   male_rabbit_id BIGINT,
@@ -332,6 +332,7 @@ CREATE TABLE IF NOT EXISTS breeding_cycles (
   KEY idx_bc_stage (house_id, lifecycle, stage, id),
   KEY idx_bc_mother_lifecycle (house_id, mother_rabbit_id, lifecycle, id),
   KEY idx_bc_next_event (house_id, next_event_date, is_event_notified),
+  CONSTRAINT ck_bc_open_batch CHECK (lifecycle <> 'OPEN' OR batch_id IS NOT NULL),
   CONSTRAINT fk_bc_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_bc_batch FOREIGN KEY (batch_id) REFERENCES batches (id),
   CONSTRAINT fk_bc_mother FOREIGN KEY (mother_rabbit_id) REFERENCES rabbits (id),
@@ -441,7 +442,7 @@ CREATE TABLE IF NOT EXISTS prepartum_records (
 CREATE TABLE IF NOT EXISTS weaning_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT,
-  -- V29 放开非空：散养母兔没有批次，分笼记录归属的是窝与周期
+  -- 保留可空以兼容 V42 前已关闭的历史周期；新开放周期及其分笼记录都有批次。
   batch_id BIGINT,
   breeding_cycle_id BIGINT,
   rabbit_id BIGINT NOT NULL,
@@ -475,6 +476,8 @@ CREATE TABLE IF NOT EXISTS weaning_record_allocations (
   weaning_record_id BIGINT NOT NULL,
   cage_id BIGINT NOT NULL,
   alloc_count INT NOT NULL,
+  male_count INT,
+  female_count INT,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_wra_record_cage (weaning_record_id, cage_id),
   KEY idx_wra_record (weaning_record_id),
@@ -829,6 +832,7 @@ CREATE TABLE IF NOT EXISTS request_dedup (
   payload_hash VARCHAR(64) NULL,
   status VARCHAR(16) NOT NULL,
   error_message VARCHAR(255),
+  response_payload JSON,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_request_dedup (house_id, user_id, api, request_id),

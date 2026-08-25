@@ -49,6 +49,29 @@ void main() {
     expect(emptyBreedingCage.usageLabel, '种兔');
   });
 
+  test('numeric API dates remain UTC instants until farm-date extraction', () {
+    final instant = DateTime.utc(2025, 8, 22, 16, 30);
+    final rabbit = Rabbit.fromJson({
+      ..._rabbitJson,
+      'arrivalDate': instant.millisecondsSinceEpoch,
+      'stageEnteredAt': instant.millisecondsSinceEpoch,
+    });
+
+    expect(rabbit.arrivalDate, instant);
+    expect(rabbit.arrivalDate!.isUtc, isTrue);
+    expect(rabbit.stageEnteredAt, instant);
+    expect(rabbit.stageEnteredAt!.isUtc, isTrue);
+  });
+
+  test('legacy juvenile growth stage decodes as adaptation', () {
+    final rabbit = Rabbit.fromJson({
+      ..._rabbitJson,
+      'growthStage': 'JUVENILE',
+    });
+
+    expect(rabbit.growthStage, 'ADAPTATION');
+  });
+
   test('repository sends stage snapshots and retains them during a cage move',
       () async {
     final adapter = _CapturingAdapter();
@@ -66,6 +89,9 @@ void main() {
       weight: 4.2,
       growthStage: ' MATURE ',
       reproductiveStage: ' PREGNANT ',
+      reproStage: 'AWAIT_ESTRUS',
+      batchId: 61,
+      requestId: 'create-rabbit-61',
     );
     await repository.updateRabbit(
       houseId: 8,
@@ -95,7 +121,9 @@ void main() {
     expect(create.body['arrivalDate'], '2025-08-23');
     expect(create.body['growthStage'], 'MATURE');
     expect(create.body['reproductiveStage'], 'PREGNANT');
-    expect(create.body['requestId'], isNotEmpty);
+    expect(create.body['reproStage'], 'AWAIT_ESTRUS');
+    expect(create.body['batchId'], 61);
+    expect(create.body['requestId'], 'create-rabbit-61');
     expect(created.arrivalDate, DateTime(2025, 8, 23));
     expect(created.stageEnteredAt, DateTime(2025, 8, 21));
 

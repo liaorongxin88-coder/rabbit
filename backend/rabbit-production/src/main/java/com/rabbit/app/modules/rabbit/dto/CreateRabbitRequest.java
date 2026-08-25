@@ -38,6 +38,9 @@ public class CreateRabbitRequest {
      */
     private String reproStage;
 
+    /** 指定生产阶段入轨时使用的生产批次。 */
+    private Long batchId;
+
     /** 进入该阶段的日期，缺省为录入时间；它决定首个待办何时到期。 */
     private Date stageEnteredAt;
 
@@ -142,6 +145,10 @@ public class CreateRabbitRequest {
     public String getReproStage() { return reproStage; }
 
     public void setReproStage(String reproStage) { this.reproStage = reproStage; }
+
+    public Long getBatchId() { return batchId; }
+
+    public void setBatchId(Long batchId) { this.batchId = batchId; }
 
     public Date getStageEnteredAt() { return stageEnteredAt; }
 

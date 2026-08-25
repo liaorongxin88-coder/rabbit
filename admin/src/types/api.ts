@@ -211,6 +211,23 @@ export interface Rabbit {
  createTime?: string | null;
 }
 
+export interface RabbitReplacementRequest {
+  rabbitIds: number[]
+  forceExitBatch: boolean
+  targetCageId: number
+  requestId: string
+}
+
+export interface RabbitReplacementItem {
+  rabbitId: number
+  replacementRecordId: number
+  targetCageId: number
+}
+
+export interface RabbitReplacementResult {
+  items: RabbitReplacementItem[]
+}
+
 export interface DashboardSummary {
  selectedHouseId?: number | null;
  houseCount: number;

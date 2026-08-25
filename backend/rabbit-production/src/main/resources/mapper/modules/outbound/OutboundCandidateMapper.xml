@@ -4,8 +4,20 @@
     <sql id="CandidateColumns">
         r.id as rabbit_id, r.house_id, r.cage_id, c.cage_number, c.row_code, c.layer_index, c.position_index,
         c.is_enabled as cage_enabled, r.type as rabbit_type, r.gender, r.weight, r.is_active as active,
-        r.is_quarantined as quarantined, r.state_version, br.batch_id, br.current_status as stage,
-        br.next_event_date, br.next_event_type,
+        r.is_quarantined as quarantined, r.state_version, br.batch_id,
+        coalesce(nullif(trim(br.current_status), ''), case upper(r.growth_stage)
+            when 'JUVENILE' then '适应期'
+            when 'ADAPTATION' then '适应期'
+            when 'GROWING' then '生长期'
+            when 'FATTENING' then '育肥期'
+            when 'MATURE' then '成熟可售'
+            else null
+        end) as stage,
+        r.growth_stage, br.next_event_date, br.next_event_type,
+        exists(select 1 from work_tasks wt where wt.house_id = r.house_id and wt.rabbit_id = r.id
+            and wt.task_type = 'SALE_READY' and wt.status = 'PENDING') as sale_ready_task,
+        exists(select 1 from work_tasks wt where wt.house_id = r.house_id and wt.rabbit_id = r.id
+            and wt.task_type = 'SALE_READY' and wt.status = 'PENDING' and wt.due_time &lt;= now()) as sale_ready_task_due,
         exists(select 1 from treatment_records tr where tr.house_id = r.house_id and tr.rabbit_id = r.id and tr.status = 'OPEN') as open_treatment,
         exists(select 1 from rabbit_abnormal_conditions ac where ac.house_id = r.house_id and ac.rabbit_id = r.id and ac.is_deal = false) as unresolved_abnormal
     </sql>
@@ -38,8 +50,11 @@
         <result column="state_version" property="stateVersion"/>
         <result column="batch_id" property="batchId"/>
         <result column="stage" property="stage"/>
+        <result column="growth_stage" property="growthStage"/>
         <result column="next_event_date" property="nextEventDate"/>
         <result column="next_event_type" property="nextEventType"/>
+        <result column="sale_ready_task" property="saleReadyTask"/>
+        <result column="sale_ready_task_due" property="saleReadyTaskDue"/>
         <result column="open_treatment" property="openTreatment"/>
         <result column="unresolved_abnormal" property="unresolvedAbnormal"/>
     </resultMap>

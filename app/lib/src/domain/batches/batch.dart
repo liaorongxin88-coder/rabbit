@@ -69,3 +69,18 @@ class Batch {
     return 0;
   }
 }
+
+List<Batch> productionIntakeBatches(
+  Iterable<Batch> batches, {
+  required int houseId,
+}) {
+  final result = batches.where((batch) {
+    if (batch.id <= 0 || batch.houseId != houseId) {
+      return false;
+    }
+    final status = batch.status.trim().toUpperCase();
+    return status != '已完成' && status != 'COMPLETED';
+  }).toList();
+  result.sort((left, right) => right.id.compareTo(left.id));
+  return result;
+}

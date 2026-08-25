@@ -47,6 +47,7 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
         // 同一只母兔另开一个哺乳周期：血配下两个 OPEN 周期是合法的。
         api.postOk("/api/repro/cycles", f.owner.token, f.houseId, obj(
             "motherRabbitId", f.doeId,
+            "batchId", f.batchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", birth,
             "birthDate", birth,
@@ -154,19 +155,31 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
         List<Long> cages = cageIds(owner, houseId);
         long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", prefix + "_doe");
         long buckId = createRabbit(owner, houseId, cages.get(1), "0", "1", prefix + "_buck");
+        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", prefix + "-batch",
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId(prefix + "_batch")
+        )).get("id").asLong();
 
         long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
             "motherRabbitId", doeId,
+            "batchId", batchId,
             "stage", "AWAIT_MATING",
             "occurredAt", now(),
             "requestId", requestId(prefix + "_cycle")
         )).get("cycleId").asLong();
 
-        return new Fixture(owner, houseId, doeId, buckId, cycleId, cages);
+        return new Fixture(owner, houseId, doeId, buckId, cycleId, batchId, cages);
     }
 
     private record Fixture(
-        UserSession owner, long houseId, long doeId, long buckId, long cycleId, List<Long> cages
+        UserSession owner,
+        long houseId,
+        long doeId,
+        long buckId,
+        long cycleId,
+        long batchId,
+        List<Long> cages
     ) {
     }
 }

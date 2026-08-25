@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 
@@ -121,16 +122,21 @@ class ReproRepository {
         'motherRabbitId': motherRabbitId,
         if (batchId != null) 'batchId': batchId,
         'stage': stage.wire,
-        if (occurredAt != null) 'occurredAt': occurredAt.millisecondsSinceEpoch,
-        if (matingDate != null) 'matingDate': matingDate.millisecondsSinceEpoch,
+        if (occurredAt != null)
+          'occurredAt': farmDateTimeToEpochMilliseconds(occurredAt),
+        if (matingDate != null)
+          'matingDate': farmDateTimeToEpochMilliseconds(matingDate),
         if (expectedBirthDate != null)
-          'expectedBirthDate': expectedBirthDate.millisecondsSinceEpoch,
-        if (birthDate != null) 'birthDate': birthDate.millisecondsSinceEpoch,
+          'expectedBirthDate':
+              farmDateTimeToEpochMilliseconds(expectedBirthDate),
+        if (birthDate != null)
+          'birthDate': farmDateTimeToEpochMilliseconds(birthDate),
         if (totalKits != null) 'totalKits': totalKits,
         if (liveKits != null) 'liveKits': liveKits,
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
-        if (firstDueAt != null) 'firstDueAt': firstDueAt.millisecondsSinceEpoch,
+        if (firstDueAt != null)
+          'firstDueAt': farmDateTimeToEpochMilliseconds(firstDueAt),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
         'requestId': requestId ?? _uuid.v4(),
       },
@@ -174,19 +180,19 @@ class ReproRepository {
     List<String> attachmentFileIds = const [],
     String? requestId,
   }) {
-    final executionTime = occurredAt ?? DateTime.now();
+    final executionTime = occurredAt ?? DateTime.now().toUtc();
     return _api.post<ReproActionResult>(
       '/api/repro/cycles/$cycleId/actions',
       houseId: houseId,
       body: {
         'action': action.wire,
         if (outcome != null) 'outcome': outcome,
-        'occurredAt': executionTime.millisecondsSinceEpoch,
+        'occurredAt': farmDateTimeToEpochMilliseconds(executionTime),
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (palpationResult != null) 'palpationResult': palpationResult.wire,
         if (nextRemindAt != null)
-          'nextRemindAt': nextRemindAt.millisecondsSinceEpoch,
+          'nextRemindAt': farmDateTimeToEpochMilliseconds(nextRemindAt),
         if (totalKits != null) 'totalKits': totalKits,
         if (liveKits != null) 'liveKits': liveKits,
         if (keptKits != null) 'keptKits': keptKits,
@@ -257,7 +263,7 @@ class ReproRepository {
       '/api/repro/cycles/$cycleId/kept-kits-adjustments',
       houseId: houseId,
       body: {
-        'occurredAt': occurredAt.millisecondsSinceEpoch,
+        'occurredAt': farmDateTimeToEpochMilliseconds(occurredAt),
         'keptKits': keptKits,
         if (sourceMotherRabbitId != null)
           'sourceMotherRabbitId': sourceMotherRabbitId,
@@ -304,19 +310,19 @@ class ReproRepository {
       '批量目标必须二选一：taskIds 或 filter',
     );
 
-    final executionTime = occurredAt ?? DateTime.now();
+    final executionTime = occurredAt ?? DateTime.now().toUtc();
     return _api.post<ReproBulkResult>(
       '/api/repro/tasks/bulk-actions',
       houseId: houseId,
       body: {
         'action': action.wire,
         if (outcome != null) 'outcome': outcome,
-        'occurredAt': executionTime.millisecondsSinceEpoch,
+        'occurredAt': farmDateTimeToEpochMilliseconds(executionTime),
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (palpationResult != null) 'palpationResult': palpationResult.wire,
         if (nextRemindAt != null)
-          'nextRemindAt': nextRemindAt.millisecondsSinceEpoch,
+          'nextRemindAt': farmDateTimeToEpochMilliseconds(nextRemindAt),
         if (reason.trim().isNotEmpty) 'reason': reason.trim(),
         if (remark.trim().isNotEmpty) 'remark': remark.trim(),
         if (hasIds) 'taskIds': _sortedUnique(taskIds),

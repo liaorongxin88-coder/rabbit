@@ -43,12 +43,19 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         );
         Date today = new Date();
         jdbc.update(
-            "update rabbits set growth_stage = 'ADAPTATION', growth_stage_entered_at = ?"
+            "update rabbits set growth_stage = 'JUVENILE', growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
             today,
             houseId,
             rabbitId
         );
+        assertEquals(1, commodityGrowthService.advanceHouse(houseId, today));
+        assertEquals("ADAPTATION", jdbc.queryForObject(
+            "select growth_stage from rabbits where house_id = ? and id = ?",
+            String.class,
+            houseId,
+            rabbitId
+        ));
 
         commodityDailyCareReminderService.scheduleHouse(houseId, today);
         commodityDailyCareReminderService.scheduleHouse(houseId, today);
@@ -100,6 +107,13 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
 
         updateGrowthEntry(houseId, rabbitId, 6);
         assertEquals(1, commodityGrowthService.advanceHouse(houseId, new Date()));
+        jdbc.update(
+            "delete from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY'",
+            houseId,
+            rabbitId
+        );
+        commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
         commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
         assertEquals("MATURE", jdbc.queryForObject(
             "select growth_stage from rabbits where house_id = ? and id = ?",
@@ -108,13 +122,127 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             rabbitId
         ));
         assertEquals(0, pendingCareCount(houseId, rabbitId));
-        assertEquals(1, jdbc.queryForObject(
-            "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
-                + " and task_type = 'SALE_READY' and status = 'PENDING'",
-            Integer.class,
+        assertEquals(1, pendingSaleReadyCount(houseId, rabbitId));
+        assertEquals(1, totalSaleReadyCount(houseId, rabbitId));
+    }
+
+    @Test
+    void saleReadyUsesMatureStateBeforeTimeAndElapsedTimeAsFallback() {
+        UserSession owner = register("commodity_sale_ready_predicate");
+        long houseId = createHouse(owner, "商品兔成熟判定兔舍", 1, 3, 1);
+        jdbc.update(
+            "update global_setting set adaptation_days = 2, growing_days = 2, fattening_days = 2"
+                + " where house_id = ?",
+            houseId
+        );
+        List<Long> cages = cageIds(owner, houseId);
+        long matureByState = createRabbit(
+            owner, houseId, cages.get(0), "2", "0", "状态提前成熟"
+        );
+        long matureByTime = createRabbit(
+            owner, houseId, cages.get(1), "2", "0", "时间达到成熟"
+        );
+        long notMature = createRabbit(
+            owner, houseId, cages.get(2), "2", "0", "尚未成熟"
+        );
+        long matureByArrival = createRabbit(
+            owner, houseId, cages.get(2), "2", "1", "历史入场时间达到成熟"
+        );
+        long missingTimeAnchor = createRabbit(
+            owner, houseId, cages.get(2), "2", "0", "缺少成熟时间锚点"
+        );
+        Date schedulerNow = new Date();
+        Date elapsedAnchor = DateUtil.plusDays(schedulerNow, -7);
+        jdbc.update(
+            "update rabbits set growth_stage = 'MATURE', growth_stage_entered_at = ?"
+                + " where house_id = ? and id = ?",
+            schedulerNow,
             houseId,
-            rabbitId
-        ));
+            matureByState
+        );
+        jdbc.update(
+            "update rabbits set growth_stage = 'FATTENING', growth_stage_entered_at = ?"
+                + " where house_id = ? and id = ?",
+            elapsedAnchor,
+            houseId,
+            matureByTime
+        );
+        jdbc.update(
+            "update rabbits set growth_stage = 'GROWING', growth_stage_entered_at = ?"
+                + " where house_id = ? and id = ?",
+            schedulerNow,
+            houseId,
+            notMature
+        );
+        jdbc.update(
+            "update rabbits set growth_stage = 'GROWING', growth_stage_entered_at = null,"
+                + " arrival_date = ? where house_id = ? and id = ?",
+            elapsedAnchor,
+            houseId,
+            matureByArrival
+        );
+        jdbc.update(
+            "update rabbits set growth_stage = 'GROWING', growth_stage_entered_at = null,"
+                + " arrival_date = null where house_id = ? and id = ?",
+            houseId,
+            missingTimeAnchor
+        );
+        jdbc.update(
+            "delete from work_tasks where house_id = ? and rabbit_id in (?, ?, ?, ?, ?)"
+                + " and task_type = 'SALE_READY'",
+            houseId,
+            matureByState,
+            matureByTime,
+            notMature,
+            matureByArrival,
+            missingTimeAnchor
+        );
+
+        commodityDailyCareReminderService.scheduleHouse(houseId, schedulerNow);
+        commodityDailyCareReminderService.scheduleHouse(houseId, schedulerNow);
+
+        assertEquals(1, pendingSaleReadyCount(houseId, matureByState));
+        assertEquals(1, pendingSaleReadyCount(houseId, matureByTime));
+        assertEquals(1, totalSaleReadyCount(houseId, matureByState));
+        assertEquals(1, totalSaleReadyCount(houseId, matureByTime));
+        assertEquals(1, pendingSaleReadyCount(houseId, matureByArrival));
+        assertEquals(0, pendingCareCount(houseId, matureByState));
+        assertEquals(0, pendingCareCount(houseId, matureByTime));
+        assertEquals(0, pendingCareCount(houseId, matureByArrival));
+        assertEquals(0, pendingSaleReadyCount(houseId, notMature));
+        assertEquals(1, pendingCareCount(houseId, notMature));
+        assertEquals(0, pendingSaleReadyCount(houseId, missingTimeAnchor));
+        assertEquals(1, pendingCareCount(houseId, missingTimeAnchor));
+
+        Date stateDueTime = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY' and status = 'PENDING'",
+            Date.class,
+            houseId,
+            matureByState
+        );
+        Date elapsedDueTime = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY' and status = 'PENDING'",
+            Date.class,
+            houseId,
+            matureByTime
+        );
+        Date arrivalDueTime = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY' and status = 'PENDING'",
+            Date.class,
+            houseId,
+            matureByArrival
+        );
+        assertTrue(Math.abs(stateDueTime.getTime() - schedulerNow.getTime()) < 1_000L,
+            "MATURE 状态必须把待出售时间拉到本次调度时间");
+        assertTrue(Math.abs(
+            elapsedDueTime.getTime() - DateUtil.plusDays(elapsedAnchor, 6).getTime()
+        ) < 1_000L, "时间兜底必须保留生长锚点加三个阶段时长的成熟时间");
+        assertTrue(Math.abs(
+            arrivalDueTime.getTime() - DateUtil.plusDays(elapsedAnchor, 6).getTime()
+        ) < 1_000L, "缺少阶段时间时必须回退到入场日期计算成熟时间");
     }
 
     @Test
@@ -203,6 +331,26 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
                 + " and task_type in ('COMMODITY_ADAPTATION_CARE', 'COMMODITY_GROWING_CARE',"
                 + " 'COMMODITY_FATTENING_CARE') and status = 'PENDING'",
+            Integer.class,
+            houseId,
+            rabbitId
+        );
+    }
+
+    private int pendingSaleReadyCount(long houseId, long rabbitId) {
+        return jdbc.queryForObject(
+            "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY' and status = 'PENDING'",
+            Integer.class,
+            houseId,
+            rabbitId
+        );
+    }
+
+    private int totalSaleReadyCount(long houseId, long rabbitId) {
+        return jdbc.queryForObject(
+            "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type = 'SALE_READY'",
             Integer.class,
             houseId,
             rabbitId

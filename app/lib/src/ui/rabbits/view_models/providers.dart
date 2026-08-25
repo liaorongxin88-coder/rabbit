@@ -32,6 +32,22 @@ final houseBreedingRabbitsProvider =
       .listAllActiveBreedingRabbits(houseId, cancelToken: cancelToken);
 });
 
+final houseBreedingParentCandidatesProvider =
+    FutureProvider.autoDispose.family<List<Rabbit>, int>((ref, houseId) async {
+  final userId = ref.watch(authenticatedUserIdProvider);
+  if (userId <= 0 || houseId <= 0) {
+    return const <Rabbit>[];
+  }
+  final cancelToken = CancelToken();
+  ref.onDispose(cancelToken.cancel);
+  final rabbits = await ref
+      .watch(rabbitRepositoryProvider)
+      .listAllBreedingRabbits(houseId, cancelToken: cancelToken);
+  return rabbits
+      .where((rabbit) => rabbit.houseId == houseId && rabbit.type == '0')
+      .toList(growable: false);
+});
+
 final allActiveHouseRabbitsProvider =
     FutureProvider.autoDispose.family<List<Rabbit>, int>((ref, houseId) async {
   final userId = ref.watch(authenticatedUserIdProvider);

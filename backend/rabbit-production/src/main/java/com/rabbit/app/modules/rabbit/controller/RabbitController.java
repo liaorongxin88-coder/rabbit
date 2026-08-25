@@ -61,6 +61,7 @@ public class RabbitController {
         r.setReproductiveStage(req.getReproductiveStage());
         RabbitService.ReproEntry reproEntry = new RabbitService.ReproEntry(
             req.getReproStage(),
+            req.getBatchId(),
             req.getStageEnteredAt(),
             req.getMatingDate(),
             req.getBirthDate(),

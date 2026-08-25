@@ -121,7 +121,7 @@ class _DetailBody extends ConsumerWidget {
             houseId: houseId,
             cage: cage ?? _fallbackCage(summary, houseId),
             rabbits: items,
-            canEdit: permission.canEdit,
+            permission: permission,
             onChanged: () {
               ref.invalidate(cageSummaryProvider(key));
               ref.invalidate(cageRabbitsProvider(key));
@@ -394,14 +394,14 @@ class _RabbitSection extends StatelessWidget {
     required this.houseId,
     required this.cage,
     required this.rabbits,
-    required this.canEdit,
+    required this.permission,
     required this.onChanged,
   });
 
   final int houseId;
   final Cage cage;
   final List<Rabbit> rabbits;
-  final bool canEdit;
+  final HousePermission permission;
   final VoidCallback onChanged;
 
   @override
@@ -420,12 +420,15 @@ class _RabbitSection extends StatelessWidget {
               ),
               FilledButton.icon(
                 key: const ValueKey('cage-rabbit-entry'),
-                onPressed: canEdit
+                onPressed: permission.canAddRabbit ||
+                        (permission.canQueryBatches &&
+                            permission.canEditBatches)
                     ? () async {
-                        await showRabbitEntryTypeSheet(
+                        await showRabbitIntakeSheet(
                           context: context,
                           houseId: houseId,
                           cage: cage,
+                          permission: permission,
                         );
                         onChanged();
                       }
@@ -478,10 +481,11 @@ String _rabbitStageLabel(Rabbit rabbit) {
 }
 
 const _growthStageLabels = <String?, String>{
-  'JUVENILE': '幼兔',
+  'JUVENILE': '适应期',
+  'ADAPTATION': '适应期',
   'GROWING': '成长期',
   'FATTENING': '育肥期',
-  'MATURE': '成熟',
+  'MATURE': '成熟可售',
 };
 
 const _reproductiveStageLabels = <String?, String>{

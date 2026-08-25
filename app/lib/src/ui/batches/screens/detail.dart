@@ -162,8 +162,12 @@ class _HouseBatchDetailScreenState
 
     final currentBatch = batch.requireValue;
     final allMembers = members.requireValue;
-    final pendingRecords = pendingWeanings.requireValue;
-    final canEdit = permission.requireValue.canEdit == true;
+    final pendingRecords = pendingProductionRecords(
+      pendingWeanings.requireValue,
+    );
+    final currentPermission = permission.requireValue;
+    final canEdit = currentPermission.canEdit == true;
+    final canSeparate = currentPermission.canEditBatches == true;
     final statuses = _statuses(allMembers);
     final effectiveStatus = _effectiveStatus(statuses);
     if (effectiveStatus != _status) {
@@ -238,7 +242,7 @@ class _HouseBatchDetailScreenState
             case 4:
               return _PendingWeaningSection(
                 records: pendingRecords,
-                canEdit: canEdit,
+                canEdit: canSeparate,
                 saving: _saving,
                 onSeparate: _separateWeaning,
               );
@@ -344,17 +348,21 @@ class _HouseBatchDetailScreenState
   }
 
   Future<void> _separateWeaning(PendingWeaningRecord record) async {
-    final completed = await showBatchWeaningSeparationSheet(
+    final result = await showBatchWeaningSeparationSheet(
       context: context,
       houseId: widget.houseId,
       batchId: widget.batchId,
       record: record,
     );
-    if (completed == true && mounted) {
+    if (result != null && mounted) {
       await _refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('分笼完成')),
+          SnackBar(
+            content: Text(
+              '已分笼 ${result.separatedCount} 只，剩余 ${result.waitingCount} 只',
+            ),
+          ),
         );
       }
     }

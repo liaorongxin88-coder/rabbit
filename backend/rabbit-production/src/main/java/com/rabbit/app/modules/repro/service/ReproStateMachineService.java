@@ -4,9 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.entity.Batch;
+import com.rabbit.app.modules.batch.entity.BatchRabbit;
+import com.rabbit.app.modules.batch.mapper.BatchMapper;
+import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.file.service.BusinessFileService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
 import com.rabbit.app.modules.repro.domain.CycleLifecycle;
 import com.rabbit.app.modules.repro.domain.CycleResult;
 import com.rabbit.app.modules.repro.domain.DeliveryOutcome;
@@ -66,6 +72,9 @@ public class ReproStateMachineService {
     private final BizAttachmentMapper bizAttachmentMapper;
     private final RabbitStageProjectionMapper rabbitStageProjectionMapper;
     private final RabbitMapper rabbitMapper;
+    private final BatchMapper batchMapper;
+    private final BatchRabbitMapper batchRabbitMapper;
+    private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final WorkTaskWriter workTaskWriter;
     private final ReproSettingResolver settingResolver;
     private final BreedingEligibilityValidator eligibilityValidator;
@@ -79,6 +88,9 @@ public class ReproStateMachineService {
         BizAttachmentMapper bizAttachmentMapper,
         RabbitStageProjectionMapper rabbitStageProjectionMapper,
         RabbitMapper rabbitMapper,
+        BatchMapper batchMapper,
+        BatchRabbitMapper batchRabbitMapper,
+        RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
         WorkTaskWriter workTaskWriter,
         ReproSettingResolver settingResolver,
         BreedingEligibilityValidator eligibilityValidator,
@@ -92,6 +104,9 @@ public class ReproStateMachineService {
         this.bizAttachmentMapper = bizAttachmentMapper;
         this.rabbitStageProjectionMapper = rabbitStageProjectionMapper;
         this.rabbitMapper = rabbitMapper;
+        this.batchMapper = batchMapper;
+        this.batchRabbitMapper = batchRabbitMapper;
+        this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.workTaskWriter = workTaskWriter;
         this.settingResolver = settingResolver;
         this.objectMapper = objectMapper;
@@ -119,14 +134,11 @@ public class ReproStateMachineService {
         Date today = DateUtil.now();
         String operator = operatorOf(command.getOperatorName(), command.getUserId());
 
-        // 步骤 1：锁定周期行。FOR UPDATE 让同周期的并发写串行化。
-        ReproCycle cycle = reproCycleMapper.selectByIdForUpdate(command.getHouseId(), command.getCycleId());
-        if (cycle == null) {
-            throw new BizException(404, "生产周期不存在");
-        }
-        if (CycleLifecycle.CLOSED.name().equals(cycle.getLifecycle())) {
-            throw new BizException(409, "该生产周期已结束，无法继续操作");
-        }
+        // 步骤 1：先锁批次和成员，再锁周期。移除成员、兔只离场和周期动作都按
+        // 同一顺序取锁，避免动作与解除成员关系交错后留下无成员的 OPEN 周期。
+        ReproCycle cycle = lockOpenCycleWithInvariant(
+            command.getHouseId(), command.getCycleId()
+        );
         Long expectedVersion = cycle.getStateVersion();
         ReproStage fromStage = ReproStage.parse(cycle.getStage());
 
@@ -216,6 +228,7 @@ public class ReproStateMachineService {
     public ReproResult openCycleAt(OpenCycleCommand command) {
         requireNotNull(command.houseId(), "兔舍");
         requireNotNull(command.motherRabbitId(), "母兔");
+        requireNotNull(command.batchId(), "生产批次");
         requireNotNull(command.targetStage(), "入轨阶段");
 
         ReproEvent replay = findReplay(command.houseId(), command.requestId());
@@ -231,6 +244,11 @@ public class ReproStateMachineService {
         String operator = operatorOf(command.operatorName(), command.userId());
         ReproSettings settings = settingResolver.resolve(command.userId(), command.houseId());
 
+        requireActiveBatchForUpdate(command.houseId(), command.batchId());
+        Rabbit mother = requireEligibleMotherForUpdate(
+            command.houseId(), command.motherRabbitId()
+        );
+        ensureActiveBreedingMember(command, entry, mother, occurredAt, operator);
         assertPipelineFree(command.houseId(), command.motherRabbitId(), entry);
 
         ReproCycle cycle = newCycle(command, entry, occurredAt, operator);
@@ -296,6 +314,114 @@ public class ReproStateMachineService {
     }
 
     // ---------------------------------------------------------------- 内部实现
+
+    private ReproCycle lockOpenCycleWithInvariant(Long houseId, Long cycleId) {
+        ReproCycle observed = reproCycleMapper.selectById(houseId, cycleId);
+        if (observed == null) {
+            throw new BizException(404, "生产周期不存在");
+        }
+        if (!CycleLifecycle.OPEN.name().equals(observed.getLifecycle())) {
+            throw new BizException(409, "该生产周期已结束，无法继续操作");
+        }
+        if (observed.getBatchId() == null) {
+            throw new BizException(409, "进行中的生产周期未绑定生产批次");
+        }
+
+        requireActiveBatchForUpdate(houseId, observed.getBatchId());
+        requireEligibleMotherForUpdate(houseId, observed.getMotherRabbitId());
+        BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
+            houseId, observed.getBatchId(), observed.getMotherRabbitId()
+        );
+        if (member == null || !"breeding".equals(member.getBatchRole())) {
+            throw new BizException(409, "生产周期对应的繁殖批次成员关系不存在");
+        }
+
+        ReproCycle locked = reproCycleMapper.selectByIdForUpdate(houseId, cycleId);
+        if (locked == null) {
+            throw new BizException(404, "生产周期不存在");
+        }
+        if (!CycleLifecycle.OPEN.name().equals(locked.getLifecycle())) {
+            throw new BizException(409, "该生产周期已结束，无法继续操作");
+        }
+        if (!observed.getBatchId().equals(locked.getBatchId())
+            || !observed.getMotherRabbitId().equals(locked.getMotherRabbitId())) {
+            throw new BizException(409, "生产周期归属已变化，请刷新后重试");
+        }
+        return locked;
+    }
+
+    private Batch requireActiveBatchForUpdate(Long houseId, Long batchId) {
+        Batch batch = batchMapper.selectByIdForUpdate(houseId, batchId);
+        if (batch == null) {
+            throw new BizException(400, "生产批次不存在");
+        }
+        if (!"进行中".equals(batch.getStatus())) {
+            throw new BizException(409, "生产批次不在进行中");
+        }
+        return batch;
+    }
+
+    private Rabbit requireEligibleMotherForUpdate(Long houseId, Long motherRabbitId) {
+        Rabbit mother = rabbitMapper.selectByIdsForUpdate(houseId, List.of(motherRabbitId))
+            .stream()
+            .findFirst()
+            .orElse(null);
+        if (mother == null) {
+            throw new BizException(400, "母兔不存在");
+        }
+        if (!Boolean.TRUE.equals(mother.getIsActive())) {
+            throw new BizException(409, "母兔不在场");
+        }
+        if (!"0".equals(mother.getGender())) {
+            throw new BizException(400, "母兔性别不正确");
+        }
+        if (!"0".equals(mother.getType()) && !"1".equals(mother.getType())) {
+            throw new BizException(400, "母兔类型不正确");
+        }
+        return mother;
+    }
+
+    private void ensureActiveBreedingMember(
+        OpenCycleCommand command,
+        EntryPoint entry,
+        Rabbit mother,
+        Date occurredAt,
+        String operator
+    ) {
+        BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
+            command.houseId(), command.batchId(), command.motherRabbitId()
+        );
+        if (member != null) {
+            if (!"breeding".equals(member.getBatchRole())) {
+                throw new BizException(409, "母兔在所选批次中的成员角色不是繁殖兔");
+            }
+            return;
+        }
+
+        BatchRabbit link = new BatchRabbit();
+        link.setBatchId(command.batchId());
+        link.setRabbitId(mother.getId());
+        link.setJoinReason("生产入轨");
+        link.setBatchRole("breeding");
+        link.setCurrentStatus(entry.stage().label());
+        link.setIsActive(Boolean.TRUE);
+        link.setJoinDate(occurredAt);
+        link.setCreateBy(operator);
+        link.setUpdateBy(operator);
+        batchRabbitMapper.insertBatch(List.of(link));
+
+        RabbitStatusHistory history = new RabbitStatusHistory();
+        history.setHouseId(command.houseId());
+        history.setRabbitId(mother.getId());
+        history.setBatchId(command.batchId());
+        history.setFromStatus(null);
+        history.setToStatus(entry.stage().label());
+        history.setChangeTime(occurredAt);
+        history.setReason("生产入轨加入批次");
+        history.setCreateBy(operator);
+        history.setUpdateBy(operator);
+        rabbitStatusHistoryMapper.insert(history);
+    }
 
     private ReproEvent findReplay(Long houseId, String requestId) {
         if (requestId == null || requestId.isBlank()) {
@@ -642,11 +768,11 @@ public class ReproStateMachineService {
         ReproCycle followUp = new ReproCycle();
         followUp.setHouseId(closed.getHouseId());
         followUp.setTenantId(closed.getTenantId());
-        // 当前批次只记录已经结束的这一轮。空怀、流产、分娩失败或分笼后的下一轮
-        // 仍会自动产生待办，但默认不继承旧批次，避免批次详情看起来永远没有结束。
-        followUp.setBatchId(null);
+        followUp.setBatchId(closed.getBatchId());
         followUp.setMotherRabbitId(closed.getMotherRabbitId());
-        followUp.setCycleNo(nextCycleNo(closed.getHouseId(), null, closed.getMotherRabbitId()));
+        followUp.setCycleNo(nextCycleNo(
+            closed.getHouseId(), closed.getBatchId(), closed.getMotherRabbitId()
+        ));
         followUp.setStage(transition.followUpStage().name());
         followUp.setStageEnteredAt(occurredAt);
         followUp.setLifecycle(CycleLifecycle.OPEN.name());

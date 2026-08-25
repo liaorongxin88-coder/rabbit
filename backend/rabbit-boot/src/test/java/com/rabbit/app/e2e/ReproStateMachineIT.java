@@ -383,6 +383,47 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
+    void actionRejectsInactiveBatchOrMissingBreedingMembership() {
+        Fixture inactiveBatch = fixture("repro_inactive_batch");
+        ReproResult inactiveCycle = openAtEstrus(inactiveBatch, "inactive_open");
+        jdbc.update(
+            "update batches set status = '已完成', end_date = now() where id = ?",
+            inactiveBatch.batchId
+        );
+
+        BizException inactiveError = Assertions.assertThrows(BizException.class, () ->
+            stateMachine.apply(command(
+                inactiveBatch,
+                inactiveCycle.cycleId(),
+                ReproAction.ESTRUS,
+                requestId("inactive_action")
+            ).build())
+        );
+        Assertions.assertEquals(409, inactiveError.getCode());
+        Assertions.assertTrue(inactiveError.getMessage().contains("不在进行中"));
+
+        Fixture missingMember = fixture("repro_missing_member");
+        ReproResult missingCycle = openAtEstrus(missingMember, "missing_open");
+        jdbc.update(
+            "update batch_rabbits set is_active = false, exit_date = now()"
+                + " where batch_id = ? and rabbit_id = ? and is_active = true",
+            missingMember.batchId,
+            missingMember.doeId
+        );
+
+        BizException memberError = Assertions.assertThrows(BizException.class, () ->
+            stateMachine.apply(command(
+                missingMember,
+                missingCycle.cycleId(),
+                ReproAction.ESTRUS,
+                requestId("missing_action")
+            ).build())
+        );
+        Assertions.assertEquals(409, memberError.getCode());
+        Assertions.assertTrue(memberError.getMessage().contains("成员关系不存在"));
+    }
+
+    @Test
     void doeCannotOccupyTwoPipelineCyclesAtOnce() {
         Fixture fixture = fixture("repro_pipeline");
         openAtEstrus(fixture, "pipeline_first");
@@ -565,7 +606,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
 
     // ------------------------------------------------------------------ 夹具
 
-    /** batchId 留空：散养母兔同样要能跑完整流程（2026-08-16 业务裁定 batch_id 可空）。 */
+    /** 空批次避免建批自动入轨，由各用例显式选择起始阶段。 */
     private record Fixture(long userId, long houseId, long doeId, long sireId, Long batchId) {
     }
 
@@ -575,7 +616,12 @@ public class ReproStateMachineIT extends E2eTestSupport {
         List<Long> cages = cageIds(owner, houseId);
         long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", prefix + "_doe");
         long sireId = createRabbit(owner, houseId, cages.get(1), "0", "1", prefix + "_sire");
-        return new Fixture(owner.userId, houseId, doeId, sireId, null);
+        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", "RSM-" + java.util.UUID.randomUUID().toString().substring(0, 8),
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId(prefix + "_batch")
+        )).get("id").asLong();
+        return new Fixture(owner.userId, houseId, doeId, sireId, batchId);
     }
 
     private ReproResult openAtEstrus(Fixture fixture, String prefix) {

@@ -28,7 +28,7 @@ test('current production stage takes precedence over the legacy reproductive sta
       },
       { AWAIT_MATING: '待配种' },
     ),
-    '成熟 · 待配种',
+    '成熟可售 · 待配种',
   )
 })
 
@@ -49,6 +49,44 @@ test('stage summary falls back to legacy labels and a stable empty value', () =>
   )
 })
 
+test('commodity growth-stage labels remain compatible with canonical and legacy values', () => {
+  assert.equal(
+    rabbitStageSummary(
+      { growthStage: 'ADAPTATION', currentStage: null, reproductiveStage: null },
+      {},
+    ),
+    '适应期',
+  )
+  assert.equal(
+    rabbitStageSummary(
+      { growthStage: 'JUVENILE', currentStage: null, reproductiveStage: null },
+      {},
+    ),
+    '适应期',
+  )
+  assert.equal(
+    rabbitStageSummary(
+      { growthStage: 'FATTENING', currentStage: null, reproductiveStage: null },
+      {},
+    ),
+    '育肥期',
+  )
+  assert.equal(
+    rabbitStageSummary(
+      { growthStage: 'MATURE', currentStage: null, reproductiveStage: null },
+      {},
+    ),
+    '成熟可售',
+  )
+  assert.equal(
+    rabbitStageSummary(
+      { growthStage: 'MARKET_READY', currentStage: null, reproductiveStage: null },
+      {},
+    ),
+    'MARKET_READY',
+  )
+})
+
 test('editable legacy reproductive stages stay limited by rabbit type and gender', () => {
   assert.deepEqual(reproductiveOptions('0', '0'), [])
   assert.deepEqual(reproductiveOptions('0', '1'), [['READY', '可配'], ['RESTING', '休整']])
@@ -58,7 +96,7 @@ test('editable legacy reproductive stages stay limited by rabbit type and gender
 
 test('arrival method labels preserve unknown server values', () => {
   assert.equal(rabbitArrivalMethodLabel('0'), '购入')
-  assert.equal(rabbitArrivalMethodLabel('1'), '出生')
+  assert.equal(rabbitArrivalMethodLabel('1'), '场内生产')
   assert.equal(rabbitArrivalMethodLabel('legacy'), 'legacy')
   assert.equal(rabbitArrivalMethodLabel(null), '-')
 })

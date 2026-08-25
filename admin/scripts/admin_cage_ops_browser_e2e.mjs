@@ -75,6 +75,7 @@ async function main() {
   const runId = header[0]
   const houseId = Number(header[1])
   const controlUser = header[3]
+  const batchId = Number(lines.find((cols) => cols[0] === 'BATCH')?.[2])
   const cageRows = lines.filter((cols) => cols[0] === 'CAGE')
   const rabbitRows = lines.filter((cols) => cols[0] === 'RABBIT')
   const cageId = (number) => Number(cageRows.find((cols) => cols[1] === number)?.[2])
@@ -95,7 +96,7 @@ async function main() {
   const commBId = rabbitId('CAGEOPS-COMM-B')
   const commCId = rabbitId('CAGEOPS-COMM-C')
 
-  if (!runId || !houseId || !controlUser || !c1 || !c7 || !doeId || !commAId || !commCId) {
+  if (!runId || !houseId || !controlUser || !batchId || !c1 || !c7 || !doeId || !commAId || !commCId) {
     fail(`unable to parse fixture output:\n${fixtureOutput}`, 65)
   }
 
@@ -210,23 +211,35 @@ async function main() {
     // 必须显式 --host 127.0.0.1：vite 默认只听 localhost，而本机 localhost 先解到 ::1，
     // 探活 127.0.0.1 会一直连不上，看起来像“dev server 没起来”。
     if (!devServerAlreadyRunning) {
-    devServer = spawn('pnpm', ['exec', 'vite', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: ADMIN_DIR,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    process.on('exit', () => devServer?.kill('SIGTERM'))
-    const devLog = []
-    devServer.stdout.on('data', (chunk) => devLog.push(chunk.toString()))
-    devServer.stderr.on('data', (chunk) => devLog.push(chunk.toString()))
-    const deadline = Date.now() + 60_000
-    for (;;) {
-      if (Date.now() > deadline) {
-        writeFileSync(path.join(artifactDir, 'vite.log'), devLog.join(''))
-        fail('vite dev server did not become reachable within 60s', 70)
+      const pnpmEntry = process.env.npm_execpath
+      const command = pnpmEntry ? process.execPath : 'pnpm'
+      const args = [
+        ...(pnpmEntry ? [pnpmEntry] : []),
+        'exec',
+        'vite',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--strictPort',
+      ]
+      devServer = spawn(command, args, {
+        cwd: ADMIN_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      process.on('exit', () => devServer?.kill('SIGTERM'))
+      const devLog = []
+      devServer.stdout.on('data', (chunk) => devLog.push(chunk.toString()))
+      devServer.stderr.on('data', (chunk) => devLog.push(chunk.toString()))
+      const deadline = Date.now() + 60_000
+      for (;;) {
+        if (Date.now() > deadline) {
+          writeFileSync(path.join(artifactDir, 'vite.log'), devLog.join(''))
+          fail('vite dev server did not become reachable within 60s', 70)
+        }
+        if (await servesThisAdmin(baseUrl)) break
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
-      if (await servesThisAdmin(baseUrl)) break
-      await new Promise((resolve) => setTimeout(resolve, 500))
-    }
     }
   }
   console.log(`admin at ${baseUrl}`)
@@ -429,12 +442,14 @@ async function main() {
     await page.getByRole('option', { name: '待摸胎' }).click()
     // 待摸胎入轨要配种日期，这个字段是服务端字典驱动出来的。
     await page.locator('#rabbit-mating-date').waitFor({ timeout: 10_000 })
+    await page.locator('#rabbit-production-batch').click()
+    await page.getByRole('option', { name: 'CAGEOPS', exact: true }).click()
     const today = new Date()
     const iso = (date) => date.toISOString().slice(0, 10)
     await page.fill('#rabbit-stage-entered-at', iso(today))
     await page.fill('#rabbit-mating-date', iso(new Date(today.getTime() - 5 * 86_400_000)))
     await page.fill('#rabbit-breed', 'BROWSER-NEWDOE')
-    await shot('12-doe-entry-stage-picked')
+    await shot('12-doe-entry-stage-batch-picked')
     await entryDialog.getByRole('button', { name: '保存' }).click()
     // 提示语要说清楚入的是哪个阶段，不能只说“已录入”。
     await expectToast('兔只已录入，并从【待摸胎】入轨')
@@ -491,7 +506,7 @@ async function main() {
     '01-cage-map', '02-cage-rabbits-two', '02a-rabbit-detail', '03-departure-dialog', '04-departure-done',
     '05-cage-rabbits-one', '06-rabbit-list-with-stage', '07-transfer-dialog-swap',
     '08-transfer-swap-done', '09-transfer-dialog-append', '10-transfer-append-done',
-    '11-doe-entry-form', '12-doe-entry-stage-picked', '13-doe-entry-done',
+    '11-doe-entry-form', '12-doe-entry-stage-batch-picked', '13-doe-entry-done',
     '14a-narrow-cage-map', '14-narrow-cage-tab', '15-narrow-cage-rabbits', '16-narrow-transfer-dialog',
   ]
   const missing = required.filter((name) => !shots.includes(name))
@@ -520,10 +535,16 @@ async function main() {
          WHERE house_id = ${houseId} AND breed = 'BROWSER-NEWDOE' AND is_active = TRUE),
       (SELECT COUNT(*) FROM breeding_cycles bc
          INNER JOIN rabbits r ON r.id = bc.mother_rabbit_id
-         WHERE r.house_id = ${houseId} AND r.breed = 'BROWSER-NEWDOE' AND bc.closed_at IS NULL),
+         WHERE r.house_id = ${houseId} AND r.breed = 'BROWSER-NEWDOE'
+           AND bc.lifecycle = 'OPEN' AND bc.batch_id = ${batchId}),
       (SELECT COUNT(*) FROM work_tasks wt
          INNER JOIN rabbits r ON r.id = wt.rabbit_id
-         WHERE r.house_id = ${houseId} AND r.breed = 'BROWSER-NEWDOE' AND wt.status = 'PENDING')
+         WHERE r.house_id = ${houseId} AND r.breed = 'BROWSER-NEWDOE' AND wt.status = 'PENDING'),
+      (SELECT COUNT(*) FROM batch_rabbits br
+         INNER JOIN rabbits r ON r.id = br.rabbit_id
+         WHERE r.house_id = ${houseId} AND r.breed = 'BROWSER-NEWDOE'
+           AND br.batch_id = ${batchId} AND br.batch_role = 'breeding'
+           AND br.is_active = TRUE)
     ) AS actual;`)
 
   // COMM-A 已离场并落一条死亡记录；母兔与后备兔互换到 c2/c1 且两笼用途互换；
@@ -531,7 +552,7 @@ async function main() {
   // 新母兔停在 AWAIT_PALPATION，且有一条开放周期与一条待办。
   const expected = [
     '0', '1', String(c2), String(c1), '2:1', '1:1',
-    String(c3), '3:2', '0:0', String(c6), '1:1', 'AWAIT_PALPATION', '1', '1',
+    String(c3), '3:2', '0:0', String(c6), '1:1', 'AWAIT_PALPATION', '1', '1', '1',
   ].join(' ')
 
   writeFileSync(

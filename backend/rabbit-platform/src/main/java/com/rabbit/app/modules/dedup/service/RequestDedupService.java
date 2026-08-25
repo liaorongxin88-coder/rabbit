@@ -52,7 +52,7 @@ public class RequestDedupService {
             throw new BizException(409, "请求幂等状态异常，请稍后重试");
         }
         if (!Objects.equals(payloadHash, old.getPayloadHash())) {
-            throw new BizException(409, "requestId已用于不同的批量配种请求");
+            throw new BizException(409, "requestId已用于不同的请求载荷");
         }
         if (STATUS_DONE.equals(old.getStatus())) {
             return BeginResult.DONE;
@@ -94,6 +94,28 @@ public class RequestDedupService {
             return;
         }
         requestDedupMapper.updateStatus(houseId, userId, api, requestId, STATUS_DONE, null);
+    }
+
+    public void markDone(
+        Long houseId,
+        Long userId,
+        String api,
+        String requestId,
+        String responsePayload
+    ) {
+        if (requestId == null || requestId.trim().isEmpty()) {
+            return;
+        }
+        if (requestDedupMapper.updateStatusWithResponse(
+            houseId, userId, api, requestId, STATUS_DONE, responsePayload
+        ) != 1) {
+            throw new BizException(500, "幂等响应保存失败");
+        }
+    }
+
+    public String getResponsePayload(Long houseId, Long userId, String api, String requestId) {
+        RequestDedup item = requestDedupMapper.selectByKey(houseId, userId, api, requestId);
+        return item == null ? null : item.getResponsePayload();
     }
 
     public void markFailed(Long houseId, Long userId, String api, String requestId, String errorMessage) {

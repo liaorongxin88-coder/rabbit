@@ -23,6 +23,13 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({'token': 'operator-token'});
   });
 
+  test('batch action timestamps preserve the selected farm date', () {
+    expect(
+      formatBatchWriteDateTime(DateTime(2026, 8, 20, 9, 30)),
+      '2026-08-20T01:30:00.000Z',
+    );
+  });
+
   test('generic batch binding sends rabbitIds for commodity members', () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
@@ -294,6 +301,35 @@ void main() {
     expect(changedIds, 'request-2');
     expect(changedBatch, 'request-3');
     expect(changedAction, 'request-4');
+  });
+
+  test('separation allocation and parent changes rotate requestId', () {
+    var sequence = 0;
+    final controller = BatchWriteRequestController(
+      requestIdFactory: () => 'separation-${++sequence}',
+    );
+
+    String requestId({int count = 2, int? motherId, int? fatherId}) {
+      return controller.requestIdFor(canonicalBatchWriteFingerprint({
+        'action': 'separateWeaning',
+        'batchId': 20,
+        'weaningRecordId': 501,
+        'allocations': [
+          {'cageId': 12, 'count': count},
+        ],
+        'motherRabbitId': motherId,
+        'fatherRabbitId': fatherId,
+      }));
+    }
+
+    final original = requestId();
+    expect(requestId(), original);
+    expect(requestId(count: 1), 'separation-2');
+    expect(requestId(count: 1, motherId: 101), 'separation-3');
+    expect(
+      requestId(count: 1, motherId: 101, fatherId: 88),
+      'separation-4',
+    );
   });
 
   test('explicitly starting a new draft clears the payload binding', () {

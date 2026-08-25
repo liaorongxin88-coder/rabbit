@@ -18,6 +18,9 @@ public class WeaningRecord {
     private Integer waitingCount;
     private Integer maleCount;
     private Integer femaleCount;
+    private Integer waitingMaleCount;
+    private Integer waitingFemaleCount;
+    private Long sireRabbitId;
     private Double avgWeight;
     private String remark;
     private String createBy;
@@ -143,6 +146,30 @@ public class WeaningRecord {
 
     public void setFemaleCount(Integer femaleCount) {
         this.femaleCount = femaleCount;
+    }
+
+    public Integer getWaitingMaleCount() {
+        return waitingMaleCount;
+    }
+
+    public void setWaitingMaleCount(Integer waitingMaleCount) {
+        this.waitingMaleCount = waitingMaleCount;
+    }
+
+    public Integer getWaitingFemaleCount() {
+        return waitingFemaleCount;
+    }
+
+    public void setWaitingFemaleCount(Integer waitingFemaleCount) {
+        this.waitingFemaleCount = waitingFemaleCount;
+    }
+
+    public Long getSireRabbitId() {
+        return sireRabbitId;
+    }
+
+    public void setSireRabbitId(Long sireRabbitId) {
+        this.sireRabbitId = sireRabbitId;
     }
 
     public Double getAvgWeight() {

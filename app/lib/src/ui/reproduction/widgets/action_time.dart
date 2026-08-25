@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+
 String formatActionTime(DateTime value) =>
-    DateFormat('yyyy-MM-dd HH:mm').format(value);
+    DateFormat('yyyy-MM-dd HH:mm').format(farmLocalDateTime(value));
 
 Future<DateTime?> pickActionTime({
   required BuildContext context,
   required DateTime current,
   required String helpText,
 }) async {
-  final now = DateTime.now();
+  final now = farmLocalDateTime(DateTime.now().toUtc());
+  final normalizedCurrent = farmLocalDateTime(current);
   final firstDate = DateTime(2020);
-  final initialDate = current.isBefore(firstDate)
+  final initialDate = normalizedCurrent.isBefore(firstDate)
       ? firstDate
-      : current.isAfter(now)
+      : normalizedCurrent.isAfter(now)
           ? now
-          : current;
+          : normalizedCurrent;
   final date = await showDatePicker(
     context: context,
     initialDate: initialDate,
@@ -31,7 +34,7 @@ Future<DateTime?> pickActionTime({
   final time = await showTimePicker(
     context: context,
     initialTime: TimeOfDay.fromDateTime(
-      _sameDay(date, current) ? current : date,
+      _sameDay(date, normalizedCurrent) ? normalizedCurrent : date,
     ),
     helpText: '选择执行时间',
     cancelText: '取消',

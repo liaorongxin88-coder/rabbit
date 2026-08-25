@@ -91,7 +91,7 @@ class BatchServiceTest {
 
         when(dedup.shouldSkipAsDone(1L, 7L, "batch.addMembers", "request-2"))
             .thenReturn(false);
-        when(batchMapper.selectById(1L, 9L)).thenReturn(batch);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
         when(rabbitMapper.selectByIdsForUpdate(1L, List.of(3L)))
             .thenReturn(List.of(mother(3L)));
         when(batchRabbitMapper.selectActiveByBatchAndRabbitsForUpdate(
@@ -133,7 +133,7 @@ class BatchServiceTest {
 
         when(dedup.shouldSkipAsDone(1L, 7L, "batch.addMembers", "request-sale"))
             .thenReturn(false);
-        when(batchMapper.selectById(1L, 9L)).thenReturn(batch);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
         when(rabbitMapper.selectByIdsForUpdate(1L, List.of(18L)))
             .thenReturn(List.of(commodity));
         when(batchRabbitMapper.selectActiveByBatchAndRabbitsForUpdate(
@@ -163,7 +163,7 @@ class BatchServiceTest {
     }
 
     @Test
-    void bindsUnboundPipelineToBatchWithoutOpeningAnotherCycle() {
+    void keepsExistingBoundPipelineWithoutOpeningAnotherCycle() {
         BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
         BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
         RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
@@ -182,17 +182,16 @@ class BatchServiceTest {
         pipeline.setId(21L);
         pipeline.setHouseId(1L);
         pipeline.setMotherRabbitId(3L);
-        pipeline.setBatchId(null);
+        pipeline.setBatchId(9L);
 
         when(dedup.shouldSkipAsDone(1L, 7L, "batch.addMembers", "request-open"))
             .thenReturn(false);
-        when(batchMapper.selectById(1L, 9L)).thenReturn(batch);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
         when(rabbitMapper.selectByIdsForUpdate(1L, List.of(3L)))
             .thenReturn(List.of(mother(3L)));
         when(batchRabbitMapper.selectActiveByBatchAndRabbitsForUpdate(1L, 9L, List.of(3L)))
             .thenReturn(List.of());
         when(reproCycleMapper.selectOpenPipelineForUpdate(1L, 3L)).thenReturn(pipeline);
-        when(reproCycleMapper.assignBatchIfUnbound(1L, 21L, 9L, "7")).thenReturn(1);
 
         service(
             batchMapper,
@@ -206,8 +205,8 @@ class BatchServiceTest {
             workTaskWriter
         ).addMembers(7L, 1L, 9L, List.of(3L), "request-open");
 
-        verify(reproCycleMapper).assignBatchIfUnbound(1L, 21L, 9L, "7");
-        verify(workTaskWriter).assignPendingCycleTasksToBatch(1L, 21L, 9L, "7");
+        verify(reproCycleMapper, never()).assignBatchIfUnbound(1L, 21L, 9L, "7");
+        verify(workTaskWriter, never()).assignPendingCycleTasksToBatch(1L, 21L, 9L, "7");
         verify(stateMachine, never()).openCycleAt(any());
     }
 
@@ -228,7 +227,7 @@ class BatchServiceTest {
 
         when(dedup.shouldSkipAsDone(1L, 7L, "batch.removeMember", "remove-1"))
             .thenReturn(false);
-        when(batchMapper.selectById(1L, 9L)).thenReturn(batch);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
         when(batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(1L, 9L, 18L))
             .thenReturn(link);
         when(batchRabbitMapper.deactivateIfActive(
@@ -248,6 +247,44 @@ class BatchServiceTest {
         );
         verify(dedup).markDone(1L, 7L, "batch.removeMember", "remove-1");
         verify(historyMapper, never()).insertBatch(anyList());
+    }
+
+    @Test
+    void rejectsRemovingBreedingMemberWithOpenCycleInTheSameBatch() {
+        BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
+        BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
+        RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
+        RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
+        BreedingCycleMapper cycleMapper = org.mockito.Mockito.mock(BreedingCycleMapper.class);
+        RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
+        Batch batch = new Batch();
+        batch.setId(9L);
+        batch.setHouseId(1L);
+        batch.setStatus("进行中");
+        BatchRabbit link = new BatchRabbit();
+        link.setId(77L);
+        link.setBatchId(9L);
+        link.setRabbitId(3L);
+        link.setBatchRole("breeding");
+
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
+        when(batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(1L, 9L, 3L))
+            .thenReturn(link);
+        when(cycleMapper.countOpenLifecycleByBatchAndMother(1L, 9L, 3L)).thenReturn(1);
+
+        BizException error = assertThrows(BizException.class, () -> service(
+            batchMapper,
+            batchRabbitMapper,
+            rabbitMapper,
+            historyMapper,
+            dedup,
+            cycleMapper
+        ).removeMember(7L, 1L, 9L, 3L, "remove-open"));
+
+        assertEquals(409, error.getCode());
+        verify(batchRabbitMapper, never()).deactivateIfActive(
+            eq(1L), eq(77L), any(Date.class), any(), eq("7")
+        );
     }
 
     /**

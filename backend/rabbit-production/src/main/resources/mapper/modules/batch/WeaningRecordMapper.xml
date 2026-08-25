@@ -19,6 +19,9 @@
         <result column="waiting_count" property="waitingCount"/>
         <result column="male_count" property="maleCount"/>
         <result column="female_count" property="femaleCount"/>
+        <result column="waiting_male_count" property="waitingMaleCount"/>
+        <result column="waiting_female_count" property="waitingFemaleCount"/>
+        <result column="sire_rabbit_id" property="sireRabbitId"/>
         <result column="avg_weight" property="avgWeight"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
@@ -35,9 +38,12 @@
     <select id="selectByBatch" resultMap="Map">
         select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
                group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
-               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count,
+               bc.male_rabbit_id as sire_rabbit_id,
+               w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
         from weaning_records w
         inner join batches b on b.id = w.batch_id
+        left join breeding_cycles bc on bc.id = w.breeding_cycle_id and bc.house_id = w.house_id
         left join cages ct on ct.id = w.target_cage_id and ct.house_id = b.house_id
         left join cages ci on ci.id = w.in_cage_id and ci.house_id = b.house_id
         left join weaning_record_allocations a on a.weaning_record_id = w.id
@@ -51,9 +57,46 @@
     <select id="selectPendingByBatch" resultMap="Map">
         select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
                group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
-               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count,
+               case
+                   when w.male_count is null or w.female_count is null
+                       or w.male_count + w.female_count &lt;&gt; w.weaning_count then null
+                   when count(a.id) = 0 and w.waiting_count = w.weaning_count
+                       then w.male_count
+                   when count(a.id) = count(a.male_count)
+                       and count(a.id) = count(a.female_count)
+                       and coalesce(sum(a.male_count), 0) + coalesce(sum(a.female_count), 0)
+                           = coalesce(sum(a.alloc_count), 0)
+                       and w.male_count &gt;= coalesce(sum(a.male_count), 0)
+                       and w.female_count &gt;= coalesce(sum(a.female_count), 0)
+                       and w.male_count + w.female_count
+                           - coalesce(sum(a.male_count), 0) - coalesce(sum(a.female_count), 0)
+                           = w.waiting_count
+                       then w.male_count - coalesce(sum(a.male_count), 0)
+                   else null
+               end as waiting_male_count,
+               case
+                   when w.male_count is null or w.female_count is null
+                       or w.male_count + w.female_count &lt;&gt; w.weaning_count then null
+                   when count(a.id) = 0 and w.waiting_count = w.weaning_count
+                       then w.female_count
+                   when count(a.id) = count(a.male_count)
+                       and count(a.id) = count(a.female_count)
+                       and coalesce(sum(a.male_count), 0) + coalesce(sum(a.female_count), 0)
+                           = coalesce(sum(a.alloc_count), 0)
+                       and w.male_count &gt;= coalesce(sum(a.male_count), 0)
+                       and w.female_count &gt;= coalesce(sum(a.female_count), 0)
+                       and w.male_count + w.female_count
+                           - coalesce(sum(a.male_count), 0) - coalesce(sum(a.female_count), 0)
+                           = w.waiting_count
+                       then w.female_count - coalesce(sum(a.female_count), 0)
+                   else null
+               end as waiting_female_count,
+               bc.male_rabbit_id as sire_rabbit_id,
+               w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
         from weaning_records w
         inner join batches b on b.id = w.batch_id
+        left join breeding_cycles bc on bc.id = w.breeding_cycle_id and bc.house_id = w.house_id
         left join cages ct on ct.id = w.target_cage_id and ct.house_id = b.house_id
         left join cages ci on ci.id = w.in_cage_id and ci.house_id = b.house_id
         left join weaning_record_allocations a on a.weaning_record_id = w.id
@@ -92,9 +135,12 @@
     <select id="selectByRabbit" resultMap="Map">
         select w.id, w.house_id, w.batch_id, w.breeding_cycle_id, w.rabbit_id, w.target_cage_id, ct.cage_number as target_cage_number, w.in_cage_id, ci.cage_number as in_cage_number,
                group_concat(concat(coalesce(ca.cage_number, concat('#',a.cage_id)), '×', a.alloc_count) order by a.cage_id separator ',') as alloc_summary,
-               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count, w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
+               w.weaning_date, w.weaning_count, w.waiting_count, w.male_count, w.female_count,
+               bc.male_rabbit_id as sire_rabbit_id,
+               w.avg_weight, w.remark, w.create_by, w.create_time, w.update_by, w.update_time
         from weaning_records w
         inner join rabbits r on r.id = w.rabbit_id
+        left join breeding_cycles bc on bc.id = w.breeding_cycle_id and bc.house_id = w.house_id
         left join cages ct on ct.id = w.target_cage_id and ct.house_id = r.house_id
         left join cages ci on ci.id = w.in_cage_id and ci.house_id = r.house_id
         left join weaning_record_allocations a on a.weaning_record_id = w.id

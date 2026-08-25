@@ -89,7 +89,7 @@ class Rabbit {
       arrivalDate: _dateTimeValue(json['arrivalDate']),
       weight: _doubleValue(json['weight']),
       isActive: _boolValue(json['isActive'], fallback: true),
-      growthStage: _optionalString(json['growthStage']),
+      growthStage: _growthStageValue(json['growthStage']),
       reproductiveStage: _optionalString(json['reproductiveStage']),
       currentStage: _optionalString(json['currentStage']),
       currentCycleId: _nullableIntValue(json['currentCycleId']),
@@ -130,10 +130,10 @@ class Rabbit {
 
   static DateTime? _dateTimeValue(Object? value) {
     if (value is int) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
+      return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
     }
     if (value is num) {
-      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt(), isUtc: true);
     }
     if (value is String && value.trim().isNotEmpty) {
       return DateTime.tryParse(value);
@@ -158,6 +158,11 @@ class Rabbit {
       }
     }
     return fallback;
+  }
+
+  static String? _growthStageValue(Object? value) {
+    final normalized = _optionalString(value);
+    return normalized == 'JUVENILE' ? 'ADAPTATION' : normalized;
   }
 
   static String? _optionalString(Object? value) {
