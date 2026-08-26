@@ -20,6 +20,24 @@ mvn -DskipTests package
 
 ## 后端 API E2E
 
+### 推荐：一键脚本
+
+```bash
+bash scripts/e2e-local.sh                          # 全量
+bash scripts/e2e-local.sh -Dit.test=ReproLifecycleIT # 单个类
+E2E_SCHEMA_SUFFIX=_a1 bash scripts/e2e-local.sh    # 多 agent 并行时隔离库名
+```
+
+脚本会自动定位 JDK 21、拉起或复用 `rabbit-e2e` 容器（端口 13307）、建好三个测试库并
+导出三个数据源变量。手工步骤见下文。
+
+> **不要直接跑 `mvn -Pe2e verify`。** 三个数据源变量的内置默认值都指向
+> `localhost:3306`，而 `docker-compose.yml` 里的 mysql **有意不暴露 3306**（生产安全），
+> 下文建议的临时容器又跑在 13307。直接跑会让全量用例以
+> `Failed to load ApplicationContext` 失败，报错不会提示是连不上库。
+
+### 手工准备
+
 准备 MySQL 测试库：
 
 ```bash
@@ -51,10 +69,13 @@ cd backend
 mvn -Pe2e verify
 ```
 
-可覆盖测试库连接：
+可覆盖测试库连接。上面的临时容器映射的是 **13307**，三个变量要一起改：
 
 ```bash
-E2E_DATASOURCE_URL='jdbc:mysql://localhost:3306/rabbit_app_e2e?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true' \
+QS='useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true'
+E2E_DATASOURCE_URL="jdbc:mysql://127.0.0.1:13307/rabbit_app_e2e?$QS" \
+E2E_MIGRATION_DATASOURCE_URL="jdbc:mysql://127.0.0.1:13307/rabbit_app_e2e_migration?createDatabaseIfNotExist=true&$QS" \
+E2E_LARGE_LOOP_DATASOURCE_URL="jdbc:mysql://127.0.0.1:13307/rabbit_app_e2e_large_loop?$QS" \
 E2E_DATASOURCE_USERNAME=root \
 E2E_DATASOURCE_PASSWORD=rabbit_root \
 mvn -Pe2e verify
@@ -71,6 +92,14 @@ mvn -Pe2e verify
 
 三个默认值都指向 `localhost:3306`；改端口时三个要一起改。三个测试库都
 只允许用于本地或 CI 测试。
+
+`E2E_MIGRATION_DATASOURCE_URL` 覆盖的不只是 `rabbit_app_e2e_migration`：十几个
+版本回填类 IT（`V27BackfillIT`、`V34BackfillIT`、`V42OpenCycleBatchInvariantIT` 等）
+各自内置了 `rabbit_app_e2e_v27` 这类默认库名，但读的是同一个变量。配了它，
+这些用例就共用一个迁移库；不配，它们会各自去连 `localhost:3306`。
+
+CI 里不走 13307：`.github/workflows/_quality-gates.yml` 起的 mysql service 直接映射
+`3306:3306` 并显式设好三个变量，所以 CI 与本地互不影响。
 
 注意：E2E 会清空 `rabbit_app_e2e`，不要指向开发库或生产库。
 
