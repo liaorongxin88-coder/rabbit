@@ -1198,7 +1198,15 @@ class _EventMeta extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: palette.muted),
         const SizedBox(width: 4),
-        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        // 批次编号带兔舍名和时间戳，窄屏加大字号时会撑破一行，所以这里必须可收缩。
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
       ],
     );
   }

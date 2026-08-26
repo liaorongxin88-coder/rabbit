@@ -92,4 +92,12 @@
             update_time = now()
         where house_id = #{houseId} and id = #{id}
     </update>
+
+    <update id="updateBatchCode">
+        update batches
+        set batch_code = #{batchCode},
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId} and id = #{id}
+    </update>
 </mapper>

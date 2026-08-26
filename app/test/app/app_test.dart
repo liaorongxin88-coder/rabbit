@@ -444,6 +444,7 @@ void main() {
                 eventType: '配种',
                 eventDate: today,
                 batchId: 9,
+                batchCode: '一号繁育兔舍-批次-20260220',
                 rabbitId: 18,
                 status: 'due',
                 sourceHouseId: 1,
@@ -458,7 +459,9 @@ void main() {
 
     expect(find.text('今日提醒'), findsOneWidget);
     expect(find.text('母兔 #18'), findsOneWidget);
-    expect(find.text('批次 #9'), findsOneWidget);
+    // 批次用批次编号称呼，和批次列表、批次详情一致；内部主键不上界面。
+    expect(find.text('批次 一号繁育兔舍-批次-20260220'), findsOneWidget);
+    expect(find.text('批次 #9'), findsNothing);
     expect(find.text('周期记录 #71'), findsOneWidget);
     expect(find.text('记录配种'), findsOneWidget);
     expect(find.text('分娩'), findsOneWidget);

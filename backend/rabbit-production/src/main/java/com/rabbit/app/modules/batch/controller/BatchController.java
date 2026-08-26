@@ -12,6 +12,7 @@ import com.rabbit.app.modules.batch.dto.SeparateWeaningRecordRequest;
 import com.rabbit.app.modules.batch.dto.WeaningSeparationResult;
 import com.rabbit.app.modules.batch.dto.AddBatchMembersRequest;
 import com.rabbit.app.modules.batch.dto.CreateBatchRequest;
+import com.rabbit.app.modules.batch.dto.RenameBatchRequest;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
@@ -31,7 +32,9 @@ import com.rabbit.app.security.permission.RequiresPermission;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -99,8 +102,22 @@ public class BatchController {
     public ApiResponse<Batch> createBatch(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateBatchRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        String batchCode = batchCodeFallbackResolver.resolve(houseId, req.getBatchCode());
+        String batchCode = batchCodeFallbackResolver.resolve(req.getBatchCode());
         return ApiResponse.ok(batchService.createBatch(userId, houseId, batchCode, req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
+    }
+
+    /** 改批次编号。批次建完才发现名字打错时，不必重建批次搬兔只。 */
+    @PostMapping("/batches/{batchId}/code")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_EDIT)
+    public ApiResponse<Batch> renameBatch(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId,
+            @Valid @RequestBody RenameBatchRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(batchService.renameBatch(
+            userId, houseId, batchId, req.getBatchCode(), req.getRequestId()));
     }
 
     /** 向批次追加兔只标签；同一兔只可以同时属于多个批次。 */
@@ -311,7 +328,45 @@ public class BatchController {
             }
             items.add(new EventItem(tr.getId(), "治疗复查", "治疗复查", tr.getNextReviewDate(), null, tr.getRabbitId(), "治疗中"));
         }
+        attachBatchCodes(houseId, items);
         return ApiResponse.ok(items);
+    }
+
+    /**
+     * 给提醒补上批次编号。
+     *
+     * <p>{@code work_tasks.batch_id} 是内部主键，界面上渲染成「批次 #12」；批次列表和批次详情
+     * 显示的却是批次编号。两个称呼对不上号，操作者只能猜，常把它读成周期号。这里按兔舍一次性
+     * 取批次做映射，让提醒页用和批次页同一个名字称呼同一个批次。
+     *
+     * <p>取不到编号时留空而不是回落到 id：批次不在本兔舍或已不存在时，显示一个查无此物的号码
+     * 比不显示更糟。{@code batchId} 保持原样，生产动作提交仍要用它。
+     */
+    private void attachBatchCodes(Long houseId, List<EventItem> items) {
+        boolean anyBatch = false;
+        for (EventItem item : items) {
+            if (item.getBatchId() != null && item.getBatchId() > 0) {
+                anyBatch = true;
+                break;
+            }
+        }
+        if (!anyBatch) {
+            return;
+        }
+        Map<Long, String> codes = new HashMap<Long, String>();
+        for (Batch batch : batchService.listBatches(houseId)) {
+            codes.put(batch.getId(), batch.getBatchCode());
+        }
+        for (EventItem item : items) {
+            Long batchId = item.getBatchId();
+            if (batchId == null || batchId <= 0) {
+                continue;
+            }
+            String code = codes.get(batchId);
+            if (code != null && !code.trim().isEmpty()) {
+                item.setBatchCode(code);
+            }
+        }
     }
 
     private Long requireLogin() {

@@ -860,6 +860,65 @@ public class BatchService {
         return replacementRecordMapper.selectDue(houseId, DateUtil.now());
     }
 
+    /**
+     * 改批次编号。
+     *
+     * <p>编号是操作者认批次的唯一凭据，建完才发现打错字、或者养殖计划变了想换个叫法，
+     * 以前只能重建一个批次再把兔只搬过去。
+     *
+     * <p>已完成的批次同样允许改：翻历史记录时把一个错名字改对是正当需求，而且改名
+     * 不影响任何生产数据，批次的身份始终是主键。编号没有唯一约束，这里也不额外拦重名，
+     * 与建批次时的口径保持一致。
+     */
+    @Transactional
+    public Batch renameBatch(
+        Long userId,
+        Long houseId,
+        Long batchId,
+        String batchCode,
+        String requestId
+    ) {
+        String api = "batch.rename";
+        String code = batchCode == null ? "" : batchCode.trim();
+        if (code.isEmpty()) {
+            throw new BizException(400, "批次编号不能为空");
+        }
+        if (
+            requestDedupService.shouldSkipAsDone(
+                houseId,
+                userId,
+                api,
+                requestId
+            )
+        ) {
+            return requireBatch(houseId, batchId);
+        }
+        requestDedupService.markProcessing(houseId, userId, api, requestId);
+        try {
+            Batch b = requireBatchForUpdate(houseId, batchId);
+            if (!code.equals(b.getBatchCode())) {
+                batchMapper.updateBatchCode(
+                    houseId,
+                    batchId,
+                    code,
+                    String.valueOf(userId)
+                );
+                b.setBatchCode(code);
+            }
+            requestDedupService.markDone(houseId, userId, api, requestId);
+            return b;
+        } catch (RuntimeException e) {
+            requestDedupService.markFailed(
+                houseId,
+                userId,
+                api,
+                requestId,
+                e.getMessage()
+            );
+            throw e;
+        }
+    }
+
     private Batch requireBatch(Long houseId, Long batchId) {
         Batch b = batchMapper.selectById(houseId, batchId);
         if (b == null) {

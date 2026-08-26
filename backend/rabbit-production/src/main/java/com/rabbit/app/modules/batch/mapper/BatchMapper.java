@@ -23,4 +23,6 @@ public interface BatchMapper {
     Batch selectByHouseAndRequestId(@Param("houseId") Long houseId, @Param("requestId") String requestId);
 
     int updateStatusAndDates(@Param("houseId") Long houseId, @Param("id") Long id, @Param("status") String status, @Param("startDate") java.util.Date startDate, @Param("endDate") java.util.Date endDate, @Param("updateBy") String updateBy);
+
+    int updateBatchCode(@Param("houseId") Long houseId, @Param("id") Long id, @Param("batchCode") String batchCode, @Param("updateBy") String updateBy);
 }

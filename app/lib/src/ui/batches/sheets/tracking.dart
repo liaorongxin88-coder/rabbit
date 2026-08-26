@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
@@ -271,6 +272,7 @@ class _TrackingEventTile extends StatelessWidget {
   }
 }
 
+// 走兔场时区而不是设备时区：手机换了时区时，同一条记录不应该跟其它页面对不上号。
 String _dateTimeLabel(DateTime? value) => value == null
     ? '时间未记录'
-    : DateFormat('yyyy-MM-dd HH:mm').format(value.toLocal());
+    : DateFormat('yyyy-MM-dd HH:mm').format(farmLocalDateTime(value));

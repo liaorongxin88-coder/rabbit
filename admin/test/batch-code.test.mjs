@@ -1,27 +1,27 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 import {
-  BATCH_CODE_MAX_LENGTH,
   batchCodeDraftForDialog,
   defaultBatchCode,
-} from '../src/lib/batch-code.ts'
+} from "../src/lib/batch-code.ts";
 
-const fixedDate = new Date(2026, 1, 3, 4, 5, 6, 7)
+const fixedDate = new Date(2026, 1, 3, 4, 5, 6, 7);
 
-test('uses the selected house and millisecond local time in new batch drafts', () => {
-  assert.equal(defaultBatchCode('东一舍', fixedDate), '东一舍-批次-20260203040506007')
-  assert.equal(defaultBatchCode('西二舍', fixedDate), '西二舍-批次-20260203040506007')
-})
+test("uses the local date and minute in new batch drafts", () => {
+  assert.equal(defaultBatchCode(fixedDate), "批次-20260203-0405");
+});
 
-test('keeps a manual batch code while the dialog remains open', () => {
+test("keeps a manual batch code while the dialog remains open", () => {
   assert.equal(
-    batchCodeDraftForDialog('人工批次-复配', false, '改名后的兔舍', fixedDate),
-    '人工批次-复配',
-  )
-})
+    batchCodeDraftForDialog("人工批次-复配", false, fixedDate),
+    "人工批次-复配",
+  );
+});
 
-test('reserves space for the timestamp when the house name reaches the maximum length', () => {
-  const code = defaultBatchCode('兔'.repeat(100), fixedDate)
-  assert.equal(code.length, BATCH_CODE_MAX_LENGTH)
-  assert.equal(code.endsWith('-批次-20260203040506007'), true)
-})
+// 编号要显示在 App 提醒卡片上，和周期号、日期挤一行，所以生成值必须短。
+// 旧格式带兔舍名加 17 位毫秒戳，兔舍名一长就被省略号截掉。
+test("stays short enough for the reminder chip", () => {
+  const code = defaultBatchCode(fixedDate);
+  assert.equal(code.length, 16);
+  assert.equal(code.startsWith("批次-"), true);
+});

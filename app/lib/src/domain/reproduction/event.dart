@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+
 class EventItem {
   const EventItem({
     required this.recordId,
@@ -9,6 +11,7 @@ class EventItem {
     required this.batchId,
     required this.rabbitId,
     required this.status,
+    this.batchCode = '',
     this.sourceHouseId,
     this.sourceHouseName = '',
     this.content = '',
@@ -19,6 +22,9 @@ class EventItem {
   final String eventType;
   final DateTime? eventDate;
   final int? batchId;
+
+  /// 批次编号，即批次列表和批次详情里用的那个名字。服务端查不到批次时为空。
+  final String batchCode;
   final int? rabbitId;
   final String status;
   final int? sourceHouseId;
@@ -49,9 +55,13 @@ class EventItem {
     return '兔 #$id';
   }
 
+  /// 提醒卡片上的批次名。没批次就返回 null，调用方据此整个不显示这个字段。
+  ///
+  /// 只能拿到 batchId 时不再回落成「批次 #12」：那个内部主键在批次列表里从不出现，
+  /// 操作者对不上号，反而会把它读成旁边那个周期记录号。
   String? get batchLabel {
-    final id = batchId;
-    return id == null || id <= 0 ? null : '批次 #$id';
+    final code = batchCode.trim();
+    return code.isEmpty ? null : '批次 $code';
   }
 
   String? get cycleRecordLabel => isBreedingCycle ? '周期记录 #$recordId' : null;
@@ -64,10 +74,7 @@ class EventItem {
     if (date == null) {
       return false;
     }
-    final today = DateTime.now();
-    return DateTime(date.year, date.month, date.day).isBefore(
-      DateTime(today.year, today.month, today.day),
-    );
+    return localDateOnly(date).isBefore(localDateOnly(DateTime.now()));
   }
 
   bool get isDue {
@@ -78,10 +85,7 @@ class EventItem {
     if (date == null) {
       return false;
     }
-    final today = DateTime.now();
-    return date.year == today.year &&
-        date.month == today.month &&
-        date.day == today.day;
+    return localDateOnly(date) == localDateOnly(DateTime.now());
   }
 
   String get statusLabel {
@@ -103,18 +107,23 @@ class EventItem {
     }
   }
 
+  /// 提醒日期。
+  ///
+  /// 先换算到兔场所在时区再格式化：部分接口回的是 UTC 时刻，直接读 month/day
+  /// 会把晚上 8 点以后的到期日提前一天，同一个待办在不同页面就会显示两个日期。
   String get dateLabel {
     final date = eventDate;
     if (date == null) {
       return '日期未设置';
     }
-    return DateFormat('MM月dd日').format(date);
+    return DateFormat('MM月dd日').format(farmLocalDateTime(date));
   }
 
   String get targetLabel {
     final parts = <String>[];
-    if (batchId != null && batchId! > 0) {
-      parts.add('批次#$batchId');
+    final code = batchCode.trim();
+    if (code.isNotEmpty) {
+      parts.add('批次 $code');
     }
     if (rabbitId != null && rabbitId! > 0) {
       parts.add('兔#$rabbitId');
@@ -143,6 +152,7 @@ class EventItem {
       eventType: eventType,
       eventDate: eventDate,
       batchId: batchId,
+      batchCode: batchCode,
       rabbitId: rabbitId,
       status: status,
       sourceHouseId: sourceHouseId ?? this.sourceHouseId,
@@ -158,6 +168,7 @@ class EventItem {
       eventType: json['eventType'] as String? ?? '',
       eventDate: _parseDate(json['eventDate']),
       batchId: _nullableInt(json['batchId']),
+      batchCode: json['batchCode'] as String? ?? '',
       rabbitId: _nullableInt(json['rabbitId']),
       status: json['status'] as String? ?? '',
       sourceHouseId: _nullableInt(json['sourceHouseId'] ?? json['houseId']),

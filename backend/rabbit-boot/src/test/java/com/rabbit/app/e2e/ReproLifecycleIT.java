@@ -155,8 +155,15 @@ public class ReproLifecycleIT extends E2eTestSupport {
             other.houseId));
     }
 
+    /**
+     * 客户端没传编号时服务端补一个短编号。
+     *
+     * <p>旧格式是「兔舍名-批次-17 位毫秒戳」，兔舍名一长就把提醒卡片的 chip 撑到被省略号
+     * 截掉。提醒卡片自己已经单独显示了兔舍名，所以现在不再带；两个兔舍同一分钟建的批次
+     * 拿到同一个默认值是预期行为，这只是个预填草稿，输入框里可以直接改掉。
+     */
     @Test
-    void batchCodeFallbackUsesTheAuthenticatedHouseAndKeepsReplaysStable() {
+    void batchCodeFallbackFillsAShortCodeAndKeepsReplaysStable() {
         UserSession owner = register("batch_code_fallback");
         long eastHouseId = createHouse(owner, "东一舍", 1, 1, 1);
         long westHouseId = createHouse(owner, "西二舍", 1, 1, 1);
@@ -177,9 +184,10 @@ public class ReproLifecycleIT extends E2eTestSupport {
                 "requestId", requestId("batch_code_manual")
         ));
 
-        Assertions.assertTrue(east.get("batchCode").asText().matches("东一舍-批次-\\d{17}"));
-        Assertions.assertTrue(west.get("batchCode").asText().matches("西二舍-批次-\\d{17}"));
-        Assertions.assertNotEquals(east.get("batchCode").asText(), west.get("batchCode").asText());
+        Assertions.assertTrue(east.get("batchCode").asText().matches("批次-\\d{8}-\\d{4}"),
+            "默认编号要短到能放进提醒卡片，实际是 " + east.get("batchCode").asText());
+        Assertions.assertTrue(west.get("batchCode").asText().matches("批次-\\d{8}-\\d{4}"),
+            "只有空白字符的编号也算没传");
         Assertions.assertEquals(east.get("id").asLong(), replay.get("id").asLong());
         Assertions.assertEquals(east.get("batchCode").asText(), replay.get("batchCode").asText());
         Assertions.assertEquals("人工批次-复配", manual.get("batchCode").asText());
@@ -392,6 +400,64 @@ public class ReproLifecycleIT extends E2eTestSupport {
             houseId,
             rabbitId
         ), "治疗记录保留原始状态供追溯，但不再生成提醒");
+    }
+
+    /**
+     * 提醒要能把批次叫出名字来。
+     *
+     * <p>以前只回 batchId，客户端只能显示成「批次 #12」；批次列表里写的却是批次编号，
+     * 两边对不上号，操作者会把那个内部 id 当成周期号。
+     */
+    @Test
+    void reminderCarriesTheBatchCodeUsersSeeInTheBatchList() {
+        Fixture f = fixture("evt_code", 1);
+        long doe = f.doeIds.get(0);
+        String batchCode = api.getOk("/api/batches/" + f.batchId, f.owner.token, f.houseId)
+            .get("batchCode").asText();
+
+        JsonNode reminder = null;
+        for (JsonNode event : api.getOk("/api/events", f.owner.token, f.houseId)) {
+            if (event.path("rabbitId").asLong() == doe) {
+                reminder = event;
+                break;
+            }
+        }
+
+        Assertions.assertNotNull(reminder, "入轨的母兔应该有一条待办提醒");
+        Assertions.assertEquals(f.batchId, reminder.path("batchId").asLong());
+        Assertions.assertEquals(batchCode, reminder.path("batchCode").asText(),
+            "提醒里的批次编号要和批次详情一致");
+    }
+
+    /**
+     * 改批次编号后，提醒页跟着改口。
+     *
+     * <p>编号是操作者认批次的名字。建完才发现打错字时，以前只能重建批次搬兔只；
+     * 改完名两边必须立刻一致，否则又回到了同一个批次两个叫法的老问题。
+     */
+    @Test
+    void renamingABatchRenamesItOnTheReminderPageToo() {
+        Fixture f = fixture("evt_rename", 1);
+        long doe = f.doeIds.get(0);
+
+        api.postOk("/api/batches/" + f.batchId + "/code", f.owner.token, f.houseId,
+            java.util.Map.of("batchCode", "二月配种批", "requestId", "rename-" + f.batchId));
+
+        Assertions.assertEquals("二月配种批",
+            api.getOk("/api/batches/" + f.batchId, f.owner.token, f.houseId)
+                .get("batchCode").asText());
+
+        JsonNode reminder = null;
+        for (JsonNode event : api.getOk("/api/events", f.owner.token, f.houseId)) {
+            if (event.path("rabbitId").asLong() == doe) {
+                reminder = event;
+                break;
+            }
+        }
+
+        Assertions.assertNotNull(reminder, "入轨的母兔应该有一条待办提醒");
+        Assertions.assertEquals("二月配种批", reminder.path("batchCode").asText(),
+            "改名后提醒里的批次编号要跟着变");
     }
 
     private int reminderCount(UserSession owner, long houseId, long rabbitId) {

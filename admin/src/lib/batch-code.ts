@@ -1,25 +1,30 @@
-export const BATCH_CODE_MAX_LENGTH = 100
+export const BATCH_CODE_MAX_LENGTH = 100;
 
-export function defaultBatchCode(houseName: string, date = new Date()) {
-  const timestamp = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-    String(date.getHours()).padStart(2, '0'),
-    String(date.getMinutes()).padStart(2, '0'),
-    String(date.getSeconds()).padStart(2, '0'),
-    String(date.getMilliseconds()).padStart(3, '0'),
-  ].join('')
-  const suffix = `-批次-${timestamp}`
-  const housePrefix = houseName.trim().slice(0, BATCH_CODE_MAX_LENGTH - suffix.length)
-  return `${housePrefix}${suffix}`
+/**
+ * 新建批次时预填的编号，格式 `批次-20260220-1530`，固定 16 个字符。
+ *
+ * 这个编号会出现在 App 提醒卡片上，和周期号、日期挤在同一行，所以必须短到不被截断。
+ * 提醒卡片自己已经单独显示了兔舍名，编号里不必再带一遍。
+ *
+ * 只精确到分钟。同一兔舍在同一分钟内建两个批次才会撞名，而这只是个预填草稿，
+ * 输入框里可以直接改掉。
+ */
+export function defaultBatchCode(date = new Date()) {
+ const timestamp = [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, "0"),
+  String(date.getDate()).padStart(2, "0"),
+  "-",
+  String(date.getHours()).padStart(2, "0"),
+  String(date.getMinutes()).padStart(2, "0"),
+ ].join("");
+ return `批次-${timestamp}`;
 }
 
 export function batchCodeDraftForDialog(
-  currentCode: string,
-  isOpening: boolean,
-  houseName: string,
-  date = new Date(),
+ currentCode: string,
+ isOpening: boolean,
+ date = new Date(),
 ) {
-  return isOpening ? defaultBatchCode(houseName, date) : currentCode
+ return isOpening ? defaultBatchCode(date) : currentCode;
 }

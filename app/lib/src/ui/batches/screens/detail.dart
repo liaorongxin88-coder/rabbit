@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch_code.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
@@ -55,6 +58,7 @@ class _HouseBatchDetailScreenState
   final _selectedRabbitIds = <int>{};
   final _batchActionRequest = BatchWriteRequestController();
   final _completeRequest = BatchWriteRequestController();
+  final _renameRequest = BatchWriteRequestController();
 
   String _query = '';
   String _role = _all;
@@ -232,6 +236,7 @@ class _HouseBatchDetailScreenState
                   allMembers,
                 ),
                 onAddMembers: () => _addBatchMembers(allMembers),
+                onRename: () => _renameBatch(currentBatch),
               );
             case 1:
               return const SizedBox(height: 12);
@@ -770,6 +775,68 @@ class _HouseBatchDetailScreenState
     }
   }
 
+  /// 改批次编号。
+  ///
+  /// 已完成的批次也允许改：翻历史记录时把一个错名字改对是正当需求，
+  /// 而且改名不影响任何生产数据。
+  Future<void> _renameBatch(Batch batch) async {
+    if (_saving) {
+      return;
+    }
+    final code = await _showRenameDialog(batch.batchCode);
+    if (code == null || !mounted || code == batch.batchCode.trim()) {
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final requestId = _renameRequest.requestIdFor(
+        canonicalBatchWriteFingerprint({
+          'action': 'renameBatch',
+          'houseId': widget.houseId,
+          'batchId': widget.batchId,
+          'batchCode': code,
+        }),
+      );
+      await ref.read(batchRepositoryProvider).renameBatch(
+            houseId: widget.houseId,
+            batchId: widget.batchId,
+            batchCode: code,
+            requestId: requestId,
+          );
+      if (!mounted) {
+        return;
+      }
+      _renameRequest.startNewDraft();
+      _refresh();
+      // 批次列表和提醒页都按编号称呼批次，改完名两边都要重拉。
+      ref.invalidate(houseBatchesProvider(widget.houseId));
+      ref.invalidate(homeEventsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('批次编号已改为 $code')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<String?> _showRenameDialog(String currentCode) {
+    return showDialog<String>(
+      context: context,
+      builder: (_) => _RenameBatchDialog(initialCode: currentCode),
+    );
+  }
+
   Future<_CompleteChoice?> _showCompleteDialog(int activeCount) async {
     final remark = TextEditingController();
     var force = false;
@@ -926,9 +993,9 @@ class _HouseBatchDetailScreenState
     if (date == null) {
       return '';
     }
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final eventDay = DateTime(date.year, date.month, date.day);
+    // 同样走兔场时区，否则跨 UTC 日界的待办会比提醒页早一天变成逾期。
+    final today = localDateOnly(DateTime.now());
+    final eventDay = localDateOnly(date);
     if (eventDay.isBefore(today)) {
       return 'overdue';
     }
@@ -936,6 +1003,61 @@ class _HouseBatchDetailScreenState
       return 'due';
     }
     return 'upcoming';
+  }
+}
+
+/// 改批次编号的弹窗。
+///
+/// 单独做成 StatefulWidget 是为了让它自己持有 controller：在调用方 await 完
+/// showDialog 立即 dispose，弹窗的退场动画还在跑，TextField 会碰到已释放的 controller。
+class _RenameBatchDialog extends StatefulWidget {
+  const _RenameBatchDialog({required this.initialCode});
+
+  final String initialCode;
+
+  @override
+  State<_RenameBatchDialog> createState() => _RenameBatchDialogState();
+}
+
+class _RenameBatchDialogState extends State<_RenameBatchDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialCode);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('修改批次编号'),
+      content: TextField(
+        key: const ValueKey('batch-rename-field'),
+        controller: _controller,
+        autofocus: true,
+        maxLength: maxBatchCodeLength,
+        decoration: const InputDecoration(labelText: '批次编号'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('batch-rename-confirm'),
+          onPressed: () {
+            final value = _controller.text.trim();
+            if (value.isEmpty) {
+              return;
+            }
+            Navigator.of(context).pop(value);
+          },
+          child: const Text('保存'),
+        ),
+      ],
+    );
   }
 }
 
@@ -947,6 +1069,7 @@ class _BatchHeader extends StatelessWidget {
     required this.saving,
     required this.onComplete,
     required this.onAddMembers,
+    required this.onRename,
   });
 
   final Batch batch;
@@ -955,6 +1078,7 @@ class _BatchHeader extends StatelessWidget {
   final bool saving;
   final VoidCallback onComplete;
   final VoidCallback onAddMembers;
+  final VoidCallback onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -979,6 +1103,14 @@ class _BatchHeader extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              // 已完成的批次也能改名，所以不跟着下面那组按钮一起被 completed 关掉。
+              if (canEdit)
+                IconButton(
+                  key: const ValueKey('batch-rename-button'),
+                  tooltip: '修改批次编号',
+                  onPressed: saving ? null : onRename,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
               _LabelChip(
                 label:
                     batch.status.trim().isEmpty ? '状态未设置' : batch.status.trim(),
@@ -1608,18 +1740,18 @@ class _BatchMemberCard extends StatelessWidget {
     return Icons.chevron_right;
   }
 
+  /// 下一步的到期日。
+  ///
+  /// 走兔场时区并沿用全局的 `MM月dd日`：这个日期和提醒页是同一条待办。旧写法
+  /// 直接读 UTC 时刻的 month/day，晚上 8 点后到期的待办会在这里早一天。
   static String _dateSuffix(DateTime? date) {
     if (date == null) return '';
-    return '（${date.month}月${date.day}日）';
+    return '（${DateFormat('MM月dd日').format(farmLocalDateTime(date))}）';
   }
 }
 
-String _compactDate(DateTime value) {
-  final local = value.toLocal();
-  final month = local.month.toString().padLeft(2, '0');
-  final day = local.day.toString().padLeft(2, '0');
-  return '${local.year}-$month-$day';
-}
+String _compactDate(DateTime value) =>
+    DateFormat('yyyy-MM-dd').format(farmLocalDateTime(value));
 
 class _LabelChip extends StatelessWidget {
   const _LabelChip({required this.label});

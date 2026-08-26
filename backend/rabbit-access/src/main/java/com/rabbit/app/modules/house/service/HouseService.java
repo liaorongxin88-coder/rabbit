@@ -156,17 +156,6 @@ public class HouseService {
         }
     }
 
-    public String requireHouseName(Long houseId) {
-        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
-        if (house == null || Boolean.TRUE.equals(house.getIsDeleted())) {
-            throw new BizException(404, "兔舍不存在或已删除");
-        }
-        if (house.getName() == null || house.getName().trim().isEmpty()) {
-            throw new BizException(400, "兔舍名称不能为空");
-        }
-        return house.getName();
-    }
-
     public void assertHousePermission(Long userId, Long houseId, String requiredPerm) {
         accessControlService.requireHouseLevel(userId, houseId, requiredPerm);
     }

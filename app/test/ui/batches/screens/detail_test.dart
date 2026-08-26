@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
+import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
@@ -716,6 +719,149 @@ void main() {
     expect(find.text('下一步 未知阶段的旧下一步'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('doe next-step date matches the reminder page calendar',
+      (tester) async {
+    const request = BatchDetailRequest(houseId: 8, batchId: 19);
+    // 2026-02-20 00:30 Asia/Shanghai 到期。接口回的是 UTC 时刻，直接读 month/day
+    // 会变成 02月19日，而提醒页对同一条待办显示 02月20日。
+    final dueAt = DateTime.utc(2026, 2, 19, 16, 30);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          batchDetailProvider(request).overrideWith(
+            (_) async => const Batch(
+              id: 19,
+              houseId: 8,
+              batchCode: 'DATE-19',
+              status: '进行中',
+              startDate: null,
+              endDate: null,
+              remark: '',
+            ),
+          ),
+          batchMembersProvider(request).overrideWith(
+            (_) async => [
+              BatchRabbitItem(
+                id: 1,
+                batchId: 19,
+                rabbitId: 1901,
+                currentStatus: '待配种',
+                currentStage: 'AWAIT_MATING',
+                nextEventType: '',
+                batchRole: 'breeding',
+                nextEventDate: dueAt,
+              ),
+            ],
+          ),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'view', isAdmin: false),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HouseBatchDetailScreen(houseId: 8, batchId: 19),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final nextStep = find.text('下一步 配种（02月20日）');
+    await _scrollDetailUntilVisible(tester, nextStep);
+    expect(nextStep, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // 已完成的批次也要能改名：翻历史记录时把一个错名字改对是正当需求，
+  // 而且批次的身份始终是主键，改名不影响任何生产数据。
+  testWidgets('renames a completed Batch from the detail header',
+      (tester) async {
+    const request = BatchDetailRequest(houseId: 8, batchId: 21);
+    final repository = _RecordingBatchRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          batchRepositoryProvider.overrideWithValue(repository),
+          batchDetailProvider(request).overrideWith(
+            (_) async => const Batch(
+              id: 21,
+              houseId: 8,
+              batchCode: '批次-20260220-1530',
+              status: '已完成',
+              startDate: null,
+              endDate: null,
+              remark: '',
+            ),
+          ),
+          batchMembersProvider(request).overrideWith(
+            (_) async => const <BatchRabbitItem>[],
+          ),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'control', isAdmin: true),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: const HouseBatchDetailScreen(houseId: 8, batchId: 21),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('批次-20260220-1530'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('batch-rename-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('batch-rename-field')),
+      '二月配种批',
+    );
+    await tester.tap(find.byKey(const ValueKey('batch-rename-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(repository.renames, hasLength(1));
+    expect(repository.renames.single['batchId'], 21);
+    expect(repository.renames.single['batchCode'], '二月配种批');
+    expect(repository.renames.single['requestId'], isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _RecordingBatchRepository extends BatchRepository {
+  factory _RecordingBatchRepository() {
+    return _RecordingBatchRepository._(ApiClient(SessionStore()));
+  }
+
+  _RecordingBatchRepository._(this.client) : super(client);
+
+  final ApiClient client;
+  final renames = <Map<String, Object?>>[];
+
+  @override
+  Future<Batch> renameBatch({
+    required int houseId,
+    required int batchId,
+    required String batchCode,
+    String? requestId,
+  }) async {
+    renames.add({
+      'houseId': houseId,
+      'batchId': batchId,
+      'batchCode': batchCode,
+      'requestId': requestId,
+    });
+    return Batch(
+      id: batchId,
+      houseId: houseId,
+      batchCode: batchCode,
+      status: '已完成',
+      startDate: null,
+      endDate: null,
+      remark: '',
+    );
+  }
 }
 
 Future<void> _scrollDetailUntilVisible(

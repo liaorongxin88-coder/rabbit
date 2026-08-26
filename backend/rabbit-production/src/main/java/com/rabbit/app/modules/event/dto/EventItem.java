@@ -9,6 +9,14 @@ public class EventItem {
     private String eventType;
     private Date eventDate;
     private Long batchId;
+    /**
+     * 批次编号，供界面直接显示。
+     *
+     * <p>只给 batchId 的话客户端只能显示成「批次 #12」，而批次列表和批次详情显示的是
+     * 批次编号，两边对不上号；操作者会把这个内部 id 当成周期号。批次查不到时留空，
+     * 客户端据此隐藏批次字段，而不是显示一个查无此物的号码。
+     */
+    private String batchCode;
     private Long rabbitId;
     private String status;
     private String content;
@@ -70,6 +78,14 @@ public class EventItem {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public String getBatchCode() {
+        return batchCode;
+    }
+
+    public void setBatchCode(String batchCode) {
+        this.batchCode = batchCode;
     }
 
     public Long getRabbitId() {

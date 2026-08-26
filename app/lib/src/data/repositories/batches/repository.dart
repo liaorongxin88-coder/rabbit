@@ -83,6 +83,28 @@ class BatchRepository {
     );
   }
 
+  /// 改批次编号。
+  ///
+  /// 编号是操作者认批次的名字，建完才发现打错字时不必重建批次搬兔只。
+  Future<Batch> renameBatch({
+    required int houseId,
+    required int batchId,
+    required String batchCode,
+    String? requestId,
+  }) {
+    return _api.post<Batch>(
+      '/api/batches/$batchId/code',
+      houseId: houseId,
+      body: {
+        'batchCode': batchCode.trim(),
+        'requestId': requestId ?? _uuid.v4(),
+      },
+      decode: (data) => Batch.fromJson(
+        requireJsonObject(data, message: '批次改名结果格式不正确'),
+      ),
+    );
+  }
+
   Future<Batch> getBatch({
     required int houseId,
     required int batchId,

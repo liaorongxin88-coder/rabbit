@@ -9,7 +9,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
   testWidgets(
-    'uses each house name in the default and keeps a manual batch code',
+    'prefills a short house-independent default and keeps a manual batch code',
     (tester) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       final fixedTime = DateTime(2026, 2, 3, 4, 5, 6, 7);
@@ -17,7 +17,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('open-east-batch')));
       await tester.pumpAndSettle();
-      expect(_batchCode(tester), '东一舍-批次-20260203040506007');
+      expect(_batchCode(tester), '批次-20260203-0405');
 
       await tester.enterText(
         find.byKey(const ValueKey('batch-code-field')),
@@ -26,11 +26,13 @@ void main() {
       await tester.pump();
       expect(_batchCode(tester), '人工批次-复配');
 
+      // 默认编号不再带兔舍名：提醒卡片已经单独显示了兔舍，再带一遍只会把
+      // chip 撑到被省略号截掉。换个兔舍应该拿到完全一样的默认值。
       await navigatorKey.currentState!.maybePop();
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('open-west-batch')));
       await tester.pumpAndSettle();
-      expect(_batchCode(tester), '西二舍-批次-20260203040506007');
+      expect(_batchCode(tester), '批次-20260203-0405');
     },
   );
 }

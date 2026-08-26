@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   CalendarClockIcon,
   ChevronLeftIcon,
+  PencilIcon,
   ChevronRightIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -20,6 +21,7 @@ import {
   listPendingWeaningRecords,
   listRabbits,
   listReproStageActions,
+  renameBatch,
   separateWeaningRecord,
   submitBatchAction,
   submitRabbitDeparture,
@@ -154,6 +156,9 @@ export function WorkspaceProductionPage() {
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [actionBatch, setActionBatch] = useState<ProductionBatch | null>(null);
+  const [renamingBatch, setRenamingBatch] = useState<ProductionBatch | null>(
+    null,
+  );
   const canEdit = hasPermission(workspace.permission, "rabbit:batches:edit");
   const canRabbitEdit = hasPermission(
     workspace.permission,
@@ -262,7 +267,6 @@ export function WorkspaceProductionPage() {
               open={createOpen}
               onOpenChange={setCreateOpen}
               houseId={workspace.selectedHouse?.id ?? null}
-              houseName={workspace.selectedHouse?.name ?? ""}
               rabbits={rabbits}
               disabled={!canEdit}
               onSaved={load}
@@ -353,7 +357,7 @@ export function WorkspaceProductionPage() {
                     </div>
                   </dl>
 
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-col gap-2">
                     {isCompletedBatchStatus(batch.status) ? (
                       <p className="text-right text-xs text-muted-foreground">
                         已闭环
@@ -369,6 +373,16 @@ export function WorkspaceProductionPage() {
                         生产操作
                       </Button>
                     )}
+                    {/* 已闭环的批次也能改名：翻历史记录时把错名字改对是正当需求。 */}
+                    <Button
+                      className="w-full"
+                      variant="ghost"
+                      disabled={!canEdit}
+                      onClick={() => setRenamingBatch(batch)}
+                    >
+                      <PencilIcon data-icon="inline-start" />
+                      修改编号
+                    </Button>
                   </div>
                 </article>
               ))}
@@ -418,21 +432,33 @@ export function WorkspaceProductionPage() {
                         {batch.remark || "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {isCompletedBatchStatus(batch.status) ? (
-                          <span className="text-xs text-muted-foreground">
-                            已闭环
-                          </span>
-                        ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          {isCompletedBatchStatus(batch.status) ? (
+                            <span className="text-xs text-muted-foreground">
+                              已闭环
+                            </span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!canEdit}
+                              onClick={() => setActionBatch(batch)}
+                            >
+                              <CalendarClockIcon data-icon="inline-start" />
+                              生产操作
+                            </Button>
+                          )}
+                          {/* 已闭环的批次也能改名。 */}
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
                             disabled={!canEdit}
-                            onClick={() => setActionBatch(batch)}
+                            onClick={() => setRenamingBatch(batch)}
                           >
-                            <CalendarClockIcon data-icon="inline-start" />
-                            生产操作
+                            <PencilIcon data-icon="inline-start" />
+                            修改编号
                           </Button>
-                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -452,7 +478,92 @@ export function WorkspaceProductionPage() {
         onOpenChange={(open) => !open && setActionBatch(null)}
         onSaved={load}
       />
+
+      <RenameBatchDialog
+        batch={renamingBatch}
+        houseId={workspace.selectedHouse?.id ?? null}
+        onOpenChange={(open) => !open && setRenamingBatch(null)}
+        onSaved={load}
+      />
     </>
+  );
+}
+
+/**
+ * 改批次编号。
+ *
+ * 编号是操作者认批次的名字，也是 App 提醒卡片上显示的那个。
+ * 建完才发现打错字时，以前只能重建批次再把兔只搬过去。
+ */
+function RenameBatchDialog({
+  batch,
+  houseId,
+  onOpenChange,
+  onSaved,
+}: {
+  batch: ProductionBatch | null;
+  houseId: number | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [code, setCode] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (batch) setCode(batch.batchCode);
+  }, [batch]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = code.trim();
+    if (!houseId || !batch || !next) return;
+    if (next === batch.batchCode.trim()) {
+      onOpenChange(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await renameBatch(houseId, batch.id, next);
+      toast.success(`批次编号已改为 ${next}`);
+      onOpenChange(false);
+      await onSaved();
+    } catch {
+      // Shared request feedback is sufficient.
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={batch !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>修改批次编号</DialogTitle>
+          <DialogDescription>
+            编号会出现在批次列表和 App 的提醒卡片上。
+          </DialogDescription>
+        </DialogHeader>
+        <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="batch-rename-code">批次编号</FieldLabel>
+              <Input
+                id="batch-rename-code"
+                value={code}
+                required
+                maxLength={BATCH_CODE_MAX_LENGTH}
+                onChange={(event) => setCode(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="submit" disabled={saving || !code.trim()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -460,7 +571,6 @@ function CreateBatchDialog({
   open,
   onOpenChange,
   houseId,
-  houseName,
   rabbits,
   disabled,
   onSaved,
@@ -468,7 +578,6 @@ function CreateBatchDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   houseId: number | null;
-  houseName: string;
   rabbits: Rabbit[];
   disabled: boolean;
   onSaved: () => Promise<void>;
@@ -510,9 +619,7 @@ function CreateBatchDialog({
 
   useEffect(() => {
     const isOpening = open && !wasOpenRef.current;
-    setCode((current) =>
-      batchCodeDraftForDialog(current, isOpening, houseName),
-    );
+    setCode((current) => batchCodeDraftForDialog(current, isOpening));
     if (isOpening) {
       setSelectedIds([]);
       setRabbitSearch("");
@@ -520,7 +627,7 @@ function CreateBatchDialog({
       setRemark("");
     }
     wasOpenRef.current = open;
-  }, [houseName, open]);
+  }, [open]);
 
   function toggleRabbit(id: number) {
     setSelectedIds((current) => {

@@ -10,7 +10,7 @@ import {
   rabbitEventPath,
   weaningSeparationPath,
 } from "@/lib/batch-workflow";
-import { rabbitReplacementPath } from '@/lib/rabbit-replacement'
+import { rabbitReplacementPath } from "@/lib/rabbit-replacement";
 import type {
   BatchRabbit,
   BreedingCycle,
@@ -184,7 +184,11 @@ export function retainRabbitsAsReplacement(
   houseId: number,
   data: RabbitReplacementRequest,
 ) {
-  return workspacePostJson<RabbitReplacementResult>(rabbitReplacementPath(), data, { houseId })
+  return workspacePostJson<RabbitReplacementResult>(
+    rabbitReplacementPath(),
+    data,
+    { houseId },
+  );
 }
 
 export function createRabbitSale(houseId: number, data: RabbitSaleRequest) {
@@ -293,6 +297,19 @@ export function createBatch(
   return workspacePostJson<ProductionBatch>(
     "/api/batches",
     { ...data, requestId: requestId() },
+    { houseId },
+  );
+}
+
+/** 改批次编号。批次建完才发现名字打错时，不必重建批次搬兔只。 */
+export function renameBatch(
+  houseId: number,
+  batchId: number,
+  batchCode: string,
+) {
+  return workspacePostJson<ProductionBatch>(
+    `/api/batches/${batchId}/code`,
+    { batchCode, requestId: requestId() },
     { houseId },
   );
 }
