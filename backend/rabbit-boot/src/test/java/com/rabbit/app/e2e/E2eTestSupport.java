@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Base64;
+import javax.sql.DataSource;
 
 @ActiveProfiles("e2e")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -29,6 +30,9 @@ public abstract class E2eTestSupport {
     private Flyway flyway;
 
     @Autowired
+    private DataSource dataSource;
+
+    @Autowired
     private TestRestTemplate restTemplate;
 
     @Autowired
@@ -38,8 +42,8 @@ public abstract class E2eTestSupport {
 
     @BeforeEach
     void resetDatabase() {
-        flyway.clean();
-        flyway.migrate();
+        // schema 每个 JVM 只建一次，用例之间只清数据。细节和退路见 E2eDatabaseReset。
+        E2eDatabaseReset.reset(dataSource, flyway);
         platformAdminBootstrap.ensureBootstrapAdmin();
         api = new E2eApiClient(restTemplate, "http://localhost:" + port);
     }
