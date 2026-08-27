@@ -25,7 +25,9 @@ Use four-space indentation in Java and two spaces in TypeScript/Dart. Java class
 
 ## Testing Guidelines
 
-Name backend unit tests `*Test.java` and E2E tests `*IT.java`. Name Flutter tests `*_test.dart`. Add regression coverage for business rules, providers, repositories, API contracts, and permission changes. Admin currently relies on lint/build plus browser verification; include desktop and narrow-screen checks for UI changes.
+Name backend unit tests `*Test.java` and E2E tests `*IT.java`. Name Flutter tests `*_test.dart`. Add regression coverage for business rules, providers, repositories, API contracts, and permission changes.
+
+Backend unit tests live in the module that owns the class under test, not in `rabbit-boot`. `rabbit-boot` keeps only tests that genuinely need every module on the classpath (the ArchUnit rules, the controller permission scan, the schema SQL check, and its own config), plus the `*IT.java` suite, which needs the full application context. `BootTestPlacementTest` enforces this and will fail with the offending file names if a unit test lands in `rabbit-boot` by mistake. Admin currently relies on lint/build plus browser verification; include desktop and narrow-screen checks for UI changes.
 
 ## Commit & Pull Request Guidelines
 

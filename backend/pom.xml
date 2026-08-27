@@ -96,6 +96,16 @@
         </dependencies>
     </dependencyManagement>
 
+    <!-- 每个模块都要能测自己的业务范围，所以测试栈放在父 pom 里统一继承，
+         而不是在四个子模块里各写一遍。 -->
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <plugin>

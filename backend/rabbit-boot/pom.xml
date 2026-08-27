@@ -62,11 +62,8 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+        <!-- spring-boot-starter-test 现由父 pom 统一提供。archunit 只有这里用得到：
+             架构测试要 importPackages("com.rabbit.app")，必须站在能看见全部模块的位置。 -->
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit</artifactId>
