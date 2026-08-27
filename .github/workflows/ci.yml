@@ -20,20 +20,32 @@ jobs:
     uses: ./.github/workflows/_quality-gates.yml
     with:
       upload_qa_artifacts: ${{ github.event_name == 'push' }}
+      filter_by_changes: true
 
   backend_container:
     name: Backend container smoke
     needs: quality
+    # Runs on every trigger so the required check keeps reporting; the steps
+    # below no-op when backend/ is untouched.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      RUN: ${{ needs.quality.outputs.backend }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及 backend/，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Docker Buildx
+        if: env.RUN == 'true'
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Build backend image
+        if: env.RUN == 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: ./backend
@@ -44,4 +56,5 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend-ci
 
       - name: Start image and probe protected API
+        if: env.RUN == 'true'
         run: ./scripts/ci/backend-container-smoke.sh rabbit-backend:ci

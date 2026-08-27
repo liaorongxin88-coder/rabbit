@@ -8,39 +8,106 @@ on:
         required: false
         default: false
         type: boolean
+      filter_by_changes:
+        description: >-
+          Skip the expensive work in gates whose component is untouched. Leave
+          off for releases so a tag always re-runs everything.
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      backend:
+        description: Whether backend sources changed (always true without filtering).
+        value: ${{ jobs.changes.outputs.backend }}
+      admin:
+        description: Whether admin sources changed (always true without filtering).
+        value: ${{ jobs.changes.outputs.admin }}
+      app:
+        description: Whether Flutter sources changed (always true without filtering).
+        value: ${{ jobs.changes.outputs.app }}
 
 permissions:
   contents: read
 
+# Every gate below runs on every trigger and keeps its check name, even when its
+# component did not change. Branch protection requires these names, and a
+# job-level `if:` would leave the required check permanently pending instead of
+# green. So the filtering sits on the steps: an untouched component still
+# reports, it just does no work and finishes in seconds.
 jobs:
+  changes:
+    name: Detect changed components
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      admin: ${{ steps.detect.outputs.admin }}
+      app: ${{ steps.detect.outputs.app }}
+      lint: ${{ steps.detect.outputs.lint }}
+    steps:
+      # Full history: the three-dot diff needs a merge base, which a shallow
+      # clone does not have.
+      - name: Check out full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed components
+        id: detect
+        env:
+          FILTER_BY_CHANGES: ${{ inputs.filter_by_changes }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: ./scripts/ci/detect-changes.sh
+
   workflow_lint:
     name: Workflow and documentation lint
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      RUN: ${{ needs.changes.outputs.lint }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及工作流、脚本或文档，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Check GitHub Actions workflows
+        if: env.RUN == 'true'
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: -color
 
       - name: Check shell scripts
+        if: env.RUN == 'true'
         run: shellcheck scripts/ci/*.sh deploy/scripts/*.sh deploy/remote/*.sh
 
       - name: Check local Markdown links
+        if: env.RUN == 'true'
         run: node scripts/ci/check-markdown-links.mjs
 
   backend_unit:
     name: Backend unit tests
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RUN: ${{ needs.changes.outputs.backend }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及 backend/，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Java 21
+        if: env.RUN == 'true'
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -51,18 +118,25 @@ jobs:
             backend/*/pom.xml
 
       - name: Run Checkstyle and unit tests
+        if: env.RUN == 'true'
         run: mvn --batch-mode --no-transfer-progress --file backend/pom.xml test
 
-  backend_e2e:
-    name: Backend MySQL and Valkey integration tests
+  backend_e2e_shard:
+    name: Backend E2E shard ${{ matrix.shard }}
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Shards are independent, so let the others finish and report. Cancelling
+      # siblings on the first failure hides how many suites are actually broken.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: rabbit_root
-          MYSQL_DATABASE: rabbit_app_e2e
           TZ: Asia/Shanghai
         ports:
           - 3306:3306
@@ -82,14 +156,18 @@ jobs:
           --health-retries 20
     env:
       APP_CACHE_PORT: "6379"
-      E2E_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      E2E_MIGRATION_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e_migration?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      E2E_LARGE_LOOP_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/rabbit_app_e2e_large_loop?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      RUN: ${{ needs.changes.outputs.backend }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及 backend/，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Java 21
+        if: env.RUN == 'true'
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -99,48 +177,109 @@ jobs:
             backend/pom.xml
             backend/*/pom.xml
 
+      # Each shard needs its own schemas. Tests wipe data between cases, so two
+      # shards sharing a database would clear each other's rows mid-run.
+      - name: Resolve shard databases
+        if: env.RUN == 'true'
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          qs='useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true'
+          main="rabbit_app_e2e_s${SHARD}"
+          migration="rabbit_app_e2e_migration_s${SHARD}"
+          large_loop="rabbit_app_e2e_large_loop_s${SHARD}"
+          {
+            echo "E2E_MAIN_DB=${main}"
+            echo "E2E_MIGRATION_DB=${migration}"
+            echo "E2E_LARGE_LOOP_DB=${large_loop}"
+            echo "E2E_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/${main}?${qs}"
+            echo "E2E_MIGRATION_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/${migration}?${qs}"
+            echo "E2E_LARGE_LOOP_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/${large_loop}?${qs}"
+          } >>"$GITHUB_ENV"
+
       - name: Create isolated E2E databases
+        if: env.RUN == 'true'
         env:
           MYSQL_CONTAINER: ${{ job.services.mysql.id }}
         run: |
-          docker exec "$MYSQL_CONTAINER" mysql -uroot -prabbit_root -e \
-            'CREATE DATABASE IF NOT EXISTS rabbit_app_e2e CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS rabbit_app_e2e_migration CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE IF NOT EXISTS rabbit_app_e2e_large_loop CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+          for db in "$E2E_MAIN_DB" "$E2E_MIGRATION_DB" "$E2E_LARGE_LOOP_DB"; do
+            docker exec "$MYSQL_CONTAINER" mysql -uroot -prabbit_root -e \
+              "CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+          done
 
       - name: Run integration tests
-        run: >-
-          mvn --batch-mode --no-transfer-progress --file backend/pom.xml -Pe2e
-          -Dcache.it.host=127.0.0.1 -Dcache.it.port=6379 verify
+        if: env.RUN == 'true'
+        env:
+          CACHE_IT_HOST: 127.0.0.1
+          CACHE_IT_PORT: "6379"
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          E2E_SHARD_TOTAL: ${{ strategy.job-total }}
+        run: ./scripts/ci/backend-e2e.sh
+
+  # Keeps the pre-sharding check name alive. A matrix publishes one check per
+  # shard ("... shard 1"), so without this the name branch protection requires
+  # would never report again.
+  backend_e2e:
+    name: Backend MySQL and Valkey integration tests
+    if: always()
+    needs: backend_e2e_shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.backend_e2e_shard.result }}
+        run: |
+          echo "分片汇总结果：${RESULT}"
+          if [[ "$RESULT" == "failure" || "$RESULT" == "cancelled" ]]; then
+            echo "至少一个 E2E 分片未通过，详见 Backend E2E shard N。" >&2
+            exit 1
+          fi
 
   admin:
     name: Admin lint, tests, and build
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RUN: ${{ needs.changes.outputs.admin }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及 admin/，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Node.js 24
+        if: env.RUN == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
 
       - name: Enable pinned pnpm
+        if: env.RUN == 'true'
         run: corepack enable && corepack prepare pnpm@11.22.0 --activate
 
       - name: Install dependencies from lockfile
+        if: env.RUN == 'true'
         run: pnpm --dir admin install --frozen-lockfile
 
       - name: Lint
+        if: env.RUN == 'true'
         run: pnpm --dir admin lint
 
       - name: Test
+        if: env.RUN == 'true'
         run: pnpm --dir admin test
 
       - name: Build
+        if: env.RUN == 'true'
         run: pnpm --dir admin build
 
       - name: Upload QA Admin bundle
-        if: inputs.upload_qa_artifacts
+        if: env.RUN == 'true' && inputs.upload_qa_artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: qa-admin-${{ github.sha }}
@@ -150,15 +289,23 @@ jobs:
 
   flutter:
     name: Flutter checks and QA APK
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       CI: "true"
+      RUN: ${{ needs.changes.outputs.app }}
     steps:
+      - name: Report skip
+        if: env.RUN != 'true'
+        run: echo "本次改动不涉及 app/，跳过实际检查。"
+
       - name: Check out source
+        if: env.RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Java 21
+        if: env.RUN == 'true'
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -170,6 +317,7 @@ jobs:
             app/android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Flutter 3.24.3
+        if: env.RUN == 'true'
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
@@ -177,18 +325,19 @@ jobs:
           cache: true
 
       - name: Analyze and test
+        if: env.RUN == 'true'
         working-directory: app
         run: ./rabbit check
 
       - name: Build debug-signed staging APK
-        if: inputs.upload_qa_artifacts
+        if: env.RUN == 'true' && inputs.upload_qa_artifacts
         working-directory: app
         run: |
           build_number=$((4003 + GITHUB_RUN_NUMBER))
           ./rabbit apk test --release "--build-number=$build_number"
 
       - name: Upload QA APK
-        if: inputs.upload_qa_artifacts
+        if: env.RUN == 'true' && inputs.upload_qa_artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: qa-android-staging-${{ github.sha }}

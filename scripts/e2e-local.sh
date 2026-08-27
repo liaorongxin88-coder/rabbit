@@ -11,6 +11,10 @@
 #   bash scripts/e2e-local.sh -Dit.test=ReproLifecycleIT
 #   E2E_SCHEMA_SUFFIX=_a1 bash scripts/e2e-local.sh    # 多 agent 并行时隔离库名
 #   E2E_CLEAN=1 bash scripts/e2e-local.sh              # 先 mvn clean
+#   E2E_DROP=1 bash scripts/e2e-local.sh               # 跑完删掉本次的三个库
+#
+#   # 复现 CI 的第 3 片。库名后缀要一并给，否则两个分片会互相清库。
+#   E2E_SCHEMA_SUFFIX=_s3 E2E_SHARD_INDEX=3 E2E_SHARD_TOTAL=4 bash scripts/e2e-local.sh
 #
 # 什么时候需要 E2E_CLEAN=1：若出现 NoClassDefFoundError（类在源码里确实存在）
 # 或 "The forked VM terminated without properly saying goodbye"，那是 target/ 残留
@@ -123,5 +127,28 @@ if [[ "${E2E_CLEAN:-}" == "1" ]]; then
   mvn --batch-mode --no-transfer-progress --file backend/pom.xml clean
 fi
 
+# 敲定名字逐个删，不用通配。容器里长期混着各人各次的临时库，
+# 一旦用 `drop ... like 'rabbit_app_%'` 清场，很容易把别人正在用的库一并干掉。
+drop_run_databases() {
+  echo "==> 删除本次测试库：$MAIN_DB / $MIGRATION_DB / $LARGE_LOOP_DB"
+  for db in "$MAIN_DB" "$MIGRATION_DB" "$LARGE_LOOP_DB"; do
+    docker exec "$E2E_CONTAINER" mysql -uroot -p"$E2E_ROOT_PASSWORD" \
+      -e "drop database if exists \`$db\`;" 2>/dev/null
+  done
+}
+
+if [[ "${E2E_DROP:-}" == "1" ]]; then
+  trap drop_run_databases EXIT
+fi
+
+# 转给 CI 同一个入口，两边共用选片逻辑。本地默认不起 Valkey，把 cache.it.host
+# 置空让两个 Lettuce IT 自己 assumeTrue 跳过；想跑它们就显式给 CACHE_IT_HOST。
 echo "==> mvn -Pe2e verify ${*:-}"
-exec mvn --batch-mode --no-transfer-progress --file backend/pom.xml -Pe2e "$@" verify
+export CACHE_IT_HOST="${CACHE_IT_HOST:-}"
+
+# E2E_DROP 靠 EXIT trap 收尾，而 exec 会把本进程换掉，trap 就不会触发了。
+if [[ "${E2E_DROP:-}" == "1" ]]; then
+  "$ROOT_DIR/scripts/ci/backend-e2e.sh" "$@"
+else
+  exec "$ROOT_DIR/scripts/ci/backend-e2e.sh" "$@"
+fi

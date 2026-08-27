@@ -7,7 +7,7 @@ Rabbit 使用 GitHub Actions 执行质量门禁和制品发布。后端当前仍
 
 | 触发方式 | 执行内容 | 产物或外部影响 |
 | --- | --- | --- |
-| Pull Request | 后端单测与 E2E、Admin、Flutter、工作流和文档检查、后端容器探测 | 无外部发布 |
+| Pull Request | 按变更选跑后端单测与 E2E、Admin、Flutter、工作流和文档检查、后端容器探测 | 无外部发布 |
 | 推送 `main` | 与 PR 相同，并上传 QA Admin 包和测试环境 APK | Actions 临时制品，保留 14 天 |
 | 推送注解标签 `vMAJOR.MINOR.PATCH` | 重跑质量门禁，构建并签名发布制品 | GHCR 镜像、GitHub Release、provenance |
 | 发布完成且 `BACKEND_AUTO_DEPLOY=true` | 通过 `production` environment 审批后部署镜像 digest | 生产后端切换与部署证据 |
@@ -22,7 +22,48 @@ QA APK 使用 debug 签名，只能用于测试设备。正式 AAB 只有在启�
 - [../../.github/workflows/_quality-gates.yml](../../.github/workflows/_quality-gates.yml)：三端质量门禁。
 - [../../.github/workflows/_build-service-image.yml](../../.github/workflows/_build-service-image.yml)：服务镜像、SBOM 和 provenance。
 
-`main` 的分支保护至少应要求这些检查通过：
+## 按变更选跑
+
+`ci.yml` 传入 `filter_by_changes: true`，`_quality-gates.yml` 先跑 `changes` job，由
+[../../scripts/ci/detect-changes.sh](../../scripts/ci/detect-changes.sh) 算出本次改动涉及
+哪些组件，后续门禁用 `if:` 按结果决定是否执行。发布工作流不传这个开关，所以
+标签发布总是重跑全量。
+
+| 变更路径 | 触发的门禁 |
+| --- | --- |
+| `backend/**` | 后端单测、后端 E2E、后端容器探测 |
+| `admin/**` | Admin lint、测试和构建 |
+| `app/**` | Flutter 检查与 QA APK |
+| 任意 `*.md` | 仅工作流和文档检查 |
+| `.github/workflows/**`、`scripts/ci/**`、`docker-compose.yml`、`.env.example` | 全部 |
+
+判定取基线到 HEAD 的三点 diff，PR 用 `pull_request.base.sha`，push 用 `event.before`。
+基线解析不出来、不在本地历史（浅克隆或强推）、或者 diff 失败时，一律回退到全量
+执行。漏跑一个门禁会让缺陷进主干，多跑一次只是浪费机器时间，两者代价不对等。
+
+## 后端 E2E 分片
+
+`backend_e2e` 是 4 路 matrix，`fail-fast: false`。
+[../../scripts/ci/e2e-shard-args.sh](../../scripts/ci/e2e-shard-args.sh) 算出本片要跑哪些类，
+通过 `-Dit.test=` 交给 failsafe。
+
+装箱用 LPT（最长优先）：按耗时降序，每个类放进当前最轻的一片。耗时表在
+[../../scripts/ci/e2e-timings.txt](../../scripts/ci/e2e-timings.txt)。它只影响均衡，不影响覆盖：
+装箱对每个实际存在的 `*IT.java` 都分配且只分配一次，表里没有的类按默认权重计。
+新增用例忘了更新耗时表，最坏结果只是某片稍慢。
+
+为什么是 4 片，而不是更多：全量 442 秒，但 `LargeHouseOutboundSubmitScaleIT` 单类就占
+135 秒，而且它只有一个 `@Test`，不可再分。关键路径下界是
+`max(最重单类, 总时长 / 分片数)`，到 4 片时刚好降到 135 秒，再加分片只多烧 runner。
+实测装箱结果 135 / 125 / 91 / 91，正好压在理论下界上。
+
+每个分片连自己的库（`rabbit_app_e2e_s1` 到 `_s4`，迁移库同理）。这不是优化而是前提：
+用例之间要把数据清干净，两个分片共用一个库会互相清空。
+改分片数只需改 matrix，`E2E_SHARD_TOTAL` 取自 `strategy.job-total`，不会不同步。
+
+## 分支保护
+
+`main` 的分支保护至少应要求这些检查通过，**名字和引入变更过滤前一致，不需要改仓库设置**：
 
 - Workflow and documentation lint
 - Backend unit tests
@@ -30,6 +71,14 @@ QA APK 使用 debug 签名，只能用于测试设备。正式 AAB 只有在启�
 - Admin lint, tests, and build
 - Flutter checks and QA APK
 - Backend container smoke
+
+这些 job 每次都跑，变更过滤加在**步骤**上而不是 job 上。原因是被 `if:` 整个跳过的 job
+不会上报状态，会让 required check 永远卡在 pending。改成步骤级后，无关改动的门禁照样
+报绿，只是几秒就结束。
+
+`Backend MySQL and Valkey integration tests` 现在是一个汇总 job：matrix 会按
+`Backend E2E shard N` 分别上报，汇总 job 保留分片前的名字，任一分片失败就失败。
+加减分片不会影响这个名字，也就不需要同步改分支保护。
 
 ## 发布前配置
 
@@ -143,6 +192,12 @@ git push origin v1.0.0
 
 # 需要本地 MySQL 和 Valkey 的后端 E2E
 ./scripts/ci/backend-e2e.sh
+
+# 只跑 CI 第 3 片（复现分片失败），注意先把数据源指向该片的库
+E2E_SHARD_INDEX=3 E2E_SHARD_TOTAL=4 ./scripts/ci/backend-e2e.sh
+
+# 看一下这次改动会触发哪些门禁
+FILTER_BY_CHANGES=true BASE_SHA=origin/main ./scripts/ci/detect-changes.sh
 
 # 构建后端镜像、Admin 和测试 APK
 ./scripts/ci/build.sh
