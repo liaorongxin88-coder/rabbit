@@ -15,7 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * The mother row lock in BatchService serializes overlapping tag writes.
- * One rabbit may carry several active batch tags without duplicating its pipeline.
+ * One rabbit may carry several active batch tags without starting a breeding cycle.
  */
 public class BatchConcurrentCreateIT extends E2eTestSupport {
 
@@ -23,7 +23,7 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
     private JdbcTemplate jdbc;
 
     @Test
-    void concurrentCreatesCanTagOneMotherInTwoActiveBatches() throws Exception {
+    void concurrentCreatesCanTagOneMotherInTwoActiveBatchesWithoutStartingCycle() throws Exception {
         UserSession owner = register("batch_concurrent_create");
         long houseId = createHouse(owner, "并发建批次兔舍", 1, 2, 1);
         long motherId = createRabbit(
@@ -84,10 +84,9 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
                 )
             );
             Assertions.assertEquals(
-                1,
+                0,
                 jdbc.queryForObject(
-                    "select count(*) from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN' "
-                        + "and stage <> 'AWAIT_WEANING'",
+                    "select count(*) from breeding_cycles where mother_rabbit_id = ?",
                     Integer.class,
                     motherId
                 )
@@ -134,6 +133,14 @@ public class BatchConcurrentCreateIT extends E2eTestSupport {
 
         addRabbitTag(owner, houseId, batchB, rabbitId, "add-b-2");
         Assertions.assertEquals(2, activeTagCount(rabbitId));
+        Assertions.assertEquals(
+            0,
+            jdbc.queryForObject(
+                "select count(*) from breeding_cycles where mother_rabbit_id = ?",
+                Integer.class,
+                rabbitId
+            )
+        );
         Assertions.assertEquals(
             3,
             jdbc.queryForObject(

@@ -34,6 +34,15 @@ class IndividualRabbitSaleIT extends E2eTestSupport {
                 Integer.class,
                 batchId
         ));
+        Assertions.assertEquals(0, jdbc.queryForObject(
+                "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id in (?, ?)",
+                Integer.class,
+                houseId,
+                doeId,
+                replacementId
+        ));
+        enterBreedingCycle(owner, houseId, batchId, doeId, "sale_doe_cycle");
+        enterBreedingCycle(owner, houseId, batchId, replacementId, "sale_replacement_cycle");
         Assertions.assertEquals(2, jdbc.queryForObject(
                 "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id in (?, ?) and lifecycle = 'OPEN'",
                 Integer.class,
@@ -113,6 +122,22 @@ class IndividualRabbitSaleIT extends E2eTestSupport {
                 houseId,
                 doeId,
                 replacementId
+        ));
+    }
+
+    private void enterBreedingCycle(
+            UserSession owner,
+            long houseId,
+            long batchId,
+            long rabbitId,
+            String requestSuffix
+    ) {
+        api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+                "motherRabbitId", rabbitId,
+                "batchId", batchId,
+                "stage", "AWAIT_ESTRUS",
+                "occurredAt", now(),
+                "requestId", requestId(requestSuffix)
         ));
     }
 
