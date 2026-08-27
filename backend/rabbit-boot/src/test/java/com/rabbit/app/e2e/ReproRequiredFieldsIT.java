@@ -223,10 +223,13 @@ public class ReproRequiredFieldsIT extends E2eTestSupport {
             "femaleRabbitIds", List.of(doeId),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
-        long cycleId = jdbc.queryForObject(
-            "select id from breeding_cycles where house_id = ? and batch_id = ? and mother_rabbit_id = ?",
-            Long.class, houseId, batchId, doeId
-        );
+        long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+            "motherRabbitId", doeId,
+            "batchId", batchId,
+            "stage", "AWAIT_ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId(prefix + "_cycle")
+        )).get("cycleId").asLong();
         api.postOk(actionPath(cycleId), owner.token, houseId, obj(
             "action", "ESTRUS", "occurredAt", now(), "requestId", requestId("estrus")
         ));
