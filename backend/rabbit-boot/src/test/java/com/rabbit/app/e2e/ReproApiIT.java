@@ -26,7 +26,6 @@ public class ReproApiIT extends E2eTestSupport {
         Fixture f = fixture("repro_api_flow", 1);
         long doeId = f.does.get(0);
 
-        // 建批次时母兔已入轨（待催情），这里直接拿那个周期。
         long cycleId = openAtEstrus(f, doeId, "open");
         JsonNode opened = api.getOk("/api/repro/cycles/" + cycleId, f.token, f.houseId);
         Assertions.assertEquals("AWAIT_ESTRUS", opened.get("stage").asText());
@@ -111,47 +110,57 @@ public class ReproApiIT extends E2eTestSupport {
     }
 
     @Test
-    void directOpenRequiresBatchAndCreatesTheSelectedBatchMembership() {
+    void directOpenTreatsEarlyBatchAsOptionalPlanUntilMating() {
         UserSession owner = register("batch_mid_cycle");
-        long houseId = createHouse(owner, "batch_mid_cycle_house", 1, 4, 1);
+        long houseId = createHouse(owner, "batch_mid_cycle_house", 1, 5, 1);
         List<Long> cages = cageIds(owner, houseId);
-        long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", "mid_cycle_doe");
-        long buckId = createRabbit(owner, houseId, cages.get(1), "0", "1", "mid_cycle_buck");
+        long unplannedDoeId = createRabbit(
+            owner, houseId, cages.get(0), "0", "0", "unplanned_doe");
+        long plannedDoeId = createRabbit(
+            owner, houseId, cages.get(1), "0", "0", "planned_doe");
+        long buckId = createRabbit(owner, houseId, cages.get(2), "0", "1", "mid_cycle_buck");
 
-        api.expectError(
-            "/api/repro/cycles", HttpMethod.POST, owner.token, houseId, obj(
-                "motherRabbitId", doeId,
-                "stage", "AWAIT_ESTRUS",
-                "occurredAt", now(),
-                "requestId", requestId("mid_cycle_missing_batch")
-            ), 400, "生产批次"
-        );
-
-        JsonNode batch = api.postOk("/api/batches", owner.token, houseId, obj(
-            "batchCode", "MID-" + requestId("batch").substring(0, 8),
-            "femaleRabbitIds", List.of(),
-            "requestId", requestId("mid_cycle_batch")
+        long unplannedCycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+            "motherRabbitId", unplannedDoeId,
+            "stage", "AWAIT_ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId("mid_cycle_without_batch")
+        )).get("cycleId").asLong();
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from breeding_cycles where id = ?"
+                + " and batch_id is null and planned_batch_id is null",
+            Integer.class, unplannedCycleId
         ));
-        long batchId = batch.get("id").asLong();
-        JsonNode opened = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
-            "motherRabbitId", doeId,
+
+        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", "MID-" + requestId("batch").substring(0, 8),
+            "femaleRabbitIds", List.of(plannedDoeId),
+            "requestId", requestId("mid_cycle_batch")
+        )).get("id").asLong();
+        Assertions.assertEquals(0, jdbc.queryForObject(
+            "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ?",
+            Integer.class, houseId, plannedDoeId
+        ), "加入批次只建立计划成员关系，不应自动开启周期");
+
+        long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+            "motherRabbitId", plannedDoeId,
             "batchId", batchId,
             "stage", "AWAIT_ESTRUS",
             "occurredAt", now(),
             "requestId", requestId("mid_cycle_open")
-        ));
-        long cycleId = opened.get("cycleId").asLong();
-        Assertions.assertEquals("进行中", batch.get("status").asText());
-        Assertions.assertEquals(batchId, jdbc.queryForObject(
-            "select batch_id from breeding_cycles where id = ?", Long.class, cycleId
-        ));
+        )).get("cycleId").asLong();
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from breeding_cycles where id = ?"
+                + " and batch_id is null and planned_batch_id = ?",
+            Integer.class, cycleId, batchId
+        ), "待催情阶段只记录计划批次");
 
         JsonNode item = api.getOk(
             "/api/batches/" + batchId + "/batch-rabbits", owner.token, houseId
         ).get(0);
         Assertions.assertTrue(item.get("isActive").asBoolean());
-        Assertions.assertEquals(cycleId, item.get("currentCycleId").asLong());
-        Assertions.assertEquals("AWAIT_ESTRUS", item.get("currentStage").asText());
+        Assertions.assertTrue(item.get("currentCycleId").isNull());
+        Assertions.assertTrue(item.get("currentStage").isNull());
 
         JsonNode batchTasks = api.getOk(
             "/api/tasks?batchId=" + batchId + "&includeFuture=true", owner.token, houseId
@@ -171,27 +180,17 @@ public class ReproApiIT extends E2eTestSupport {
             "matingMethod", "NATURAL",
             "requestId", requestId("mid_cycle_mating")
         ));
-        JsonNode empty = api.postOk(
-            "/api/repro/cycles/" + cycleId + "/actions", owner.token, houseId, obj(
-                "action", "PALPATION",
-                "palpationResult", "EMPTY",
-                "occurredAt", now(),
-                "requestId", requestId("mid_cycle_empty")
-            )
-        );
-        long followUpCycleId = empty.get("followUpCycleId").asLong();
 
-        JsonNode continued = api.getOk(
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from breeding_cycles where id = ?"
+                + " and batch_id = ? and planned_batch_id is null",
+            Integer.class, cycleId, batchId
+        ), "配种完成后才正式绑定生产批次");
+        JsonNode bound = api.getOk(
             "/api/batches/" + batchId + "/batch-rabbits", owner.token, houseId
         ).get(0);
-        Assertions.assertEquals(followUpCycleId, continued.get("currentCycleId").asLong());
-        Assertions.assertEquals("AWAIT_ESTRUS", continued.get("currentStage").asText());
-        Assertions.assertEquals(1, api.getOk(
-            "/api/tasks?batchId=" + batchId + "&includeFuture=true", owner.token, houseId
-        ).get("total").asInt());
-        Assertions.assertEquals(batchId, jdbc.queryForObject(
-            "select batch_id from breeding_cycles where id = ?", Long.class, followUpCycleId
-        ));
+        Assertions.assertEquals(cycleId, bound.get("currentCycleId").asLong());
+        Assertions.assertEquals("AWAIT_PALPATION", bound.get("currentStage").asText());
     }
 
     @Test
@@ -199,6 +198,7 @@ public class ReproApiIT extends E2eTestSupport {
         Fixture first = fixture("batch_tracking_scope", 1);
         long doeId = first.does.get(0);
         long firstCycleId = openAtEstrus(first, doeId, "first");
+        advanceToMating(first, firstCycleId, "first");
 
         jdbc.update(
             "insert into litters (house_id, cycle_id, mother_rabbit_id, batch_id,"
@@ -237,12 +237,8 @@ public class ReproApiIT extends E2eTestSupport {
             "femaleRabbitIds", List.of(doeId),
             "requestId", requestId("tracking_second_batch")
         )).get("id").asLong();
-        long secondCycleId = jdbc.queryForObject(
-            "select id from breeding_cycles where batch_id = ? and mother_rabbit_id = ?",
-            Long.class,
-            secondBatchId,
-            doeId
-        );
+        long secondCycleId = openAtEstrus(first, doeId, secondBatchId, "second");
+        advanceToMating(first, secondCycleId, "second");
 
         JsonNode firstTag = api.getOk(
             "/api/batches/" + first.batchId + "/batch-rabbits",
@@ -264,7 +260,7 @@ public class ReproApiIT extends E2eTestSupport {
             first.houseId
         ).get(0);
         Assertions.assertEquals(secondCycleId, secondTag.get("currentCycleId").asLong());
-        Assertions.assertEquals("AWAIT_ESTRUS", secondTag.get("currentStage").asText());
+        Assertions.assertEquals("AWAIT_PALPATION", secondTag.get("currentStage").asText());
         Assertions.assertEquals(0, secondTag.get("batchLitterCount").asInt());
 
         JsonNode memberships = api.getOk(
@@ -293,7 +289,7 @@ public class ReproApiIT extends E2eTestSupport {
         Assertions.assertEquals(1, events.size());
         Assertions.assertEquals(first.batchId, events.get(0).get("batchId").asLong());
         Assertions.assertEquals(firstCycleId, events.get(0).get("cycleId").asLong());
-        Assertions.assertEquals("开始周期", events.get(0).get("eventLabel").asText());
+        Assertions.assertEquals("配种", events.get(0).get("eventLabel").asText());
     }
 
     /**
@@ -341,23 +337,16 @@ public class ReproApiIT extends E2eTestSupport {
     @Test
     void enteringAtLactationPersistsKitCounts() {
         Fixture f = fixture("repro_api_lactation", 1);
-        // 建批已经给这头母兔开了一条待催情周期，而 V44 起同一 (母兔, 批次)
-        // 至多一条未结束周期。哺乳周期因此另开一个批次装——这正是新定义里
-        // 「母兔同时位于两个繁殖周期时它也同时处于两个批次之中」的形状。
-        long lactationBatchId = api.postOk("/api/batches", f.token, f.houseId, obj(
-            "batchCode", "API-LACT-" + requestId("lact_batch").substring(0, 8),
-            "femaleRabbitIds", List.of(),
-            "requestId", requestId("lactation_batch")
-        )).get("id").asLong();
         // 存量录入：母兔已在哺乳，直接从待分笼入轨。
         long cycleId = api.postOk("/api/repro/cycles", f.token, f.houseId, obj(
             "motherRabbitId", f.does.get(0),
-            "batchId", lactationBatchId,
+            "batchId", f.batchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", now(),
             "birthDate", now() - 5L * 24 * 3600 * 1000,
             "totalKits", 9,
             "liveKits", 7,
+            "keptKits", 6,
             "requestId", requestId("lactation")
         )).get("cycleId").asLong();
 
@@ -366,7 +355,7 @@ public class ReproApiIT extends E2eTestSupport {
             "select total_kits from breeding_cycles where id = ?", Integer.class, cycleId).intValue());
         Assertions.assertEquals(7, jdbc.queryForObject(
             "select live_kits from breeding_cycles where id = ?", Integer.class, cycleId).intValue());
-        Assertions.assertEquals(7, jdbc.queryForObject(
+        Assertions.assertEquals(6, jdbc.queryForObject(
             "select current_nursing_kits from breeding_cycles where id = ?",
             Integer.class, cycleId).intValue());
         // 入轨必须同时建窝并挂上分笼待办（主体是窝，不是周期），
@@ -405,6 +394,9 @@ public class ReproApiIT extends E2eTestSupport {
         long futureRabbitId = f.does.get(1);
         long doneRabbitId = f.does.get(2);
         long cancelledRabbitId = f.does.get(3);
+        for (int i = 0; i < f.does.size(); i++) {
+            openAtEstrus(f, f.does.get(i), "future_" + i);
+        }
 
         jdbc.update(
             "update work_tasks set due_date = date_sub(current_date, interval 1 day),"
@@ -646,18 +638,33 @@ public class ReproApiIT extends E2eTestSupport {
         return now() + 30L * 24 * 3600 * 1000;
     }
 
-    /**
-     * 取该母兔当前处于待催情的周期。
-     *
-     * <p>无需再调入轨接口：建批次时已经把成员送进了生产流水线。
-     * 这里直接用那个周期，而不是自己另开一个——后者既会撞上
-     * 「一头母兔仅一条流水线周期」不变式，也不是真实用法。
-     */
+    private void advanceToMating(Fixture f, long cycleId, String prefix) {
+        api.postOk("/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, obj(
+            "action", "ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId(prefix + "_estrus")
+        ));
+        api.postOk("/api/repro/cycles/" + cycleId + "/actions", f.token, f.houseId, obj(
+            "action", "MATING",
+            "occurredAt", now(),
+            "maleRabbitId", f.buckId,
+            "matingMethod", "NATURAL",
+            "requestId", requestId(prefix + "_mating")
+        ));
+    }
+
     private long openAtEstrus(Fixture f, long doeId, String prefix) {
-        return jdbc.queryForObject(
-            "select id from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
-                + " and lifecycle = 'OPEN' order by id desc limit 1",
-            Long.class, f.houseId, doeId);
+        return openAtEstrus(f, doeId, f.batchId, prefix);
+    }
+
+    private long openAtEstrus(Fixture f, long doeId, long batchId, String prefix) {
+        return api.postOk("/api/repro/cycles", f.token, f.houseId, obj(
+            "motherRabbitId", doeId,
+            "batchId", batchId,
+            "stage", "AWAIT_ESTRUS",
+            "occurredAt", now(),
+            "requestId", requestId(prefix + "_open")
+        )).get("cycleId").asLong();
     }
 
     private Fixture fixture(String prefix, int doeCount) {

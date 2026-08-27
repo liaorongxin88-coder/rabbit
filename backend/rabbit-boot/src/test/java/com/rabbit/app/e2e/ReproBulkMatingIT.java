@@ -27,9 +27,9 @@ public class ReproBulkMatingIT extends E2eTestSupport {
         ), 400, "批量配种功能已下线，请逐只提交配种记录");
 
         Assertions.assertEquals(round.doeIds.size(), count(
-            "select count(*) from breeding_cycles where house_id = ? and batch_id = ? "
-                + "and stage = 'AWAIT_MATING' and mating_date is null",
-            round.houseId, round.batchId), "拒绝后周期和配种日期必须保持不变");
+            "select count(*) from breeding_cycles where house_id = ? and batch_id is null "
+                + "and planned_batch_id = ? and stage = 'AWAIT_MATING' and mating_date is null",
+            round.houseId, round.batchId), "拒绝后计划批次和配种日期必须保持不变");
         Assertions.assertEquals(round.doeIds.size(), count(
             "select count(*) from work_tasks where house_id = ? and batch_id = ? "
                 + "and task_type = 'MATING' and status = 'PENDING'",
@@ -44,7 +44,8 @@ public class ReproBulkMatingIT extends E2eTestSupport {
         Round round = roundAwaitingMating("individual_mating", 1);
         long doeId = round.doeIds.get(0);
         long cycleId = jdbc.queryForObject(
-            "select id from breeding_cycles where house_id = ? and batch_id = ? and mother_rabbit_id = ?",
+            "select id from breeding_cycles where house_id = ? and planned_batch_id = ?"
+                + " and mother_rabbit_id = ?",
             Long.class, round.houseId, round.batchId, doeId);
 
         api.postOk("/api/repro/cycles/" + cycleId + "/actions", round.owner.token, round.houseId, obj(
@@ -57,6 +58,10 @@ public class ReproBulkMatingIT extends E2eTestSupport {
 
         Assertions.assertEquals("AWAIT_PALPATION", jdbc.queryForObject(
             "select stage from breeding_cycles where id = ?", String.class, cycleId));
+        Assertions.assertEquals(1, count(
+            "select count(*) from breeding_cycles where id = ? and batch_id = ?"
+                + " and planned_batch_id is null",
+            cycleId, round.batchId), "单只配种完成后必须正式绑定生产批次");
         Assertions.assertEquals(1, count(
             "select count(*) from repro_events where house_id = ? and event_type = 'MATING_DONE'",
             round.houseId), "单只配种必须写入配种事件");
@@ -83,6 +88,15 @@ public class ReproBulkMatingIT extends E2eTestSupport {
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
 
+        for (int i = 0; i < does.size(); i++) {
+            api.postOk("/api/repro/cycles", owner.token, houseId, obj(
+                "motherRabbitId", does.get(i),
+                "batchId", batchId,
+                "stage", "AWAIT_ESTRUS",
+                "occurredAt", oneMinuteAgo(),
+                "requestId", requestId(prefix + "_cycle_" + i)
+            ));
+        }
         api.postOk("/api/repro/tasks/bulk-actions", owner.token, houseId, obj(
             "action", "ESTRUS",
             "occurredAt", oneMinuteAgo(),
