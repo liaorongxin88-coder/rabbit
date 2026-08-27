@@ -22,6 +22,7 @@ class AccountSettingsScreen extends ConsumerWidget {
     final profile = ref.watch(userProfileProvider);
     return AppPage(
       title: '账号设置',
+      fallbackBackLocation: '/profile',
       actions: [
         IconButton(
           tooltip: '刷新',

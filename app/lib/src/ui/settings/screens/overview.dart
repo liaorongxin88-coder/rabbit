@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/config/legal.dart';
 import 'package:rabbit_flutter/src/ui/auth/screens/legal.dart';
@@ -14,56 +13,52 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
     return AppPage(
-      title: '设置',
+      title: '关于鸿兔智管',
+      fallbackBackLocation: '/profile',
       child: ListView(
         padding: AppSpacing.pagePadding,
         children: [
           SectionCard(
-            child: Column(
+            child: Row(
+              key: const ValueKey('settings-about-summary'),
               children: [
-                _SettingsEntry(
-                  entryKey: const ValueKey('settings-entry-account'),
-                  icon: Icons.manage_accounts_outlined,
-                  iconColor: palette.primary,
-                  iconBackground: palette.primarySoft,
-                  title: '账号设置',
-                  subtitle: '修改用户名和登录密码',
-                  onTap: () => context.go('/settings/account'),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: palette.primarySoft,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.pets_outlined, color: palette.primary),
                 ),
-                const Divider(height: 1),
-                _SettingsEntry(
-                  entryKey: const ValueKey('settings-entry-app'),
-                  icon: Icons.tune_outlined,
-                  iconColor: palette.success,
-                  iconBackground: palette.successSoft,
-                  title: '应用设置',
-                  subtitle: '主题、启动页、本地缓存',
-                  onTap: () => context.go('/settings/app'),
-                ),
-                const Divider(height: 1),
-                _SettingsEntry(
-                  entryKey: const ValueKey('settings-entry-reminders'),
-                  icon: Icons.notifications_active_outlined,
-                  iconColor: palette.warning,
-                  iconBackground: palette.warningSoft,
-                  title: '我的事件提醒',
-                  subtitle: '按兔舍配置提醒类型和提前天数',
-                  onTap: () => context.go('/settings/reminders'),
-                ),
-                const Divider(height: 1),
-                _SettingsEntry(
-                  entryKey: const ValueKey('settings-entry-production'),
-                  icon: Icons.calendar_month_outlined,
-                  iconColor: palette.warning,
-                  iconBackground: palette.warningSoft,
-                  title: '兔舍生产设置',
-                  subtitle: '配置所有兔舍共用的生产周期',
-                  onTap: () => context.go('/settings/production'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '鸿兔智管',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '兔舍生产管理工具',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              '法律与隐私',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
           SectionCard(
             child: Column(
               children: [

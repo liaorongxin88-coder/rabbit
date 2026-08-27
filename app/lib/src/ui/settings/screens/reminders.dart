@@ -26,6 +26,7 @@ class _ReminderSettingsScreenState
     final houses = ref.watch(housesProvider);
     return AppPage(
       title: '我的事件提醒',
+      fallbackBackLocation: '/profile',
       actions: [
         IconButton(
           tooltip: '刷新',

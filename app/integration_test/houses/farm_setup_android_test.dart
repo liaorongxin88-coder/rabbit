@@ -334,7 +334,7 @@ Future<void> _configureCreationTemplate(
   await _scrollUntilPresent(tester, production);
   await tester.tap(production);
   await _waitFor(tester, find.text('默认生产设置'));
-  await _waitFor(tester, find.text('新建兔场默认配置'));
+  await _waitFor(tester, find.text('新建兔舍默认配置'));
   await _enterField(
     tester,
     const ValueKey('production-sale-days'),

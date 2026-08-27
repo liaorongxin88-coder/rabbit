@@ -58,6 +58,7 @@ class ProductionSettingsScreen extends ConsumerWidget {
     final setting = ref.watch(userSettingProvider);
     return AppPage(
       title: '默认生产设置',
+      fallbackBackLocation: '/profile',
       actions: [
         IconButton(
           tooltip: '刷新',
@@ -178,14 +179,14 @@ class _ProductionSettingsFormState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _isHouseSetting ? '当前兔舍独立配置' : '新建兔场默认配置',
+                        _isHouseSetting ? '当前兔舍独立配置' : '新建兔舍默认配置',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _isHouseSetting
                             ? '仅影响 ${widget.houseName ?? '当前兔舍'}，状态转换和事件表单会用这些天数预填日期。'
-                            : '创建兔场时复制这些天数；已创建兔场不会随此处变化。',
+                            : '创建兔舍时复制这些天数；已创建兔舍不会随此处变化。',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],

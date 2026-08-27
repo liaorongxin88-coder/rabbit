@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/src/app.dart';
@@ -19,6 +20,7 @@ import 'package:rabbit_flutter/src/domain/settings/production.dart';
 import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 import 'package:rabbit_flutter/src/domain/settings/local.dart';
 import 'package:rabbit_flutter/src/domain/houses/house.dart';
+import 'package:rabbit_flutter/src/domain/profile/profile.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
 import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
 import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
@@ -27,6 +29,7 @@ import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/profile/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
 
 void main() {
@@ -568,12 +571,137 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('我的'), findsWidgets);
-    expect(find.text('账号设置'), findsOneWidget);
+    expect(find.text('账号'), findsOneWidget);
+    expect(find.text('账号与安全'), findsOneWidget);
+    expect(find.text('兔舍管理'), findsOneWidget);
+    expect(find.text('事件提醒'), findsOneWidget);
+    expect(find.text('默认生产设置'), findsOneWidget);
+    expect(find.text('为新建兔舍预设生产周期'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('profile-entry-about')),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('应用'), findsOneWidget);
     expect(find.text('应用设置'), findsOneWidget);
-    expect(find.text('兔舍生产设置'), findsOneWidget);
-    expect(find.text('所有兔舍共用的周期配置'), findsOneWidget);
+    expect(find.text('关于鸿兔智管'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('profile-settings-entry')),
+      findsNothing,
+    );
     expect(find.textContaining('当前兔舍'), findsNothing);
     expect(find.text('后端地址'), findsNothing);
+  });
+
+  testWidgets('profile setting entries open the intended pages and return',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'userId': 3,
+      'userName': 'test_20260627',
+      'app.startRoute': '/profile',
+    });
+    FlutterSecureStorage.setMockInitialValues({'token': 'test-token'});
+
+    await tester.pumpWidget(
+      ProviderScopeWrapper(
+        overrides: [
+          housesProvider.overrideWith((_) async => const <RabbitHouse>[]),
+          homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          userProfileProvider.overrideWith(
+            (_) async => const UserProfile(
+              userId: 3,
+              userName: 'test_20260627',
+              openidBound: false,
+            ),
+          ),
+          userSettingProvider.overrideWith(
+            (_) async => GlobalSetting.defaults(),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final destinations = [
+      (
+        key: const ValueKey('profile-entry-account'),
+        path: '/settings/account',
+        title: '账号设置',
+      ),
+      (
+        key: const ValueKey('profile-entry-reminders'),
+        path: '/settings/reminders',
+        title: '我的事件提醒',
+      ),
+      (
+        key: const ValueKey('profile-entry-production'),
+        path: '/settings/production',
+        title: '默认生产设置',
+      ),
+      (
+        key: const ValueKey('profile-entry-app'),
+        path: '/settings/app',
+        title: '应用设置',
+      ),
+      (
+        key: const ValueKey('profile-entry-about'),
+        path: '/settings',
+        title: '关于鸿兔智管',
+      ),
+    ];
+    final router = GoRouter.of(
+      tester.element(find.byKey(const ValueKey('nav-profile'))),
+    );
+
+    for (final destination in destinations) {
+      router.go('/profile');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final entry = find.byKey(destination.key);
+      await tester.scrollUntilVisible(
+        entry,
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      if (entry.hitTestable().evaluate().isEmpty) {
+        await tester.drag(
+          find.byType(ListView).first,
+          const Offset(0, -80),
+        );
+        await tester.pump();
+      }
+      await tester.tap(entry.hitTestable());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.text(destination.title),
+        findsOneWidget,
+        reason: '${destination.key}',
+      );
+      expect(find.byKey(const ValueKey('page-back-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('nav-profile')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('page-back-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('我的'), findsWidgets, reason: '${destination.key}');
+      expect(find.byKey(const ValueKey('nav-profile')), findsOneWidget);
+
+      router.go(destination.path);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(destination.title), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        '/profile',
+        reason: destination.path,
+      );
+    }
   });
 
   testWidgets('production settings opens without selected house',
@@ -597,10 +725,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('兔舍生产设置'));
+    await tester.tap(
+      find.byKey(const ValueKey('profile-entry-production')),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('新建兔场默认配置'), findsOneWidget);
+    expect(find.text('新建兔舍默认配置'), findsOneWidget);
     expect(find.text('配种至摸胎时长'), findsOneWidget);
     expect(find.text('请选择兔舍'), findsNothing);
   });

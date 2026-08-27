@@ -16,6 +16,7 @@ class AppSettingsScreen extends ConsumerWidget {
     final settings = ref.watch(localAppSettingsControllerProvider);
     return AppPage(
       title: '应用设置',
+      fallbackBackLocation: '/profile',
       child: settings.when(
         data: (data) => _AppSettingsContent(settings: data),
         loading: () => const Center(child: CircularProgressIndicator()),

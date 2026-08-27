@@ -20,14 +20,6 @@ class ProfileScreen extends ConsumerWidget {
 
     return AppPage(
       title: '我的',
-      actions: [
-        IconButton(
-          key: const ValueKey('profile-settings-entry'),
-          tooltip: '设置',
-          onPressed: () => context.go('/settings'),
-          icon: const Icon(Icons.settings_outlined),
-        ),
-      ],
       child: ListView(
         padding: AppSpacing.pagePadding,
         children: [
@@ -67,53 +59,72 @@ class ProfileScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          SectionCard(
-            child: Column(
-              children: [
-                _ProfileEntry(
-                  entryKey: const ValueKey('profile-entry-account'),
-                  icon: Icons.manage_accounts_outlined,
-                  iconColor: palette.primary,
-                  iconBackground: palette.primarySoft,
-                  title: '账号设置',
-                  subtitle: '用户名、密码和登录资料',
-                  onTap: () => context.go('/settings/account'),
-                ),
-                const Divider(height: 1),
-                _ProfileEntry(
-                  entryKey: const ValueKey('profile-entry-app'),
-                  icon: Icons.tune_outlined,
-                  iconColor: palette.success,
-                  iconBackground: palette.successSoft,
-                  title: '应用设置',
-                  subtitle: localSettings == null
-                      ? '主题、启动页和本地缓存'
-                      : '${localSettings.themeLabel} · 默认${localSettings.startRouteLabel}',
-                  onTap: () => context.go('/settings/app'),
-                ),
-                const Divider(height: 1),
-                _ProfileEntry(
-                  entryKey: const ValueKey('profile-entry-reminders'),
-                  icon: Icons.notifications_active_outlined,
-                  iconColor: palette.warning,
-                  iconBackground: palette.warningSoft,
-                  title: '我的事件提醒',
-                  subtitle: '按兔舍配置提醒类型和提前天数',
-                  onTap: () => context.go('/settings/reminders'),
-                ),
-                const Divider(height: 1),
-                _ProfileEntry(
-                  entryKey: const ValueKey('profile-entry-production'),
-                  icon: Icons.calendar_month_outlined,
-                  iconColor: palette.warning,
-                  iconBackground: palette.warningSoft,
-                  title: '兔舍生产设置',
-                  subtitle: '所有兔舍共用的周期配置',
-                  onTap: () => context.go('/settings/production'),
-                ),
-              ],
-            ),
+          const SizedBox(height: 16),
+          _ProfileSection(
+            title: '账号',
+            children: [
+              _ProfileEntry(
+                entryKey: const ValueKey('profile-entry-account'),
+                icon: Icons.manage_accounts_outlined,
+                iconColor: palette.primary,
+                iconBackground: palette.primarySoft,
+                title: '账号与安全',
+                subtitle: '账号、手机号、用户名和登录密码',
+                onTap: () => context.push('/settings/account'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ProfileSection(
+            title: '兔舍管理',
+            children: [
+              _ProfileEntry(
+                entryKey: const ValueKey('profile-entry-reminders'),
+                icon: Icons.notifications_active_outlined,
+                iconColor: palette.warning,
+                iconBackground: palette.warningSoft,
+                title: '事件提醒',
+                subtitle: '按兔舍设置提醒类型和提前天数',
+                onTap: () => context.push('/settings/reminders'),
+              ),
+              const Divider(height: 1),
+              _ProfileEntry(
+                entryKey: const ValueKey('profile-entry-production'),
+                icon: Icons.calendar_month_outlined,
+                iconColor: palette.success,
+                iconBackground: palette.successSoft,
+                title: '默认生产设置',
+                subtitle: '为新建兔舍预设生产周期',
+                onTap: () => context.push('/settings/production'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ProfileSection(
+            title: '应用',
+            children: [
+              _ProfileEntry(
+                entryKey: const ValueKey('profile-entry-app'),
+                icon: Icons.tune_outlined,
+                iconColor: palette.primary,
+                iconBackground: palette.primarySoft,
+                title: '应用设置',
+                subtitle: localSettings == null
+                    ? '主题、默认启动页和本地设置'
+                    : '${localSettings.themeLabel} · 默认${localSettings.startRouteLabel}',
+                onTap: () => context.push('/settings/app'),
+              ),
+              const Divider(height: 1),
+              _ProfileEntry(
+                entryKey: const ValueKey('profile-entry-about'),
+                icon: Icons.info_outline,
+                iconColor: palette.success,
+                iconBackground: palette.successSoft,
+                title: '关于鸿兔智管',
+                subtitle: '隐私政策和用户协议',
+                onTap: () => context.push('/settings'),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
@@ -124,6 +135,30 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+        ),
+        SectionCard(child: Column(children: children)),
+      ],
     );
   }
 }

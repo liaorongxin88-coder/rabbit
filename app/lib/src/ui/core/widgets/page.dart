@@ -52,10 +52,10 @@ class AppPage extends StatelessWidget {
       return page;
     }
     return PopScope<Object?>(
-      canPop: Navigator.of(context).canPop(),
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          context.go(fallbackLocation);
+          _goBack(context, fallbackLocation);
         }
       },
       child: page,

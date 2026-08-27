@@ -325,37 +325,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               child: ProfileScreen(),
             ),
           ),
-          GoRoute(
-            path: '/settings',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: SettingsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings/account',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: AccountSettingsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings/app',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: AppSettingsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings/production',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProductionSettingsScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/settings/reminders',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ReminderSettingsScreen(),
-            ),
-          ),
         ],
+      ),
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: SettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/settings/account',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: AccountSettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/settings/app',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: AppSettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/settings/production',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ProductionSettingsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/settings/reminders',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ReminderSettingsScreen(),
+        ),
       ),
     ],
   );
