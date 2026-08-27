@@ -24,7 +24,18 @@ public class AppUpdateIT extends E2eTestSupport {
         Assertions.assertEquals("1.0.6", update.get("versionName").asText());
         Assertions.assertTrue(update.get("forceUpdate").asBoolean());
         Assertions.assertEquals(123456L, update.get("apkSizeBytes").asLong());
-        Assertions.assertEquals("https://downloads.example.test/rabbit-4007.apk", update.get("downloadUrl").asText());
+        // 默认是代理模式，回给客户端的是后端地址，不是版本清单里登记的上游地址。
+        // 不写死域名：域名改了不应该让这条断言坠。
+        String downloadUrl = update.get("downloadUrl").asText();
+        Assertions.assertTrue(
+                downloadUrl.startsWith("https://"),
+                "客户端只收 https，实际：" + downloadUrl);
+        Assertions.assertTrue(
+                downloadUrl.endsWith("/api/app-updates/" + second.get("id").asLong() + "/download"),
+                "应指向后端代理端点，实际：" + downloadUrl);
+        Assertions.assertFalse(
+                downloadUrl.contains("downloads.example.test"),
+                "上游地址不该泄露给客户端，实际：" + downloadUrl);
         Assertions.assertFalse(update.has("requestId"));
 
         api.putOk("/api/admin/app-updates/" + second.get("id").asLong() + "/status", adminToken, null, obj(
