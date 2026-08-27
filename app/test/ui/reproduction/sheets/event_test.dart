@@ -315,16 +315,16 @@ void main() {
 
     final occurredAt = DateTime.fromMillisecondsSinceEpoch(
       harness.adapter.requests.single['occurredAt'] as int,
+      isUtc: true,
     );
-    final today = DateTime.now();
+    final occurredFarmDate = localDateOnly(occurredAt);
     expect(
-      DateTime(occurredAt.year, occurredAt.month, occurredAt.day),
-      DateTime(today.year, today.month, today.day),
+      occurredFarmDate,
+      localDateOnly(DateTime.now().toUtc()),
     );
     expect(
-      DateTime(occurredAt.year, occurredAt.month, occurredAt.day),
-      isNot(
-          DateTime(futureDueTime.year, futureDueTime.month, futureDueTime.day)),
+      occurredFarmDate,
+      isNot(localDateOnly(futureDueTime.toUtc())),
     );
   });
 
