@@ -12,6 +12,7 @@ import java.util.Locale;
  * 首页要三路合并、还各有各的 ack 语义。
  */
 public enum TaskType {
+    RECOVERY("休养到期", ReproAction.START_CYCLE),
     ESTRUS("待催情", ReproAction.ESTRUS),
     MATING("待配种", ReproAction.MATING),
     PALPATION("待摸胎", ReproAction.PALPATION),
@@ -84,16 +85,17 @@ public enum TaskType {
             || COMMODITY_FATTENING_CARE.name().equals(taskType);
     }
 
-    /** 该阶段对应的待办类型；READY / 非管线态无待办。 */
+    /** 该阶段对应的待办类型；暂停与离场不挂待办。 */
     public static TaskType forStage(ReproStage stage) {
         return switch (stage) {
+            case READY -> RECOVERY;
             case AWAIT_ESTRUS -> ESTRUS;
             case AWAIT_MATING -> MATING;
             case AWAIT_PALPATION -> PALPATION;
             case AWAIT_PREPARTUM -> PREPARTUM;
             case AWAIT_DELIVERY -> DELIVERY;
             case AWAIT_WEANING -> WEANING;
-            case READY, SUSPENDED, RETIRED -> null;
+            case SUSPENDED, RETIRED -> null;
         };
     }
 

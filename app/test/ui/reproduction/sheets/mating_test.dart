@@ -11,9 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
@@ -128,6 +130,7 @@ Widget _singleApp({
       reproRepositoryProvider.overrideWithValue(repository),
       allActiveHouseRabbitsProvider(8).overrideWith((_) async => rabbits),
       houseCagesProvider(8).overrideWith((_) async => const <Cage>[]),
+      houseBatchesProvider(8).overrideWith((_) async => const [_activeBatch]),
     ],
     child: MaterialApp(
       theme: buildAppTheme(),
@@ -164,6 +167,16 @@ Rabbit _male(int id) {
     isActive: true,
   );
 }
+
+const _activeBatch = Batch(
+  id: 9,
+  houseId: 8,
+  batchCode: 'B-009',
+  status: '进行中',
+  startDate: null,
+  endDate: null,
+  remark: '',
+);
 
 const _matingEvent = EventItem(
   recordId: 301,

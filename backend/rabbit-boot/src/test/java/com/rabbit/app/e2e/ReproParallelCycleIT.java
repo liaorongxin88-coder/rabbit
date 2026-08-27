@@ -72,24 +72,24 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         ReproResult empty = apply(f, bloodMating.cycleId(), ReproAction.PALPATION, "coexist_empty",
             b -> b.outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY));
 
-        Long estrusCycle = empty.followUpCycleId();
-        Assertions.assertNotNull(estrusCycle, "空怀应接续一条新的待催情周期");
+        Long recoveryCycle = empty.followUpCycleId();
+        Assertions.assertNotNull(recoveryCycle, "空怀应接续一条新的休养周期");
 
         assertStage(nursing.cycleId(), ReproStage.AWAIT_WEANING, "OPEN");
-        assertStage(estrusCycle, ReproStage.AWAIT_ESTRUS, "OPEN");
-        Assertions.assertEquals(2, openCycles(f), "此时应恰有哺乳与待催情两条周期");
-        // 两条待办并存，且主体不同：分笼挂窝、催情挂周期。
+        assertStage(recoveryCycle, ReproStage.READY, "OPEN");
+        Assertions.assertEquals(2, openCycles(f), "此时应恰有哺乳与休养两条周期");
+        // 两条待办并存，且主体不同：分笼挂窝、休养挂周期。
         Assertions.assertEquals("WEANING", pendingTaskTypeOnLitter(litterId));
-        Assertions.assertEquals("ESTRUS", pendingTaskTypeOnCycle(estrusCycle));
-        // 管线周期优先：母兔卡片显示待催情，而不是待分笼。
-        assertProjection(f, ReproStage.AWAIT_ESTRUS, estrusCycle);
+        Assertions.assertEquals("RECOVERY", pendingTaskTypeOnCycle(recoveryCycle));
+        assertProjection(f, ReproStage.READY, recoveryCycle);
 
-        // ① 推进待催情周期，哺乳周期与它的分笼待办必须纹丝不动
-        apply(f, estrusCycle, ReproAction.ESTRUS, "coexist_estrus", b -> b);
+        // ① 休养到期并推进催情，哺乳周期与分笼待办必须纹丝不动。
+        apply(f, recoveryCycle, ReproAction.START_CYCLE, "coexist_recovery", b -> b);
+        apply(f, recoveryCycle, ReproAction.ESTRUS, "coexist_estrus", b -> b);
         assertStage(nursing.cycleId(), ReproStage.AWAIT_WEANING, "OPEN");
         Assertions.assertEquals("WEANING", pendingTaskTypeOnLitter(litterId),
             "推进待催情周期不应动到窝上的分笼待办");
-        assertStage(estrusCycle, ReproStage.AWAIT_MATING, "OPEN");
+        assertStage(recoveryCycle, ReproStage.AWAIT_MATING, "OPEN");
 
         // ② 给哺乳周期分笼，待配种周期必须纹丝不动，且不得再接续一条新周期
         ReproResult weaned = actionService.apply(
@@ -100,10 +100,10 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Assertions.assertNull(weaned.followUpCycleId(),
             "管线上已有周期在跑，分笼不得再自动接续，否则违反 uk_bc_pipeline");
         assertStage(nursing.cycleId(), null, "CLOSED");
-        assertStage(estrusCycle, ReproStage.AWAIT_MATING, "OPEN");
+        assertStage(recoveryCycle, ReproStage.AWAIT_MATING, "OPEN");
         Assertions.assertEquals(1, openCycles(f));
         // 投影跟随仍在跑的那条，而不是被刚关掉的哺乳周期拖回去。
-        assertProjection(f, ReproStage.AWAIT_MATING, estrusCycle);
+        assertProjection(f, ReproStage.AWAIT_MATING, recoveryCycle);
     }
 
     /** 推迟只改当事周期的到期时间，另一条周期的待办不受影响。 */
@@ -162,12 +162,17 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Assertions.assertEquals("RETIRED", projectedStage(f));
     }
 
-    /** 自动接续的新周期继续归属同一生产批次。 */
+    /** 关闭结果释放正式批次，下一轮从无批次休养期重新开始。 */
     @Test
-    void followUpCycleInheritsTheClosedBatchBinding() {
+    void followUpCycleReleasesTheClosedBatchBinding() {
         Fixture f = batchFixture("par_batch");
         Long firstCycle = openCycleIdInBatch(f);
-        Assertions.assertEquals(f.batchId, batchIdOf(firstCycle), "建批入轨的周期应绑在该批次上");
+        Assertions.assertNull(batchIdOf(firstCycle));
+        Assertions.assertEquals(f.batchId, jdbc.queryForObject(
+            "select planned_batch_id from breeding_cycles where id = ?",
+            Long.class,
+            firstCycle
+        ));
 
         // 走一轮空怀，触发接续
         apply(f, firstCycle, ReproAction.ESTRUS, "batch_estrus", b -> b);
@@ -178,8 +183,11 @@ public class ReproParallelCycleIT extends E2eTestSupport {
 
         Long followUp = empty.followUpCycleId();
         Assertions.assertNotNull(followUp);
-        Assertions.assertEquals(f.batchId, batchIdOf(followUp),
-            "接续周期必须继承已关闭周期的生产批次");
+        Assertions.assertNull(batchIdOf(followUp),
+            "休养周期不得继承已关闭周期的正式生产批次");
+        assertStage(followUp, ReproStage.READY, "OPEN");
+        Assertions.assertEquals("RECOVERY", pendingTaskTypeOnCycle(followUp));
+        Assertions.assertEquals(0, activeBreedingMembers(f, f.batchId));
         Assertions.assertEquals(1, openCycles(f));
     }
 
@@ -203,8 +211,12 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         advanceToDelivery(f, nursingCycle, "complete");
         // 血配的第二轮：必须显式选另一个批次，服务端不会替你新建。
         ReproResult bloodCycle = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "complete_blood");
+        apply(f, bloodCycle.cycleId(), ReproAction.MATING, "complete_blood_mating",
+            b -> b.batchId(f.bloodBatchId)
+                .maleRabbitId(f.sireId)
+                .matingMethod(MatingMethod.NATURAL));
 
-        // ① 一兔两周期 == 一兔两批次
+        // ① 配种关键节点完成后，一兔两周期 == 一兔两批次
         Assertions.assertEquals(2, openCycles(f), "血配下母兔仍应有两条未结束周期");
         Assertions.assertEquals(f.batchId, batchIdOf(nursingCycle), "哺乳周期留在原批次");
         Assertions.assertEquals(
@@ -319,15 +331,15 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             Assertions.assertEquals("ABORTED", resultOf(cycle.cycleId()),
                 "流产结果要可统计，否则算不出流产率");
             // 关周期不改 stage：报表靠它回答「在哪一步流的」。
-            Assertions.assertNotNull(aborted.followUpCycleId(), "流产后应接续新一轮");
-            assertStage(aborted.followUpCycleId(), ReproStage.AWAIT_ESTRUS, "OPEN");
+            Assertions.assertNotNull(aborted.followUpCycleId(), "流产后应进入休养期");
+            assertStage(aborted.followUpCycleId(), ReproStage.READY, "OPEN");
             Assertions.assertEquals(1, openCycles(f));
-            Assertions.assertEquals("ESTRUS", pendingTaskTypeOnCycle(aborted.followUpCycleId()));
+            Assertions.assertEquals("RECOVERY", pendingTaskTypeOnCycle(aborted.followUpCycleId()));
         }
     }
 
     @Test
-    void emptyAbortionAndWeaningFollowUpsInheritTheClosedBatch() {
+    void emptyAbortionAndWeaningFollowUpsReleaseTheClosedBatch() {
         Fixture emptyFixture = batchFixture("batch_empty_close");
         Long emptyCycle = openCycleIdInBatch(emptyFixture);
         apply(emptyFixture, emptyCycle, ReproAction.ESTRUS, "batch_empty_estrus", b -> b);
@@ -340,7 +352,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "batch_empty",
             b -> b.outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY)
         );
-        assertFollowUpInheritedBatch(emptyFixture, empty.followUpCycleId());
+        assertFollowUpReleasedBatch(emptyFixture, empty.followUpCycleId());
 
         Fixture abortionFixture = batchFixture("batch_abort_close");
         Long abortionCycle = openCycleIdInBatch(abortionFixture);
@@ -357,7 +369,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
                 .remark("流产详情")
                 .attachmentFileIds(List.of(abortionImage))
         );
-        assertFollowUpInheritedBatch(abortionFixture, aborted.followUpCycleId());
+        assertFollowUpReleasedBatch(abortionFixture, aborted.followUpCycleId());
 
         Fixture weaningFixture = batchFixture("batch_weaning_close");
         Long weaningCycle = openCycleIdInBatch(weaningFixture);
@@ -369,25 +381,19 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "batch_weaning_do",
             b -> b.weanedCount(7)
         );
-        assertFollowUpInheritedBatch(weaningFixture, weaned.followUpCycleId());
+        assertFollowUpReleasedBatch(weaningFixture, weaned.followUpCycleId());
     }
 
-    private void assertFollowUpInheritedBatch(Fixture fixture, Long followUpCycleId) {
+    private void assertFollowUpReleasedBatch(Fixture fixture, Long followUpCycleId) {
         Assertions.assertNotNull(followUpCycleId);
         Assertions.assertEquals(1, (int) jdbc.queryForObject(
-            "select count(*) from breeding_cycles where house_id = ? and batch_id = ?"
-                + " and id = ? and lifecycle = 'OPEN'",
-            Integer.class, fixture.houseId, fixture.batchId, followUpCycleId
+            "select count(*) from breeding_cycles where house_id = ? and batch_id is null"
+                + " and id = ? and lifecycle = 'OPEN' and stage = 'READY'",
+            Integer.class, fixture.houseId, followUpCycleId
         ));
-
-        JsonNode item = api.getOk(
-            "/api/batches/" + fixture.batchId + "/batch-rabbits",
-            fixture.owner.token,
-            fixture.houseId
-        ).get(0);
-        Assertions.assertEquals(followUpCycleId, item.get("currentCycleId").asLong());
-        Assertions.assertEquals("AWAIT_ESTRUS", item.get("currentStage").asText());
-        Assertions.assertEquals(1, api.getOk(
+        Assertions.assertEquals("RECOVERY", pendingTaskTypeOnCycle(followUpCycleId));
+        Assertions.assertEquals(0, activeBreedingMembers(fixture, fixture.batchId));
+        Assertions.assertEquals(0, api.getOk(
             "/api/tasks?batchId=" + fixture.batchId + "&includeFuture=true",
             fixture.owner.token,
             fixture.houseId
@@ -485,6 +491,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
 
         java.util.Map<String, java.util.List<String>> factsByStage =
             new java.util.LinkedHashMap<>();
+        java.util.Map<String, Boolean> batchRequiredByStage = new java.util.LinkedHashMap<>();
         for (com.fasterxml.jackson.databind.JsonNode row : rows) {
             Assertions.assertFalse(row.get("stageLabel").asText().isBlank(), "阶段中文名不得为空");
             java.util.List<String> facts = new java.util.ArrayList<>();
@@ -492,24 +499,36 @@ public class ReproParallelCycleIT extends E2eTestSupport {
                 Assertions.assertFalse(fact.get("label").asText().isBlank(), "必填项中文名不得为空");
                 facts.add(fact.get("fact").asText());
             }
-            factsByStage.put(row.get("stage").asText(), facts);
+            String stage = row.get("stage").asText();
+            factsByStage.put(stage, facts);
+            batchRequiredByStage.put(stage, row.get("batchRequired").asBoolean());
         }
 
-        // 只列可入轨的阶段；准备/暂停/离场不是入轨点。
+        // 休养期是可直接入轨的真实阶段；暂停和离场不是入轨点。
         Assertions.assertEquals(
             List.of(
-                "AWAIT_ESTRUS", "AWAIT_MATING", "AWAIT_PALPATION",
+                "READY", "AWAIT_ESTRUS", "AWAIT_MATING", "AWAIT_PALPATION",
                 "AWAIT_PREPARTUM", "AWAIT_DELIVERY", "AWAIT_WEANING"
             ),
             List.copyOf(factsByStage.keySet())
         );
+        Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("READY"));
         Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_ESTRUS"));
-        Assertions.assertEquals(List.of("MATING_DATE"), factsByStage.get("AWAIT_PALPATION"));
+        Assertions.assertEquals(
+            List.of("MALE_RABBIT", "MATING_METHOD", "STAGE_ENTERED_AT"),
+            factsByStage.get("AWAIT_PALPATION")
+        );
         Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_PREPARTUM"));
         Assertions.assertEquals(List.of("STAGE_ENTERED_AT"), factsByStage.get("AWAIT_DELIVERY"));
         Assertions.assertEquals(
-            List.of("BIRTH_DATE", "LIVE_KITS"), factsByStage.get("AWAIT_WEANING")
+            List.of("KEPT_KITS", "LIVE_KITS", "STAGE_ENTERED_AT", "TOTAL_KITS"),
+            factsByStage.get("AWAIT_WEANING")
         );
+        Assertions.assertFalse(batchRequiredByStage.get("READY"));
+        Assertions.assertFalse(batchRequiredByStage.get("AWAIT_ESTRUS"));
+        Assertions.assertFalse(batchRequiredByStage.get("AWAIT_MATING"));
+        Assertions.assertTrue(batchRequiredByStage.get("AWAIT_PALPATION"));
+        Assertions.assertTrue(batchRequiredByStage.get("AWAIT_WEANING"));
     }
 
     /**
@@ -601,7 +620,11 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
         long bloodBatchId = emptyBatch(owner, houseId, prefix + "_blood_batch");
-        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId, bloodBatchId);
+        Fixture fixture = new Fixture(
+            owner, owner.userId, houseId, doeId, sireId, batchId, bloodBatchId
+        );
+        openAtEstrus(fixture, prefix + "_entry");
+        return fixture;
     }
 
     /**

@@ -15,6 +15,7 @@ public class Rabbit {
     private String gender;
     private String breed;
     private String arrivalMethod;
+    private String sourceSeller;
     private Date arrivalDate;
     private Double weight;
     private String growthStage;
@@ -165,6 +166,14 @@ public class Rabbit {
 
     public void setArrivalMethod(String arrivalMethod) {
         this.arrivalMethod = arrivalMethod;
+    }
+
+    public String getSourceSeller() {
+        return sourceSeller;
+    }
+
+    public void setSourceSeller(String sourceSeller) {
+        this.sourceSeller = sourceSeller;
     }
 
     @JsonFormat(pattern = "yyyy-MM-dd", timezone = "Asia/Shanghai")

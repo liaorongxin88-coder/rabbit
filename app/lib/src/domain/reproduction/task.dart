@@ -65,7 +65,7 @@ enum MatingMethod {
 
 /// 生产阶段。仅用于展示与判断表单形态。
 enum ReproStage {
-  ready('READY', '准备'),
+  ready('READY', '休养期'),
   awaitEstrus('AWAIT_ESTRUS', '待催情'),
   awaitMating('AWAIT_MATING', '待配种'),
   awaitPalpation('AWAIT_PALPATION', '待摸胎'),

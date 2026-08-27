@@ -76,6 +76,12 @@ public final class TransitionTable {
     private static Map<String, Transition> build() {
         List<Transition> rows = new ArrayList<>();
 
+        // T1 休养结束：无批次继续进入待催情，批次直到配种时才绑定。
+        rows.add(advance(
+            ReproStage.READY, ReproAction.START_CYCLE, ReproStage.AWAIT_ESTRUS,
+            DueAnchor.IMMEDIATE, ReproEventType.RECOVERY_DONE
+        ));
+
         // T2 催情：待催情 → 待配种，到期 = 操作日 + estrus_duration_days
         rows.add(advance(
             ReproStage.AWAIT_ESTRUS, ReproAction.ESTRUS, ReproStage.AWAIT_MATING,
@@ -95,11 +101,11 @@ public final class TransitionTable {
             DueAnchor.PREPARTUM_DURATION, ReproEventType.PALPATION_PREGNANT
         ));
 
-        // T4b 摸胎-空怀：关周期，立刻开新周期催情（不等复旧期，母兔本就没怀）
+        // T4b 摸胎-空怀：关闭原批次周期，进入无批次休养期。
         rows.add(new Transition(
             ReproStage.AWAIT_PALPATION, ReproAction.PALPATION, PalpationResult.EMPTY.name(),
-            null, true, CycleResult.EMPTY, ReproStage.AWAIT_ESTRUS,
-            DueAnchor.IMMEDIATE, ReproEventType.PALPATION_EMPTY
+            null, true, CycleResult.EMPTY, ReproStage.READY,
+            DueAnchor.POSTPARTUM_RECOVERY, ReproEventType.PALPATION_EMPTY
         ));
 
         // T4c 摸胎-不确定：阶段不变，按用户选的复查日期再提醒
@@ -122,20 +128,18 @@ public final class TransitionTable {
             DueAnchor.WEANING_DUE, ReproEventType.DELIVERY_DONE
         ));
 
-        // T6x 接产-分娩失败：关周期，复旧后重新催情
+        // T6x 接产-分娩失败：关闭原批次周期，进入无批次休养期。
         rows.add(new Transition(
             ReproStage.AWAIT_DELIVERY, ReproAction.DELIVERY, DeliveryOutcome.FAILED.name(),
-            null, true, CycleResult.FAILED, ReproStage.AWAIT_ESTRUS,
+            null, true, CycleResult.FAILED, ReproStage.READY,
             DueAnchor.POSTPARTUM_RECOVERY, ReproEventType.DELIVERY_FAILED
         ));
 
-        // T7 分笼：关周期 → 准备 → 自动开下一轮。
-        // 若母兔已有管线周期（血配提前开启），服务层会跳过这次自动接续，只关窝。
-        // 接续周期继承被关闭周期的批次，不会撞上 V44 的 uk_bc_batch_member：
-        // 那个批次里该母兔原本就只有这一条 OPEN 周期，而它正在同一事务里被关掉。
+        // T7 分笼：关闭原批次周期并进入无批次休养期。
+        // 若母兔已有下一轮管线周期（血配），服务层只关闭本轮哺乳周期。
         rows.add(new Transition(
             ReproStage.AWAIT_WEANING, ReproAction.WEANING, null,
-            null, true, CycleResult.WEANED, ReproStage.AWAIT_ESTRUS,
+            null, true, CycleResult.WEANED, ReproStage.READY,
             DueAnchor.POSTPARTUM_RECOVERY, ReproEventType.WEANING_DONE
         ));
 
@@ -145,7 +149,7 @@ public final class TransitionTable {
         )) {
             rows.add(new Transition(
                 from, ReproAction.ABORTION, null,
-                null, true, CycleResult.ABORTED, ReproStage.AWAIT_ESTRUS,
+                null, true, CycleResult.ABORTED, ReproStage.READY,
                 DueAnchor.POSTPARTUM_RECOVERY, ReproEventType.ABORTION
             ));
         }

@@ -137,7 +137,12 @@ class V44BatchScopedOpenCycleIT {
 
         // 保留 id 最小的那条（血配场景里就是带着窝的哺乳周期），其余外迁。
         assertEquals(batchA, longValue("select batch_id from breeding_cycles where id = ?", bloodNursing));
-        assertEquals(recoveryR1, longValue("select batch_id from breeding_cycles where id = ?", bloodPipeline));
+        assertNull(stringValue(
+            "select batch_id from breeding_cycles where id = ?", bloodPipeline
+        ));
+        assertEquals(recoveryR1, longValue(
+            "select planned_batch_id from breeding_cycles where id = ?", bloodPipeline
+        ));
         // 已结束的周期不参与去重，批次归属不动。
         assertEquals(batchA, longValue("select batch_id from breeding_cycles where id = ?", bloodClosed));
 
@@ -149,8 +154,14 @@ class V44BatchScopedOpenCycleIT {
         assertEquals(batchB, longValue("select batch_id from breeding_cycles where id = ?", crossB1));
         // 两条多余周期的批次内序位都是 2，但按母兔重排后拿到 R1 与 R2，落进不同批次。
         long crossA2Batch = longValue("select batch_id from breeding_cycles where id = ?", crossA2);
-        long crossB2Batch = longValue("select batch_id from breeding_cycles where id = ?", crossB2);
-        assertNotEquals(crossA2Batch, crossB2Batch, "同一母兔的两条多余周期不得落进同一恢复批次");
+        assertNull(stringValue(
+            "select batch_id from breeding_cycles where id = ?", crossB2
+        ));
+        long crossB2Plan = longValue(
+            "select planned_batch_id from breeding_cycles where id = ?", crossB2
+        );
+        assertNotEquals(crossA2Batch, crossB2Plan,
+            "同一母兔的两条多余周期不得落进同一恢复批次");
 
         assertEquals(batchB, longValue("select batch_id from breeding_cycles where id = ?", tidyCycle));
         assertEquals(1, intValue("select cycle_no from breeding_cycles where id = ?", tidyCycle),

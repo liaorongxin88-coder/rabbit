@@ -85,6 +85,7 @@ void main() {
       gender: '0',
       breed: ' 新西兰白兔 ',
       arrivalMethod: '0',
+      sourceSeller: ' 北方种兔场 ',
       arrivalDate: arrivalDate,
       weight: 4.2,
       growthStage: ' MATURE ',
@@ -119,6 +120,7 @@ void main() {
     expect(create.headers['X-House-Id'], '8');
     expect(create.body['breed'], '新西兰白兔');
     expect(create.body['arrivalDate'], '2025-08-23');
+    expect(create.body['sourceSeller'], '北方种兔场');
     expect(create.body['growthStage'], 'MATURE');
     expect(create.body['reproductiveStage'], 'PREGNANT');
     expect(create.body['reproStage'], 'AWAIT_ESTRUS');

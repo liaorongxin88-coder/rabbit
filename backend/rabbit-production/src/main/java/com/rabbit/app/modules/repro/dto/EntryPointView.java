@@ -14,6 +14,7 @@ import java.util.List;
 public record EntryPointView(
     String stage,
     String stageLabel,
+    boolean batchRequired,
     List<RequiredFactView> requiredFacts
 ) {
 
@@ -31,6 +32,8 @@ public record EntryPointView(
             .map(fact -> new RequiredFactView(fact.name(), fact.label()))
             .sorted(java.util.Comparator.comparing(RequiredFactView::fact))
             .toList();
-        return new EntryPointView(entry.stage().name(), entry.stage().label(), facts);
+        return new EntryPointView(
+            entry.stage().name(), entry.stage().label(), entry.requiresBatch(), facts
+        );
     }
 }

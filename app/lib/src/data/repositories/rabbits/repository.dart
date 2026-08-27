@@ -11,6 +11,7 @@ import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/replacement.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/range_entry.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
   return RabbitRepository(ref.watch(apiClientProvider));
@@ -185,6 +186,8 @@ class RabbitRepository {
     required String gender,
     required String breed,
     required String arrivalMethod,
+    String sourceSeller = '',
+    int? motherId,
     required DateTime arrivalDate,
     required double? weight,
     String? growthStage,
@@ -194,7 +197,11 @@ class RabbitRepository {
     DateTime? stageEnteredAt,
     DateTime? matingDate,
     DateTime? birthDate,
+    int? totalKits,
     int? liveKits,
+    int? keptKits,
+    int? maleRabbitId,
+    MatingMethod? matingMethod,
     String? requestId,
   }) {
     final body = <String, dynamic>{
@@ -202,6 +209,8 @@ class RabbitRepository {
       'type': type,
       'gender': gender,
       'arrivalMethod': arrivalMethod,
+      if (sourceSeller.trim().isNotEmpty) 'sourceSeller': sourceSeller.trim(),
+      if (motherId != null && motherId > 0) 'motherId': motherId,
       'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
       'requestId': requestId ?? _uuid.v4(),
     };
@@ -223,8 +232,20 @@ class RabbitRepository {
       if (birthDate != null) {
         body['birthDate'] = farmDateTimeToEpochMilliseconds(birthDate);
       }
+      if (totalKits != null && totalKits >= 0) {
+        body['totalKits'] = totalKits;
+      }
       if (liveKits != null && liveKits >= 0) {
         body['liveKits'] = liveKits;
+      }
+      if (keptKits != null && keptKits >= 0) {
+        body['keptKits'] = keptKits;
+      }
+      if (maleRabbitId != null && maleRabbitId > 0) {
+        body['maleRabbitId'] = maleRabbitId;
+      }
+      if (matingMethod != null) {
+        body['matingMethod'] = matingMethod.wire;
       }
     }
     final trimmedBreed = breed.trim();

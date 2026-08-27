@@ -145,6 +145,7 @@ public class ReproStateMachineService {
         // 步骤 2：查转换表。非法组合在这里被挡下，且只有这一处判定。
         Transition transition = TransitionTable.require(fromStage, command.getAction(), discriminatorOf(command));
         validateFacts(command, transition, cycle);
+        bindBatchForMatingIfNeeded(cycle, command, occurredAt, operator);
         boolean hasNextTask = willHaveNextTask(command, cycle, transition);
         validateNextReminderOutcome(command, hasNextTask);
 
@@ -181,6 +182,9 @@ public class ReproStateMachineService {
         cycle.setUpdateBy(operator);
         if (reproCycleMapper.applyTransition(cycle, expectedVersion) == 0) {
             throw new BizException(409, "状态已变化，请刷新后重试");
+        }
+        if (transition.closesCycle()) {
+            releaseClosedCycleBatchMembership(cycle, occurredAt, operator);
         }
 
         // 步骤 7：任务流转 —— 完成当前待办，建立下一条。
@@ -228,7 +232,6 @@ public class ReproStateMachineService {
     public ReproResult openCycleAt(OpenCycleCommand command) {
         requireNotNull(command.houseId(), "兔舍");
         requireNotNull(command.motherRabbitId(), "母兔");
-        requireNotNull(command.batchId(), "生产批次");
         requireNotNull(command.targetStage(), "入轨阶段");
 
         ReproEvent replay = findReplay(command.houseId(), command.requestId());
@@ -244,15 +247,36 @@ public class ReproStateMachineService {
         String operator = operatorOf(command.operatorName(), command.userId());
         ReproSettings settings = settingResolver.resolve(command.userId(), command.houseId());
 
-        requireActiveBatchForUpdate(command.houseId(), command.batchId());
+        Long selectedBatchId = command.batchId();
+        Long entryBatchId = entry.requiresBatch() ? selectedBatchId : null;
+        if (entry.requiresBatch() && entryBatchId == null) {
+            throw new BizException(400, "从【" + entry.stage().label() + "】入轨必须选择生产批次");
+        }
+        if (selectedBatchId != null) {
+            requireActiveBatchForUpdate(command.houseId(), selectedBatchId);
+        }
         Rabbit mother = requireEligibleMotherForUpdate(
             command.houseId(), command.motherRabbitId()
         );
+        if (entry.stage() == ReproStage.AWAIT_PALPATION) {
+            eligibilityValidator.validateMating(
+                command.houseId(),
+                command.motherRabbitId(),
+                command.maleRabbitId(),
+                command.stageEnteredAt() != null ? command.stageEnteredAt() : occurredAt
+            );
+        }
         assertPipelineFree(command.houseId(), command.motherRabbitId(), entry);
-        assertBatchCycleFree(command.houseId(), command.batchId(), command.motherRabbitId());
-        ensureActiveBreedingMember(command, entry, mother, occurredAt, operator);
+        if (entryBatchId != null) {
+            assertBatchCycleFree(command.houseId(), entryBatchId, command.motherRabbitId());
+        }
+        if (selectedBatchId != null) {
+            ensureActiveBreedingMember(
+                command.houseId(), selectedBatchId, mother, entry.stage(), occurredAt, operator
+            );
+        }
 
-        ReproCycle cycle = newCycle(command, entry, occurredAt, operator);
+        ReproCycle cycle = newCycle(command, entry, entryBatchId, occurredAt, operator);
 
         // 首任务到期日必须在 insert 之前算：它既是 work_tasks 的 due，也是
         // next_event_date 兼容列的值，而没有 OTA 的老 APK 只认后者。
@@ -292,16 +316,20 @@ public class ReproStateMachineService {
         event.setHouseId(command.houseId());
         event.setCycleId(cycle.getId());
         event.setMotherRabbitId(command.motherRabbitId());
-        event.setBatchId(command.batchId());
+        event.setBatchId(cycle.getBatchId());
         event.setEventType(ReproEventType.CYCLE_START.name());
         event.setFromStage(null);
         event.setToStage(entry.stage().name());
         event.setOccurredAt(occurredAt);
-        event.setPayload(toJson(Map.of("entryStage", entry.stage().name())));
+        Map<String, Object> entryPayload = new LinkedHashMap<>();
+        entryPayload.put("entryStage", entry.stage().name());
+        putIfPresent(entryPayload, "plannedBatchId", cycle.getPlannedBatchId());
+        event.setPayload(toJson(entryPayload));
         event.setOperatorId(command.userId());
         event.setOperatorName(operator);
         event.setRequestId(requireRequestId(command.requestId()));
         insertEvent(event);
+        writeEntryOperationEvent(command, cycle, entry, occurredAt, operator);
 
         Long litterId = null;
         if (litter != null) {
@@ -330,17 +358,24 @@ public class ReproStateMachineService {
         if (!CycleLifecycle.OPEN.name().equals(observed.getLifecycle())) {
             throw new BizException(409, "该生产周期已结束，无法继续操作");
         }
-        if (observed.getBatchId() == null) {
-            throw new BizException(409, "进行中的生产周期未绑定生产批次");
-        }
 
-        requireActiveBatchForUpdate(houseId, observed.getBatchId());
-        requireEligibleMotherForUpdate(houseId, observed.getMotherRabbitId());
-        BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
-            houseId, observed.getBatchId(), observed.getMotherRabbitId()
-        );
-        if (member == null || !"breeding".equals(member.getBatchRole())) {
-            throw new BizException(409, "生产周期对应的繁殖批次成员关系不存在");
+        ReproStage observedStage = ReproStage.parse(observed.getStage());
+        if (observed.getBatchId() == null) {
+            if (observedStage != ReproStage.READY
+                && observedStage != ReproStage.AWAIT_ESTRUS
+                && observedStage != ReproStage.AWAIT_MATING) {
+                throw new BizException(409, "该生产阶段缺少生产批次，请联系管理员修复");
+            }
+            requireEligibleMotherForUpdate(houseId, observed.getMotherRabbitId());
+        } else {
+            requireActiveBatchForUpdate(houseId, observed.getBatchId());
+            requireEligibleMotherForUpdate(houseId, observed.getMotherRabbitId());
+            BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
+                houseId, observed.getBatchId(), observed.getMotherRabbitId()
+            );
+            if (member == null || !"breeding".equals(member.getBatchRole())) {
+                throw new BizException(409, "生产周期对应的繁殖批次成员关系不存在");
+            }
         }
 
         ReproCycle locked = reproCycleMapper.selectByIdForUpdate(houseId, cycleId);
@@ -350,7 +385,7 @@ public class ReproStateMachineService {
         if (!CycleLifecycle.OPEN.name().equals(locked.getLifecycle())) {
             throw new BizException(409, "该生产周期已结束，无法继续操作");
         }
-        if (!observed.getBatchId().equals(locked.getBatchId())
+        if (!java.util.Objects.equals(observed.getBatchId(), locked.getBatchId())
             || !observed.getMotherRabbitId().equals(locked.getMotherRabbitId())) {
             throw new BizException(409, "生产周期归属已变化，请刷新后重试");
         }
@@ -389,14 +424,15 @@ public class ReproStateMachineService {
     }
 
     private void ensureActiveBreedingMember(
-        OpenCycleCommand command,
-        EntryPoint entry,
+        Long houseId,
+        Long batchId,
         Rabbit mother,
+        ReproStage stage,
         Date occurredAt,
         String operator
     ) {
         BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
-            command.houseId(), command.batchId(), command.motherRabbitId()
+            houseId, batchId, mother.getId()
         );
         if (member != null) {
             if (!"breeding".equals(member.getBatchRole())) {
@@ -406,11 +442,11 @@ public class ReproStateMachineService {
         }
 
         BatchRabbit link = new BatchRabbit();
-        link.setBatchId(command.batchId());
+        link.setBatchId(batchId);
         link.setRabbitId(mother.getId());
         link.setJoinReason("生产入轨");
         link.setBatchRole("breeding");
-        link.setCurrentStatus(entry.stage().label());
+        link.setCurrentStatus(stage.label());
         link.setIsActive(Boolean.TRUE);
         link.setJoinDate(occurredAt);
         link.setCreateBy(operator);
@@ -418,16 +454,179 @@ public class ReproStateMachineService {
         batchRabbitMapper.insertBatch(List.of(link));
 
         RabbitStatusHistory history = new RabbitStatusHistory();
-        history.setHouseId(command.houseId());
+        history.setHouseId(houseId);
         history.setRabbitId(mother.getId());
-        history.setBatchId(command.batchId());
+        history.setBatchId(batchId);
         history.setFromStatus(null);
-        history.setToStatus(entry.stage().label());
+        history.setToStatus(stage.label());
         history.setChangeTime(occurredAt);
         history.setReason("生产入轨加入批次");
         history.setCreateBy(operator);
         history.setUpdateBy(operator);
         rabbitStatusHistoryMapper.insert(history);
+    }
+
+    private void bindBatchForMatingIfNeeded(
+        ReproCycle cycle,
+        ReproCommand command,
+        Date occurredAt,
+        String operator
+    ) {
+        if (command.getAction() != ReproAction.MATING) {
+            return;
+        }
+        Long selectedBatchId = command.getBatchId() != null
+            ? command.getBatchId()
+            : cycle.getBatchId() != null
+                ? cycle.getBatchId()
+                : cycle.getPlannedBatchId();
+        if (selectedBatchId == null) {
+            throw new BizException(400, "配种时请选择生产批次");
+        }
+        if (cycle.getBatchId() != null) {
+            if (!cycle.getBatchId().equals(selectedBatchId)) {
+                throw new BizException(409, "生产周期已绑定其他批次，请刷新后重试");
+            }
+            return;
+        }
+
+        requireActiveBatchForUpdate(cycle.getHouseId(), selectedBatchId);
+        assertBatchCycleFree(cycle.getHouseId(), selectedBatchId, cycle.getMotherRabbitId());
+        if (cycle.getPlannedBatchId() != null
+            && !cycle.getPlannedBatchId().equals(selectedBatchId)) {
+            releasePlannedBatchMembership(cycle, occurredAt, operator);
+        }
+        Rabbit mother = requireEligibleMotherForUpdate(
+            cycle.getHouseId(), cycle.getMotherRabbitId()
+        );
+        ensureActiveBreedingMember(
+            cycle.getHouseId(),
+            selectedBatchId,
+            mother,
+            ReproStage.AWAIT_PALPATION,
+            occurredAt,
+            operator
+        );
+        int batchCycleNo = nextCycleNo(
+            cycle.getHouseId(), selectedBatchId, cycle.getMotherRabbitId()
+        );
+        if (reproCycleMapper.assignBatchIfUnboundWithCycleNo(
+            cycle.getHouseId(), cycle.getId(), selectedBatchId, batchCycleNo, operator
+        ) != 1) {
+            throw new BizException(409, "生产周期批次已变化，请刷新后重试");
+        }
+        workTaskWriter.assignPendingCycleTasksToBatch(
+            cycle.getHouseId(), cycle.getId(), selectedBatchId, operator
+        );
+        cycle.setBatchId(selectedBatchId);
+        cycle.setPlannedBatchId(null);
+        cycle.setCycleNo(batchCycleNo);
+    }
+
+    private void releasePlannedBatchMembership(
+        ReproCycle cycle,
+        Date occurredAt,
+        String operator
+    ) {
+        BatchRabbit planned = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
+            cycle.getHouseId(), cycle.getPlannedBatchId(), cycle.getMotherRabbitId()
+        );
+        if (planned != null) {
+            batchRabbitMapper.deactivateIfActive(
+                cycle.getHouseId(),
+                planned.getId(),
+                occurredAt,
+                "配种时改选生产批次",
+                operator
+            );
+        }
+    }
+
+    private void releaseClosedCycleBatchMembership(
+        ReproCycle cycle,
+        Date occurredAt,
+        String operator
+    ) {
+        Long membershipBatchId = cycle.getBatchId() != null
+            ? cycle.getBatchId()
+            : cycle.getPlannedBatchId();
+        if (membershipBatchId == null) {
+            return;
+        }
+        BatchRabbit member = batchRabbitMapper.selectActiveByBatchAndRabbitForUpdate(
+            cycle.getHouseId(), membershipBatchId, cycle.getMotherRabbitId()
+        );
+        if (member == null) {
+            return;
+        }
+        int changed = batchRabbitMapper.deactivateIfActive(
+            cycle.getHouseId(),
+            member.getId(),
+            occurredAt,
+            "生产周期结束",
+            operator
+        );
+        // 多表 UPDATE 同时修改 batch_rabbits 与 rabbits，MySQL 会返回 2。
+        if (changed <= 0) {
+            throw new BizException(409, "批次成员关系已变化，请刷新后重试");
+        }
+
+        RabbitStatusHistory history = new RabbitStatusHistory();
+        history.setHouseId(cycle.getHouseId());
+        history.setRabbitId(cycle.getMotherRabbitId());
+        history.setBatchId(membershipBatchId);
+        history.setFromStatus(ReproStage.parse(cycle.getStage()).label());
+        history.setToStatus(CycleResult.REMOVED.name().equals(cycle.getResult())
+            ? ReproStage.RETIRED.label()
+            : ReproStage.READY.label());
+        history.setChangeTime(occurredAt);
+        history.setReason("生产周期结束，退出原批次");
+        history.setCreateBy(operator);
+        history.setUpdateBy(operator);
+        rabbitStatusHistoryMapper.insert(history);
+    }
+
+    private void writeEntryOperationEvent(
+        OpenCycleCommand command,
+        ReproCycle cycle,
+        EntryPoint entry,
+        Date occurredAt,
+        String operator
+    ) {
+        ReproEventType eventType;
+        ReproStage fromStage;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (entry.stage() == ReproStage.AWAIT_PALPATION) {
+            eventType = ReproEventType.MATING_DONE;
+            fromStage = ReproStage.AWAIT_MATING;
+            putIfPresent(payload, "maleRabbitId", command.maleRabbitId());
+            putIfPresent(payload, "matingMethod", command.matingMethod());
+        } else if (entry.stage() == ReproStage.AWAIT_WEANING) {
+            eventType = ReproEventType.DELIVERY_DONE;
+            fromStage = ReproStage.AWAIT_DELIVERY;
+            putIfPresent(payload, "totalKits", command.totalKits());
+            putIfPresent(payload, "liveKits", command.liveKits());
+            putIfPresent(payload, "keptKits", command.keptKits());
+        } else {
+            return;
+        }
+
+        ReproEvent operation = new ReproEvent();
+        operation.setHouseId(command.houseId());
+        operation.setCycleId(cycle.getId());
+        operation.setMotherRabbitId(cycle.getMotherRabbitId());
+        operation.setBatchId(cycle.getBatchId());
+        operation.setEventType(eventType.name());
+        operation.setFromStage(fromStage.name());
+        operation.setToStage(entry.stage().name());
+        operation.setOccurredAt(
+            command.stageEnteredAt() != null ? command.stageEnteredAt() : occurredAt
+        );
+        operation.setPayload(toJson(payload));
+        operation.setOperatorId(command.userId());
+        operation.setOperatorName(operator);
+        operation.setRequestId(ReproRequestIds.derive(command.requestId(), eventType.name()));
+        insertEvent(operation);
     }
 
     private ReproEvent findReplay(Long houseId, String requestId) {
@@ -775,10 +974,10 @@ public class ReproStateMachineService {
         ReproCycle followUp = new ReproCycle();
         followUp.setHouseId(closed.getHouseId());
         followUp.setTenantId(closed.getTenantId());
-        followUp.setBatchId(closed.getBatchId());
+        followUp.setBatchId(null);
         followUp.setMotherRabbitId(closed.getMotherRabbitId());
         followUp.setCycleNo(nextCycleNo(
-            closed.getHouseId(), closed.getBatchId(), closed.getMotherRabbitId()
+            closed.getHouseId(), null, closed.getMotherRabbitId()
         ));
         followUp.setStage(transition.followUpStage().name());
         followUp.setStageEnteredAt(occurredAt);
@@ -792,24 +991,31 @@ public class ReproStateMachineService {
     private ReproCycle newCycle(
         OpenCycleCommand command,
         EntryPoint entry,
+        Long entryBatchId,
         Date occurredAt,
         String operator
     ) {
         ReproCycle cycle = new ReproCycle();
         cycle.setHouseId(command.houseId());
-        cycle.setBatchId(command.batchId());
+        cycle.setBatchId(entryBatchId);
+        cycle.setPlannedBatchId(entry.requiresBatch() ? null : command.batchId());
         cycle.setMotherRabbitId(command.motherRabbitId());
         cycle.setMaleRabbitId(command.maleRabbitId());
-        cycle.setCycleNo(nextCycleNo(command.houseId(), command.batchId(), command.motherRabbitId()));
+        cycle.setCycleNo(nextCycleNo(command.houseId(), entryBatchId, command.motherRabbitId()));
         cycle.setStage(entry.stage().name());
         cycle.setStageEnteredAt(command.stageEnteredAt() != null ? command.stageEnteredAt() : occurredAt);
         cycle.setLifecycle(CycleLifecycle.OPEN.name());
         cycle.setMatingMethod(command.matingMethod() != null ? command.matingMethod().name() : null);
-        cycle.setMatingDate(command.matingDate());
-        cycle.setBirthDate(command.birthDate());
+        Date enteredAt = command.stageEnteredAt() != null ? command.stageEnteredAt() : occurredAt;
+        cycle.setMatingDate(entry.stage() == ReproStage.AWAIT_PALPATION
+            ? enteredAt
+            : command.matingDate());
+        cycle.setBirthDate(entry.stage() == ReproStage.AWAIT_WEANING
+            ? enteredAt
+            : command.birthDate());
         cycle.setExpectedBirthDate(command.expectedBirthDate() != null
             ? command.expectedBirthDate()
-            : DueDateCalculator.expectedBirthDate(command.matingDate()));
+            : DueDateCalculator.expectedBirthDate(cycle.getMatingDate()));
         cycle.setRequestId(command.requestId());
         cycle.setRemark(command.remark());
         cycle.setCreateBy(operator);
@@ -823,15 +1029,15 @@ public class ReproStateMachineService {
         litter.setCycleId(cycle.getId());
         litter.setMotherRabbitId(command.motherRabbitId());
         litter.setSireRabbitId(command.maleRabbitId());
-        litter.setBatchId(command.batchId());
-        litter.setBirthDate(command.birthDate());
-        litter.setTotalKits(command.totalKits() != null ? command.totalKits() : command.liveKits());
+        litter.setBatchId(cycle.getBatchId());
+        litter.setBirthDate(cycle.getBirthDate());
+        litter.setTotalKits(command.totalKits());
         litter.setLiveKits(command.liveKits());
-        litter.setKeptKits(command.liveKits());
+        litter.setKeptKits(command.keptKits());
         litter.setFosterIn(0);
         litter.setFosterOut(0);
         litter.setLossCount(Math.max(0, orZero(litter.getTotalKits()) - orZero(command.liveKits())));
-        litter.setCurrentNursing(orZero(command.liveKits()));
+        litter.setCurrentNursing(orZero(command.keptKits()));
         litter.setStatus(LitterStatus.NURSING.name());
         litter.setRequestId(command.requestId());
         litter.setCreateBy(operator);
@@ -906,7 +1112,7 @@ public class ReproStateMachineService {
             cycle.getId(),
             litterId,
             cycle.getMotherRabbitId(),
-            cycle.getBatchId(),
+            cycle.getBatchId() != null ? cycle.getBatchId() : cycle.getPlannedBatchId(),
             cageOf(cycle.getHouseId(), cycle.getMotherRabbitId()),
             dueTime,
             operator
@@ -1008,6 +1214,11 @@ public class ReproStateMachineService {
         }
         switch (command.getAction()) {
             case MATING -> {
+                if (cycle.getBatchId() == null
+                    && cycle.getPlannedBatchId() == null
+                    && command.getBatchId() == null) {
+                    throw new BizException(400, "配种时请选择生产批次");
+                }
                 if (command.getMatingMethod() == null) {
                     throw new BizException(400, "请选择配种方式");
                 }
@@ -1108,10 +1319,25 @@ public class ReproStateMachineService {
                 case STAGE_ENTERED_AT -> command.stageEnteredAt() != null || command.occurredAt() != null;
                 case MATING_DATE -> command.matingDate() != null;
                 case BIRTH_DATE -> command.birthDate() != null;
+                case MALE_RABBIT -> command.maleRabbitId() != null;
+                case MATING_METHOD -> command.matingMethod() != null;
+                case TOTAL_KITS -> command.totalKits() != null;
                 case LIVE_KITS -> command.liveKits() != null;
+                case KEPT_KITS -> command.keptKits() != null;
             };
             if (!present) {
                 throw new BizException(400, "从【" + entry.stage().label() + "】入轨需要补录" + fact.label());
+            }
+        }
+        if (entry.stage() == ReproStage.AWAIT_WEANING) {
+            if (command.totalKits() < 0 || command.liveKits() < 0 || command.keptKits() < 0) {
+                throw new BizException(400, "产仔数量不能为负数");
+            }
+            if (command.liveKits() > command.totalKits()) {
+                throw new BizException(400, "活仔数不能大于产仔数");
+            }
+            if (command.keptKits() > command.liveKits()) {
+                throw new BizException(400, "留仔数不能大于活仔数");
             }
         }
     }

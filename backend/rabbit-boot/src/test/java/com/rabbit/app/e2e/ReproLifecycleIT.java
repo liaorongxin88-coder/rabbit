@@ -47,11 +47,22 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Long reopened = jdbc.queryForObject(
             "select id from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
             Long.class, doe);
-        Assertions.assertEquals(2, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
-            "同批次接续周期应递增编号");
-        Assertions.assertEquals(f.batchId, jdbc.queryForObject(
+        Assertions.assertNull(jdbc.queryForObject(
             "select batch_id from breeding_cycles where id = ?", Long.class, reopened
+        ), "休养期不应继续占用上一轮生产批次");
+        act(f, reopened, "b1c2_recovery", obj(
+            "action", "START_CYCLE", "occurredAt", oneMinuteAgo()));
+        act(f, reopened, "b1c2_estrus", obj(
+            "action", "ESTRUS", "occurredAt", oneMinuteAgo()));
+        act(f, reopened, "b1c2_mate", obj(
+            "action", "MATING",
+            "occurredAt", oneMinuteAgo(),
+            "batchId", f.batchId,
+            "maleRabbitId", f.buckId,
+            "matingMethod", "NATURAL"
         ));
+        Assertions.assertEquals(2, intOf("select cycle_no from breeding_cycles where id = ?", reopened),
+            "再次绑定同一生产批次时周期号应递增");
 
         // 换到新批次：编号重新从 1 起算。先用另一头母兔创建批次，避免建批路径
         // 自动为本用例的母兔开周期；关闭接续周期后再显式选择新批次入轨。
@@ -61,6 +72,13 @@ public class ReproLifecycleIT extends E2eTestSupport {
         act(f, reopened, "b1c2_retire", obj("action", "RETIRE", "occurredAt", oneMinuteAgo(),
             "reason", "转批次"));
         long moved = openAt(f, doe, otherBatch, "AWAIT_MATING", "b2c1");
+        act(f, moved, "b2c1_mate", obj(
+            "action", "MATING",
+            "occurredAt", oneMinuteAgo(),
+            "batchId", otherBatch,
+            "maleRabbitId", f.buckId,
+            "matingMethod", "NATURAL"
+        ));
         Assertions.assertEquals(1, intOf("select cycle_no from breeding_cycles where id = ?", moved),
             "换批次后应重新从 1 起算");
     }
@@ -79,7 +97,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
         // 管线周期仍是建批时自动入轨的那一条，留在 f.batchId。
         long nursingBatch = createBatch(f, List.of(), "cull_nursing_batch");
         long nursing = openAt(f, doe, nursingBatch, "AWAIT_WEANING", "cull_nursing",
-            obj("birthDate", oneMinuteAgo(), "totalKits", 7, "liveKits", 6));
+            obj("birthDate", oneMinuteAgo(), "totalKits", 7, "liveKits", 6, "keptKits", 6));
         long pipeline = advanceToMating(f, doe, "cull_pipeline");
         Assertions.assertEquals(2, intOf(
             "select count(*) from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'", doe));
@@ -112,7 +130,14 @@ public class ReproLifecycleIT extends E2eTestSupport {
     void batchCannotBeCompletedWhileCyclesAreStillRunning() {
         Fixture f = fixture("complete", 1);
         long doe = f.doeIds.get(0);
-        advanceToMating(f, doe, "complete_open");
+        long cycle = advanceToMating(f, doe, "complete_open");
+        act(f, cycle, "complete_mating", obj(
+            "action", "MATING",
+            "occurredAt", oneMinuteAgo(),
+            "batchId", f.batchId,
+            "maleRabbitId", f.buckId,
+            "matingMethod", "NATURAL"
+        ));
 
         api.expectError("/api/batches/" + f.batchId + "/complete", HttpMethod.POST,
             f.owner.token, f.houseId, obj(
@@ -219,12 +244,13 @@ public class ReproLifecycleIT extends E2eTestSupport {
      * <p>并且开周期必须与建批同事务：否则部分失败会留下一半母兔入轨、一半没入轨。
      */
     @Test
-    void creatingABreedingBatchPutsEveryDoeIntoThePipeline() {
+    void newDoesEnterThePipelineWithAnOptionalPlannedBatch() {
         Fixture f = fixture("intake", 3);
 
         Assertions.assertEquals(3, intOf(
-            "select count(*) from breeding_cycles where house_id = ? and batch_id = ?"
-                + " and lifecycle = 'OPEN' and stage = 'AWAIT_ESTRUS'", f.houseId, f.batchId),
+            "select count(*) from breeding_cycles where house_id = ? and batch_id is null"
+                + " and planned_batch_id = ? and lifecycle = 'OPEN' and stage = 'AWAIT_ESTRUS'",
+            f.houseId, f.batchId),
             "每头母兔都应有一条待催情的周期");
         Assertions.assertEquals(3, intOf(
             "select count(*) from work_tasks where house_id = ? and batch_id = ?"
@@ -236,8 +262,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
                 "母兔投影列要同步，否则笼位与兔卡看不到阶段");
         }
 
-        // 直接入轨同样必须选择批次。批次先建空壳时，状态机会在同一事务里补上
-        // 繁殖成员关系，不能留下只有周期、没有批次成员的半套数据。
+        // 早期阶段直接入轨时，所选批次只作为计划；周期到配种后才正式绑定。
         long directDoe = createRabbit(f.owner, f.houseId,
             cageIds(f.owner, f.houseId).get(4), "0", "0", "intake_direct");
         long directBatch = createBatch(f, List.of(), "intake_b2");
@@ -250,9 +275,9 @@ public class ReproLifecycleIT extends E2eTestSupport {
         ));
         Assertions.assertEquals(1, intOf(
             "select count(*) from breeding_cycles where mother_rabbit_id = ?"
-                + " and batch_id = ? and lifecycle = 'OPEN'",
+                + " and batch_id is null and planned_batch_id = ? and lifecycle = 'OPEN'",
             directDoe, directBatch),
-            "直接入轨必须绑定所选批次");
+            "待配种入轨应保存计划批次，但不提前建立正式周期绑定");
         Assertions.assertEquals(1, intOf(
             "select count(*) from batch_rabbits where rabbit_id = ? and batch_id = ?"
                 + " and batch_role = 'breeding' and is_active = true",
@@ -261,25 +286,26 @@ public class ReproLifecycleIT extends E2eTestSupport {
     }
 
     @Test
-    void cannotRemoveBreedingMemberWhileItsBatchCycleIsOpen() {
-        Fixture f = fixture("remove_open_member", 1);
+    void plannedBatchMemberCanBeRemovedBeforeMating() {
+        Fixture f = fixture("remove_planned_member", 1);
         long doe = f.doeIds.get(0);
 
-        api.expectError(
+        api.deleteOk(
             "/api/batches/" + f.batchId + "/members/" + doe
-                + "?requestId=" + requestId("remove_open_member"),
-            org.springframework.http.HttpMethod.DELETE,
+                + "?requestId=" + requestId("remove_planned_member"),
             f.owner.token,
-            f.houseId,
-            null,
-            409,
-            "进行中生产周期"
+            f.houseId
         );
 
-        Assertions.assertEquals(1, intOf(
+        Assertions.assertEquals(0, intOf(
             "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
                 + " and is_active = true",
             f.batchId, doe
+        ));
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from breeding_cycles where mother_rabbit_id = ?"
+                + " and batch_id is null and planned_batch_id = ? and lifecycle = 'OPEN'",
+            doe, f.batchId
         ));
     }
 
@@ -302,7 +328,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
         // 同上：并行的哺乳周期归另一个批次（V44）。
         long nursingBatch = createBatch(f, List.of(), "depart_nursing_batch");
         long nursing = openAt(f, doe, nursingBatch, "AWAIT_WEANING", "depart_nursing",
-            obj("birthDate", oneMinuteAgo(), "totalKits", 6, "liveKits", 5));
+            obj("birthDate", oneMinuteAgo(), "totalKits", 6, "liveKits", 5, "keptKits", 5));
         advanceToMating(f, doe, "depart_pipeline");
         Assertions.assertEquals(2, intOf(
             "select count(*) from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
@@ -465,6 +491,50 @@ public class ReproLifecycleIT extends E2eTestSupport {
             "改名后提醒里的批次编号要跟着变");
     }
 
+    @Test
+    void newDoeEntryPersistsSourceProfileAndStartsRecovery() {
+        Fixture f = fixture("doe_profile", 1);
+        long cageId = cageIds(f.owner, f.houseId).get(2);
+        Date enteredAt = new Date(oneMinuteAgo());
+
+        JsonNode created = api.postOk("/api/rabbits", f.owner.token, f.houseId, obj(
+            "cageId", cageId,
+            "type", "0",
+            "gender", "0",
+            "breed", "新西兰白",
+            "arrivalMethod", "0",
+            "sourceSeller", "北方种兔场",
+            "arrivalDate", enteredAt,
+            "weight", 3.8,
+            "reproStage", "READY",
+            "batchId", f.batchId,
+            "stageEnteredAt", enteredAt,
+            "requestId", requestId("doe_profile_create")
+        ));
+        long doeId = created.get("id").asLong();
+
+        Assertions.assertEquals("北方种兔场", strOf(
+            "select source_seller from rabbits where id = ?", doeId
+        ));
+        Assertions.assertEquals("MATURE", strOf(
+            "select growth_stage from rabbits where id = ?", doeId
+        ));
+        Assertions.assertEquals("READY", strOf(
+            "select current_stage from rabbits where id = ?", doeId
+        ));
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from breeding_cycles where mother_rabbit_id = ?"
+                + " and stage = 'READY' and batch_id is null and planned_batch_id = ?",
+            doeId,
+            f.batchId
+        ));
+        Assertions.assertEquals(1, intOf(
+            "select count(*) from work_tasks where rabbit_id = ? and task_type = 'RECOVERY'"
+                + " and status = 'PENDING'",
+            doeId
+        ));
+    }
+
     private int reminderCount(UserSession owner, long houseId, long rabbitId) {
         int count = 0;
         for (JsonNode event : api.getOk("/api/events", owner.token, houseId)) {
@@ -537,7 +607,17 @@ public class ReproLifecycleIT extends E2eTestSupport {
         }
         Fixture f = new Fixture(owner, houseId, 0, buckId, does);
         long batchId = createBatch(f, does, prefix + "_batch");
-        return new Fixture(owner, houseId, batchId, buckId, does);
+        Fixture planned = new Fixture(owner, houseId, batchId, buckId, does);
+        for (int index = 0; index < does.size(); index++) {
+            openAt(
+                planned,
+                does.get(index),
+                batchId,
+                "AWAIT_ESTRUS",
+                prefix + "_entry_" + index
+            );
+        }
+        return planned;
     }
 
     private record Fixture(
@@ -578,12 +658,12 @@ public class ReproLifecycleIT extends E2eTestSupport {
                 "requestId", requestId("empty_add")
         ));
 
-        Assertions.assertEquals("AWAIT_ESTRUS",
-                jdbc.queryForObject(
-                        "select stage from breeding_cycles where batch_id = ? and mother_rabbit_id = ?",
-                        String.class, batchId, doeId),
-                "追加的母兔必须当场入轨");
-        Assertions.assertEquals(1,
+        Assertions.assertEquals(0,
+                (int) jdbc.queryForObject(
+                        "select count(*) from breeding_cycles where mother_rabbit_id = ?",
+                        Integer.class, doeId),
+                "加入批次只建立计划成员关系，不应强制开启生产周期");
+        Assertions.assertEquals(0,
                 (int) jdbc.queryForObject(
                         "select count(*) from work_tasks where house_id = ? and rabbit_id = ? and status = 'PENDING'",
                         Integer.class, houseId, doeId));

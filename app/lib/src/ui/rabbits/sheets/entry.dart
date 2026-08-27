@@ -41,6 +41,24 @@ const _replacementReproductiveStageOptions = <_StageOption>[
   _StageOption('RESERVE', '后备'),
 ];
 
+List<Rabbit> _availableBreedingMales(
+  Iterable<Rabbit> rabbits, {
+  required int houseId,
+}) {
+  final result = rabbits
+      .where(
+        (rabbit) =>
+            rabbit.id > 0 &&
+            rabbit.houseId == houseId &&
+            rabbit.isActive &&
+            rabbit.type == '0' &&
+            rabbit.gender == '1',
+      )
+      .toList();
+  result.sort((left, right) => left.id.compareTo(right.id));
+  return result;
+}
+
 List<Batch> _inProgressBatches(Iterable<Batch> batches) {
   final result = batches
       .where((batch) => batch.id > 0 && batch.status.trim() == '进行中')
@@ -308,12 +326,16 @@ class _ExistingRabbitReproEntrySheet extends ConsumerStatefulWidget {
 
 class _ExistingRabbitReproEntrySheetState
     extends ConsumerState<_ExistingRabbitReproEntrySheet> {
+  final _totalKitsController = TextEditingController();
   final _liveKitsController = TextEditingController();
+  final _keptKitsController = TextEditingController();
   String? _stage;
   int? _batchId;
   DateTime? _stageEnteredAt;
   DateTime? _matingDate;
   DateTime? _birthDate;
+  int? _maleRabbitId;
+  MatingMethod _matingMethod = MatingMethod.natural;
   var _saving = false;
 
   @override
@@ -327,7 +349,9 @@ class _ExistingRabbitReproEntrySheetState
 
   @override
   void dispose() {
+    _totalKitsController.dispose();
     _liveKitsController.dispose();
+    _keptKitsController.dispose();
     super.dispose();
   }
 
@@ -335,6 +359,8 @@ class _ExistingRabbitReproEntrySheetState
   Widget build(BuildContext context) {
     final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
     final batchesAsync = ref.watch(houseBatchesProvider(widget.houseId));
+    final rabbitsAsync =
+        ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     return AnimatedPadding(
@@ -396,7 +422,8 @@ class _ExistingRabbitReproEntrySheetState
                       icon: Icons.error_outline,
                       text: '生产阶段读取失败：$error',
                     ),
-                    data: (entries) => _buildEntryFields(entries, batchesAsync),
+                    data: (entries) =>
+                        _buildEntryFields(entries, batchesAsync, rabbitsAsync),
                   ),
                 ),
               ),
@@ -411,6 +438,7 @@ class _ExistingRabbitReproEntrySheetState
   Widget _buildEntryFields(
     List<ReproEntryPoint> entries,
     AsyncValue<List<Batch>> batchesAsync,
+    AsyncValue<List<Rabbit>> rabbitsAsync,
   ) {
     if (entries.isEmpty) {
       return const InfoNotice(
@@ -448,7 +476,10 @@ class _ExistingRabbitReproEntrySheetState
         ),
         if (selected != null) ...[
           const SizedBox(height: 12),
-          _buildBatchField(batchesAsync),
+          _buildBatchField(
+            batchesAsync,
+            required: selected.batchRequired,
+          ),
           const SizedBox(height: 12),
           _buildDateField(
             key: const ValueKey('existing-rabbit-stage-entered-at'),
@@ -474,19 +505,115 @@ class _ExistingRabbitReproEntrySheetState
               onPicked: (value) => setState(() => _birthDate = value),
             ),
           ],
+          if (selected.requires('MALE_RABBIT') ||
+              selected.requires('MATING_METHOD')) ...[
+            const SizedBox(height: 12),
+            _buildMatingFields(rabbitsAsync),
+          ],
+          if (selected.requires('TOTAL_KITS')) ...[
+            const SizedBox(height: 12),
+            _buildCountField(
+              key: const ValueKey('existing-rabbit-total-kits'),
+              label: '产仔数',
+              controller: _totalKitsController,
+            ),
+          ],
           if (selected.requires('LIVE_KITS')) ...[
             const SizedBox(height: 12),
-            TextField(
+            _buildCountField(
               key: const ValueKey('existing-rabbit-live-kits'),
+              label: '活仔数',
               controller: _liveKitsController,
-              enabled: !_saving,
-              decoration: const InputDecoration(labelText: '活仔数'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+          if (selected.requires('KEPT_KITS')) ...[
+            const SizedBox(height: 12),
+            _buildCountField(
+              key: const ValueKey('existing-rabbit-kept-kits'),
+              label: '留仔数',
+              controller: _keptKitsController,
             ),
           ],
         ],
       ],
+    );
+  }
+
+  Widget _buildMatingFields(AsyncValue<List<Rabbit>> rabbitsAsync) {
+    return rabbitsAsync.when(
+      loading: () => const InfoNotice(
+        icon: Icons.hourglass_empty,
+        text: '正在读取可用种公兔…',
+      ),
+      error: (_, __) => const InfoNotice(
+        icon: Icons.error_outline,
+        text: '种公兔读取失败，请刷新后重试。',
+      ),
+      data: (rabbits) {
+        final males = _availableBreedingMales(
+          rabbits,
+          houseId: widget.houseId,
+        );
+        return Column(
+          children: [
+            DropdownButtonFormField<MatingMethod>(
+              key: const ValueKey('existing-rabbit-mating-method'),
+              value: _matingMethod,
+              decoration: const InputDecoration(labelText: '配种方式'),
+              items: [
+                for (final method in MatingMethod.values)
+                  DropdownMenuItem(value: method, child: Text(method.label)),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(
+                        () => _matingMethod = value ?? _matingMethod,
+                      ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              key: const ValueKey('existing-rabbit-mating-male'),
+              value: males.any((rabbit) => rabbit.id == _maleRabbitId)
+                  ? _maleRabbitId
+                  : null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '配种公兔',
+                hintText: '请选择种公兔',
+              ),
+              items: [
+                for (final male in males)
+                  DropdownMenuItem(
+                    value: male.id,
+                    child: Text(
+                      '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _maleRabbitId = value),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCountField({
+    required Key key,
+    required String label,
+    required TextEditingController controller,
+  }) {
+    return TextField(
+      key: key,
+      controller: controller,
+      enabled: !_saving,
+      decoration: InputDecoration(labelText: label),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
     );
   }
 
@@ -532,7 +659,10 @@ class _ExistingRabbitReproEntrySheetState
     );
   }
 
-  Widget _buildBatchField(AsyncValue<List<Batch>> batchesAsync) {
+  Widget _buildBatchField(
+    AsyncValue<List<Batch>> batchesAsync, {
+    required bool required,
+  }) {
     return batchesAsync.when(
       loading: () => const InfoNotice(
         icon: Icons.hourglass_empty,
@@ -557,9 +687,9 @@ class _ExistingRabbitReproEntrySheetState
           key: const ValueKey('existing-rabbit-repro-batch'),
           value: selectedId,
           isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '批次',
-            hintText: '请选择进行中的批次',
+          decoration: InputDecoration(
+            labelText: required ? '生产批次' : '计划批次（可选）',
+            hintText: required ? '请选择进行中的生产批次' : '可先选择计划进入的批次',
           ),
           items: [
             for (final batch in activeBatches)
@@ -626,7 +756,7 @@ class _ExistingRabbitReproEntrySheetState
       return;
     }
     final batchId = _selectedInProgressBatchId();
-    if (batchId == null) {
+    if (selected.batchRequired && batchId == null) {
       _showMessage('请选择进行中的批次');
       return;
     }
@@ -646,7 +776,11 @@ class _ExistingRabbitReproEntrySheetState
             occurredAt: _stageEnteredAt,
             matingDate: _matingDate,
             birthDate: _birthDate,
+            totalKits: int.tryParse(_totalKitsController.text.trim()),
             liveKits: int.tryParse(_liveKitsController.text.trim()),
+            keptKits: int.tryParse(_keptKitsController.text.trim()),
+            maleRabbitId: _maleRabbitId,
+            matingMethod: _matingMethod,
           );
       if (!mounted) {
         return;
@@ -686,7 +820,11 @@ class _ExistingRabbitReproEntrySheetState
         _batchId = null;
         _matingDate = null;
         _birthDate = null;
+        _maleRabbitId = null;
+        _matingMethod = MatingMethod.natural;
+        _totalKitsController.clear();
         _liveKitsController.clear();
+        _keptKitsController.clear();
       }
       _stage = value;
       _stageEnteredAt = value == null ? null : _farmToday();
@@ -723,7 +861,11 @@ class _ExistingRabbitReproEntrySheetState
         'STAGE_ENTERED_AT' => _stageEnteredAt != null,
         'MATING_DATE' || 'GESTATION_ANCHOR' => _matingDate != null,
         'BIRTH_DATE' => _birthDate != null,
+        'MALE_RABBIT' => _maleRabbitId != null,
+        'MATING_METHOD' => true,
+        'TOTAL_KITS' => _totalKitsController.text.trim().isNotEmpty,
         'LIVE_KITS' => _liveKitsController.text.trim().isNotEmpty,
+        'KEPT_KITS' => _keptKitsController.text.trim().isNotEmpty,
         _ => true,
       };
       if (!filled) {
@@ -879,7 +1021,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   final _formKey = GlobalKey<FormState>();
   final _breedController = TextEditingController();
   final _weightController = TextEditingController();
+  final _sourceSellerController = TextEditingController();
+  final _totalKitsController = TextEditingController();
   final _liveKitsController = TextEditingController();
+  final _keptKitsController = TextEditingController();
   late String _type;
   var _gender = '0';
   var _arrivalMethod = '0';
@@ -893,6 +1038,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   DateTime? _stageEnteredAt;
   DateTime? _matingDate;
   DateTime? _birthDate;
+  int? _entryMaleRabbitId;
+  MatingMethod _entryMatingMethod = MatingMethod.natural;
+  int? _sourceMotherId;
   var _saving = false;
 
   bool get _isEdit => widget.rabbit != null;
@@ -917,6 +1065,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       _gender = rabbit.gender;
       _arrivalMethod =
           rabbit.arrivalMethod.isEmpty ? '0' : rabbit.arrivalMethod;
+      _sourceSellerController.text = rabbit.sourceSeller;
+      _sourceMotherId = rabbit.motherId;
       _breedController.text = rabbit.breed;
       final weight = rabbit.weight;
       if (weight != null && weight > 0) {
@@ -941,7 +1091,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   void dispose() {
     _breedController.dispose();
     _weightController.dispose();
+    _sourceSellerController.dispose();
+    _totalKitsController.dispose();
     _liveKitsController.dispose();
+    _keptKitsController.dispose();
     super.dispose();
   }
 
@@ -1016,6 +1169,19 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   }
 
   Widget _buildFormBody(BuildContext context) {
+    final rabbits =
+        ref.watch(allActiveHouseRabbitsProvider(widget.houseId)).valueOrNull ??
+            const <Rabbit>[];
+    final sourceMothers = rabbits
+        .where(
+          (rabbit) =>
+              rabbit.id > 0 &&
+              rabbit.isActive &&
+              rabbit.gender == '0' &&
+              rabbit.type == '0',
+        )
+        .toList()
+      ..sort((left, right) => left.id.compareTo(right.id));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1085,6 +1251,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 if (text.length > 100) {
                   return '品种不能超过 100 字';
                 }
+                if (_canOpenReproEntry && _reproStage != null && text.isEmpty) {
+                  return '请填写种母兔品种';
+                }
                 return null;
               },
             ),
@@ -1103,21 +1272,27 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _ResponsiveFieldRow(
           children: [
             DropdownButtonFormField<String>(
-              value: _isEdit ? _arrivalMethod : '0',
+              key: const ValueKey('rabbit-entry-source-method'),
+              value: _arrivalMethod,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: '来源'),
-              items: [
-                const DropdownMenuItem(value: '0', child: Text('购入')),
-                if (_isEdit)
-                  const DropdownMenuItem(value: '1', child: Text('场内生产')),
+              decoration: const InputDecoration(labelText: '来源方式'),
+              items: const [
+                DropdownMenuItem(value: '0', child: Text('购入')),
+                DropdownMenuItem(value: '1', child: Text('自留')),
               ],
-              onChanged: _isEdit && !_saving
-                  ? (value) => setState(
-                        () => _arrivalMethod = value ?? _arrivalMethod,
-                      )
-                  : null,
+              onChanged: _saving || (!_isEdit && !_canOpenReproEntry)
+                  ? null
+                  : (value) => setState(() {
+                        _arrivalMethod = value ?? _arrivalMethod;
+                        if (_arrivalMethod == '0') {
+                          _sourceMotherId = null;
+                        } else {
+                          _sourceSellerController.clear();
+                        }
+                      }),
             ),
             TextFormField(
+              key: const ValueKey('rabbit-entry-weight'),
               controller: _weightController,
               decoration: const InputDecoration(
                 labelText: '体重',
@@ -1131,9 +1306,58 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   RegExp(r'^\d*\.?\d{0,2}'),
                 ),
               ],
+              validator: (value) {
+                if (!_canOpenReproEntry || _reproStage == null) {
+                  return null;
+                }
+                final weight = double.tryParse(value?.trim() ?? '');
+                return weight == null || weight <= 0 ? '请填写种母兔体重' : null;
+              },
             ),
           ],
         ),
+        if (_canOpenReproEntry && _arrivalMethod == '0') ...[
+          const SizedBox(height: 12),
+          TextFormField(
+            key: const ValueKey('rabbit-entry-source-seller'),
+            controller: _sourceSellerController,
+            decoration: const InputDecoration(labelText: '供应方'),
+            maxLength: 120,
+            validator: (value) {
+              if (_reproStage != null &&
+                  (value == null || value.trim().isEmpty)) {
+                return '请填写购入种母兔的供应方';
+              }
+              return null;
+            },
+          ),
+        ],
+        if (_canOpenReproEntry && _arrivalMethod == '1') ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int?>(
+            key: const ValueKey('rabbit-entry-source-mother'),
+            value: sourceMothers.any((rabbit) => rabbit.id == _sourceMotherId)
+                ? _sourceMotherId
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: '母兔（可选）'),
+            items: [
+              const DropdownMenuItem<int?>(value: null, child: Text('不关联母兔')),
+              for (final mother in sourceMothers)
+                DropdownMenuItem<int?>(
+                  value: mother.id,
+                  child: Text(
+                    '兔 #${mother.id} · ${mother.breed.isEmpty ? '未填品种' : mother.breed}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _sourceMotherId = value),
+          ),
+        ],
       ],
     );
   }
@@ -1141,6 +1365,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   Widget _buildStageFields(BuildContext context) {
     final reproductiveOptions = _reproductiveStageOptions;
     final fixedReproductiveStage = _type == '1';
+    final breedingDoe = _type == '0' && _gender == '0';
     // 种母兔的选项为空（阶段由生产流程维护），不能再渲染一个空下拉给用户点。
     final hasReproductiveStage = _type != '2' &&
         (fixedReproductiveStage || reproductiveOptions.isNotEmpty);
@@ -1154,22 +1379,26 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           '记录入栏时状态；后续繁殖进度由批次流程维护。',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const SizedBox(height: 10),
-        DropdownButtonFormField<String>(
-          key: const ValueKey('rabbit-growth-stage'),
-          value: _growthStage,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '成长阶段',
-            hintText: '请选择成长阶段',
+        if (!breedingDoe) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('rabbit-growth-stage'),
+            value: _growthStage,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: '成长阶段',
+              hintText: '请选择成长阶段',
+            ),
+            items: [
+              for (final option in _growthStageOptions)
+                DropdownMenuItem(
+                    value: option.value, child: Text(option.label)),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _growthStage = value),
           ),
-          items: [
-            for (final option in _growthStageOptions)
-              DropdownMenuItem(value: option.value, child: Text(option.label)),
-          ],
-          onChanged:
-              _saving ? null : (value) => setState(() => _growthStage = value),
-        ),
+        ],
         if (hasReproductiveStage) ...[
           const SizedBox(height: 12),
           if (fixedReproductiveStage)
@@ -1219,6 +1448,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   Widget _buildReproEntryFields(BuildContext context) {
     final entriesAsync = ref.watch(reproEntryPointsProvider(widget.houseId));
     final batchesAsync = ref.watch(houseBatchesProvider(widget.houseId));
+    final rabbitsAsync =
+        ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     return entriesAsync.when(
       loading: () => const InfoNotice(
         icon: Icons.hourglass_empty,
@@ -1263,7 +1494,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             ),
             if (selected != null) ...[
               const SizedBox(height: 12),
-              _buildReproBatchField(batchesAsync),
+              _buildReproBatchField(
+                batchesAsync,
+                required: selected.batchRequired,
+              ),
               const SizedBox(height: 12),
               _buildDateField(
                 key: const ValueKey('rabbit-stage-entered-at'),
@@ -1289,15 +1523,33 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   onPicked: (value) => setState(() => _birthDate = value),
                 ),
               ],
+              if (selected.requires('MALE_RABBIT') ||
+                  selected.requires('MATING_METHOD')) ...[
+                const SizedBox(height: 12),
+                _buildEntryMatingFields(rabbitsAsync),
+              ],
+              if (selected.requires('TOTAL_KITS')) ...[
+                const SizedBox(height: 12),
+                _buildEntryCountField(
+                  key: const ValueKey('rabbit-total-kits'),
+                  label: '产仔数',
+                  controller: _totalKitsController,
+                ),
+              ],
               if (selected.requires('LIVE_KITS')) ...[
                 const SizedBox(height: 12),
-                TextFormField(
+                _buildEntryCountField(
                   key: const ValueKey('rabbit-live-kits'),
+                  label: '活仔数',
                   controller: _liveKitsController,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(labelText: '活仔数'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+              ],
+              if (selected.requires('KEPT_KITS')) ...[
+                const SizedBox(height: 12),
+                _buildEntryCountField(
+                  key: const ValueKey('rabbit-kept-kits'),
+                  label: '留仔数',
+                  controller: _keptKitsController,
                 ),
               ],
             ],
@@ -1307,7 +1559,88 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     );
   }
 
-  Widget _buildReproBatchField(AsyncValue<List<Batch>> batchesAsync) {
+  Widget _buildEntryMatingFields(AsyncValue<List<Rabbit>> rabbitsAsync) {
+    return rabbitsAsync.when(
+      loading: () => const InfoNotice(
+        icon: Icons.hourglass_empty,
+        text: '正在读取可用种公兔…',
+      ),
+      error: (_, __) => const InfoNotice(
+        icon: Icons.error_outline,
+        text: '种公兔读取失败，请刷新后重试。',
+      ),
+      data: (rabbits) {
+        final males = _availableBreedingMales(
+          rabbits,
+          houseId: widget.houseId,
+        );
+        return Column(
+          children: [
+            DropdownButtonFormField<MatingMethod>(
+              key: const ValueKey('rabbit-entry-mating-method'),
+              value: _entryMatingMethod,
+              decoration: const InputDecoration(labelText: '配种方式'),
+              items: [
+                for (final method in MatingMethod.values)
+                  DropdownMenuItem(value: method, child: Text(method.label)),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(
+                        () => _entryMatingMethod = value ?? _entryMatingMethod,
+                      ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              key: const ValueKey('rabbit-entry-mating-male'),
+              value: males.any((rabbit) => rabbit.id == _entryMaleRabbitId)
+                  ? _entryMaleRabbitId
+                  : null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '配种公兔',
+                hintText: '请选择种公兔',
+              ),
+              items: [
+                for (final male in males)
+                  DropdownMenuItem(
+                    value: male.id,
+                    child: Text(
+                      '兔 #${male.id} · ${male.breed.isEmpty ? '未填品种' : male.breed}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _entryMaleRabbitId = value),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEntryCountField({
+    required Key key,
+    required String label,
+    required TextEditingController controller,
+  }) {
+    return TextFormField(
+      key: key,
+      controller: controller,
+      enabled: !_saving,
+      decoration: InputDecoration(labelText: label),
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+    );
+  }
+
+  Widget _buildReproBatchField(
+    AsyncValue<List<Batch>> batchesAsync, {
+    required bool required,
+  }) {
     return batchesAsync.when(
       loading: () => const InfoNotice(
         icon: Icons.hourglass_empty,
@@ -1332,9 +1665,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           key: const ValueKey('rabbit-repro-batch'),
           value: selectedId,
           isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '批次',
-            hintText: '请选择进行中的批次',
+          decoration: InputDecoration(
+            labelText: required ? '生产批次' : '计划批次（可选）',
+            hintText: required ? '请选择进行中的生产批次' : '可先选择计划进入的批次',
           ),
           items: [
             for (final batch in activeBatches)
@@ -1360,7 +1693,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _batchId = null;
         _matingDate = null;
         _birthDate = null;
+        _entryMaleRabbitId = null;
+        _entryMatingMethod = MatingMethod.natural;
+        _totalKitsController.clear();
         _liveKitsController.clear();
+        _keptKitsController.clear();
       }
       _reproStage = value;
       _stageEnteredAt = value == null ? null : _farmToday();
@@ -1526,7 +1863,9 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               type: _type,
               gender: _gender,
               breed: _breedController.text,
-              arrivalMethod: '0',
+              arrivalMethod: _arrivalMethod,
+              sourceSeller: _sourceSellerController.text,
+              motherId: _sourceMotherId,
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
@@ -1536,7 +1875,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               stageEnteredAt: _stageEnteredAt,
               matingDate: _matingDate,
               birthDate: _birthDate,
+              totalKits: int.tryParse(_totalKitsController.text.trim()),
               liveKits: int.tryParse(_liveKitsController.text.trim()),
+              keptKits: int.tryParse(_keptKitsController.text.trim()),
+              maleRabbitId: _entryMaleRabbitId,
+              matingMethod: _entryMatingMethod,
             );
       }
       ref.invalidate(houseRabbitsProvider(widget.houseId));
@@ -1634,21 +1977,25 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     if (!_canOpenReproEntry || _reproStage == null) {
       return null;
     }
-    if (_selectedInProgressBatchId() == null) {
-      return '请选择进行中的批次';
-    }
     final entries =
         ref.read(reproEntryPointsProvider(widget.houseId)).valueOrNull;
     final selected = entries == null ? null : _selectedEntryPoint(entries);
     if (selected == null) {
       return null;
     }
+    if (selected.batchRequired && _selectedInProgressBatchId() == null) {
+      return '请选择进行中的批次';
+    }
     for (final fact in selected.requiredFacts) {
       final filled = switch (fact.fact) {
         'STAGE_ENTERED_AT' => _stageEnteredAt != null,
         'MATING_DATE' || 'GESTATION_ANCHOR' => _matingDate != null,
         'BIRTH_DATE' => _birthDate != null,
+        'MALE_RABBIT' => _entryMaleRabbitId != null,
+        'MATING_METHOD' => true,
+        'TOTAL_KITS' => _totalKitsController.text.trim().isNotEmpty,
         'LIVE_KITS' => _liveKitsController.text.trim().isNotEmpty,
+        'KEPT_KITS' => _keptKitsController.text.trim().isNotEmpty,
         _ => true,
       };
       if (!filled) {

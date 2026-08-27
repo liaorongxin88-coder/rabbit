@@ -64,6 +64,7 @@ public class RabbitController {
         r.setGender(req.getGender());
         r.setBreed(req.getBreed());
         r.setArrivalMethod(req.getArrivalMethod());
+        r.setSourceSeller(req.getSourceSeller());
         r.setArrivalDate(req.getArrivalDate());
         r.setWeight(req.getWeight());
         r.setGrowthStage(req.getGrowthStage());
@@ -74,7 +75,11 @@ public class RabbitController {
             req.getStageEnteredAt(),
             req.getMatingDate(),
             req.getBirthDate(),
-            req.getLiveKits()
+            req.getTotalKits(),
+            req.getLiveKits(),
+            req.getKeptKits(),
+            req.getMaleRabbitId(),
+            req.getMatingMethod()
         );
         return ApiResponse.ok(
             rabbitService.createRabbit(userId, houseId, r, reproEntry, req.getRequestId())

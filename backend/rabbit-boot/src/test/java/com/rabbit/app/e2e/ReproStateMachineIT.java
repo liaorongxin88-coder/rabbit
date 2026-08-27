@@ -111,7 +111,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
             b -> b.occurredAt(weaningAt).weanedCount(8).avgWeaningWeight(0.6));
         Assertions.assertEquals(opened.cycleId(), weaning.cycleId(), "动作周期仍应是刚完成的断奶周期");
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
-        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, weaning.stage());
+        Assertions.assertEquals(ReproStage.READY, weaning.stage());
         Assertions.assertEquals(
             6,
             daysBetween(weaningAt, weaning.nextDueTime()),
@@ -123,10 +123,33 @@ public class ReproStateMachineIT extends E2eTestSupport {
                 "select result from breeding_cycles where id = ?", String.class, opened.cycleId()
             )
         );
-        // 断奶后自动接续下一轮：母兔不会掉出流程。
-        Assertions.assertNotNull(weaning.followUpCycleId(), "断奶应自动开启下一轮周期");
+        // 断奶后进入真实休养期，到期任务再自动推进待催情。
+        Assertions.assertNotNull(weaning.followUpCycleId(), "断奶应开启休养周期");
         Assertions.assertEquals(weaning.followUpCycleId(), weaning.currentCycleId());
-        assertProjection(fixture, "AWAIT_ESTRUS", weaning.followUpCycleId());
+        assertProjection(fixture, "READY", weaning.followUpCycleId());
+        assertSinglePendingTask(fixture.houseId, weaning.followUpCycleId(), "RECOVERY");
+        Assertions.assertEquals(0, jdbc.queryForObject(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and is_active = true",
+            Integer.class,
+            fixture.batchId,
+            fixture.doeId
+        ));
+
+        ReproResult recovered = apply(
+            fixture,
+            weaning.followUpCycleId(),
+            ReproAction.START_CYCLE,
+            "full_recovery_done",
+            b -> b
+        );
+        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, recovered.stage());
+        assertSinglePendingTask(fixture.houseId, recovered.cycleId(), "ESTRUS");
+        Assertions.assertNull(jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?",
+            Long.class,
+            recovered.cycleId()
+        ));
     }
 
     @Test
@@ -383,9 +406,10 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
-    void actionRejectsInactiveBatchOrMissingBreedingMembership() {
+    void matingRejectsInactiveBatchAndRestoresRemovedPlannedMembership() {
         Fixture inactiveBatch = fixture("repro_inactive_batch");
         ReproResult inactiveCycle = openAtEstrus(inactiveBatch, "inactive_open");
+        apply(inactiveBatch, inactiveCycle.cycleId(), ReproAction.ESTRUS, "inactive_estrus", b -> b);
         jdbc.update(
             "update batches set status = '已完成', end_date = now() where id = ?",
             inactiveBatch.batchId
@@ -395,32 +419,44 @@ public class ReproStateMachineIT extends E2eTestSupport {
             stateMachine.apply(command(
                 inactiveBatch,
                 inactiveCycle.cycleId(),
-                ReproAction.ESTRUS,
+                ReproAction.MATING,
                 requestId("inactive_action")
-            ).build())
+            ).batchId(inactiveBatch.batchId)
+                .maleRabbitId(inactiveBatch.sireId)
+                .matingMethod(MatingMethod.NATURAL)
+                .build())
         );
         Assertions.assertEquals(409, inactiveError.getCode());
         Assertions.assertTrue(inactiveError.getMessage().contains("不在进行中"));
 
-        Fixture missingMember = fixture("repro_missing_member");
-        ReproResult missingCycle = openAtEstrus(missingMember, "missing_open");
+        Fixture removedPlan = fixture("repro_removed_plan");
+        ReproResult removedPlanCycle = openAtEstrus(removedPlan, "removed_plan_open");
+        apply(removedPlan, removedPlanCycle.cycleId(), ReproAction.ESTRUS,
+            "removed_plan_estrus", b -> b);
         jdbc.update(
             "update batch_rabbits set is_active = false, exit_date = now()"
                 + " where batch_id = ? and rabbit_id = ? and is_active = true",
-            missingMember.batchId,
-            missingMember.doeId
+            removedPlan.batchId,
+            removedPlan.doeId
         );
 
-        BizException memberError = Assertions.assertThrows(BizException.class, () ->
-            stateMachine.apply(command(
-                missingMember,
-                missingCycle.cycleId(),
-                ReproAction.ESTRUS,
-                requestId("missing_action")
-            ).build())
+        ReproResult mating = apply(
+            removedPlan,
+            removedPlanCycle.cycleId(),
+            ReproAction.MATING,
+            "removed_plan_mating",
+            b -> b.batchId(removedPlan.batchId)
+                .maleRabbitId(removedPlan.sireId)
+                .matingMethod(MatingMethod.NATURAL)
         );
-        Assertions.assertEquals(409, memberError.getCode());
-        Assertions.assertTrue(memberError.getMessage().contains("成员关系不存在"));
+        Assertions.assertEquals(ReproStage.AWAIT_PALPATION, mating.stage());
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and batch_role = 'breeding' and is_active = true",
+            Integer.class,
+            removedPlan.batchId,
+            removedPlan.doeId
+        ));
     }
 
     @Test
@@ -452,9 +488,12 @@ public class ReproStateMachineIT extends E2eTestSupport {
             null, null, null, null, null, null, requestId("blood_second")
         ));
         Assertions.assertEquals(ReproStage.AWAIT_MATING, second.stage());
-        Assertions.assertEquals(bloodBatchId, (long) jdbc.queryForObject(
+        Assertions.assertNull(jdbc.queryForObject(
             "select batch_id from breeding_cycles where id = ?", Long.class, second.cycleId()
-        ), "并行周期归另一个批次，于是母兔同时处于两个批次之中");
+        ));
+        Assertions.assertEquals(bloodBatchId, (long) jdbc.queryForObject(
+            "select planned_batch_id from breeding_cycles where id = ?", Long.class, second.cycleId()
+        ), "待配种周期只保存计划批次，配种后才建立正式绑定");
 
         // 同批次内不得再开第二条（V44 uk_bc_batch_member）。
         BizException sameBatch = Assertions.assertThrows(
@@ -511,7 +550,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
-    void emptyPalpationClosesCycleAndReopensForEstrusImmediately() {
+    void emptyPalpationClosesCycleReleasesBatchAndStartsRecovery() {
         Fixture fixture = fixture("repro_empty");
         ReproResult opened = openAtEstrus(fixture, "empty_open");
         apply(fixture, opened.cycleId(), ReproAction.ESTRUS, "empty_estrus", b -> b);
@@ -526,23 +565,35 @@ public class ReproStateMachineIT extends E2eTestSupport {
 
         Assertions.assertEquals(opened.cycleId(), empty.cycleId());
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), empty.lifecycle());
-        Assertions.assertNotNull(empty.followUpCycleId(), "空怀应立即接续下一轮");
+        Assertions.assertNotNull(empty.followUpCycleId(), "空怀应开启休养周期");
         Assertions.assertEquals(empty.followUpCycleId(), empty.currentCycleId());
-        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, empty.stage());
+        Assertions.assertEquals(ReproStage.READY, empty.stage());
+        assertSinglePendingTask(fixture.houseId, empty.followUpCycleId(), "RECOVERY");
+        Assertions.assertEquals(0, jdbc.queryForObject(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and is_active = true",
+            Integer.class,
+            fixture.batchId,
+            fixture.doeId
+        ));
 
         ReproResult replayed = stateMachine.apply(emptyCommand);
         Assertions.assertTrue(replayed.replayed());
         Assertions.assertEquals(opened.cycleId(), replayed.cycleId());
         Assertions.assertEquals(empty.currentCycleId(), replayed.currentCycleId());
-        Assertions.assertEquals(ReproStage.AWAIT_ESTRUS, replayed.stage());
+        Assertions.assertEquals(ReproStage.READY, replayed.stage());
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), replayed.lifecycle());
-        // 空怀是立即重新催情，不等子宫复旧期。
-        Assertions.assertEquals(
-            0,
-            daysBetween(new Date(), empty.nextDueTime()),
-            "空怀后的催情任务应当天到期"
+        Integer recoveryDays = jdbc.queryForObject(
+            "select postpartum_days from global_setting where house_id = ?",
+            Integer.class,
+            fixture.houseId
         );
-        // 同一母兔在同一批次重开周期：唯一性只在 OPEN 周期间成立。
+        Assertions.assertEquals(
+            recoveryDays.intValue(),
+            daysBetween(new Date(), empty.nextDueTime()),
+            "空怀后应按兔舍配置完成休养，再进入待催情"
+        );
+        // 原周期关闭并建立无批次休养周期。
         Assertions.assertEquals(
             2,
             (int) jdbc.queryForObject(
@@ -628,6 +679,89 @@ public class ReproStateMachineIT extends E2eTestSupport {
     private record Fixture(
         UserSession owner, long userId, long houseId, long doeId, long sireId, Long batchId
     ) {
+    }
+
+    @Test
+    void directEntryCreatesMatingAndDeliveryOperationEvents() {
+        Fixture matingFixture = fixture("repro_entry_mating");
+        Date matingAt = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
+        ReproResult palpation = stateMachine.openCycleAt(new OpenCycleCommand(
+            matingFixture.houseId,
+            matingFixture.userId,
+            "tester",
+            matingFixture.doeId,
+            matingFixture.batchId,
+            ReproStage.AWAIT_PALPATION,
+            matingAt,
+            matingAt,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            matingFixture.sireId,
+            MatingMethod.NATURAL,
+            null,
+            null,
+            requestId("entry_mating")
+        ));
+        long storedMatingSecond = dateOf(
+            palpation.cycleId(), "mating_date"
+        ).getTime() / 1000;
+        Assertions.assertTrue(
+            Math.abs(matingAt.getTime() / 1000 - storedMatingSecond) <= 1,
+            "配种操作时间应使用入轨日期"
+        );
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from repro_events where cycle_id = ?"
+                + " and event_type = 'MATING_DONE' and batch_id = ?"
+                + " and payload->>'$.maleRabbitId' = ?"
+                + " and payload->>'$.matingMethod' = 'NATURAL'",
+            Integer.class,
+            palpation.cycleId(),
+            matingFixture.batchId,
+            String.valueOf(matingFixture.sireId)
+        ));
+
+        Fixture deliveryFixture = fixture("repro_entry_delivery");
+        Date deliveryAt = new Date(System.currentTimeMillis() - 24L * 3600 * 1000);
+        ReproResult weaning = stateMachine.openCycleAt(new OpenCycleCommand(
+            deliveryFixture.houseId,
+            deliveryFixture.userId,
+            "tester",
+            deliveryFixture.doeId,
+            deliveryFixture.batchId,
+            ReproStage.AWAIT_WEANING,
+            deliveryAt,
+            deliveryAt,
+            null,
+            null,
+            null,
+            8,
+            7,
+            6,
+            null,
+            null,
+            null,
+            null,
+            requestId("entry_delivery")
+        ));
+        Assertions.assertEquals(1, jdbc.queryForObject(
+            "select count(*) from repro_events where cycle_id = ?"
+                + " and event_type = 'DELIVERY_DONE' and batch_id = ?"
+                + " and payload->>'$.totalKits' = '8'"
+                + " and payload->>'$.liveKits' = '7'"
+                + " and payload->>'$.keptKits' = '6'",
+            Integer.class,
+            weaning.cycleId(),
+            deliveryFixture.batchId
+        ));
+        Assertions.assertEquals(6, jdbc.queryForObject(
+            "select kept_kits from litters where cycle_id = ?",
+            Integer.class,
+            weaning.cycleId()
+        ));
     }
 
     private Fixture fixture(String prefix) {

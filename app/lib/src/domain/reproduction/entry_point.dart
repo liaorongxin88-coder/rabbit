@@ -7,11 +7,13 @@ class ReproEntryPoint {
   const ReproEntryPoint({
     required this.stage,
     required this.stageLabel,
+    this.batchRequired = false,
     required this.requiredFacts,
   });
 
   final String stage;
   final String stageLabel;
+  final bool batchRequired;
   final List<ReproRequiredFact> requiredFacts;
 
   bool requires(String fact) => requiredFacts.any((item) => item.fact == fact);
@@ -25,6 +27,7 @@ class ReproEntryPoint {
     return ReproEntryPoint(
       stage: json['stage']?.toString() ?? '',
       stageLabel: json['stageLabel']?.toString() ?? '',
+      batchRequired: json['batchRequired'] == true,
       requiredFacts: [
         for (final raw in (json['requiredFacts'] as List? ?? const []))
           ReproRequiredFact.fromJson(Map<String, dynamic>.from(raw as Map)),

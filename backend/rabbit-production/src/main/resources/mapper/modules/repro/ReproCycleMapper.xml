@@ -8,6 +8,7 @@
         <result column="tenant_id" property="tenantId"/>
         <result column="house_id" property="houseId"/>
         <result column="batch_id" property="batchId"/>
+        <result column="planned_batch_id" property="plannedBatchId"/>
         <result column="mother_rabbit_id" property="motherRabbitId"/>
         <result column="male_rabbit_id" property="maleRabbitId"/>
         <result column="cycle_no" property="cycleNo"/>
@@ -43,7 +44,7 @@
       交给数据库默认值，V28 随 batch 模块一并删除。
     -->
     <sql id="cols">
-        id, tenant_id, house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
+        id, tenant_id, house_id, batch_id, planned_batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
         stage, stage_entered_at, lifecycle, result, mating_method, state_version,
         mating_date, pregnancy_check_date, pregnancy_result, expected_birth_date,
         birth_date, weaning_date, closed_at, close_reason, request_id, remark,
@@ -58,14 +59,14 @@
     -->
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         insert into breeding_cycles (
-            tenant_id, house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
+            tenant_id, house_id, batch_id, planned_batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
             stage, stage_entered_at, lifecycle, result, mating_method, state_version,
             mating_date, pregnancy_check_date, pregnancy_result, expected_birth_date,
             birth_date, weaning_date, request_id, remark,
             total_kits, live_kits, current_nursing_kits,
             create_by, create_time, update_by, update_time
         ) values (
-            #{tenantId}, #{houseId}, #{batchId}, #{motherRabbitId}, #{maleRabbitId}, #{cycleNo},
+            #{tenantId}, #{houseId}, #{batchId}, #{plannedBatchId}, #{motherRabbitId}, #{maleRabbitId}, #{cycleNo},
             #{stage}, #{stageEnteredAt}, #{lifecycle}, #{result}, #{matingMethod}, 0,
             #{matingDate}, #{pregnancyCheckDate}, #{pregnancyResult}, #{expectedBirthDate},
             #{birthDate}, #{weaningDate}, #{requestId}, #{remark},
@@ -90,7 +91,7 @@
     </select>
 
     <!--
-      stage 列表必须与 V26 pipeline_guard 生成列逐字一致（ReproStage.PIPELINE 亦然）。
+      stage 列表必须与 V47 pipeline_guard 生成列逐字一致（ReproStage.PIPELINE 亦然）。
       三处任一漂移，应用层放行的写入就会在唯一键上炸掉，或反过来漏防。
     -->
     <select id="selectOpenPipelineForUpdate" resultMap="Map">
@@ -98,7 +99,7 @@
         where house_id = #{houseId}
           and mother_rabbit_id = #{motherRabbitId}
           and lifecycle = 'OPEN'
-          and stage in ('AWAIT_ESTRUS', 'AWAIT_MATING', 'AWAIT_PALPATION',
+          and stage in ('READY', 'AWAIT_ESTRUS', 'AWAIT_MATING', 'AWAIT_PALPATION',
                         'AWAIT_PREPARTUM', 'AWAIT_DELIVERY')
         order by id desc
         limit 1 for update
@@ -130,6 +131,20 @@
     <update id="assignBatchIfUnbound">
         update breeding_cycles
         set batch_id = #{batchId},
+            planned_batch_id = null,
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and id = #{id}
+          and batch_id is null
+          and lifecycle = 'OPEN'
+    </update>
+
+    <update id="assignBatchIfUnboundWithCycleNo">
+        update breeding_cycles
+        set batch_id = #{batchId},
+            planned_batch_id = null,
+            cycle_no = #{cycleNo},
             update_by = #{updateBy},
             update_time = now()
         where house_id = #{houseId}
@@ -147,6 +162,7 @@
         update breeding_cycles
         set stage = #{cycle.stage},
             stage_entered_at = #{cycle.stageEnteredAt},
+            planned_batch_id = #{cycle.plannedBatchId},
             lifecycle = #{cycle.lifecycle},
             result = #{cycle.result},
             mating_method = #{cycle.matingMethod},

@@ -15,8 +15,10 @@ public class ReproCycle {
     private Long id;
     private Long tenantId;
     private Long houseId;
-    /** 散养母兔可空（2026-08-16 业务裁定）。 */
+    /** 正式生产批次；从配种进入待摸胎时才绑定。 */
     private Long batchId;
+    /** 休养、催情或待配种阶段的新入栏计划批次，不参与周期约束。 */
+    private Long plannedBatchId;
     private Long motherRabbitId;
     private Long maleRabbitId;
     private Integer cycleNo;
@@ -82,6 +84,14 @@ public class ReproCycle {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public Long getPlannedBatchId() {
+        return plannedBatchId;
+    }
+
+    public void setPlannedBatchId(Long plannedBatchId) {
+        this.plannedBatchId = plannedBatchId;
     }
 
     public Long getMotherRabbitId() {

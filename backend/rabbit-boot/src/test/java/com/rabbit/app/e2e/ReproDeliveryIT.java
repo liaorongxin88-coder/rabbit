@@ -97,6 +97,9 @@ public class ReproDeliveryIT extends E2eTestSupport {
     @Test
     void failedDeliveryWarnsButDoesNotCullTheDoe() {
         Fixture f = pregnantDoe("deliv_fail");
+        Long batchId = jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?", Long.class, f.cycleId
+        );
         String imageId = uploadTestImage(f.owner, f.houseId, "dystocia");
 
         api.postOk("/api/repro/cycles/" + f.cycleId + "/actions", f.owner.token, f.houseId, obj(
@@ -138,10 +141,18 @@ public class ReproDeliveryIT extends E2eTestSupport {
         Assertions.assertEquals(0, num(
             "select count(*) from rabbit_departure_records where rabbit_id = ?", f.doeId),
             "不应产生离场记录");
-        // 恢复期后重新催情：接续周期已开好。
-        Assertions.assertEquals("AWAIT_ESTRUS", str(
+        // 失败产释放旧批次并进入真实休养期，到期后再自动催情。
+        Assertions.assertEquals("READY", str(
             "select stage from breeding_cycles where mother_rabbit_id = ? and lifecycle = 'OPEN'",
-            f.doeId), "应自动开出下一轮待催情周期");
+            f.doeId), "应自动开出无批次休养周期");
+        Assertions.assertEquals(1, num(
+            "select count(*) from work_tasks where rabbit_id = ? and task_type = 'RECOVERY'"
+                + " and status = 'PENDING'",
+            f.doeId));
+        Assertions.assertEquals(0, num(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and is_active = true",
+            batchId, f.doeId));
     }
 
     @Test

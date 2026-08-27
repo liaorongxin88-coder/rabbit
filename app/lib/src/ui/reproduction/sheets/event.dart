@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
@@ -138,6 +139,14 @@ List<Rabbit> _availableBreedingMales(
 
 bool _containsMaleId(Iterable<Rabbit> males, int? maleId) {
   return maleId != null && males.any((male) => male.id == maleId);
+}
+
+List<Batch> _activeProductionBatches(Iterable<Batch> batches) {
+  final result = batches
+      .where((batch) => batch.id > 0 && batch.status.trim() == '进行中')
+      .toList();
+  result.sort((left, right) => right.id.compareTo(left.id));
+  return result;
 }
 
 Future<void> showProductionEventSheet({
@@ -286,6 +295,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   var _postponed = false;
   var _parturitionFailed = false;
   int? _selectedMaleId;
+  int? _selectedBatchId;
   List<XFile> _images = const [];
   var _saving = false;
 
@@ -295,6 +305,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     final now = DateTime.now();
     final initial = widget.initialDate;
     _actionDate = initial == null || initial.isAfter(now) ? now : initial;
+    _selectedBatchId = widget.batchId;
   }
 
   @override
@@ -494,6 +505,56 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     });
   }
 
+  Widget _buildMatingBatchField(AsyncValue<List<Batch>> batchesAsync) {
+    return batchesAsync.when(
+      loading: () => const InfoNotice(
+        icon: Icons.hourglass_empty,
+        text: '正在读取进行中的生产批次…',
+      ),
+      error: (_, __) => const InfoNotice(
+        icon: Icons.error_outline,
+        text: '生产批次读取失败，请刷新后重试。',
+      ),
+      data: (batches) {
+        final activeBatches = _activeProductionBatches(batches);
+        if (activeBatches.isEmpty) {
+          return const InfoNotice(
+            icon: Icons.info_outline,
+            text: '当前没有进行中的生产批次。',
+          );
+        }
+        final selectedId = activeBatches.any(
+          (batch) => batch.id == _selectedBatchId,
+        )
+            ? _selectedBatchId
+            : null;
+        return DropdownButtonFormField<int>(
+          key: const ValueKey('mating-production-batch'),
+          value: selectedId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '生产批次',
+            hintText: '请选择进行中的生产批次',
+          ),
+          items: [
+            for (final batch in activeBatches)
+              DropdownMenuItem(
+                value: batch.id,
+                child: Text(
+                  batch.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) => setState(() => _selectedBatchId = value),
+        );
+      },
+    );
+  }
+
   bool get _canPostpone =>
       widget.kind == ProductionKind.estrus ||
       widget.kind == ProductionKind.mating ||
@@ -508,7 +569,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       canonicalBatchWriteFingerprint({
         'action': widget.kind.name,
         'houseId': widget.houseId,
-        'batchId': widget.batchId,
+        'batchId': widget.kind == ProductionKind.mating
+            ? _selectedBatchId
+            : widget.batchId,
         'rabbitId': widget.rabbitId,
         'breedingCycleId': _breedingCycleId,
         ...fields,
@@ -520,7 +583,9 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     required List<Rabbit> rabbits,
     required List<Cage> cages,
   }) async {
-    final batchId = widget.batchId;
+    final batchId = widget.kind == ProductionKind.mating
+        ? _selectedBatchId
+        : widget.batchId;
     if (widget.kind == ProductionKind.sale &&
         (batchId == null || batchId <= 0)) {
       _showMessage('批次信息缺失，请刷新后重试');
@@ -579,6 +644,15 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           }),
         );
       } else if (widget.kind == ProductionKind.mating) {
+        final activeBatches = _activeProductionBatches(
+          ref.read(houseBatchesProvider(widget.houseId)).valueOrNull ??
+              const [],
+        );
+        if (batchId == null ||
+            !activeBatches.any((batch) => batch.id == batchId)) {
+          _showMessage('请选择进行中的生产批次');
+          return;
+        }
         final males = _availableBreedingMales(
           rabbits,
           houseId: widget.houseId,
@@ -595,10 +669,12 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           cycleId: cycleId!,
           action: ReproAction.mating,
           occurredAt: _actionDate,
+          batchId: batchId,
           maleRabbitId: maleId,
           matingMethod: _matingMethod,
           nextRemindAt: nextRemindAt,
           requestId: _requestIdFor({
+            'batchId': batchId,
             'maleRabbitId': maleId,
             'matingMethod': _matingMethod.wire,
             'matingDate': formatBatchWriteDateTime(_actionDate),
@@ -804,6 +880,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     final rabbitsAsync =
         ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     final cagesAsync = ref.watch(houseCagesProvider(widget.houseId));
+    final batchesAsync = ref.watch(houseBatchesProvider(widget.houseId));
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final availableHeight = mediaQuery.size.height - keyboardInset;
@@ -876,6 +953,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                     Flexible(
                       child: ListView(
                         key: const ValueKey('production-event-form-list'),
+                        cacheExtent: 1200,
                         keyboardDismissBehavior:
                             ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -1001,6 +1079,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                   ),
                                 ),
                               ),
+                            const SizedBox(height: 12),
+                            _buildMatingBatchField(batchesAsync),
                           ],
                           if (!_postponed &&
                               widget.kind == ProductionKind.pregnancyCheck) ...[

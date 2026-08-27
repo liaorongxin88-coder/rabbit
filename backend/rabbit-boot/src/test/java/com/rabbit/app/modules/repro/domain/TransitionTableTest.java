@@ -28,6 +28,7 @@ class TransitionTableTest {
 
     /** 设计 §3.2 全部合法转换的期望值，格式：from|action|outcome。 */
     private static final List<String> LEGAL_KEYS = List.of(
+        "READY|START_CYCLE|",
         "AWAIT_ESTRUS|ESTRUS|",
         "AWAIT_MATING|MATING|",
         "AWAIT_PALPATION|PALPATION|PREGNANT",
@@ -110,6 +111,7 @@ class TransitionTableTest {
         // 必须与 V26 breeding_cycles.pipeline_guard 生成列里的 stage 列表逐字一致，
         // 否则应用层放行的并发写会在数据库层被唯一键拒绝（或反过来漏防）。
         assertAll(
+            () -> assertTrue(ReproStage.READY.isPipeline()),
             () -> assertTrue(ReproStage.AWAIT_ESTRUS.isPipeline()),
             () -> assertTrue(ReproStage.AWAIT_MATING.isPipeline()),
             () -> assertTrue(ReproStage.AWAIT_PALPATION.isPipeline()),
@@ -117,7 +119,6 @@ class TransitionTableTest {
             () -> assertTrue(ReproStage.AWAIT_DELIVERY.isPipeline()),
             // 哺乳段不占管线：这正是血配（重叠哺乳配种）得以成立的前提。
             () -> assertTrue(!ReproStage.AWAIT_WEANING.isPipeline()),
-            () -> assertTrue(!ReproStage.READY.isPipeline()),
             () -> assertTrue(!ReproStage.SUSPENDED.isPipeline()),
             () -> assertTrue(!ReproStage.RETIRED.isPipeline())
         );
@@ -128,20 +129,34 @@ class TransitionTableTest {
         assertAll(
             () -> assertClose(
                 ReproStage.AWAIT_PALPATION, ReproAction.PALPATION, "EMPTY",
-                CycleResult.EMPTY, ReproStage.AWAIT_ESTRUS, DueAnchor.IMMEDIATE
+                CycleResult.EMPTY, ReproStage.READY, DueAnchor.POSTPARTUM_RECOVERY
             ),
             () -> assertClose(
                 ReproStage.AWAIT_DELIVERY, ReproAction.DELIVERY, "FAILED",
-                CycleResult.FAILED, ReproStage.AWAIT_ESTRUS, DueAnchor.POSTPARTUM_RECOVERY
+                CycleResult.FAILED, ReproStage.READY, DueAnchor.POSTPARTUM_RECOVERY
             ),
             () -> assertClose(
                 ReproStage.AWAIT_WEANING, ReproAction.WEANING, null,
-                CycleResult.WEANED, ReproStage.AWAIT_ESTRUS, DueAnchor.POSTPARTUM_RECOVERY
+                CycleResult.WEANED, ReproStage.READY, DueAnchor.POSTPARTUM_RECOVERY
             ),
             () -> assertClose(
                 ReproStage.AWAIT_PREPARTUM, ReproAction.ABORTION, null,
-                CycleResult.ABORTED, ReproStage.AWAIT_ESTRUS, DueAnchor.POSTPARTUM_RECOVERY
+                CycleResult.ABORTED, ReproStage.READY, DueAnchor.POSTPARTUM_RECOVERY
             )
+        );
+    }
+
+    @Test
+    void recoveryAutomaticallyAdvancesToEstrus() {
+        Transition recovery = TransitionTable.require(
+            ReproStage.READY, ReproAction.START_CYCLE, null
+        );
+
+        assertAll(
+            () -> assertFalse(recovery.closesCycle()),
+            () -> assertEquals(ReproStage.AWAIT_ESTRUS, recovery.toStage()),
+            () -> assertEquals(DueAnchor.IMMEDIATE, recovery.dueAnchor()),
+            () -> assertEquals(ReproEventType.RECOVERY_DONE, recovery.eventType())
         );
     }
 

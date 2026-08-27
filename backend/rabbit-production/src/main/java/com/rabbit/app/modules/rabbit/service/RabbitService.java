@@ -3,6 +3,8 @@ package com.rabbit.app.modules.rabbit.service;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.batch.entity.Batch;
+import com.rabbit.app.modules.repro.domain.EntryPoint;
+import com.rabbit.app.modules.repro.domain.MatingMethod;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.service.OpenCycleCommand;
@@ -119,8 +121,34 @@ public class RabbitService {
         Date stageEnteredAt,
         Date matingDate,
         Date birthDate,
-        Integer liveKits
-    ) {}
+        Integer totalKits,
+        Integer liveKits,
+        Integer keptKits,
+        Long maleRabbitId,
+        String matingMethod
+    ) {
+        public ReproEntry(
+            String stage,
+            Long batchId,
+            Date stageEnteredAt,
+            Date matingDate,
+            Date birthDate,
+            Integer liveKits
+        ) {
+            this(
+                stage,
+                batchId,
+                stageEnteredAt,
+                matingDate,
+                birthDate,
+                liveKits,
+                liveKits,
+                liveKits,
+                null,
+                null
+            );
+        }
+    }
 
     @Transactional
     public Rabbit createRabbit(Long userId, Long houseId, Rabbit rabbit, String requestId) {
@@ -156,6 +184,7 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
+            validateDoeEntryProfile(houseId, rabbit, reproEntry);
             lockReproBatchIfRequested(houseId, reproEntry);
 
             // A locking read is current under MySQL REPEATABLE READ. Every manual entry
@@ -1020,12 +1049,52 @@ public class RabbitService {
      * <p>只对种母兔生效；其他类型传了就直接报错，而不是静默忽略——静默忽略会让
      * 用户以为已经入轨，实际上这只兔永远不会出现在待办里。
      */
+    private void validateDoeEntryProfile(Long houseId, Rabbit rabbit, ReproEntry entry) {
+        if (entry == null || entry.stage() == null || entry.stage().isBlank()) {
+            return;
+        }
+        if (!"0".equals(rabbit.getType()) || !"0".equals(rabbit.getGender())) {
+            return;
+        }
+        if (rabbit.getBreed() == null || rabbit.getBreed().isBlank()) {
+            throw new BizException(400, "请填写种母兔品种");
+        }
+        if (rabbit.getWeight() == null || rabbit.getWeight() <= 0) {
+            throw new BizException(400, "请填写种母兔体重");
+        }
+        if (!"0".equals(rabbit.getArrivalMethod()) && !"1".equals(rabbit.getArrivalMethod())) {
+            throw new BizException(400, "请选择种母兔来源方式");
+        }
+        if ("0".equals(rabbit.getArrivalMethod())) {
+            if (rabbit.getSourceSeller() == null || rabbit.getSourceSeller().isBlank()) {
+                throw new BizException(400, "购入种母兔请填写供应方");
+            }
+            rabbit.setSourceSeller(rabbit.getSourceSeller().trim());
+            rabbit.setMotherId(null);
+            return;
+        }
+        rabbit.setSourceSeller(null);
+        if (rabbit.getMotherId() == null) {
+            return;
+        }
+        Rabbit mother = rabbitMapper.selectById(houseId, rabbit.getMotherId());
+        if (mother == null || !Boolean.TRUE.equals(mother.getIsActive())
+            || !"0".equals(mother.getGender())) {
+            throw new BizException(400, "关联母兔不存在或不在场");
+        }
+    }
+
     private void lockReproBatchIfRequested(Long houseId, ReproEntry entry) {
         if (entry == null || entry.stage() == null || entry.stage().isBlank()) {
             return;
         }
+        ReproStage target = ReproStage.parse(entry.stage());
+        boolean batchRequired = EntryPoint.forStage(target).requiresBatch();
         if (entry.batchId() == null) {
-            throw new BizException(400, "生产批次不能为空");
+            if (batchRequired) {
+                throw new BizException(400, "生产批次不能为空");
+            }
+            return;
         }
         Batch batch = batchMapper.selectByIdForUpdate(houseId, entry.batchId());
         if (batch == null) {
@@ -1063,10 +1132,11 @@ public class RabbitService {
             entry.matingDate(),
             null,
             entry.birthDate(),
+            entry.totalKits(),
             entry.liveKits(),
-            entry.liveKits(),
-            null,
-            null,
+            entry.keptKits(),
+            entry.maleRabbitId(),
+            MatingMethod.parse(entry.matingMethod()),
             null,
             null,
             ReproRequestIds.derive(requestId, "entry-" + rabbit.getId())
@@ -1079,6 +1149,10 @@ public class RabbitService {
         String reproductiveStage = normalizeStage(rabbit.getReproductiveStage());
         if ("2".equals(type) && growthStage == null) {
             growthStage = CommodityGrowthStage.ADAPTATION.name();
+        }
+        if ("0".equals(type) && "0".equals(gender)) {
+            // 种母兔不让用户维护成长阶段；入栏即按成熟可售口径记录。
+            growthStage = CommodityGrowthStage.MATURE.name();
         }
         if (growthStage != null) {
             try {

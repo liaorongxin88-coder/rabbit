@@ -8,6 +8,7 @@ class Rabbit {
     required this.gender,
     required this.breed,
     required this.arrivalMethod,
+    this.sourceSeller = '',
     required this.arrivalDate,
     required this.weight,
     required this.isActive,
@@ -26,6 +27,7 @@ class Rabbit {
   final String gender;
   final String breed;
   final String arrivalMethod;
+  final String sourceSeller;
   final DateTime? arrivalDate;
   final double? weight;
   final bool isActive;
@@ -86,6 +88,7 @@ class Rabbit {
       gender: json['gender'] as String? ?? '',
       breed: json['breed'] as String? ?? '',
       arrivalMethod: json['arrivalMethod'] as String? ?? '',
+      sourceSeller: json['sourceSeller'] as String? ?? '',
       arrivalDate: _dateTimeValue(json['arrivalDate']),
       weight: _doubleValue(json['weight']),
       isActive: _boolValue(json['isActive'], fallback: true),

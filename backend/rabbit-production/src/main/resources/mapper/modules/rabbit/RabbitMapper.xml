@@ -15,6 +15,7 @@
         <result column="gender" property="gender"/>
         <result column="breed" property="breed"/>
         <result column="arrival_method" property="arrivalMethod"/>
+        <result column="source_seller" property="sourceSeller"/>
         <result column="arrival_date" property="arrivalDate"/>
         <result column="weight" property="weight"/>
         <result column="growth_stage" property="growthStage"/>
@@ -39,8 +40,8 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbits (house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage, state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
-        values (#{houseId}, #{cageId}, #{motherId}, #{fatherId}, #{birthBatchId}, #{birthCycleId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{arrivalDate}, #{weight}, #{growthStage}, #{growthStageEnteredAt}, #{reproductiveStage}, coalesce(#{stateVersion}, 0), #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
+        insert into rabbits (house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed, arrival_method, source_seller, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage, state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id, create_by, update_by)
+        values (#{houseId}, #{cageId}, #{motherId}, #{fatherId}, #{birthBatchId}, #{birthCycleId}, #{type}, #{gender}, #{breed}, #{arrivalMethod}, #{sourceSeller}, #{arrivalDate}, #{weight}, #{growthStage}, #{growthStageEnteredAt}, #{reproductiveStage}, coalesce(#{stateVersion}, 0), #{isActive}, #{isQuarantined}, #{quarantineTime}, #{quarantineReason}, #{requestId}, #{createBy}, #{updateBy})
     </insert>
 
     <insert id="insertBatch">
@@ -64,7 +65,7 @@
     -->
     <sql id="RabbitColumns">
         id, house_id, cage_id, mother_id, father_id, birth_batch_id, birth_cycle_id, type, gender, breed,
-        arrival_method, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage,
+        arrival_method, source_seller, arrival_date, weight, growth_stage, growth_stage_entered_at, reproductive_stage,
         current_stage, current_cycle_id, stage_entered_at, last_mating_date,
         state_version, is_active, is_quarantined, quarantine_time, quarantine_reason, request_id,
         departure_date, departure_reason, create_by, create_time, update_by, update_time

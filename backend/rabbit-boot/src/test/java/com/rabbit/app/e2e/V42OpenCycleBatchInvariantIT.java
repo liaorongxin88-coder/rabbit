@@ -3,7 +3,6 @@ package com.rabbit.app.e2e;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -145,8 +144,11 @@ class V42OpenCycleBatchInvariantIT {
 
         flyway(null).migrate();
 
-        assertEquals(selectedBatch, longValue(
+        assertNull(nullableLongValue(
             "select batch_id from breeding_cycles where id = ?", boundCycle
+        ));
+        assertEquals(selectedBatch, longValue(
+            "select planned_batch_id from breeding_cycles where id = ?", boundCycle
         ));
         assertEquals(2, intValue(
             "select cycle_no from breeding_cycles where id = ?", boundCycle
@@ -172,16 +174,22 @@ class V42OpenCycleBatchInvariantIT {
         assertEquals(recoveryBatch, longValue(
             "select batch_id from breeding_cycles where id = ?", orphanCycle
         ));
-        assertEquals(recoveryBatch, longValue(
+        assertNull(nullableLongValue(
             "select batch_id from breeding_cycles where id = ?", secondOrphanCycle
+        ));
+        assertEquals(recoveryBatch, longValue(
+            "select planned_batch_id from breeding_cycles where id = ?", secondOrphanCycle
         ));
         assertEquals(1, intValue(
             "select count(*) from batches where house_id = ? and request_id = ?",
             houseId,
             "v42-recovery-house-" + houseId
         ));
-        assertEquals(recoveryBatch, longValue(
+        assertNull(nullableLongValue(
             "select batch_id from breeding_cycles where id = ?", completedBatchCycle
+        ));
+        assertEquals(recoveryBatch, longValue(
+            "select planned_batch_id from breeding_cycles where id = ?", completedBatchCycle
         ));
         assertEquals(recoveryBatch, longValue(
             "select batch_id from breeding_cycles where id = ?", crossHouseCycle
@@ -220,14 +228,16 @@ class V42OpenCycleBatchInvariantIT {
             "select batch_id from breeding_cycles where id = ?", closedNullCycle
         ));
 
-        assertEquals(1, intValue(
+        assertEquals(0, intValue(
             "select count(*) from information_schema.table_constraints"
                 + " where constraint_schema = database() and table_name = 'breeding_cycles'"
                 + " and constraint_name = 'ck_bc_open_batch' and constraint_type = 'CHECK'"
-                + " and enforced = 'YES'"
         ));
-        assertThrows(SQLException.class, () -> cycle(
-            houseId, null, historicalMother, 2, "AWAIT_ESTRUS", "OPEN", "rejected-open"
+        long legalOpen = cycle(
+            houseId, null, historicalMother, 2, "AWAIT_ESTRUS", "OPEN", "legal-open"
+        );
+        assertNotNull(nullableLongValue(
+            "select id from breeding_cycles where id = ? and batch_id is null", legalOpen
         ));
         long legalClosed = cycle(
             houseId, null, historicalMother, 2, "AWAIT_ESTRUS", "CLOSED", "legal-closed"

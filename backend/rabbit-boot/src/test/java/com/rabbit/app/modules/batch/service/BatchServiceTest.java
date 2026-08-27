@@ -163,6 +163,52 @@ class BatchServiceTest {
     }
 
     @Test
+    void breedingFemaleJoinsAsPlanWithoutOpeningReproCycle() {
+        BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
+        BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
+        RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
+        RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
+        RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
+        ReproCycleMapper reproCycleMapper = org.mockito.Mockito.mock(ReproCycleMapper.class);
+        ReproStateMachineService stateMachine = org.mockito.Mockito.mock(
+            ReproStateMachineService.class
+        );
+        Batch batch = new Batch();
+        batch.setId(9L);
+        batch.setHouseId(1L);
+        batch.setStatus("进行中");
+
+        when(dedup.shouldSkipAsDone(1L, 7L, "batch.addMembers", "request-plan"))
+            .thenReturn(false);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
+        when(rabbitMapper.selectByIdsForUpdate(1L, List.of(3L)))
+            .thenReturn(List.of(mother(3L)));
+        when(batchRabbitMapper.selectActiveByBatchAndRabbitsForUpdate(
+            1L, 9L, List.of(3L)
+        )).thenReturn(List.of());
+
+        service(
+            batchMapper,
+            batchRabbitMapper,
+            rabbitMapper,
+            historyMapper,
+            dedup,
+            null,
+            reproCycleMapper,
+            stateMachine,
+            org.mockito.Mockito.mock(WorkTaskWriter.class)
+        ).addMembers(7L, 1L, 9L, List.of(3L), "request-plan");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<BatchRabbit>> links = ArgumentCaptor.forClass(List.class);
+        verify(batchRabbitMapper).insertBatch(links.capture());
+        BatchRabbit link = links.getValue().get(0);
+        assertEquals("breeding", link.getBatchRole());
+        assertEquals("待催情", link.getCurrentStatus());
+        verify(stateMachine, never()).openCycleAt(any());
+    }
+
+    @Test
     void keepsExistingBoundPipelineWithoutOpeningAnotherCycle() {
         BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
         BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
@@ -407,10 +453,6 @@ class BatchServiceTest {
             null,
             dedup,
             null,
-            reproCycleMapper,
-            stateMachine,
-            org.mockito.Mockito.mock(
-                com.rabbit.app.modules.repro.service.OperatorNameResolver.class),
             workTaskWriter,
             10
         );

@@ -21,21 +21,41 @@ import java.util.Set;
  * （见 {@link ReproStage#isPipeline()}），并且要在同事务建一条 NURSING 窝。
  */
 public enum EntryPoint {
+    /** 休养期：按兔舍配置的恢复天数生成自动推进任务。 */
+    READY(ReproStage.READY, DueAnchor.POSTPARTUM_RECOVERY,
+        EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
     /** 待催情：只需知道何时进入该阶段；首任务默认当天，用户可指定。 */
-    ESTRUS(ReproStage.AWAIT_ESTRUS, DueAnchor.USER_SPECIFIED, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
+    ESTRUS(ReproStage.AWAIT_ESTRUS, DueAnchor.USER_SPECIFIED,
+        EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
     /** 待配种：催情已完成，按催情持续期推算配种窗口。 */
-    MATING(ReproStage.AWAIT_MATING, DueAnchor.ESTRUS_DURATION, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
-    /** 待摸胎：必须补录配种日（公兔可选），否则算不出摸胎日。 */
-    PALPATION(ReproStage.AWAIT_PALPATION, DueAnchor.PALPATION_WAIT, EnumSet.of(RequiredFact.MATING_DATE)),
+    MATING(ReproStage.AWAIT_MATING, DueAnchor.ESTRUS_DURATION,
+        EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
+    /** 待摸胎：入轨日期即配种日，必须补录配种公兔和方式。 */
+    PALPATION(
+        ReproStage.AWAIT_PALPATION,
+        DueAnchor.PALPATION_WAIT,
+        EnumSet.of(
+            RequiredFact.STAGE_ENTERED_AT,
+            RequiredFact.MALE_RABBIT,
+            RequiredFact.MATING_METHOD
+        )
+    ),
     /** 待备产：已进入该阶段，首任务当天出现。 */
-    PREPARTUM(ReproStage.AWAIT_PREPARTUM, DueAnchor.SAME_DAY, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
+    PREPARTUM(ReproStage.AWAIT_PREPARTUM, DueAnchor.SAME_DAY,
+        EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
     /** 待分娩：已进入该阶段，首任务当天出现。 */
-    DELIVERY(ReproStage.AWAIT_DELIVERY, DueAnchor.SAME_DAY, EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
-    /** 待分笼：必须补录分娩日与活仔数，同事务建 NURSING 窝。 */
+    DELIVERY(ReproStage.AWAIT_DELIVERY, DueAnchor.SAME_DAY,
+        EnumSet.of(RequiredFact.STAGE_ENTERED_AT)),
+    /** 待分笼：入轨日期即分娩日，同事务建窝并记录完整仔数。 */
     WEANING(
         ReproStage.AWAIT_WEANING,
         DueAnchor.WEANING_DUE,
-        EnumSet.of(RequiredFact.BIRTH_DATE, RequiredFact.LIVE_KITS)
+        EnumSet.of(
+            RequiredFact.STAGE_ENTERED_AT,
+            RequiredFact.TOTAL_KITS,
+            RequiredFact.LIVE_KITS,
+            RequiredFact.KEPT_KITS
+        )
     );
 
     /** 入轨时必须补录的事实；缺失即拒绝，不允许用默认值糊过去。 */
@@ -43,7 +63,11 @@ public enum EntryPoint {
         STAGE_ENTERED_AT("进入该阶段的日期"),
         MATING_DATE("配种日期"),
         BIRTH_DATE("分娩日期"),
-        LIVE_KITS("活仔数");
+        MALE_RABBIT("配种公兔"),
+        MATING_METHOD("配种方式"),
+        TOTAL_KITS("产仔数"),
+        LIVE_KITS("活仔数"),
+        KEPT_KITS("留仔数");
 
         private final String label;
 
@@ -76,6 +100,14 @@ public enum EntryPoint {
 
     public Set<RequiredFact> requiredFacts() {
         return requiredFacts;
+    }
+
+    /** 生产批次从配种事实开始绑定，休养、催情和待配种阶段均可无批次运行。 */
+    public boolean requiresBatch() {
+        return switch (stage) {
+            case AWAIT_PALPATION, AWAIT_PREPARTUM, AWAIT_DELIVERY, AWAIT_WEANING -> true;
+            default -> false;
+        };
     }
 
     /** 该入轨点是否占用管线互斥锁。 */

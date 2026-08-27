@@ -29,10 +29,25 @@ void main() {
       action: ReproAction.estrus,
       requestId: 'action-time',
     );
+    await repository.applyAction(
+      houseId: 8,
+      cycleId: 10,
+      action: ReproAction.mating,
+      batchId: 61,
+      maleRabbitId: 22,
+      matingMethod: MatingMethod.natural,
+      requestId: 'mating-batch',
+    );
     final action = adapter.jsonRequests.firstWhere(
       (request) => request.path == '/api/repro/cycles/9/actions',
     );
     expect(action.body['occurredAt'], isA<int>());
+    final mating = adapter.jsonRequests.firstWhere(
+      (request) => request.path == '/api/repro/cycles/10/actions',
+    );
+    expect(mating.body['batchId'], 61);
+    expect(mating.body['maleRabbitId'], 22);
+    expect(mating.body['matingMethod'], 'NATURAL');
 
     final result = await repository.adjustKeptKits(
       houseId: 8,
@@ -64,7 +79,8 @@ void main() {
       batchId: 61,
       stage: ReproStage.awaitPalpation,
       occurredAt: DateTime(2026, 8, 21),
-      matingDate: DateTime(2026, 8, 20),
+      maleRabbitId: 22,
+      matingMethod: MatingMethod.natural,
       requestId: 'open-cycle-61',
     );
 
@@ -78,10 +94,8 @@ void main() {
       request.body['occurredAt'],
       DateTime.utc(2026, 8, 20, 16).millisecondsSinceEpoch,
     );
-    expect(
-      request.body['matingDate'],
-      DateTime.utc(2026, 8, 19, 16).millisecondsSinceEpoch,
-    );
+    expect(request.body['maleRabbitId'], 22);
+    expect(request.body['matingMethod'], 'NATURAL');
     expect(request.body['requestId'], 'open-cycle-61');
   });
 

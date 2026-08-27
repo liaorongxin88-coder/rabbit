@@ -22,7 +22,7 @@ public interface ReproCycleMapper {
     /**
      * 锁定该母兔当前占用管线的 OPEN 周期。
      *
-     * <p>管线段 = pipeline_guard 生成列认定的五个阶段，刻意不含 AWAIT_WEANING——
+     * <p>管线段 = pipeline_guard 生成列认定的休养及五个等待阶段，刻意不含 AWAIT_WEANING——
      * 哺乳与下一轮怀孕可并行（血配），这是「同一母兔仅一条管线周期」不变式的准确边界。
      */
     ReproCycle selectOpenPipelineForUpdate(
@@ -54,6 +54,15 @@ public interface ReproCycleMapper {
         @Param("houseId") Long houseId,
         @Param("id") Long id,
         @Param("batchId") Long batchId,
+        @Param("updateBy") String updateBy
+    );
+
+    /** 配种确认批次时，同时把周期号切换到目标批次的编号作用域。 */
+    int assignBatchIfUnboundWithCycleNo(
+        @Param("houseId") Long houseId,
+        @Param("id") Long id,
+        @Param("batchId") Long batchId,
+        @Param("cycleNo") Integer cycleNo,
         @Param("updateBy") String updateBy
     );
 

@@ -11,15 +11,15 @@ import java.util.Set;
  *
  * <p>阶段分两类：
  * <ul>
- *   <li><b>管线段</b>（{@link #isPipeline()}）：待催情 → 待分娩。一只母兔同时只允许一个
+ *   <li><b>管线段</b>（{@link #isPipeline()}）：休养期 → 待分娩。一只母兔同时只允许一个
  *       管线段 OPEN 的周期，由 {@code breeding_cycles.pipeline_guard} 生成列 + 唯一键兜底。</li>
  *   <li><b>哺乳段</b>（{@link #AWAIT_WEANING}）：不占管线锁，因此支持血配——上一窝还在哺乳时
  *       新周期已能进入管线（设计 §3.3）。</li>
  * </ul>
  */
 public enum ReproStage {
-    /** 准备：周期间歇态，通常瞬时。子宫复旧完成后由此入下一轮。 */
-    READY("准备"),
+    /** 休养期：上一轮结束后的恢复阶段，到期后自动进入待催情。 */
+    READY("休养期"),
     AWAIT_ESTRUS("待催情"),
     AWAIT_MATING("待配种"),
     AWAIT_PALPATION("待摸胎"),
@@ -34,10 +34,11 @@ public enum ReproStage {
     RETIRED("离场");
 
     /**
-     * 管线段：这几个阶段共用一把「一母兔一管线」的锁。刻意不含 AWAIT_WEANING——
+     * 管线段：休养期和妊娠前后等待阶段共用一把「一母兔一管线」的锁。刻意不含 AWAIT_WEANING——
      * 哺乳与下一轮妊娠可并行是兔的真实生理能力（双子宫 + 刺激性排卵，设计 §3.4）。
      */
     private static final Set<ReproStage> PIPELINE = Set.of(
+        READY,
         AWAIT_ESTRUS,
         AWAIT_MATING,
         AWAIT_PALPATION,

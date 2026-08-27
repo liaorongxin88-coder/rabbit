@@ -29,10 +29,54 @@ public record OpenCycleCommand(
     Date birthDate,
     Integer totalKits,
     Integer liveKits,
+    Integer keptKits,
     Long maleRabbitId,
     MatingMethod matingMethod,
     Date firstDueAt,
     String remark,
     String requestId
 ) {
+    /** 兼容既有调用方；新增的留仔数缺省沿用活仔数。 */
+    public OpenCycleCommand(
+        Long houseId,
+        Long userId,
+        String operatorName,
+        Long motherRabbitId,
+        Long batchId,
+        ReproStage targetStage,
+        Date occurredAt,
+        Date stageEnteredAt,
+        Date matingDate,
+        Date expectedBirthDate,
+        Date birthDate,
+        Integer totalKits,
+        Integer liveKits,
+        Long maleRabbitId,
+        MatingMethod matingMethod,
+        Date firstDueAt,
+        String remark,
+        String requestId
+    ) {
+        this(
+            houseId,
+            userId,
+            operatorName,
+            motherRabbitId,
+            batchId,
+            targetStage,
+            occurredAt,
+            stageEnteredAt,
+            matingDate,
+            expectedBirthDate,
+            birthDate,
+            totalKits,
+            liveKits,
+            liveKits,
+            maleRabbitId,
+            matingMethod,
+            firstDueAt,
+            remark,
+            requestId
+        );
+    }
 }

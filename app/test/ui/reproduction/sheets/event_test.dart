@@ -595,7 +595,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('existing doe cannot open a breeding cycle without a batch',
+  testWidgets('existing doe can enter an early stage without a batch',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     tester.platformDispatcher.textScaleFactorTestValue = 2;
@@ -672,8 +672,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(harness.adapter.requests, isEmpty);
-    expect(find.text('请选择进行中的批次'), findsWidgets);
+    expect(harness.adapter.requests, hasLength(1));
+    expect(harness.adapter.requests.single['stage'], 'AWAIT_ESTRUS');
+    expect(harness.adapter.requests.single.containsKey('batchId'), isFalse);
     expect(tester.takeException(), isNull);
   });
 

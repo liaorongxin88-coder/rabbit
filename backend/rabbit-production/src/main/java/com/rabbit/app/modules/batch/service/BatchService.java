@@ -17,14 +17,7 @@ import com.rabbit.app.modules.batch.mapper.WeaningRecordMapper;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
-import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.domain.TaskType;
-import com.rabbit.app.modules.repro.entity.ReproCycle;
-import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
-import com.rabbit.app.modules.repro.service.OpenCycleCommand;
-import com.rabbit.app.modules.repro.service.OperatorNameResolver;
-import com.rabbit.app.modules.repro.service.ReproRequestIds;
-import com.rabbit.app.modules.repro.service.ReproStateMachineService;
 import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
@@ -77,10 +70,6 @@ public class BatchService {
     private final OutboundEligibilityService outboundEligibilityService;
     private final int commodityCageCapacity;
 
-    /** 建批次时把母兔送进生产流水线；批次本身只是标签，状态在周期上。 */
-    private final ReproCycleMapper reproCycleMapper;
-    private final ReproStateMachineService reproStateMachineService;
-    private final OperatorNameResolver operatorNameResolver;
     private final WorkTaskWriter workTaskWriter;
 
     public BatchService(
@@ -102,15 +91,9 @@ public class BatchService {
         ReplacementRecordMapper replacementRecordMapper,
         RequestDedupService requestDedupService,
         OutboundEligibilityService outboundEligibilityService,
-        ReproCycleMapper reproCycleMapper,
-        ReproStateMachineService reproStateMachineService,
-        OperatorNameResolver operatorNameResolver,
         WorkTaskWriter workTaskWriter,
         @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
-        this.reproCycleMapper = reproCycleMapper;
-        this.reproStateMachineService = reproStateMachineService;
-        this.operatorNameResolver = operatorNameResolver;
         this.workTaskWriter = workTaskWriter;
         this.batchMapper = batchMapper;
         this.batchRabbitMapper = batchRabbitMapper;
@@ -324,7 +307,6 @@ public class BatchService {
         List<BatchRabbit> links = new ArrayList<BatchRabbit>(rabbits.size());
         List<RabbitStatusHistory> histories =
             new ArrayList<RabbitStatusHistory>(rabbits.size());
-        List<Rabbit> breedingFemales = new ArrayList<Rabbit>();
         for (Rabbit rabbit : rabbits) {
             Long rabbitId = rabbit.getId();
             if (rabbit.getIsActive() == null || !rabbit.getIsActive()) {
@@ -365,15 +347,9 @@ public class BatchService {
             history.setUpdateBy(String.valueOf(userId));
             histories.add(history);
 
-            if (breedingFemale) {
-                breedingFemales.add(rabbit);
-            }
         }
         insertBatchRabbitLinks(links);
         insertStatusHistories(histories);
-        openReproCyclesForNewMembers(
-            userId, houseId, batchId, breedingFemales, now, requestId
-        );
     }
 
     /**
@@ -466,57 +442,6 @@ public class BatchService {
         } catch (RuntimeException e) {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
-        }
-    }
-
-    /**
-     * V44 起「每母兔每批次至多一条未结束周期」是硬约束。哺乳中的母兔被加进另一个
-     * 批次时，这里会在新批次上开出她的下一轮待催情周期——这正是需求说的「母兔同时
-     * 位于两个繁殖周期时它也同时处于两个批次之中」。
-     */
-    private void openReproCyclesForNewMembers(
-        Long userId,
-        Long houseId,
-        Long batchId,
-        List<Rabbit> females,
-        Date now,
-        String requestId
-    ) {
-        String operatorName = operatorNameResolver.resolve(userId);
-        for (Rabbit r : females) {
-            ReproCycle existing = reproCycleMapper.selectOpenPipelineForUpdate(houseId, r.getId());
-            if (existing != null) {
-                continue;
-            }
-            // 本批次里她已经有一条未结束周期时不再开第二条（V44 uk_bc_batch_member）。
-            // 上面那道管线检查漏得掉这种情况：哺乳周期不占管线，却占批次。
-            // 不拦的话 openCycleAt 会抛 409，把整次加兔操作一起带失败。
-            if (reproCycleMapper.selectOpenByBatchAndMotherForUpdate(
-                houseId, batchId, r.getId()
-            ) != null) {
-                continue;
-            }
-            OpenCycleCommand command = new OpenCycleCommand(
-                houseId,
-                userId,
-                operatorName,
-                r.getId(),
-                batchId,
-                ReproStage.AWAIT_ESTRUS,
-                now,
-                now,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                now,
-                null,
-                ReproRequestIds.derive(requestId, "open-" + r.getId())
-            );
-            reproStateMachineService.openCycleAt(command);
         }
     }
 

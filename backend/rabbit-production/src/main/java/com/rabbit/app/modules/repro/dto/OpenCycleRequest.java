@@ -11,14 +11,14 @@ import java.util.Date;
  * 这里只做形状校验。缺失事实一律拒绝而不是填默认值：默认出来的配种日期会一路
  * 传导成错误的预产期和错误的备产提醒。
  *
- * <p>{@code batchId} 可空 —— 散养母兔不归属任何批次（业务裁定 2026-08-16）。
+ * <p>{@code batchId} 在休养、待催情和待配种阶段可空；传值时表示计划批次。待摸胎及后续阶段必填。
  */
 public class OpenCycleRequest {
 
     @NotNull(message = "母兔不能为空")
     private Long motherRabbitId;
 
-    /** 可空：散养母兔不归属批次。 */
+    /** 早期阶段可空或作为计划批次；待摸胎及后续阶段必填。 */
     private Long batchId;
 
     /** 入轨阶段；缺省 AWAIT_ESTRUS（新母兔从待催情起步）。 */
@@ -37,6 +37,8 @@ public class OpenCycleRequest {
     private Integer totalKits;
 
     private Integer liveKits;
+
+    private Integer keptKits;
 
     private Long maleRabbitId;
 
@@ -128,6 +130,14 @@ public class OpenCycleRequest {
 
     public void setLiveKits(Integer liveKits) {
         this.liveKits = liveKits;
+    }
+
+    public Integer getKeptKits() {
+        return keptKits;
+    }
+
+    public void setKeptKits(Integer keptKits) {
+        this.keptKits = keptKits;
     }
 
     public Long getMaleRabbitId() {

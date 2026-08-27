@@ -119,6 +119,7 @@ public class ReproCycleController {
             request.getBirthDate(),
             request.getTotalKits(),
             request.getLiveKits(),
+            request.getKeptKits(),
             request.getMaleRabbitId(),
             MatingMethod.parse(request.getMatingMethod()),
             request.getFirstDueAt(),
@@ -150,6 +151,7 @@ public class ReproCycleController {
             .requestId(request.getRequestId())
             .remark(request.getRemark())
             .reason(request.getReason())
+            .batchId(request.getBatchId())
             .maleRabbitId(request.getMaleRabbitId())
             .matingMethod(MatingMethod.parse(request.getMatingMethod()))
             .palpationResult(PalpationResult.parse(request.getPalpationResult()))

@@ -34,6 +34,9 @@ public class CycleActionRequest {
 
     private String reason;
 
+    /** 配种时选择的生产批次；休养、催情和待配种阶段均不提前绑定。 */
+    private Long batchId;
+
     private Long maleRabbitId;
 
     private String matingMethod;
@@ -118,6 +121,14 @@ public class CycleActionRequest {
 
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public Long getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(Long batchId) {
+        this.batchId = batchId;
     }
 
     public Long getMaleRabbitId() {

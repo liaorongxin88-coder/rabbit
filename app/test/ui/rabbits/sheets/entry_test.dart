@@ -129,13 +129,13 @@ void main() {
         const ValueKey('rabbit-reproductive-stage'),
       );
       final reproEntryStage = find.byKey(const ValueKey('rabbit-repro-stage'));
-      expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsNothing);
       // 种母兔不再提供旧的繁殖阶段下拉：后端已拒收手录值，
       // 她们走服务端下发的生产阶段入轨。
       expect(reproductiveStage, findsNothing);
       expect(reproEntryStage, findsOneWidget);
 
-      // 从【待分笼】入轨需要分娩日与活仔数，字段随服务端字典出现。
+      // 从【待分笼】入轨使用进入阶段日作为分娩日，并补录完整仔数。
       await tester.ensureVisible(reproEntryStage);
       await tester.pumpAndSettle();
       await tester.tap(reproEntryStage);
@@ -146,8 +146,10 @@ void main() {
         find.byKey(const ValueKey('rabbit-stage-entered-at')),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('rabbit-birth-date')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rabbit-birth-date')), findsNothing);
+      expect(find.byKey(const ValueKey('rabbit-total-kits')), findsOneWidget);
       expect(find.byKey(const ValueKey('rabbit-live-kits')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rabbit-kept-kits')), findsOneWidget);
       expect(find.byKey(const ValueKey('rabbit-mating-date')), findsNothing);
 
       final male = find.text('公');
@@ -242,7 +244,7 @@ void main() {
     );
   });
 
-  testWidgets('repro entry requires an active batch before create',
+  testWidgets('early repro entry accepts an optional planned batch',
       (tester) async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
@@ -265,14 +267,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('rabbit-repro-batch')), findsOneWidget);
+    expect(find.text('计划批次（可选）'), findsOneWidget);
+    await _fillRequiredDoeProfile(tester);
     await tester.ensureVisible(
       find.byKey(const ValueKey('rabbit-entry-submit')),
     );
     await tester.tap(find.byKey(const ValueKey('rabbit-entry-submit')));
-    await tester.pumpAndSettle();
+    await _waitForCapturedRequest(tester, adapter);
 
-    expect(find.text('请选择进行中的批次'), findsWidgets);
-    expect(adapter.requests, isEmpty);
+    expect(adapter.requests, hasLength(1));
+    expect(adapter.requests.single.body['reproStage'], 'AWAIT_ESTRUS');
+    expect(adapter.requests.single.body.containsKey('batchId'), isFalse);
   });
 
   testWidgets('repro entry selects only an active batch and sends its id',
@@ -307,20 +312,17 @@ void main() {
     await tester.pumpAndSettle();
 
     // Leaving and re-entering tracking must not retain the earlier batch.
+    await tester.ensureVisible(stage);
     await tester.tap(stage);
     await tester.pumpAndSettle();
     await tester.tap(find.text('暂不入轨').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(stage);
     await tester.tap(stage);
     await tester.pumpAndSettle();
     await tester.tap(find.text('待催情').last);
     await tester.pumpAndSettle();
 
-    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
-    await tester.ensureVisible(submit);
-    await tester.tap(submit);
-    await tester.pumpAndSettle();
-    expect(find.text('请选择进行中的批次'), findsWidgets);
     expect(adapter.requests, isEmpty);
 
     await tester.ensureVisible(batch);
@@ -329,6 +331,7 @@ void main() {
     await tester.tap(find.text(_activeBatch.batchCode).last);
     await tester.pumpAndSettle();
 
+    await _fillRequiredDoeProfile(tester);
     final submitAfterReselection =
         find.byKey(const ValueKey('rabbit-entry-submit'));
     await tester.ensureVisible(submitAfterReselection);
@@ -615,16 +618,28 @@ Widget _testApp({
           ReproEntryPoint(
             stage: 'AWAIT_PALPATION',
             stageLabel: '待摸胎',
+            batchRequired: true,
             requiredFacts: [
-              ReproRequiredFact(fact: 'MATING_DATE', label: '配种日期'),
+              ReproRequiredFact(
+                fact: 'STAGE_ENTERED_AT',
+                label: '进入该阶段的日期',
+              ),
+              ReproRequiredFact(fact: 'MALE_RABBIT', label: '配种公兔'),
+              ReproRequiredFact(fact: 'MATING_METHOD', label: '配种方式'),
             ],
           ),
           ReproEntryPoint(
             stage: 'AWAIT_WEANING',
             stageLabel: '待分笼',
+            batchRequired: true,
             requiredFacts: [
-              ReproRequiredFact(fact: 'BIRTH_DATE', label: '分娩日期'),
+              ReproRequiredFact(
+                fact: 'STAGE_ENTERED_AT',
+                label: '进入该阶段的日期',
+              ),
+              ReproRequiredFact(fact: 'TOTAL_KITS', label: '产仔数'),
               ReproRequiredFact(fact: 'LIVE_KITS', label: '活仔数'),
+              ReproRequiredFact(fact: 'KEPT_KITS', label: '留仔数'),
             ],
           ),
         ],
@@ -721,6 +736,21 @@ final _replacementRabbit = Rabbit(
   growthStage: 'GROWING',
   reproductiveStage: null,
 );
+
+Future<void> _fillRequiredDoeProfile(WidgetTester tester) async {
+  final breed = find.byKey(const ValueKey('rabbit-entry-breed'));
+  await tester.ensureVisible(breed);
+  await tester.enterText(breed, '新西兰白');
+
+  final weight = find.byKey(const ValueKey('rabbit-entry-weight'));
+  await tester.ensureVisible(weight);
+  await tester.enterText(weight, '3.8');
+
+  final seller = find.byKey(const ValueKey('rabbit-entry-source-seller'));
+  await tester.ensureVisible(seller);
+  await tester.enterText(seller, '测试供应方');
+  await tester.pump();
+}
 
 Future<void> _waitForCapturedRequest(
   WidgetTester tester,

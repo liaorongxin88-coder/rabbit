@@ -109,6 +109,7 @@ class ReproRepository {
     DateTime? birthDate,
     int? totalKits,
     int? liveKits,
+    int? keptKits,
     int? maleRabbitId,
     MatingMethod? matingMethod,
     DateTime? firstDueAt,
@@ -133,6 +134,7 @@ class ReproRepository {
           'birthDate': farmDateTimeToEpochMilliseconds(birthDate),
         if (totalKits != null) 'totalKits': totalKits,
         if (liveKits != null) 'liveKits': liveKits,
+        if (keptKits != null) 'keptKits': keptKits,
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (firstDueAt != null)
@@ -156,6 +158,7 @@ class ReproRepository {
     // 接产：BORN / FAILED
     String? outcome,
     // 配种
+    int? batchId,
     int? maleRabbitId,
     MatingMethod? matingMethod,
     // 摸胎
@@ -188,6 +191,7 @@ class ReproRepository {
         'action': action.wire,
         if (outcome != null) 'outcome': outcome,
         'occurredAt': farmDateTimeToEpochMilliseconds(executionTime),
+        if (batchId != null) 'batchId': batchId,
         if (maleRabbitId != null) 'maleRabbitId': maleRabbitId,
         if (matingMethod != null) 'matingMethod': matingMethod.wire,
         if (palpationResult != null) 'palpationResult': palpationResult.wire,

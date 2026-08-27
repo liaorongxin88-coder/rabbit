@@ -9,6 +9,7 @@ package com.rabbit.app.modules.repro.domain;
  */
 public enum ReproEventType {
     CYCLE_START("开始周期"),
+    RECOVERY_DONE("结束休养"),
     ESTRUS_DONE("催情"),
     MATING_DONE("配种"),
     PALPATION_PREGNANT("摸胎-怀孕"),

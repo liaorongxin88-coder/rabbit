@@ -27,6 +27,10 @@ public class CreateRabbitRequest {
     private String breed;
 
     private String arrivalMethod;
+
+    @Size(max = 120, message = "供应方过长")
+    private String sourceSeller;
+
     private Date arrivalDate;
     private Double weight;
 
@@ -55,7 +59,15 @@ public class CreateRabbitRequest {
 
     private Date birthDate;
 
+    private Integer totalKits;
+
     private Integer liveKits;
+
+    private Integer keptKits;
+
+    private Long maleRabbitId;
+
+    private String matingMethod;
 
     @NotBlank(message = "requestId不能为空")
     private String requestId;
@@ -106,6 +118,14 @@ public class CreateRabbitRequest {
 
     public void setArrivalMethod(String arrivalMethod) {
         this.arrivalMethod = arrivalMethod;
+    }
+
+    public String getSourceSeller() {
+        return sourceSeller;
+    }
+
+    public void setSourceSeller(String sourceSeller) {
+        this.sourceSeller = sourceSeller;
     }
 
     public Date getArrivalDate() {
@@ -168,7 +188,23 @@ public class CreateRabbitRequest {
 
     public void setBirthDate(Date birthDate) { this.birthDate = birthDate; }
 
+    public Integer getTotalKits() { return totalKits; }
+
+    public void setTotalKits(Integer totalKits) { this.totalKits = totalKits; }
+
     public Integer getLiveKits() { return liveKits; }
 
     public void setLiveKits(Integer liveKits) { this.liveKits = liveKits; }
+
+    public Integer getKeptKits() { return keptKits; }
+
+    public void setKeptKits(Integer keptKits) { this.keptKits = keptKits; }
+
+    public Long getMaleRabbitId() { return maleRabbitId; }
+
+    public void setMaleRabbitId(Long maleRabbitId) { this.maleRabbitId = maleRabbitId; }
+
+    public String getMatingMethod() { return matingMethod; }
+
+    public void setMatingMethod(String matingMethod) { this.matingMethod = matingMethod; }
 }
