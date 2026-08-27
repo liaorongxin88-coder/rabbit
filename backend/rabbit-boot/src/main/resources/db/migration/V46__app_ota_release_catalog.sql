@@ -1,0 +1,21 @@
+CREATE TABLE app_releases (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    platform VARCHAR(16) NOT NULL,
+    build_number BIGINT NOT NULL,
+    version_name VARCHAR(64) NOT NULL,
+    download_url VARCHAR(2048) NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    apk_size_bytes BIGINT NOT NULL,
+    release_notes VARCHAR(1000) NOT NULL DEFAULT '',
+    force_update BOOLEAN NOT NULL DEFAULT FALSE,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    request_id VARCHAR(64) NOT NULL,
+    create_by VARCHAR(64) NOT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_by VARCHAR(64) NOT NULL,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_app_releases_platform_build (platform, build_number),
+    UNIQUE KEY uk_app_releases_request (request_id),
+    KEY idx_app_releases_check (platform, is_published, build_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Android OTA release catalog';

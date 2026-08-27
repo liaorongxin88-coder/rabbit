@@ -23,6 +23,8 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/departure.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/vaccination.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/widgets/vaccinations.dart';
 
 class HouseRabbitsScreen extends ConsumerWidget {
   const HouseRabbitsScreen({super.key, required this.houseId});
@@ -372,6 +374,11 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
                   const SizedBox(height: 18),
                   _buildReproductionFlow(context, tasks, stageActions),
                 ],
+                const SizedBox(height: 18),
+                RabbitVaccinationHistory(
+                  houseId: widget.houseId,
+                  rabbitId: widget.rabbit.id,
+                ),
                 const SizedBox(height: 18),
                 _buildMemberships(context, memberships),
                 if (widget.rabbit.type == '0' &&
@@ -752,6 +759,13 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           icon: const Icon(Icons.edit_outlined),
           label: const Text('编辑'),
         ),
+      if (widget.canEdit && widget.rabbit.isActive)
+        OutlinedButton.icon(
+          key: ValueKey('rabbit-detail-vaccination-${widget.rabbit.id}'),
+          onPressed: _openVaccination,
+          icon: const Icon(Icons.vaccines_outlined),
+          label: const Text('接种疫苗'),
+        ),
       if (widget.rabbit.isActive && (widget.pageMode || !_isDoe))
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-departure-${widget.rabbit.id}'),
@@ -901,6 +915,19 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
       motherRabbitId: widget.rabbit.id,
     );
     if (changed && mounted) {
+      _refreshRabbitFlow();
+    }
+  }
+
+  /// 接种后不关闭兔只详情。打完针的兔子仍然在栏，人往往要接着看一眼
+  /// 接种记录或再做别的操作；「登记离场」才需要关页，因为它把兔只带出了在栏列表。
+  Future<void> _openVaccination() async {
+    final recorded = await showRabbitVaccinationSheet(
+      context: context,
+      houseId: widget.houseId,
+      rabbit: widget.rabbit,
+    );
+    if (recorded && mounted) {
       _refreshRabbitFlow();
     }
   }

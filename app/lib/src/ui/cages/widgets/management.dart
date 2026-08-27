@@ -20,6 +20,7 @@ import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/range_entry.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 enum _CageOccupancyFilter { all, empty, occupied }
@@ -186,6 +187,12 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onCreate: perm.canControl
                     ? () => _showCreateCagesSheet(context)
                     : null,
+                onRangeEntry: perm.canAddRabbit
+                    ? () => showRabbitRangeEntrySheet(
+                          context: context,
+                          houseId: houseId,
+                        )
+                    : null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
@@ -196,6 +203,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 house: widget.house,
                 canManageCages: false,
                 onCreate: null,
+                onRangeEntry: null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
@@ -205,6 +213,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 house: widget.house,
                 canManageCages: false,
                 onCreate: null,
+                onRangeEntry: null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
@@ -661,6 +670,7 @@ class _CageHeader extends StatelessWidget {
     required this.house,
     required this.canManageCages,
     required this.onCreate,
+    required this.onRangeEntry,
     required this.onRefresh,
     this.showEntryHint = false,
   });
@@ -669,6 +679,7 @@ class _CageHeader extends StatelessWidget {
   final bool canManageCages;
   final bool showEntryHint;
   final VoidCallback? onCreate;
+  final VoidCallback? onRangeEntry;
   final VoidCallback onRefresh;
 
   @override
@@ -714,15 +725,22 @@ class _CageHeader extends StatelessWidget {
         ),
       ],
     );
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
+    final actions = Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         IconButton(
           tooltip: '刷新笼位',
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh),
         ),
-        const SizedBox(width: 4),
+        FilledButton.icon(
+          key: const ValueKey('cage-range-entry'),
+          onPressed: onRangeEntry,
+          icon: const Icon(Icons.select_all_outlined),
+          label: const Text('范围入栏'),
+        ),
         FilledButton.icon(
           key: const ValueKey('cage-create-entry'),
           onPressed: onCreate,
@@ -731,9 +749,6 @@ class _CageHeader extends StatelessWidget {
         ),
       ],
     );
-    if (!largeText) {
-      return Row(children: [Expanded(child: heading), actions]);
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

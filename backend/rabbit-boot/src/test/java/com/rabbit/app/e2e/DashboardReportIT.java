@@ -94,19 +94,30 @@ public class DashboardReportIT extends E2eTestSupport {
                 "totalKits", 6, "liveKits", 6, "keptKits", 6));
 
         // 第二轮：血配 —— 哺乳未结束就另开一个管线周期，于是同时有两个 OPEN。
-        long secondCycle = openCycleAtMating(owner, houseId, batchId, activeMother, "dash_c2");
+        // V44 起这第二条必须落到另一个批次（同一 (母兔, 批次) 至多一条未结束周期）。
+        // 本用例要验的是「一头母兔两条 OPEN 周期时仪表盘只算一次」，
+        // 这与周期分属哪个批次无关，只需把血配那条换个批次装。
+        long bloodBatchId = api.postOk("/api/batches", owner.token, houseId, obj(
+                "batchCode", "DASH-BLOOD-" + requestId("dashboard_blood_batch").substring(0, 8),
+                "femaleRabbitIds", List.of(),
+                "requestId", requestId("dashboard_blood_create")
+        )).get("id").asLong();
+        long secondCycle = openCycleAtMating(owner, houseId, bloodBatchId, activeMother, "dash_c2");
         act(owner, houseId, secondCycle, "dash_c2_mate", obj(
                 "action", "MATING", "occurredAt", oneMinuteAgo(),
                 "maleRabbitId", father, "matingMethod", "NATURAL"));
         act(owner, houseId, secondCycle, "dash_c2_preg", obj(
                 "action", "PALPATION", "occurredAt", oneMinuteAgo(), "palpationResult", "PREGNANT"));
 
-        JsonNode activeCycles = api.getOk(
-                "/api/batches/" + batchId + "/breeding-cycles?motherRabbitId=" + activeMother + "&activeOnly=true",
-                owner.token,
-                houseId
-        );
-        Assertions.assertEquals(2, activeCycles.size());
+        // 两条并行周期现在分属两个批次，所以按批次查各得一条，合起来才是两条。
+        // 前置条件还是那个前置条件：这头母兔确实同时挂着两条未结束周期。
+        Assertions.assertEquals(1, activeCyclesOf(owner, houseId, batchId, activeMother).size());
+        Assertions.assertEquals(1, activeCyclesOf(owner, houseId, bloodBatchId, activeMother).size());
+        Assertions.assertEquals(2, jdbc.queryForObject(
+                "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
+                        + " and lifecycle = 'OPEN'",
+                Integer.class, houseId, activeMother).intValue(),
+                "血配下这头母兔应有两条未结束周期");
 
         JsonNode summary = api.getOk(
                 "/api/reports/dashboard?houseId=" + houseId + "&year=" + LocalDate.now().getYear(),
@@ -138,6 +149,7 @@ public class DashboardReportIT extends E2eTestSupport {
         }
         // 没有待催情周期，说明这是血配：她正在哺乳，而哺乳周期不占流水线，
         // 所以这里真的要另开一条新的流水线周期——两个 OPEN 周期并存正是血配的形态。
+        // V44 起传进来的 batchId 必须是另一个批次，否则这里会拿到 409。
         return api.postOk("/api/repro/cycles", owner.token, houseId, obj(
                 "motherRabbitId", motherId,
                 "batchId", batchId,
@@ -145,6 +157,16 @@ public class DashboardReportIT extends E2eTestSupport {
                 "occurredAt", oneMinuteAgo(),
                 "requestId", requestId(prefix + "_open")
         )).get("cycleId").asLong();
+    }
+
+    private JsonNode activeCyclesOf(
+            UserSession owner, long houseId, long batchId, long motherId) {
+        return api.getOk(
+                "/api/batches/" + batchId + "/breeding-cycles?motherRabbitId=" + motherId
+                        + "&activeOnly=true",
+                owner.token,
+                houseId
+        );
     }
 
     private void act(

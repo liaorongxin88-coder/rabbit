@@ -30,6 +30,7 @@ import type {
   RabbitHouse,
   RabbitReplacementRequest,
   RabbitReplacementResult,
+  RangeRabbitEntryResult,
   ReproActionResult,
   ReproBulkResult,
   ReproTaskPage,
@@ -40,6 +41,7 @@ import type {
   SmsCodeDelivery,
 } from "@/types/api";
 import type { RabbitSaleRequest } from "@/types/rabbit-sale";
+import type { VaccinationRecord } from "@/types/rabbit-vaccination";
 
 export function requestId() {
   return crypto.randomUUID();
@@ -241,6 +243,25 @@ export function createRabbit(
 ) {
   return workspacePostJson<Rabbit>(
     "/api/rabbits",
+    { ...data, requestId: requestId() },
+    { houseId },
+  );
+}
+
+export function createRabbitsInRange(
+  houseId: number,
+  data: Omit<RabbitWriteInput, "cageId"> & {
+    rowStart: number;
+    rowEnd: number;
+    positionStart: number;
+    positionEnd: number;
+    layerStart: number;
+    layerEnd: number;
+    rabbitsPerCage: number;
+  },
+) {
+  return workspacePostJson<RangeRabbitEntryResult>(
+    "/api/rabbits/range-entry",
     { ...data, requestId: requestId() },
     { houseId },
   );
@@ -575,5 +596,18 @@ export function removeHouseMember(houseId: number, userId: number) {
   return workspaceDeleteJson<void>(`/api/house-members/${userId}`, {
     houseId,
     params: { requestId: requestId() },
+  });
+}
+
+/**
+ * 单只兔的接种历史。
+ *
+ * admin 只读不写：接种是站在笼前完成的现场动作，录入入口在 App，
+ * 后台承担的是回查和核对。
+ */
+export function listRabbitVaccinations(houseId: number, rabbitId: number) {
+  return workspaceGetJson<VaccinationRecord[]>("/api/vaccinations", {
+    houseId,
+    params: { rabbitId },
   });
 }

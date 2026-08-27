@@ -341,10 +341,18 @@ public class ReproApiIT extends E2eTestSupport {
     @Test
     void enteringAtLactationPersistsKitCounts() {
         Fixture f = fixture("repro_api_lactation", 1);
+        // 建批已经给这头母兔开了一条待催情周期，而 V44 起同一 (母兔, 批次)
+        // 至多一条未结束周期。哺乳周期因此另开一个批次装——这正是新定义里
+        // 「母兔同时位于两个繁殖周期时它也同时处于两个批次之中」的形状。
+        long lactationBatchId = api.postOk("/api/batches", f.token, f.houseId, obj(
+            "batchCode", "API-LACT-" + requestId("lact_batch").substring(0, 8),
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId("lactation_batch")
+        )).get("id").asLong();
         // 存量录入：母兔已在哺乳，直接从待分笼入轨。
         long cycleId = api.postOk("/api/repro/cycles", f.token, f.houseId, obj(
             "motherRabbitId", f.does.get(0),
-            "batchId", f.batchId,
+            "batchId", lactationBatchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", now(),
             "birthDate", now() - 5L * 24 * 3600 * 1000,

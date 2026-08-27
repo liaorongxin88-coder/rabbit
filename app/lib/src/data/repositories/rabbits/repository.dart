@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/domain/cages/transfer.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/replacement.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/range_entry.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 final rabbitRepositoryProvider = Provider<RabbitRepository>((ref) {
@@ -249,6 +250,56 @@ class RabbitRepository {
       body: body,
       decode: (data) => Rabbit.fromJson(
         requireJsonObject(data, message: '录入兔只结果格式不正确'),
+      ),
+    );
+  }
+
+  Future<RangeRabbitEntryResult> createRabbitsInRange({
+    required int houseId,
+    required int rowStart,
+    required int rowEnd,
+    required int positionStart,
+    required int positionEnd,
+    required int layerStart,
+    required int layerEnd,
+    required int rabbitsPerCage,
+    required String type,
+    required String gender,
+    required String arrivalMethod,
+    required DateTime arrivalDate,
+    String breed = '',
+    double? weight,
+    String? growthStage,
+    String? reproductiveStage,
+  }) {
+    final body = <String, dynamic>{
+      'rowStart': rowStart,
+      'rowEnd': rowEnd,
+      'positionStart': positionStart,
+      'positionEnd': positionEnd,
+      'layerStart': layerStart,
+      'layerEnd': layerEnd,
+      'rabbitsPerCage': rabbitsPerCage,
+      'type': type,
+      'gender': gender,
+      'arrivalMethod': arrivalMethod,
+      'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
+      'requestId': _uuid.v4(),
+    };
+    if (breed.trim().isNotEmpty) body['breed'] = breed.trim();
+    if (weight != null && weight > 0) body['weight'] = weight;
+    if (growthStage?.trim().isNotEmpty ?? false) {
+      body['growthStage'] = growthStage!.trim();
+    }
+    if (reproductiveStage?.trim().isNotEmpty ?? false) {
+      body['reproductiveStage'] = reproductiveStage!.trim();
+    }
+    return _api.post<RangeRabbitEntryResult>(
+      '/api/rabbits/range-entry',
+      houseId: houseId,
+      body: body,
+      decode: (data) => RangeRabbitEntryResult.fromJson(
+        requireJsonObject(data, message: '范围入栏结果格式不正确'),
       ),
     );
   }

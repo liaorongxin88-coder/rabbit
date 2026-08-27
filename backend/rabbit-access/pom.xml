@@ -29,6 +29,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+        <!--
+            操作追踪的两个切面（OperationContextAspect / OperationEventAspect）需要
+            AspectJ 注解风格的 AOP。仓库此前没有任何 @Aspect，故在此首次引入。
+            放在 access 而不是 boot：切面与 OperationContext 同模块，production
+            通过依赖 access 就能拿到 @TrackedOperation，不必各自声明 AOP 依赖。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>

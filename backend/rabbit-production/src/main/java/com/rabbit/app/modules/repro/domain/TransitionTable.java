@@ -131,6 +131,8 @@ public final class TransitionTable {
 
         // T7 分笼：关周期 → 准备 → 自动开下一轮。
         // 若母兔已有管线周期（血配提前开启），服务层会跳过这次自动接续，只关窝。
+        // 接续周期继承被关闭周期的批次，不会撞上 V44 的 uk_bc_batch_member：
+        // 那个批次里该母兔原本就只有这一条 OPEN 周期，而它正在同一事务里被关掉。
         rows.add(new Transition(
             ReproStage.AWAIT_WEANING, ReproAction.WEANING, null,
             null, true, CycleResult.WEANED, ReproStage.AWAIT_ESTRUS,

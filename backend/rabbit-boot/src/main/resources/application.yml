@@ -58,6 +58,16 @@ app:
       enabled: ${APP_ADMIN_BOOTSTRAP_ENABLED:true}
       username: ${APP_ADMIN_BOOTSTRAP_USERNAME:admin}
       password: ${APP_ADMIN_BOOTSTRAP_PASSWORD:admin123456}
+  app-update:
+    # direct：把版本清单里登记的地址（当前是 GitHub Release）直接给客户端，省带宽，
+    #   但要求设备能出网。
+    # proxy：客户端只连后端，由后端取上游再转发。场区内网只放通后端时用。
+    #   升级流量会全部压在后端，且必须配下面的 public-base-url。
+    # 两者切换只改配置，不用重新发版。
+    download-mode: ${APP_UPDATE_DOWNLOAD_MODE:direct}
+    # proxy 模式下拼给客户端的后端对外地址，必须是 https（客户端只收 https）。
+    # 例如 https://api.dzht.top。配错或缺失会在启动时直接报错。
+    public-base-url: ${APP_UPDATE_PUBLIC_BASE_URL:}
   wechat:
     enabled: false
     appid:

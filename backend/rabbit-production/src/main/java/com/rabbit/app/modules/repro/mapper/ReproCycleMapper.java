@@ -30,6 +30,19 @@ public interface ReproCycleMapper {
         @Param("motherRabbitId") Long motherRabbitId
     );
 
+    /**
+     * 锁定该母兔在指定批次内的 OPEN 周期（含哺乳段）。
+     *
+     * <p>对应 V44 的 uk_bc_batch_member：一只母兔在同一批次内至多一条未结束周期。
+     * 与 {@link #selectOpenPipelineForUpdate} 的区别是它<b>不排除</b> AWAIT_WEANING——
+     * 哺乳周期不占管线，但它占批次，血配的下一轮因此必须开在别的批次上。
+     */
+    ReproCycle selectOpenByBatchAndMotherForUpdate(
+        @Param("houseId") Long houseId,
+        @Param("batchId") Long batchId,
+        @Param("motherRabbitId") Long motherRabbitId
+    );
+
     /** 该母兔全部未结束周期（含哺乳段），用于血配场景下的并行判定。 */
     List<ReproCycle> selectOpenByMother(
         @Param("houseId") Long houseId,

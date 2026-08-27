@@ -248,8 +248,9 @@ public class ReproStateMachineService {
         Rabbit mother = requireEligibleMotherForUpdate(
             command.houseId(), command.motherRabbitId()
         );
-        ensureActiveBreedingMember(command, entry, mother, occurredAt, operator);
         assertPipelineFree(command.houseId(), command.motherRabbitId(), entry);
+        assertBatchCycleFree(command.houseId(), command.batchId(), command.motherRabbitId());
+        ensureActiveBreedingMember(command, entry, mother, occurredAt, operator);
 
         ReproCycle cycle = newCycle(command, entry, occurredAt, operator);
 
@@ -279,7 +280,13 @@ public class ReproStateMachineService {
             syncLitterCounters(cycle, litter);
         }
 
-        reproCycleMapper.insert(cycle);
+        try {
+            reproCycleMapper.insert(cycle);
+        } catch (DuplicateKeyException e) {
+            // uk_bc_batch_member 的兜底：前置检查与 insert 之间并发插入了同一 (批次, 母兔)。
+            // 让它以业务语义 409 出去，而不是一个看不懂的 500。
+            throw new BizException(409, "该母兔在本批次已有进行中的生产周期，请改选其他批次");
+        }
 
         ReproEvent event = new ReproEvent();
         event.setHouseId(command.houseId());
@@ -1118,6 +1125,30 @@ public class ReproStateMachineService {
         if (running != null) {
             throw new BizException(409, "该母兔已有进行中的生产周期（阶段："
                 + ReproStage.parse(running.getStage()).label() + "）");
+        }
+    }
+
+    /**
+     * 批次互斥：一只母兔在同一批次内至多一条未结束周期（V44 uk_bc_batch_member）。
+     *
+     * <p>这里拦的恰好是 {@link #assertPipelineFree} 放行的那一格：哺乳周期不占管线，
+     * 所以母兔带崽期间可以重新配种（血配）。新定义下血配<b>仍然允许</b>，只是第二条
+     * 并行周期必须落在另一个批次上，于是「母兔同时处于两个周期」自然等价于
+     * 「母兔同时属于两个批次」（飞书 recvqh3EJXzmO1）。
+     *
+     * <p>目标批次<b>要求调用方显式传入</b>，服务端不自动建批：批次是需求里明写的
+     * 「用户创建、用户点击结束」的容器，自动造出来的批次带着用户没取过的编号出现在
+     * 列表里，还得用户亲手去结束它；而且自动建批直接剥夺了「把它放进现有批次」
+     * 这个更常见的选择。
+     */
+    private void assertBatchCycleFree(Long houseId, Long batchId, Long motherRabbitId) {
+        ReproCycle inBatch = reproCycleMapper.selectOpenByBatchAndMotherForUpdate(
+            houseId, batchId, motherRabbitId
+        );
+        if (inBatch != null) {
+            throw new BizException(409, "该母兔在本批次已有进行中的生产周期（阶段："
+                + ReproStage.parse(inBatch.getStage()).label()
+                + "），并行的下一轮请改选其他批次");
         }
     }
 

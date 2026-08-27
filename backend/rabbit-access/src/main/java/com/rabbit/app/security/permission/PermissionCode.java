@@ -64,6 +64,8 @@ public enum PermissionCode {
     RABBIT_SETTINGS_EDIT("rabbit:settings:edit", PermissionScope.HOUSE, HouseRole.MANAGER.rank()),
     RABBIT_TREATMENTS_LIST("rabbit:treatments:list", PermissionScope.HOUSE, HouseRole.VIEWER.rank()),
     RABBIT_TREATMENTS_EDIT("rabbit:treatments:edit", PermissionScope.HOUSE, HouseRole.STAFF.rank()),
+    RABBIT_VACCINATIONS_LIST("rabbit:vaccinations:list", PermissionScope.HOUSE, HouseRole.VIEWER.rank()),
+    RABBIT_VACCINATIONS_ADD("rabbit:vaccinations:add", PermissionScope.HOUSE, HouseRole.STAFF.rank()),
     RABBIT_WEIGHTS_LIST("rabbit:weights:list", PermissionScope.HOUSE, HouseRole.VIEWER.rank()),
     RABBIT_WEIGHTS_ADD("rabbit:weights:add", PermissionScope.HOUSE, HouseRole.STAFF.rank()),
     RABBIT_NFC_QUERY("rabbit:nfc:query", PermissionScope.HOUSE, HouseRole.VIEWER.rank()),

@@ -29,7 +29,7 @@ import 'package:rabbit_flutter/src/ui/settings/screens/app.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/production.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/reminders.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 const _appSettingsLoadingPath = '/app-settings-loading';
 const _appSettingsErrorPath = '/app-settings-error';
@@ -40,7 +40,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(notifier.dispose);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: _appSettingsLoadingPath,
     refreshListenable: notifier,
     redirect: (context, state) {
@@ -150,7 +150,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/houses/:houseId/outbound',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final houseId =
               int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;

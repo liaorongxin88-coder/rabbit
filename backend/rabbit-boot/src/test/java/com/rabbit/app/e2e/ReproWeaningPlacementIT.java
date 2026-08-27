@@ -408,9 +408,13 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
         for (int index = 0; index < doeCount; index++) {
             does.add(createRabbit(owner, houseId, cages.get(index), "0", "0", prefix + "_doe" + index));
         }
+        // 建空批次，再用待分笼入轨把母兔带进来。
+        // 建批时就带母兔会自动开一条待催情周期，下面再开待分笼就是同一批次内的
+        // 第二条未结束周期，V44 起会被 409 拒掉。成员关系本来就由生产周期派生，
+        // 入轨会自动建立繁殖成员关系，本场景要的也正是「这批母兔在哺乳」。
         long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
             "batchCode", "WP-" + requestId(prefix).substring(0, 8),
-            "femaleRabbitIds", does,
+            "femaleRabbitIds", List.of(),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
 

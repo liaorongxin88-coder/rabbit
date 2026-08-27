@@ -75,7 +75,10 @@ public class ReproLifecycleIT extends E2eTestSupport {
         long doe = f.doeIds.get(0);
 
         // 血配：一个哺乳周期 + 一个管线周期，两个都 OPEN。
-        long nursing = openAt(f, doe, f.batchId, "AWAIT_WEANING", "cull_nursing",
+        // V44 起两条并行周期必须分属两个批次，所以哺乳周期另开一个批次装；
+        // 管线周期仍是建批时自动入轨的那一条，留在 f.batchId。
+        long nursingBatch = createBatch(f, List.of(), "cull_nursing_batch");
+        long nursing = openAt(f, doe, nursingBatch, "AWAIT_WEANING", "cull_nursing",
             obj("birthDate", oneMinuteAgo(), "totalKits", 7, "liveKits", 6));
         long pipeline = advanceToMating(f, doe, "cull_pipeline");
         Assertions.assertEquals(2, intOf(
@@ -296,7 +299,9 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Fixture f = fixture("depart", 1);
         long doe = f.doeIds.get(0);
 
-        long nursing = openAt(f, doe, f.batchId, "AWAIT_WEANING", "depart_nursing",
+        // 同上：并行的哺乳周期归另一个批次（V44）。
+        long nursingBatch = createBatch(f, List.of(), "depart_nursing_batch");
+        long nursing = openAt(f, doe, nursingBatch, "AWAIT_WEANING", "depart_nursing",
             obj("birthDate", oneMinuteAgo(), "totalKits", 6, "liveKits", 5));
         advanceToMating(f, doe, "depart_pipeline");
         Assertions.assertEquals(2, intOf(

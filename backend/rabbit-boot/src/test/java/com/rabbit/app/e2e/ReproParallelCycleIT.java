@@ -29,6 +29,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * <p>本套件专门盯「操作 A 周期时会不会伤到 B 周期」：历史上真出现过给 A 分笼
  * 把 B 的阶段覆盖掉的漂移缺陷，只断言当事周期是发现不了的。
+ *
+ * <p><b>V44 改了两条并行周期的批次归属。</b>它们不再共用一个批次，而是各占一个：
+ * 飞书 recvqh3EJXzmO1 定义「每只母兔在同一 Batch 内只有一个繁育周期，当母兔同时
+ * 位于两个繁殖周期时它也同时处于两个批次之中」。血配本身仍然合法，只是第二条
+ * 周期必须显式选定另一个批次（新建或现有都行），服务端不自动建批。
+ * 因此本类的夹具带两个批次，并行周期一律走 {@code openBloodMatingAt}。
  */
 public class ReproParallelCycleIT extends E2eTestSupport {
     @Autowired
@@ -59,8 +65,8 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Long litterId = litterIdOf(nursing.cycleId());
         assertProjection(f, ReproStage.READY, null);
 
-        // 分笼前开启下一轮，再摸出空怀 —— 由此产生「待分笼 + 待催情」
-        ReproResult bloodMating = openAt(f, ReproStage.AWAIT_MATING, "coexist_blood");
+        // 分笼前开启下一轮（落到血配批次），再摸出空怀 —— 由此产生「待分笼 + 待催情」
+        ReproResult bloodMating = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "coexist_blood");
         apply(f, bloodMating.cycleId(), ReproAction.MATING, "coexist_mate",
             b -> b.maleRabbitId(f.sireId).matingMethod(MatingMethod.NATURAL));
         ReproResult empty = apply(f, bloodMating.cycleId(), ReproAction.PALPATION, "coexist_empty",
@@ -107,7 +113,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         ReproResult nursing = openAtEstrus(f, "pp_open");
         advanceToDelivery(f, nursing.cycleId(), "pp");
         Long litterId = litterIdOf(nursing.cycleId());
-        ReproResult mating = openAt(f, ReproStage.AWAIT_MATING, "pp_blood");
+        ReproResult mating = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "pp_blood");
 
         Date weaningDueBefore = taskDueOnLitter(litterId);
         Date matingDueBefore = taskDueOnCycle(mating.cycleId());
@@ -139,7 +145,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Fixture f = fixture("par_retire");
         ReproResult nursing = openAtEstrus(f, "rt_open");
         advanceToDelivery(f, nursing.cycleId(), "rt");
-        ReproResult mating = openAt(f, ReproStage.AWAIT_MATING, "rt_blood");
+        ReproResult mating = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "rt_blood");
         Assertions.assertEquals(2, openCycles(f));
 
         // 只对管线周期发离场
@@ -178,25 +184,95 @@ public class ReproParallelCycleIT extends E2eTestSupport {
     }
 
     /**
-     * 并存的两条周期都会挡住批次结束，且必须逐条结清。
+     * 两条并行周期落在两个不同批次，且各自挡住自己那个批次的结束。
      *
-     * <p>批次是纯标签，结束批次不代表母兔离场，所以这里只能靠把周期跑完或显式离场。
+     * <p><b>这条用例的语义在 V44 被整个换掉了。</b>原来它叫
+     * {@code bothParallelCyclesBlockBatchCompletion}，断言两条周期留在<b>同一个</b>
+     * 批次里（注释写的是「两条并行周期都应计入批次的未结束周期」）。飞书
+     * recvqh3EJXzmO1 的新定义把这件事反过来，于是断言也反过来。
+     *
+     * <p>换语义不等于放松保护。「批次还有未结束周期就不许结束」这条既有守卫必须
+     * 原样活着，只是现在要<b>逐个批次</b>验证：以前一个批次挡两条周期，现在是两个
+     * 批次各挡一条。任何一边漏掉，被漏掉的那条周期就会随批次归档一起从视野里消失，
+     * 而母兔仍被 uk_bc_pipeline 占着。
      */
     @Test
-    void bothParallelCyclesBlockBatchCompletion() {
+    void parallelCyclesLandInSeparateBatchesAndEachBlocksItsOwn() {
         Fixture f = batchFixture("par_complete");
-        Long firstCycle = openCycleIdInBatch(f);
-        advanceToDelivery(f, firstCycle, "complete");
-        openAt(f, ReproStage.AWAIT_MATING, "complete_blood");
+        Long nursingCycle = openCycleIdInBatch(f);
+        advanceToDelivery(f, nursingCycle, "complete");
+        // 血配的第二轮：必须显式选另一个批次，服务端不会替你新建。
+        ReproResult bloodCycle = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "complete_blood");
 
+        // ① 一兔两周期 == 一兔两批次
+        Assertions.assertEquals(2, openCycles(f), "血配下母兔仍应有两条未结束周期");
+        Assertions.assertEquals(f.batchId, batchIdOf(nursingCycle), "哺乳周期留在原批次");
         Assertions.assertEquals(
-            2,
-            (int) jdbc.queryForObject(
-                "select count(*) from breeding_cycles where house_id = ? and batch_id = ? and lifecycle = 'OPEN'",
-                Integer.class, f.houseId, f.batchId
-            ),
-            "两条并行周期都应计入批次的未结束周期"
+            f.bloodBatchId, batchIdOf(bloodCycle.cycleId()), "并行周期必须落到另一个批次"
         );
+        Assertions.assertEquals(1, openCyclesInBatch(f, f.batchId),
+            "同一 (母兔, 批次) 至多一条未结束周期");
+        Assertions.assertEquals(1, openCyclesInBatch(f, f.bloodBatchId),
+            "同一 (母兔, 批次) 至多一条未结束周期");
+
+        // ② 成员关系由生产周期派生，所以母兔应同时是两个批次的活跃繁殖成员
+        Assertions.assertEquals(1, activeBreedingMembers(f, f.batchId));
+        Assertions.assertEquals(1, activeBreedingMembers(f, f.bloodBatchId));
+
+        // ③ 同批次内不得再开第二条：这是硬约束，不是「先到先得」。
+        // 用待分笼入轨并补齐它的必录事实：它不占管线，所以报错只能来自批次约束；
+        // 事实缺一个都会先拿到 400，那就测不到想测的那条规则了。
+        BizException duplicate = Assertions.assertThrows(
+            BizException.class,
+            () -> stateMachine.openCycleAt(new OpenCycleCommand(
+                f.houseId, f.userId, "tester", f.doeId, f.bloodBatchId,
+                ReproStage.AWAIT_WEANING, new Date(), new Date(), null, null, new Date(),
+                6, 5, null, null, null, null, requestId("complete_dup")
+            ))
+        );
+        Assertions.assertEquals(409, duplicate.getCode());
+        Assertions.assertTrue(duplicate.getMessage().contains("其他批次"), duplicate.getMessage());
+
+        // ④ 既有保护原样保留：两个批次各自都因为自己那条未结束周期而不能结束
+        assertCompletionBlocked(f, f.batchId);
+        assertCompletionBlocked(f, f.bloodBatchId);
+
+        // ⑤ 离场是按兔结清的，两条周期一起关掉，两个批次随之都可以结束
+        actionService.apply(
+            command(f, bloodCycle.cycleId(), ReproAction.RETIRE, requestId("complete_retire"))
+                .build(),
+            ReproActionService.PlacementInput.empty()
+        );
+        Assertions.assertEquals(0, openCycles(f), "离场后不得残留开着的周期");
+        completeBatch(f, f.bloodBatchId, "complete_ok_blood");
+        completeBatch(f, f.batchId, "complete_ok_nursing");
+    }
+
+    /** 结束批次必须被拒，且周期原样保留——拒绝不能是「先改了再报错」。 */
+    private void assertCompletionBlocked(Fixture f, Long batchId) {
+        int before = openCyclesInBatch(f, batchId);
+        api.expectError(
+            "/api/batches/" + batchId + "/complete",
+            org.springframework.http.HttpMethod.POST,
+            f.owner.token, f.houseId,
+            obj("force", true, "endDate", now(),
+                "requestId", requestId("blk" + batchId)),
+            409, "未结束的生产周期"
+        );
+        Assertions.assertEquals(before, openCyclesInBatch(f, batchId),
+            "被拒绝后该批次的未结束周期数必须原样保留");
+        Assertions.assertEquals("进行中", jdbc.queryForObject(
+            "select status from batches where id = ?", String.class, batchId
+        ));
+    }
+
+    private void completeBatch(Fixture f, Long batchId, String prefix) {
+        api.postOk("/api/batches/" + batchId + "/complete", f.owner.token, f.houseId, obj(
+            "force", true, "endDate", now(), "requestId", requestId(prefix)
+        ));
+        Assertions.assertEquals("已完成", jdbc.queryForObject(
+            "select status from batches where id = ?", String.class, batchId
+        ));
     }
 
     /**
@@ -345,7 +421,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Fixture f = fixture("par_bulk_retire");
         ReproResult nursing = openAtEstrus(f, "br_open");
         advanceToDelivery(f, nursing.cycleId(), "br");
-        ReproResult mating = openAt(f, ReproStage.AWAIT_MATING, "br_blood");
+        ReproResult mating = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "br_blood");
         Assertions.assertEquals(2, openCycles(f));
 
         Long matingTaskId = taskField(mating.cycleId(), "CYCLE", "id", Long.class);
@@ -489,8 +565,13 @@ public class ReproParallelCycleIT extends E2eTestSupport {
 
     // ---------- 脚手架 ----------
 
+    /**
+     * @param batchId      主批次，第一条（哺乳）周期归它
+     * @param bloodBatchId 血配批次，V44 起第二条并行周期必须归另一个批次
+     */
     private record Fixture(
-        UserSession owner, long userId, long houseId, long doeId, long sireId, Long batchId
+        UserSession owner, long userId, long houseId, long doeId, long sireId,
+        Long batchId, Long bloodBatchId
     ) {
     }
 
@@ -500,12 +581,9 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         List<Long> cages = cageIds(owner, houseId);
         long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", prefix + "_doe");
         long sireId = createRabbit(owner, houseId, cages.get(1), "0", "1", prefix + "_sire");
-        long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
-            "batchCode", "RP-EMPTY-" + java.util.UUID.randomUUID().toString().substring(0, 8),
-            "femaleRabbitIds", List.of(),
-            "requestId", requestId(prefix + "_empty_batch")
-        )).get("id").asLong();
-        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId);
+        long batchId = emptyBatch(owner, houseId, prefix + "_empty_batch");
+        long bloodBatchId = emptyBatch(owner, houseId, prefix + "_blood_batch");
+        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId, bloodBatchId);
     }
 
     /** 建批会自动给每头母兔入轨，所以批次场景不再另行开周期。 */
@@ -522,7 +600,22 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "femaleRabbitIds", List.of(doeId),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
-        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId);
+        long bloodBatchId = emptyBatch(owner, houseId, prefix + "_blood_batch");
+        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId, bloodBatchId);
+    }
+
+    /**
+     * 空批次——建批时不选母兔，新口径明确允许。
+     *
+     * <p>血配批次用它而不是建批时就把母兔放进去：建批带母兔会立刻自动入轨一条
+     * 待催情周期，那就不是血配了。
+     */
+    private long emptyBatch(UserSession owner, long houseId, String requestPrefix) {
+        return api.postOk("/api/batches", owner.token, houseId, obj(
+            "batchCode", "RP-EMPTY-" + java.util.UUID.randomUUID().toString().substring(0, 8),
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId(requestPrefix)
+        )).get("id").asLong();
     }
 
     private Long openCycleIdInBatch(Fixture f) {
@@ -538,8 +631,23 @@ public class ReproParallelCycleIT extends E2eTestSupport {
     }
 
     private ReproResult openAt(Fixture f, ReproStage stage, String prefix) {
+        return openAt(f, f.batchId, stage, prefix);
+    }
+
+    /**
+     * 开一条并行（血配）周期。
+     *
+     * <p>它不能再用 {@code f.batchId}：V44 起同一 (母兔, 批次) 至多一条未结束周期，
+     * 同批次里再开一条会被 409 拒掉。现实里的操作也是这样：先拉一个新批次（或选一个
+     * 现有的），再把带崽的母兔配进去。
+     */
+    private ReproResult openBloodMatingAt(Fixture f, ReproStage stage, String prefix) {
+        return openAt(f, f.bloodBatchId, stage, prefix);
+    }
+
+    private ReproResult openAt(Fixture f, Long batchId, ReproStage stage, String prefix) {
         return stateMachine.openCycleAt(new OpenCycleCommand(
-            f.houseId, f.userId, "tester", f.doeId, f.batchId,
+            f.houseId, f.userId, "tester", f.doeId, batchId,
             stage, new Date(), new Date(), null, null, null,
             null, null, null, null, null, null, requestId(prefix)
         ));
@@ -624,6 +732,23 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
                 + " and lifecycle = 'OPEN'",
             Integer.class, f.houseId, f.doeId
+        );
+    }
+
+    /** 不限定母兔：要看的就是「这个批次还挡着几条周期」。 */
+    private int openCyclesInBatch(Fixture f, Long batchId) {
+        return jdbc.queryForObject(
+            "select count(*) from breeding_cycles where house_id = ? and batch_id = ?"
+                + " and lifecycle = 'OPEN'",
+            Integer.class, f.houseId, batchId
+        );
+    }
+
+    private int activeBreedingMembers(Fixture f, Long batchId) {
+        return jdbc.queryForObject(
+            "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
+                + " and batch_role = 'breeding' and is_active = true",
+            Integer.class, batchId, f.doeId
         );
     }
 

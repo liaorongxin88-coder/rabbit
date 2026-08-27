@@ -104,6 +104,21 @@
         limit 1 for update
     </select>
 
+    <!--
+      与 V44 的 batch_member_guard 生成列同源：条件只能是「同批次 + 同母兔 + OPEN」，
+      不得再加 stage 过滤。加了就会漏防哺乳周期，而唯一键并不漏，结果是应用层放行、
+      数据库报 Duplicate entry——用户看到 500，而不是那句「请改选其他批次」。
+    -->
+    <select id="selectOpenByBatchAndMotherForUpdate" resultMap="Map">
+        select <include refid="cols"/> from breeding_cycles
+        where house_id = #{houseId}
+          and batch_id = #{batchId}
+          and mother_rabbit_id = #{motherRabbitId}
+          and lifecycle = 'OPEN'
+        order by id desc
+        limit 1 for update
+    </select>
+
     <select id="selectOpenByMother" resultMap="Map">
         select <include refid="cols"/> from breeding_cycles
         where house_id = #{houseId}

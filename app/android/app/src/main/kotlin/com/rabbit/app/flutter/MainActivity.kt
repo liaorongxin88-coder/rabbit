@@ -5,8 +5,8 @@ import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
-import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
     private var carrierAuthChannel: CarrierAuthChannel? = null
+    private var otaUpdateChannel: OtaUpdateChannel? = null
     private var pendingEvent: Map<String, Any>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,21 +27,31 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also { methodChannel ->
-            methodChannel.setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "takePendingIntent" -> {
-                        result.success(pendingEvent)
-                        pendingEvent = null
+        channel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also { methodChannel ->
+                methodChannel.setMethodCallHandler { call, result ->
+                    when (call.method) {
+                        "takePendingIntent" -> {
+                            result.success(pendingEvent)
+                            pendingEvent = null
+                        }
+
+                        else -> {
+                            result.notImplemented()
+                        }
                     }
-                    else -> result.notImplemented()
                 }
             }
-        }
-        carrierAuthChannel = CarrierAuthChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            UnavailableCarrierAuthAdapter(),
-        )
+        carrierAuthChannel =
+            CarrierAuthChannel(
+                flutterEngine.dartExecutor.binaryMessenger,
+                UnavailableCarrierAuthAdapter(),
+            )
+        otaUpdateChannel =
+            OtaUpdateChannel(
+                flutterEngine.dartExecutor.binaryMessenger,
+                this,
+            )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -52,24 +63,29 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         carrierAuthChannel?.dispose()
         carrierAuthChannel = null
+        otaUpdateChannel?.dispose()
+        otaUpdateChannel = null
         super.onDestroy()
     }
 
     @Suppress("DEPRECATION")
     private fun captureNfcIntent(intent: Intent?) {
         if (intent?.action != NfcAdapter.ACTION_NDEF_DISCOVERED) return
-        val messages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
-            ?.mapNotNull { it as? NdefMessage }
-            .orEmpty()
+        val messages =
+            intent
+                .getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
+                ?.mapNotNull { it as? NdefMessage }
+                .orEmpty()
         val record = messages.firstOrNull()?.records?.firstOrNull() ?: return
         if (String(record.type, Charsets.US_ASCII) != EXTERNAL_TYPE) return
 
         val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-        val event = mapOf(
-            "payload" to String(record.payload, Charsets.US_ASCII),
-            "tagUid" to (tag?.id?.joinToString("") { byte -> "%02X".format(byte.toInt() and 0xFF) } ?: ""),
-            "receivedAt" to System.currentTimeMillis(),
-        )
+        val event =
+            mapOf(
+                "payload" to String(record.payload, Charsets.US_ASCII),
+                "tagUid" to (tag?.id?.joinToString("") { byte -> "%02X".format(byte.toInt() and 0xFF) } ?: ""),
+                "receivedAt" to System.currentTimeMillis(),
+            )
         pendingEvent = event
         channel?.invokeMethod("nfcIntent", event)
     }

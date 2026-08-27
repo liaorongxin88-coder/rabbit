@@ -1,8 +1,9 @@
 package com.rabbit.app.modules.weight.entity;
 
+import com.rabbit.app.common.Stamped;
 import java.util.Date;
 
-public class WeightLog {
+public class WeightLog implements Stamped {
     private Long id;
     private Long houseId;
     private Long rabbitId;

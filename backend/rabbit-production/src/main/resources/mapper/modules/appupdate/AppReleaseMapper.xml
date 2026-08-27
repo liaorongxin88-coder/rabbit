@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.appupdate.mapper.AppReleaseMapper">
+    <resultMap id="AppReleaseMap" type="com.rabbit.app.modules.appupdate.entity.AppRelease">
+        <id column="id" property="id"/>
+        <result column="platform" property="platform"/>
+        <result column="build_number" property="buildNumber"/>
+        <result column="version_name" property="versionName"/>
+        <result column="download_url" property="downloadUrl"/>
+        <result column="sha256" property="sha256"/>
+        <result column="apk_size_bytes" property="apkSizeBytes"/>
+        <result column="release_notes" property="releaseNotes"/>
+        <result column="force_update" property="forceUpdate"/>
+        <result column="is_published" property="published"/>
+        <result column="request_id" property="requestId"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="AppReleaseColumns">
+        id, platform, build_number, version_name, download_url, sha256,
+        apk_size_bytes, release_notes, force_update, is_published, request_id,
+        create_by, create_time, update_by, update_time
+    </sql>
+
+    <select id="selectLatestPublishedNewer" resultMap="AppReleaseMap">
+        select <include refid="AppReleaseColumns"/>
+        from app_releases
+        where platform = #{platform}
+          and is_published = true
+          and build_number &gt; #{buildNumber}
+        order by build_number desc
+        limit 1
+    </select>
+
+    <select id="selectById" resultMap="AppReleaseMap">
+        select <include refid="AppReleaseColumns"/>
+        from app_releases
+        where id = #{id}
+    </select>
+
+    <select id="selectByRequestId" resultMap="AppReleaseMap">
+        select <include refid="AppReleaseColumns"/>
+        from app_releases
+        where request_id = #{requestId}
+    </select>
+
+    <select id="selectByPlatformAndBuild" resultMap="AppReleaseMap">
+        select <include refid="AppReleaseColumns"/>
+        from app_releases
+        where platform = #{platform}
+          and build_number = #{buildNumber}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into app_releases (
+            platform, build_number, version_name, download_url, sha256,
+            apk_size_bytes, release_notes, force_update, is_published,
+            request_id, create_by, update_by
+        ) values (
+            #{platform}, #{buildNumber}, #{versionName}, #{downloadUrl}, #{sha256},
+            #{apkSizeBytes}, #{releaseNotes}, #{forceUpdate}, #{published},
+            #{requestId}, #{createBy}, #{updateBy}
+        )
+    </insert>
+
+    <update id="updatePublishedById">
+        update app_releases
+        set is_published = #{published},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id}
+    </update>
+</mapper>

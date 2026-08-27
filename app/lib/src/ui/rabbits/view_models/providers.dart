@@ -2,8 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/vaccinations/repository.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/vaccination.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
 
 final houseRabbitsProvider =
@@ -144,3 +146,39 @@ final rabbitBatchMembershipsProvider = FutureProvider.autoDispose
         );
   },
 );
+
+/// 单只兔的接种历史。复用 [RabbitDetailRequest] 作为 family key，
+/// 免得为同一对 (houseId, rabbitId) 再造一个等价的值对象。
+final rabbitVaccinationsProvider = FutureProvider.autoDispose
+    .family<List<VaccinationRecord>, RabbitDetailRequest>(
+  (ref, request) async {
+    final userId = ref.watch(authenticatedUserIdProvider);
+    if (userId <= 0) {
+      return const <VaccinationRecord>[];
+    }
+    if (request.houseId <= 0 || request.rabbitId <= 0) {
+      throw ArgumentError('接种记录参数不正确');
+    }
+    final cancelToken = CancelToken();
+    ref.onDispose(cancelToken.cancel);
+    return ref.watch(vaccinationRepositoryProvider).listByRabbit(
+          houseId: request.houseId,
+          rabbitId: request.rabbitId,
+          cancelToken: cancelToken,
+        );
+  },
+);
+
+/// 全舍待接种：已过 next_due_date 且尚未补种。
+final houseDueVaccinationsProvider = FutureProvider.autoDispose
+    .family<List<VaccinationRecord>, int>((ref, houseId) async {
+  final userId = ref.watch(authenticatedUserIdProvider);
+  if (userId <= 0 || houseId <= 0) {
+    return const <VaccinationRecord>[];
+  }
+  final cancelToken = CancelToken();
+  ref.onDispose(cancelToken.cancel);
+  return ref
+      .watch(vaccinationRepositoryProvider)
+      .listDue(houseId: houseId, cancelToken: cancelToken);
+});

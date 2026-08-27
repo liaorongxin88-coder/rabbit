@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/domain/settings/local.dart';
+import 'package:rabbit_flutter/src/ui/app_update/view_models/controller.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
@@ -131,6 +132,8 @@ class _AppSettingsContent extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        _UpdateCard(),
       ],
     );
   }
@@ -145,6 +148,53 @@ class _AppSettingsContent extends ConsumerWidget {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('本地设置已恢复默认')),
+    );
+  }
+}
+
+class _UpdateCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(appUpdateControllerProvider);
+    final checking = state.phase == AppUpdatePhase.checking;
+    final downloading = state.phase == AppUpdatePhase.downloading;
+    final version = state.currentVersion?.label ?? '未读取';
+    final description = switch (state.phase) {
+      AppUpdatePhase.upToDate => '当前已是最新版',
+      AppUpdatePhase.available => '发现新版本 ${state.release!.versionName}',
+      AppUpdatePhase.failed => state.message ?? '检查更新失败',
+      AppUpdatePhase.downloading => '正在下载更新包',
+      AppUpdatePhase.permissionRequired => '下载完成，等待安装授权',
+      AppUpdatePhase.installing => '系统安装器已打开',
+      _ => '检查新版本并安装',
+    };
+
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('应用更新', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text('当前版本：$version', style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 4),
+          Text(description, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            key: const ValueKey('app-update-check-button'),
+            onPressed: checking || downloading
+                ? null
+                : () => ref.read(appUpdateControllerProvider.notifier).check(),
+            icon: checking
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.system_update_outlined),
+            label: Text(checking ? '正在检查' : '检查更新'),
+          ),
+        ],
+      ),
     );
   }
 }

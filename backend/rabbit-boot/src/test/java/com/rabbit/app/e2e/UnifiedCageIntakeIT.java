@@ -459,9 +459,12 @@ class UnifiedCageIntakeIT extends E2eTestSupport {
         long houseId = createHouse(owner, prefix + "_house", 1, 10, 1);
         List<Long> cages = cageIds(owner, houseId);
         long doeId = createRabbit(owner, houseId, cages.get(0), "0", "0", prefix + "_doe");
+        // 建空批次，再由下面的待分笼入轨把母兔带进来（成员关系由生产周期派生）。
+        // 建批时就带母兔会自动开一条待催情周期，那么待分笼就成了同批次内的
+        // 第二条未结束周期，V44 起会被 409 拒掉。
         long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
             "batchCode", "UCI-" + requestId(prefix).substring(0, 8),
-            "femaleRabbitIds", List.of(doeId),
+            "femaleRabbitIds", List.of(),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
         long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(

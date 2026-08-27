@@ -353,6 +353,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // 兔只操作新增「接种疫苗」后底部操作条变高，任务按钮可能被挡住，先滚到可视区。
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rabbit-repro-task-action-804')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
@@ -396,6 +401,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // 兔只操作新增「接种疫苗」后底部操作条变高，任务按钮可能被挡住，先滚到可视区。
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rabbit-repro-task-action-804')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
@@ -430,6 +440,11 @@ void main() {
           return taskLoads == 1 ? [_weaningTask] : const <ReproTask>[];
         },
       ),
+    );
+    await tester.pumpAndSettle();
+    // 兔只操作新增「接种疫苗」后底部操作条变高，任务按钮可能被挡住，先滚到可视区。
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -469,6 +484,11 @@ void main() {
           return taskLoads == 1 ? [_weaningTask] : const <ReproTask>[];
         },
       ),
+    );
+    await tester.pumpAndSettle();
+    // 兔只操作新增「接种疫苗」后底部操作条变高，任务按钮可能被挡住，先滚到可视区。
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
     await tester.tap(

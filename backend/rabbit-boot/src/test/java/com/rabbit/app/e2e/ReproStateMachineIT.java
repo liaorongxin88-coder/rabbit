@@ -443,12 +443,30 @@ public class ReproStateMachineIT extends E2eTestSupport {
         advanceToDelivery(fixture, opened.cycleId(), "blood");
 
         // 哺乳段不占管线，因此可以在带崽期间重新开启一轮配种周期。
+        // V44 起它必须落在另一个批次：同一 (母兔, 批次) 至多一条未结束周期。
+        // 拿 fixture.batchId 再开一条的旧写法现在会被 409 拒掉，下面单独验。
+        long bloodBatchId = emptyBatch(fixture, "blood_batch");
         ReproResult second = stateMachine.openCycleAt(new OpenCycleCommand(
-            fixture.houseId, fixture.userId, "tester", fixture.doeId, fixture.batchId,
+            fixture.houseId, fixture.userId, "tester", fixture.doeId, bloodBatchId,
             ReproStage.AWAIT_MATING, new Date(), new Date(), null, null, null,
             null, null, null, null, null, null, requestId("blood_second")
         ));
         Assertions.assertEquals(ReproStage.AWAIT_MATING, second.stage());
+        Assertions.assertEquals(bloodBatchId, (long) jdbc.queryForObject(
+            "select batch_id from breeding_cycles where id = ?", Long.class, second.cycleId()
+        ), "并行周期归另一个批次，于是母兔同时处于两个批次之中");
+
+        // 同批次内不得再开第二条（V44 uk_bc_batch_member）。
+        BizException sameBatch = Assertions.assertThrows(
+            BizException.class,
+            () -> stateMachine.openCycleAt(new OpenCycleCommand(
+                fixture.houseId, fixture.userId, "tester", fixture.doeId, fixture.batchId,
+                ReproStage.AWAIT_WEANING, new Date(), new Date(), null, null, new Date(),
+                6, 5, null, null, null, null, requestId("blood_same_batch")
+            ))
+        );
+        Assertions.assertEquals(409, sameBatch.getCode());
+        Assertions.assertTrue(sameBatch.getMessage().contains("其他批次"), sameBatch.getMessage());
 
         Assertions.assertEquals(
             2,
@@ -607,7 +625,9 @@ public class ReproStateMachineIT extends E2eTestSupport {
     // ------------------------------------------------------------------ 夹具
 
     /** 空批次避免建批自动入轨，由各用例显式选择起始阶段。 */
-    private record Fixture(long userId, long houseId, long doeId, long sireId, Long batchId) {
+    private record Fixture(
+        UserSession owner, long userId, long houseId, long doeId, long sireId, Long batchId
+    ) {
     }
 
     private Fixture fixture(String prefix) {
@@ -621,7 +641,16 @@ public class ReproStateMachineIT extends E2eTestSupport {
             "femaleRabbitIds", List.of(),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
-        return new Fixture(owner.userId, houseId, doeId, sireId, batchId);
+        return new Fixture(owner, owner.userId, houseId, doeId, sireId, batchId);
+    }
+
+    /** 再拉一个空批次。血配的第二条并行周期需要它来安置。 */
+    private long emptyBatch(Fixture fixture, String prefix) {
+        return api.postOk("/api/batches", fixture.owner.token, fixture.houseId, obj(
+            "batchCode", "RSM-" + java.util.UUID.randomUUID().toString().substring(0, 8),
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId(prefix)
+        )).get("id").asLong();
     }
 
     private ReproResult openAtEstrus(Fixture fixture, String prefix) {

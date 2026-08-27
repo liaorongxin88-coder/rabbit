@@ -211,21 +211,37 @@ export interface Rabbit {
  createTime?: string | null;
 }
 
+export interface RangeRabbitEntrySkippedCage {
+ cageId: number;
+ cageNumber: string;
+ reason: string;
+}
+
+export interface RangeRabbitEntryResult {
+ requestedSlotCount: number;
+ missingCageCount: number;
+ unplacedCageCount: number;
+ enteredCageCount: number;
+ enteredRabbitCount: number;
+ replayedCageCount: number;
+ skippedCages: RangeRabbitEntrySkippedCage[];
+}
+
 export interface RabbitReplacementRequest {
-  rabbitIds: number[]
-  forceExitBatch: boolean
-  targetCageId: number
-  requestId: string
+ rabbitIds: number[];
+ forceExitBatch: boolean;
+ targetCageId: number;
+ requestId: string;
 }
 
 export interface RabbitReplacementItem {
-  rabbitId: number
-  replacementRecordId: number
-  targetCageId: number
+ rabbitId: number;
+ replacementRecordId: number;
+ targetCageId: number;
 }
 
 export interface RabbitReplacementResult {
-  items: RabbitReplacementItem[]
+ items: RabbitReplacementItem[];
 }
 
 export interface DashboardSummary {

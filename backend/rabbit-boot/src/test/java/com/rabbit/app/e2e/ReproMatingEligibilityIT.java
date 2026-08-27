@@ -45,9 +45,15 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
         Fixture f = doeAwaitingMating("mate_blood");
         long birth = now();
         // 同一只母兔另开一个哺乳周期：血配下两个 OPEN 周期是合法的。
+        // V44 起它们必须分属两个批次（同一 (母兔, 批次) 至多一条未结束周期）。
+        long nursingBatchId = api.postOk("/api/batches", f.owner.token, f.houseId, obj(
+            "batchCode", "mate_blood-nursing-batch",
+            "femaleRabbitIds", List.of(),
+            "requestId", requestId("mate_blood_nursing_batch")
+        )).get("id").asLong();
         api.postOk("/api/repro/cycles", f.owner.token, f.houseId, obj(
             "motherRabbitId", f.doeId,
-            "batchId", f.batchId,
+            "batchId", nursingBatchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", birth,
             "birthDate", birth,

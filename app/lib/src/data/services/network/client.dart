@@ -73,6 +73,27 @@ class ApiClient {
     );
   }
 
+  Future<void> download(
+    Uri uri,
+    String savePath, {
+    required void Function(int received, int total) onReceiveProgress,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      await _dio.downloadUri(
+        uri,
+        savePath,
+        onReceiveProgress: onReceiveProgress,
+        cancelToken: cancelToken,
+      );
+    } on DioException catch (error) {
+      throw ApiException(
+        _dioMessage(error),
+        statusCode: error.response?.statusCode,
+      );
+    }
+  }
+
   Future<T> post<T>(
     String path, {
     int? houseId,

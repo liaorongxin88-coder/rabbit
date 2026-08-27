@@ -11,6 +11,8 @@ import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/data/services/storage/nfc.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/routing/routes.dart';
+import 'package:rabbit_flutter/src/ui/app_update/view_models/controller.dart';
+import 'package:rabbit_flutter/src/ui/app_update/widgets/dialog.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
@@ -30,6 +32,7 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
   Timer? _pendingSyncTimer;
   NfcLaunchEvent? _pendingNfcEvent;
   String? _lastNfcFingerprint;
+  String? _shownUpdateBuild;
   var _processingNfc = false;
 
   @override
@@ -42,6 +45,8 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
     );
     Future.microtask(_initializeNfc);
     Future.microtask(() => ref.read(nfcPendingSyncControllerProvider));
+    Future.microtask(
+        () => ref.read(appUpdateControllerProvider.notifier).check());
     _pendingSyncTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _syncPendingBindings(),
@@ -129,6 +134,22 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AppUpdateState>(appUpdateControllerProvider, (_, next) {
+      final release = next.release;
+      if (next.phase != AppUpdatePhase.available ||
+          release == null ||
+          _shownUpdateBuild == '${release.buildNumber}' ||
+          !mounted) {
+        return;
+      }
+      _shownUpdateBuild = '${release.buildNumber}';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final dialogContext = rootNavigatorKey.currentContext;
+        if (mounted && dialogContext != null) {
+          showAppUpdateDialog(dialogContext, ref, release);
+        }
+      });
+    });
     ref.listen(housesProvider, (_, next) {
       final houses = next.valueOrNull;
       if (houses != null) {

@@ -7,4 +7,7 @@ target/
 rabbit-master/
 **/.idea/workspace.xml
 /.pi-web/
+# pi 的会话级调度状态，文件名就是会话 id，不应进版本库。
+# 只忽略这一层，留着 .pi/agents/ 这类项目级配置仍可提交。
+/.pi/subagent-schedules/
 artifacts/

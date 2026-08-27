@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.vaccination.mapper.VaccinationRecordMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.vaccination.entity.VaccinationRecord">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="rabbit_id" property="rabbitId"/>
+        <result column="vaccine_name" property="vaccineName"/>
+        <result column="vaccine_batch_no" property="vaccineBatchNo"/>
+        <result column="dose" property="dose"/>
+        <result column="route" property="route"/>
+        <result column="vaccinated_at" property="vaccinatedAt"/>
+        <result column="next_due_date" property="nextDueDate"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="request_id" property="requestId"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Cols">
+        id, house_id, rabbit_id, vaccine_name, vaccine_batch_no, dose, route,
+        vaccinated_at, next_due_date, status, remark, request_id,
+        create_by, create_time, update_by, update_time
+    </sql>
+
+    <insert id="insertBatch" useGeneratedKeys="true" keyProperty="id">
+        insert into vaccination_records
+        (house_id, rabbit_id, vaccine_name, vaccine_batch_no, dose, route,
+         vaccinated_at, next_due_date, status, remark, request_id, create_by, update_by)
+        values
+        <foreach collection="items" item="it" separator=",">
+            (#{it.houseId}, #{it.rabbitId}, #{it.vaccineName}, #{it.vaccineBatchNo},
+             #{it.dose}, #{it.route}, #{it.vaccinatedAt}, #{it.nextDueDate},
+             #{it.status}, #{it.remark}, #{it.requestId}, #{it.createBy}, #{it.updateBy})
+        </foreach>
+    </insert>
+
+    <select id="selectByReq" resultMap="Map">
+        select <include refid="Cols"/>
+        from vaccination_records
+        where house_id = #{houseId} and request_id = #{requestId}
+        order by id asc
+    </select>
+
+    <select id="selectByRabbit" resultMap="Map">
+        select <include refid="Cols"/>
+        from vaccination_records
+        where house_id = #{houseId} and rabbit_id = #{rabbitId}
+        order by id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectDueByHouse" resultMap="Map">
+        select vr.id, vr.house_id, vr.rabbit_id, vr.vaccine_name, vr.vaccine_batch_no,
+               vr.dose, vr.route, vr.vaccinated_at, vr.next_due_date, vr.status,
+               vr.remark, vr.request_id, vr.create_by, vr.create_time,
+               vr.update_by, vr.update_time
+        from vaccination_records vr
+        inner join rabbits r
+          on r.house_id = vr.house_id
+         and r.id = vr.rabbit_id
+         and r.is_active = true
+        where vr.house_id = #{houseId}
+          and vr.status = 'SCHEDULED'
+          and vr.next_due_date is not null
+          and vr.next_due_date &lt;= #{now}
+        order by vr.next_due_date asc, vr.id asc
+    </select>
+
+    <update id="markSupersededDone">
+        update vaccination_records
+        set status = 'DONE',
+            update_by = #{updateBy},
+            update_time = now()
+        where house_id = #{houseId}
+          and vaccine_name = #{vaccineName}
+          and status = 'SCHEDULED'
+          and request_id &lt;&gt; #{excludeRequestId}
+          and rabbit_id in
+        <foreach collection="rabbitIds" item="rid" open="(" separator="," close=")">
+            #{rid}
+        </foreach>
+    </update>
+</mapper>

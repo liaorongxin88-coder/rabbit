@@ -96,10 +96,14 @@
 
 | 单号 | 需求 | 飞书状态 | 实际 | 证据 |
 | --- | --- | --- | --- | --- |
-| `recvrqlA3OU53F` | APP 实现 OTA 升级功能 | 验收中 | **未实现** | `app/pubspec.yaml` 无升级依赖；`app/lib` 中 `ota\|upgrade\|checkUpdate` 零命中；后端无版本清单接口 |
+| `recvrqlA3OU53F` | APP 实现 OTA 升级功能 | 验收中 | ~~未实现~~ **已实现** | 原证据：`app/pubspec.yaml` 无升级依赖、`ota\|upgrade\|checkUpdate` 零命中。**现已由 A4 交付** |
 
-- [ ] 确认改回「方案设计中」或「待评估」
-- [ ] 本轮排期做掉（8h，CI 已产出签名 APK，缺版本清单接口和应用内升级）
+> **2026-08-26 已解决**：波次 1 的 A4 泳道完成 OTA，飞书状态不再是错的。
+> 交付内容：`V46__app_ota_release_catalog.sql`、`GET /api/app-updates/check`（匿名）、
+> `POST /api/admin/app-updates`、app 侧升级流程与设置页入口。
+> 两个勾选项作废：无需改回「方案设计中」，也无需再排 8h。
+>
+> **但方向仍成立**：飞书状态两个方向都不可信，不能因为这一条对上了就放弃核对。
 
 ---
 
@@ -111,7 +115,7 @@
 
 | 纳入 | 单号 | 剩余工作 | 面 | 工时 |
 | --- | --- | --- | --- | --- |
-| [ ] | `recvqh6N0wWVjR` | 批量范围入笼：排 2-9 × 列 1-4 × 层 2-3 的范围选择。三端零命中 | 后端+App+Admin | 8h |
+| [x] | `recvqh6N0wWVjR` | ~~批量范围入笼：排 2-9 × 列 1-4 × 层 2-3 的范围选择。三端零命中~~ **A5 已交付并验收通过**：跳过不可用笼位并报告原因，每笼固定数 | 后端+App+Admin | ~~8h~~ 0h |
 | [ ] | `recvsV3h8S6Ovc` `recvsV3pCDzZej` `recvsV3qcy068u` `recvsV3w0NLret` `recvt72IkTmhpT` `recvt72IJvo7DL` | 表单补齐：批量新增数量 + 总重量、创建时母亲兔 ID、卖家字段。六条共用一套实现 | 后端+App+Admin | 8h |
 | [ ] | `recvt6SWUAVejo` | 断奶待分配数量提示挪到笼位管理页 | App+Admin | 3h |
 | [ ] | `recvrqsCS3Six3` | 残留图标按钮文字化。`cages/widgets/management.dart:231,372,623,645,720,807`、`batches/screens/detail.dart:1235,1342,1483,1490,1497,1506` 等约 12 处 | App | 3h |
@@ -124,11 +128,11 @@
 | --- | --- | --- | --- | --- |
 | [ ] | `recvsUVpLZ09rx` `recvt6zZEIjiK8` `recvt855ZE8KgN` `recvt8aQ6LIyxs` | 4 个 NFC 触点：配种选公兔、批次追踪标签、批量出售、留崽来源母兔。底座和范式现成，重复劳动 | App | 4h |
 | [ ] | `recvt6DIqoMP8b` `recvt7ipLUiZzv` | 后备兔和商品兔的母亲兔 ID NFC。需先补创建时的母亲兔 ID 字段（当前 `entry.dart` 创建路径无此输入） | 后端+App | 4h |
-| [ ] | `recvt7fpa64K76` | 接种疫苗。全新，全仓 `疫苗\|vaccin` 零命中 | 迁移+后端+双端 | 10h |
+| [x] | `recvt7fpa64K76` | ~~接种疫苗。全新，全仓 `疫苗\|vaccin` 零命中~~ **A3 已交付并验收通过**：V45 + 批量接种 + 幂等 | 迁移+后端+双端 | ~~10h~~ 0h |
 | [ ] | `recvtchyDpV4b7` | 投喂 App 端录入 + NFC。后端 `modules/feed` 已有，Flutter 无录入页 | App | 6h |
 | [ ] | `recvt7VzBVO50v` | 异常记录按钮。表 `rabbit_abnormal_conditions` 和图片服务都在，缺 create 端点和双端入口 | 后端+双端 | 5h |
 | [ ] | `recvqgIXayF1W8` | 账号密码登录图片验证码 | 后端+双端 | 4h |
-| [ ] | `recvrqlA3OU53F` | APP OTA 升级 | 后端+App | 8h |
+| [x] | `recvrqlA3OU53F` | ~~APP OTA 升级~~ **A4 已交付**，待下一环节真机验收 | 后端+App | ~~8h~~ 0h |
 | [ ] | `recvsV7QhkxxvD` | 批次统计数据 | 见决策 2 | 4h / 14h |
 
 ### 操作追踪改造

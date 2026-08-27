@@ -2,6 +2,7 @@ package com.rabbit.app.modules.rabbit.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Date;
 
@@ -11,10 +12,15 @@ public class CreateRabbitRequest {
 
     private Long motherId;
 
+    // rabbits.type 与 rabbits.gender 在库里都是 varchar(1)，只靠 @NotBlank 拦不住非法值。
+    // 传 "FEMALE" 这类多字符串会一路击穿到 INSERT，报 Data truncation 并把 jar 路径、
+    // mapper XML 位置和完整 SQL 障础回客户端。在入口处就贴合列宽定义。
     @NotBlank(message = "type不能为空")
+    @Pattern(regexp = "[012]", message = "兔只类型只能是 0 种兔、1 后备兔或 2 商品兔")
     private String type;
 
     @NotBlank(message = "gender不能为空")
+    @Pattern(regexp = "[01]", message = "兔只性别只能是 0 母或 1 公")
     private String gender;
 
     @Size(max = 100, message = "品种过长")

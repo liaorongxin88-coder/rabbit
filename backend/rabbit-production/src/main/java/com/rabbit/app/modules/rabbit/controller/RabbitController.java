@@ -8,10 +8,13 @@ import com.rabbit.app.modules.rabbit.dto.CageTransferRequest;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.dto.CreateRabbitRequest;
 import com.rabbit.app.modules.rabbit.dto.PromoteReplacementRequest;
+import com.rabbit.app.modules.rabbit.dto.RangeRabbitEntryRequest;
+import com.rabbit.app.modules.rabbit.dto.RangeRabbitEntryResult;
 import com.rabbit.app.modules.rabbit.dto.ReplacementRequest;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.dto.UpdateRabbitRequest;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.service.RangeRabbitEntryService;
 import com.rabbit.app.modules.rabbit.service.RabbitService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
@@ -36,10 +39,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class RabbitController {
     private final HouseService houseService;
     private final RabbitService rabbitService;
+    private final RangeRabbitEntryService rangeRabbitEntryService;
 
-    public RabbitController(HouseService houseService, RabbitService rabbitService) {
+    public RabbitController(
+        HouseService houseService,
+        RabbitService rabbitService,
+        RangeRabbitEntryService rangeRabbitEntryService
+    ) {
         this.houseService = houseService;
         this.rabbitService = rabbitService;
+        this.rangeRabbitEntryService = rangeRabbitEntryService;
     }
 
     @PostMapping("/rabbits")
@@ -70,6 +79,17 @@ public class RabbitController {
         return ApiResponse.ok(
             rabbitService.createRabbit(userId, houseId, r, reproEntry, req.getRequestId())
         );
+    }
+
+    @PostMapping("/rabbits/range-entry")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_ADD)
+    public ApiResponse<RangeRabbitEntryResult> createRabbitsInRange(
+        @RequestHeader("X-House-Id") Long houseId,
+        @Valid @RequestBody RangeRabbitEntryRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(rangeRabbitEntryService.create(userId, houseId, req));
     }
 
     @GetMapping("/rabbits")

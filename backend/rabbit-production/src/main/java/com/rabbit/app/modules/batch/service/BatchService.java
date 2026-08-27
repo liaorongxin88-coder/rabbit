@@ -422,6 +422,7 @@ public class BatchService {
      *
      * <p>已有未归属批次的流水线周期会原子绑定到新批次并同步其待办；已有其他批次
      * 归属的周期保持不动，避免新标签篡改旧批次的结束语义。
+     *
      */
     @Transactional
     public void removeMember(
@@ -468,6 +469,11 @@ public class BatchService {
         }
     }
 
+    /**
+     * V44 起「每母兔每批次至多一条未结束周期」是硬约束。哺乳中的母兔被加进另一个
+     * 批次时，这里会在新批次上开出她的下一轮待催情周期——这正是需求说的「母兔同时
+     * 位于两个繁殖周期时它也同时处于两个批次之中」。
+     */
     private void openReproCyclesForNewMembers(
         Long userId,
         Long houseId,
@@ -480,6 +486,14 @@ public class BatchService {
         for (Rabbit r : females) {
             ReproCycle existing = reproCycleMapper.selectOpenPipelineForUpdate(houseId, r.getId());
             if (existing != null) {
+                continue;
+            }
+            // 本批次里她已经有一条未结束周期时不再开第二条（V44 uk_bc_batch_member）。
+            // 上面那道管线检查漏得掉这种情况：哺乳周期不占管线，却占批次。
+            // 不拦的话 openCycleAt 会抛 409，把整次加兔操作一起带失败。
+            if (reproCycleMapper.selectOpenByBatchAndMotherForUpdate(
+                houseId, batchId, r.getId()
+            ) != null) {
                 continue;
             }
             OpenCycleCommand command = new OpenCycleCommand(
