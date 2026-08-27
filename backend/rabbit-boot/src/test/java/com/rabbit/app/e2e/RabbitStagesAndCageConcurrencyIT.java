@@ -21,8 +21,10 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
     @Test
     void createsPersistValidatedStagesAndExposeActualBreedingGender() {
         UserSession owner = register("rabbit_stage");
-        long houseId = createHouse(owner, "阶段录入兔舍", 1, 2, 1);
-        long cageId = cageIds(owner, houseId).get(0);
+        long houseId = createHouse(owner, "阶段录入兔舍", 1, 3, 1);
+        List<Long> rabbitCages = cageIds(owner, houseId);
+        long cageId = rabbitCages.get(0);
+        long buckId = createRabbit(owner, houseId, rabbitCages.get(1), "0", "1", "stage_entry_buck");
         long batchId = api.postOk("/api/batches", owner.token, houseId, obj(
                 "batchCode", "STAGE-ENTRY",
                 "femaleRabbitIds", List.of(),
@@ -33,13 +35,18 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "cageId", cageId,
                 "type", "0",
                 "gender", "0",
-                "growthStage", "MATURE",
+                "breed", "新西兰白",
                 // doe-breeding-v2：种母兔的阶段改由生产流程维护，录入时给的是生产阶段。
                 "reproStage", "AWAIT_PALPATION",
                 "batchId", batchId,
+                "stageEnteredAt", now(),
                 "matingDate", now(),
-                "arrivalMethod", "1",
+                "maleRabbitId", buckId,
+                "matingMethod", "NATURAL",
+                "arrivalMethod", "0",
+                "sourceSeller", "阶段测试种兔场",
                 "arrivalDate", now(),
+                "weight", 3.6,
                 "requestId", requestId("stage_create")
         ));
 
@@ -106,7 +113,7 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
         ), 400, "种母兔的繁育阶段由生产流程维护");
 
         api.expectError("/api/rabbits", org.springframework.http.HttpMethod.POST, owner.token, houseId, obj(
-                "cageId", cageIds(owner, houseId).get(1),
+                "cageId", rabbitCages.get(2),
                 "type", "2",
                 "gender", "0",
                 "growthStage", "GROWING",
