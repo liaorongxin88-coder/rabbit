@@ -4,7 +4,95 @@
 
 ## 后端构建
 
-Java lint 会检查各后端模块的 `src/main/java` 和 `rabbit-boot/src/test/java`。它已绑定到 Maven
+## 后端单测的模块归属
+
+**单测跟着被测类走，不放 `rabbit-boot`。**
+
+| 模块 | 业务范围 | 主类 | 单测 |
+| --- | --- | --- | --- |
+| `rabbit-platform` | cache、common、dedup、util | 21 | 95 |
+| `rabbit-access` | auth、house、workspace、security、tracking | 103 | 232 |
+| `rabbit-production` | batch、cage、repro、outbound、rabbit、event 等 | 284 | 439 |
+| `rabbit-reporting` | admin、audit、report | 39 | 129 |
+| `rabbit-boot` | 启动类与运行配置 | 5 | 19 |
+
+合计 914 个单测，全量 `mvn --file backend/pom.xml test` 约 11 秒跑完。这个速度是刻意维持的：
+全部用手工 `mock()` 加构造器注入，不起 Spring 上下文。一旦有人往里加 `@SpringBootTest`，
+单测就会退化成慢速集成测试，跑一次的成本高到没人愿意在改代码时顺手跑。
+
+`rabbit-reporting`（9/9）和 `rabbit-platform`（13/13）已把有逻辑的类覆盖齐，可以当参考。
+reporting 的用例集中在两类不可逆事故：权限自锁（把自己降权、删光启用的超管、停用兔场
+唯一所有者）和幂等破坏（同一 `requestId` 换参数静默返回旧兔场）。platform 则守着一条
+跨模块的隐式契约——`TraceIdFilter` 和 `ApiResponseAuditAdvice` 写进 request 的
+`traceId`/`apiCode`/`apiMessage`，由 reporting 的 `AuditLogInterceptor` 用同样的字符串
+字面量读取，两侧没有共享常量，改名不会有编译错误，只会让审计字段静默变空。
+
+纯接口、异常类、纯 getter/setter 的实体不计入「逻辑类」，测了也只是把赋值抄一遍。
+需要真实网络或真实事务的（如 `LettuceCacheBackend`）由 `*IT.java` 覆盖，单测里 mock 掉
+网络等于测 mock 自己。
+
+只有真的需要「看见所有模块」的测试才能留在 boot：ArchUnit 规则、控制器权限扫描、
+schema SQL 校验、boot 自己的 config，以及全部 `*IT.java`（它们要完整应用上下文，
+而启动类在 boot）。
+
+`BootTestPlacementTest` 守这条线：在 boot 里放了不在白名单里的 `*Test.java`，它会失败并直接
+点名。确实只能在 boot 跑的，把类名加进 `ALLOWED` 并写明理由。
+
+只验证改动的那一块：
+
+```bash
+mvn --file backend/pom.xml -pl rabbit-production -am test
+```
+
+注意 `-am` 不能省。模块链是 platform ← access ← production ← reporting ← boot，单独 `-pl`
+会去本地仓拿兄弟模块的陈旧构件，报的是 `package ... does not exist` 这类和改动无关的错。
+
+### 怎么知道用例是不是摆设
+
+全绿不代表有用。写完一组关键用例后，把被测的那道门手动拆掉再跑一次，确认它真的会红：
+
+```bash
+# 例：把 PlatformAdminAccountService 里「不能删除当前登录账号」那段删掉，再跑
+mvn --file backend/pom.xml -pl rabbit-reporting -am test
+# 预期：deletingYourOwnAccountIsRefused 失败；若仍全绿，那条用例就是摆设
+```
+
+**坐过一次的坑：别把「构建失败」当成「用例没拓」。** 删掉一段代码往往会连带某个 import
+变成未使用，Checkstyle 在 validate 阶段就把构建卡断了，根本跑不到测试。如果只看「输出里有没有
+失败的用例名」，会得出“无人报警”的错误结论。变异时优先选**能编过的削弱**，比如把
+`Objects.equals(a, b)` 改成 `Objects.equals(a, a)`，而不是整段删除；并且先确认输出里真的
+出现了 `Tests run:`。
+
+**第二个坑：布尔字面量也不安全。** 用 `&& false` 或 `true ||` 去削弱条件，会撞上 Checkstyle
+的 `SimplifyBooleanExpression`，同样在 validate 阶段挂掉。可靠的削弱手段是等价改写：
+换掉被比较的字符串常量、`list.isEmpty()` 改成 `list.size() >= 0`、多个 `&&` 里去掉一个
+连接项、`Objects.equals(a, b)` 改成 `Objects.equals(a, a)`。
+
+判定脚本里要显式区分三种结果，否则会把构建失败误记成用例失效：
+
+```bash
+ran="$(grep -cE '^\[INFO\] Tests run:' <<<"${out}")"
+if   [[ "${ran}" -eq 0 ]]; then echo "构建就挂了，本次变异无效"
+elif [[ -n "${failed}" ]]; then echo "用例抓到了"
+else                            echo "无人报警"; fi
+```
+
+（写这类脚本时注意：中文全角标点紧跟变量展开会被当成标识符的一部分，`$label：` 会报
+unbound variable，一律写 `${label}`。）
+
+各模块的用例都过了这道检验，累计拆掉 71 处实现守卫，每一处都被对应用例插住。按模块分：
+reporting 9 处（账号枚举、审计截断、自举幂等、null enabled、自删、超管余量、唯一所有者等）、
+outbound/repro 7 处（requestId 跨兔场复用、完成态销售单比对、草稿 stateVersion、取消的
+409/404 区分、公母兔类型、null isActive）、platform 12 处（MDC 不清理、attribute 改名、
+租户头提示退化、缓存零超时、拼错 provider 静默降级）、repro 仔兔与待办 12 处（公母之和
+与断奶数、分笼上限、幂等键序号、批量禁用清单、定序）、库存与医疗 12 处（出入库方向、
+负库存 CAS、金额精度、免疫到期日、治疗乐观锁）、repro 状态机 9 处（先读后锁的归属比对、
+摸胎分流、窝死亡数、配种资格取锁定母兔）、access 10 处（角色 rank 基准、缓存命中的
+userId 比对、限流边界、抢租约影响行数、邀请权限码、防重放查询参数）。
+
+## Java lint
+
+Java lint 会检查各后端模块的 `src/main/java` 和 `src/test/java`。它已绑定到 Maven
 `validate` 阶段，因此后端的 `test`、`package` 和 `verify` 命令都会先运行检查。也可以单独执行：
 
 ```bash
@@ -88,7 +176,7 @@ mvn -Pe2e verify
 | --- | --- | --- |
 | `E2E_DATASOURCE_URL` | `rabbit_app_e2e` | 绝大多数 IT |
 | `E2E_MIGRATION_DATASOURCE_URL` | `rabbit_app_e2e_migration` | `BreedingCycleMigrationIT`、`LargeFarmSchemaMigrationIT` |
-| `E2E_LARGE_LOOP_DATASOURCE_URL` | `rabbit_app_e2e_large_loop` | `LargeWholeHouseBatchLifecycleIT` |
+| `E2E_LARGE_LOOP_DATASOURCE_URL` | `rabbit_app_e2e_large_loop` | 目前无（見下方） |
 
 三个默认值都指向 `localhost:3306`；改端口时三个要一起改。三个测试库都
 只允许用于本地或 CI 测试。
@@ -98,8 +186,57 @@ mvn -Pe2e verify
 各自内置了 `rabbit_app_e2e_v27` 这类默认库名，但读的是同一个变量。配了它，
 这些用例就共用一个迁移库；不配，它们会各自去连 `localhost:3306`。
 
+`E2E_LARGE_LOOP_DATASOURCE_URL` 目前没有任何 Java 代码读它。它原本服务于
+`LargeWholeHouseBatchLifecycleIT`，而那个类已在 doe-breeding-v2 重构（`3ba8d70`）里删除。
+现在脚本和 CI 仍然会建库、导变量，纯属惯性。清理它需要同时改
+`scripts/e2e-local.sh`、`_quality-gates.yml` 和本文，尚未做。
+
 CI 里不走 13307：`.github/workflows/_quality-gates.yml` 起的 mysql service 直接映射
 `3306:3306` 并显式设好三个变量，所以 CI 与本地互不影响。
+
+### 用例之间的数据重置
+
+`E2eTestSupport` 的 `@BeforeEach` 不再每次 `flyway.clean()` 加 `flyway.migrate()`。
+现在是：**每个 JVM 建一次 schema，用例之间只清数据**（见
+`rabbit-boot/src/test/java/com/rabbit/app/e2e/E2eDatabaseReset.java`）。
+
+原因是 46 个迁移每次要跑约 2.6 秒，主库 204 个用例合计约 10 分钟，占 E2E 总时长七成，
+而每次重建出来的 schema 完全一样。改完后全量从约 15 分钟降到 7 分 37 秒。
+
+写用例时需要知道的：
+
+- 清理用 TRUNCATE 而不是 DELETE，AUTO_INCREMENT 会归位，所以用例看到的 id 序列
+  和「刚建好的库」一致，断言口径没变。
+- 只 TRUNCATE 非空的表。非空探测是一次往返（约 3 毫秒），比无条件 TRUNCATE 全部
+  48 张表（约 390 毫秒）快得多。
+- 迁移里的种子数据（当前是 V7 和 V10 连锁产生的一行 `sys_user`）在建库后快照，
+  每次重置后原样写回。快照是通用的，以后哪个迁移新增种子行也会自动跟上。
+- 用例不要在主库做 DDL。新建的表不在基线里，不会被清理，会泄漏给后面的用例。
+
+怀疑是重置方式导致的失败时，用 `-De2e.reset=migrate` 切回旧行为对照：
+
+```bash
+bash scripts/e2e-local.sh -Dit.test=可疑的IT -De2e.reset=migrate
+```
+
+两边都挂就不是重置的锅；只有新方式挂，把用例和上面四条对一遍。
+
+### CI 分片
+
+CI 把 E2E 切成 4 片并发跑，**每片连自己的库**：主库 `rabbit_app_e2e_s1` 到 `_s4`，
+迁移库 `rabbit_app_e2e_migration_s1` 到 `_s4`。原因是用例之间要把数据清干净，共库
+就会互相清掉。这和多 agent 并行时靠 `E2E_SCHEMA_SUFFIX` 隔离是同一回事。
+
+分片按实测耗时做 LPT 装箱，不是平均分。`LargeHouseOutboundSubmitScaleIT` 单类 135 秒
+且只有一个 `@Test`，它就是关键路径的下界，所以分片数到 4 就到顶了。
+
+本地复现某一片（数据源先指好，否则会跑到默认库上）：
+
+```bash
+E2E_SCHEMA_SUFFIX=_s3 E2E_SHARD_INDEX=3 E2E_SHARD_TOTAL=4 bash scripts/e2e-local.sh
+```
+
+不传分片变量时行为不变，还是全量串行。
 
 注意：E2E 会清空 `rabbit_app_e2e`，不要指向开发库或生产库。
 

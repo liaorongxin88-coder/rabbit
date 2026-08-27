@@ -194,7 +194,7 @@ grep -nE '@(Get|Post|Put|Delete)Mapping' $(find backend -name AbnormalController
 | 中 | Spring AOP 自调用导致注解静默失效 | 事件流出现无声空洞，测试可能测不出来 | 85 处 `@Transactional` 中存在内部调用 | T1 内产出自调用清单，纳入 ArchUnit 规则 |
 | 中 | 多 agent 并发改同一模块产生合并冲突 | 整体 +15% | 泳道划分不当，两个 agent 同时改 `rabbit-production` 同一包 | 见第五节泳道与迁移号预分配 |
 | 低 | e2e 库隔离 | 并发宽度降到 1 到 2 | 已解决：`E2E_SCHEMA_SUFFIX=_a1 bash scripts/e2e-local.sh` | 每 agent 一套独立 schema |
-| 低 | 全部测试集中在 `rabbit-boot` | 每次验证都是全量构建 | 32 个 `*Test.java` 和 50 个 `*IT.java` 全在 boot 模块 | 内环用 `mvn -o test`（9.4 秒 142 例），外环才跑 e2e |
+| 已解决 | 全部测试集中在 `rabbit-boot` | 每次验证都是全量构建 | 单测已下沉到各业务模块（platform 95 / access 232 / production 439 / reporting 129 / boot 19，合计 914），`BootTestPlacementTest` 防回流；`*IT.java` 仍在 boot，因为它们需要完整应用上下文 | 内环可用 `mvn -pl <模块> -am test` 只跑改动模块，外环才跑 e2e |
 
 ---
 
@@ -244,6 +244,11 @@ grep -nE '@(Get|Post|Put|Delete)Mapping' $(find backend -name AbnormalController
 但这意味着：**两个 agent 同时跑 e2e 而不隔离 schema，会互相清库，产生大量难以
 归因的假失败。** 并行时必须给每个 agent 分配 `E2E_SCHEMA_SUFFIX`。
 
+> **2026-08-27 补充：重置机制已改，结论不变。** 现在是每个 JVM 建一次 schema，
+> 用例之间只 TRUNCATE 非空表（见 `E2eDatabaseReset`），全量从 14 分 48 秒降到 7 分 37 秒。
+> 共库依然会互相清数据，所以上面那句「必须分配 `E2E_SCHEMA_SUFFIX`」仍然成立，
+> CI 分片也是基于同一理由每片一套库。当前写法见 `docs/project/testing.md`。
+
 脚本里修掉的两个坑，值得写下来：
 
 1. **JDK 检测不能只判空。** 开发机 `JAVA_HOME` 默认指向 JDK 26，只判
@@ -259,7 +264,8 @@ grep -nE '@(Get|Post|Put|Delete)Mapping' $(find backend -name AbnormalController
 | 约束 | 事实 | 对并行的影响 |
 | --- | --- | --- |
 | Flyway 版本号全局递增 | 当前 42 个迁移，下一个 V44 | 多 agent 同时加迁移会撞号，**必须预分配** |
-| 测试全在 `rabbit-boot` | 其余四个模块 0 测试文件 | 无模块级测试隔离，每次验证都是全量构建 |
+| 单测按模块归位（已改） | 四个业务模块各自持有其业务范围的单测 | 可以 `mvn -pl <模块> -am test` 只验证改动那一块 |
+| E2E 仍在 `rabbit-boot` | 55 个 `*IT.java` 需要完整 Spring 上下文，而启动类在 boot | 模块级拆不开，只能靠 CI 分片并发 |
 | Maven 模块链式依赖 | access ← production ← reporting ← boot | 改底层模块触发上层全量重建 |
 | e2e 需要真实 MySQL | 无 Testcontainers，三个数据源变量默认指向 localhost:3306 | 已由 `scripts/e2e-local.sh` 解决，支持 `E2E_SCHEMA_SUFFIX` 每 agent 一套库 |
 | 独立泳道数量有限 | 后端写路径、兔笼域、Flutter 表层、全新后端功能、跨端功能 | 约 5 条，超过 5 个 agent 收益迅速衰减 |
@@ -270,7 +276,8 @@ grep -nE '@(Get|Post|Put|Delete)Mapping' $(find backend -name AbnormalController
 `baseline-on-migrate`，**没有启用 `out-of-order`**（默认 false）。于是在任何已迁移的库上
 （生产库、开发库都已到 V43），先合入 V50 再补 V44 会被 Flyway 直接拒绝。
 
-e2e 不受影响 —— `E2eTestSupport` 每个用例前 `flyway.clean()` 再 `migrate()`，永远是全新库，
+e2e 不受影响 —— `E2eTestSupport` 跑在全新库上（当时是每个用例 `flyway.clean()` 再
+`migrate()`，现在是每个 JVM 一次，都是从空库起步），
 **所以这个坑在 e2e 里测不出来，只会在合并到已有库时炸**。
 
 规则改为：**迁移号按预期合并顺序发放，先合并的拿低号。**
