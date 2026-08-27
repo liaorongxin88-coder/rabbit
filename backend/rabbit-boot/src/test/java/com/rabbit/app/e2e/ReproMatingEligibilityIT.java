@@ -56,9 +56,10 @@ public class ReproMatingEligibilityIT extends E2eTestSupport {
             "batchId", nursingBatchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", birth,
-            "birthDate", birth,
+            "stageEnteredAt", birth,
             "totalKits", 8,
             "liveKits", 6,
+            "keptKits", 6,
             "requestId", requestId("nursing")
         ));
 

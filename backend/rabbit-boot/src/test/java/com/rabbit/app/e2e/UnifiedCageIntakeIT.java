@@ -467,14 +467,16 @@ class UnifiedCageIntakeIT extends E2eTestSupport {
             "femaleRabbitIds", List.of(),
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
+        long birthDate = now() - 25L * 24 * 3600 * 1000;
         long cycleId = api.postOk("/api/repro/cycles", owner.token, houseId, obj(
             "motherRabbitId", doeId,
             "batchId", batchId,
             "stage", "AWAIT_WEANING",
             "occurredAt", now(),
-            "birthDate", now() - 25L * 24 * 3600 * 1000,
+            "stageEnteredAt", birthDate,
             "totalKits", kits,
             "liveKits", kits,
+            "keptKits", kits,
             "requestId", requestId(prefix + "_cycle")
         )).get("cycleId").asLong();
         long recordId = api.postOk(

@@ -418,6 +418,7 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
             "requestId", requestId(prefix + "_batch")
         )).get("id").asLong();
 
+        long birthDate = now() - 25L * 24 * 3600 * 1000;
         List<Long> cycles = new ArrayList<>();
         for (int index = 0; index < doeCount; index++) {
             cycles.add(api.postOk("/api/repro/cycles", owner.token, houseId, obj(
@@ -425,9 +426,10 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
                 "batchId", batchId,
                 "stage", "AWAIT_WEANING",
                 "occurredAt", now(),
-                "birthDate", now() - 25L * 24 * 3600 * 1000,
+                "stageEnteredAt", birthDate,
                 "totalKits", kitsPerDoe,
                 "liveKits", kitsPerDoe,
+                "keptKits", kitsPerDoe,
                 "requestId", requestId(prefix + "_cycle" + index)
             )).get("cycleId").asLong());
         }
