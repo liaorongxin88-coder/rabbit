@@ -658,14 +658,19 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       final entry = find.byKey(destination.key);
+      final profileScroll = find.descendant(
+        of: find.byKey(const ValueKey('profile-settings-scroll')),
+        matching: find.byType(Scrollable),
+      );
+      expect(profileScroll, findsOneWidget);
       await tester.scrollUntilVisible(
         entry,
         160,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: profileScroll,
       );
       if (entry.hitTestable().evaluate().isEmpty) {
         await tester.drag(
-          find.byType(ListView).first,
+          profileScroll,
           const Offset(0, -80),
         );
         await tester.pump();

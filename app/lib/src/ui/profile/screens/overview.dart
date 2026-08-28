@@ -21,6 +21,7 @@ class ProfileScreen extends ConsumerWidget {
     return AppPage(
       title: '我的',
       child: ListView(
+        key: const ValueKey('profile-settings-scroll'),
         padding: AppSpacing.pagePadding,
         children: [
           SectionCard(
