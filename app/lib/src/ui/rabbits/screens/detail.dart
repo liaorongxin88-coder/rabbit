@@ -43,8 +43,8 @@ class RabbitDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rabbit = ref.watch(rabbitDetailProvider(_request));
     final permission = ref.watch(housePermissionProvider(houseId));
-    final canCreateAbnormal =
-        permission.valueOrNull?.canEdit == true && rabbit.valueOrNull?.isActive == true;
+    final canCreateAbnormal = permission.valueOrNull?.canEdit == true &&
+        rabbit.valueOrNull?.isActive == true;
 
     return AppPage(
       title: '兔只详情',

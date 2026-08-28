@@ -408,9 +408,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         setState(() {
           _imageCaptcha = null;
-          _imageCaptchaError = error is ApiException
-              ? error.message
-              : '图片验证码加载失败，请刷新后重试';
+          _imageCaptchaError =
+              error is ApiException ? error.message : '图片验证码加载失败，请刷新后重试';
         });
       }
     } finally {
@@ -1004,7 +1003,8 @@ class _LegalConsentRow extends StatelessWidget {
               child: Checkbox(
                 key: const ValueKey('legal-consent-checkbox'),
                 value: agreed,
-                onChanged: enabled ? (value) => onChanged(value ?? false) : null,
+                onChanged:
+                    enabled ? (value) => onChanged(value ?? false) : null,
               ),
             ),
             const SizedBox(width: 4),

@@ -618,9 +618,13 @@ export function removeHouseMember(houseId: number, userId: number) {
 export function uploadWorkspaceImage(houseId: number, file: File) {
   const form = new FormData();
   form.set("file", file);
-  return workspacePostJson<{ fileId: string }>("/api/business-files/images", form, {
-    houseId,
-  });
+  return workspacePostJson<{ fileId: string }>(
+    "/api/business-files/images",
+    form,
+    {
+      houseId,
+    },
+  );
 }
 
 export function createWorkspaceAbnormalCondition(

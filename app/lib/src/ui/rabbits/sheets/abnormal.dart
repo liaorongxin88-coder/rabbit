@@ -19,7 +19,8 @@ Future<bool> showRabbitAbnormalSheet({
 }) async {
   final recorded = await showAppModalSheet<bool>(
     context: context,
-    builder: (context) => _RabbitAbnormalSheet(houseId: houseId, rabbit: rabbit),
+    builder: (context) =>
+        _RabbitAbnormalSheet(houseId: houseId, rabbit: rabbit),
   );
   return recorded ?? false;
 }
@@ -166,7 +167,8 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final palette = AppPalette.of(context);
-    final availableHeight = mediaQuery.size.height - mediaQuery.viewInsets.bottom;
+    final availableHeight =
+        mediaQuery.size.height - mediaQuery.viewInsets.bottom;
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -205,7 +207,8 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
                     ),
                     IconButton(
                       tooltip: '关闭',
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                      onPressed:
+                          _saving ? null : () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -227,7 +230,8 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
                           decoration: BoxDecoration(
                             color: palette.dangerSoft,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: palette.danger.withAlpha(90)),
+                            border:
+                                Border.all(color: palette.danger.withAlpha(90)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,9 +311,10 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
                           labelText: '异常说明 *',
                           hintText: '记录发现的情况和已采取的处理',
                         ),
-                        validator: (value) => value == null || value.trim().isEmpty
-                            ? '请填写异常说明'
-                            : null,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? '请填写异常说明'
+                                : null,
                       ),
                     ],
                   ),
@@ -325,7 +330,8 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       OutlinedButton(
-                        onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                        onPressed:
+                            _saving ? null : () => Navigator.of(context).pop(),
                         child: const Text('取消'),
                       ),
                       const SizedBox(height: 8),

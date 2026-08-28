@@ -407,9 +407,9 @@ export interface BreedingCycle {
 }
 
 export interface ImageCaptcha {
-  captchaId: string;
-  imageBase64: string;
-  expiresInSeconds: number;
+ captchaId: string;
+ imageBase64: string;
+ expiresInSeconds: number;
 }
 
 export type RabbitDepartureType = "cull" | "death";
