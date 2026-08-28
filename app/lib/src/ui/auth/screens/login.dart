@@ -421,8 +421,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _imageCaptchaError = notRequired
               ? null
               : error is ApiException
-              ? error.message
-              : '图片验证码加载失败，请刷新后重试';
+                  ? error.message
+                  : '图片验证码加载失败，请刷新后重试';
         });
       }
     } finally {
