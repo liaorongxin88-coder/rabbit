@@ -7,6 +7,7 @@ IMAGE="${1:-rabbit-backend:harness}"
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}"
 NETWORK="rabbit-ci-$RUN_SUFFIX"
 MYSQL_CONTAINER="rabbit-ci-mysql-$RUN_SUFFIX"
+VALKEY_CONTAINER="rabbit-ci-valkey-$RUN_SUFFIX"
 BACKEND_CONTAINER="rabbit-ci-backend-$RUN_SUFFIX"
 RESPONSE_FILE="$(mktemp)"
 
@@ -16,9 +17,11 @@ cleanup() {
   if [[ $status -ne 0 ]]; then
     docker logs "$BACKEND_CONTAINER" 2>/dev/null || true
     docker logs "$MYSQL_CONTAINER" 2>/dev/null || true
+    docker logs "$VALKEY_CONTAINER" 2>/dev/null || true
   fi
   docker rm --force "$BACKEND_CONTAINER" >/dev/null 2>&1 || true
   docker rm --force "$MYSQL_CONTAINER" >/dev/null 2>&1 || true
+  docker rm --force "$VALKEY_CONTAINER" >/dev/null 2>&1 || true
   docker network rm "$NETWORK" >/dev/null 2>&1 || true
   rm -f "$RESPONSE_FILE"
   exit "$status"
@@ -50,6 +53,23 @@ done
 [[ "$(docker inspect --format '{{.State.Health.Status}}' "$MYSQL_CONTAINER")" == "healthy" ]]
 
 docker run --detach \
+  --name "$VALKEY_CONTAINER" \
+  --network "$NETWORK" \
+  --health-cmd='valkey-cli ping' \
+  --health-interval=2s \
+  --health-timeout=3s \
+  --health-retries=30 \
+  valkey/valkey:8-alpine >/dev/null
+
+for _ in $(seq 1 60); do
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' "$VALKEY_CONTAINER")" == "healthy" ]]; then
+    break
+  fi
+  sleep 1
+done
+[[ "$(docker inspect --format '{{.State.Health.Status}}' "$VALKEY_CONTAINER")" == "healthy" ]]
+
+docker run --detach \
   --name "$BACKEND_CONTAINER" \
   --network "$NETWORK" \
   --publish 127.0.0.1::8080 \
@@ -61,6 +81,10 @@ docker run --detach \
   --env APP_PHONE_HASH_SECRET=ci-only-phone-hash-secret-0123456789abcdef \
   --env APP_ADMIN_BOOTSTRAP_ENABLED=false \
   --env APP_SMS_ENABLED=false \
+  --env APP_CACHE_PROVIDER=valkey \
+  --env APP_CACHE_HOST="$VALKEY_CONTAINER" \
+  --env APP_CAPTCHA_ENABLED=true \
+  --env APP_CAPTCHA_CODE_SECRET=ci-only-captcha-code-secret-0123456789abcdef \
   --env APP_NFC_TAG_ACTIVE_KEY_ID=1 \
   --env APP_NFC_TAG_SIGNING_KEYS=1=Y2ktb25seS1uZmMtc2lnbmluZy1rZXktMDEyMzQ1Njc4OWFiY2RlZg== \
   --env TZ=Asia/Shanghai \
@@ -83,6 +107,12 @@ http_status="$(curl --silent --show-error --output "$RESPONSE_FILE" --write-out 
 [[ "$http_status" == "200" || "$http_status" == "401" ]]
 grep -Eq '"code"[[:space:]]*:[[:space:]]*401' "$RESPONSE_FILE"
 
+http_status="$(curl --silent --show-error --output "$RESPONSE_FILE" --write-out '%{http_code}' "http://127.0.0.1:$host_port/api/auth/captcha")"
+[[ "$http_status" == "200" ]]
+grep -Eq '"code"[[:space:]]*:[[:space:]]*0' "$RESPONSE_FILE"
+grep -Eq '"captchaId"[[:space:]]*:[[:space:]]*"[0-9a-f]{32}"' "$RESPONSE_FILE"
+grep -Eq '"imageBase64"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]+"' "$RESPONSE_FILE"
+
 image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 container_id="$(docker inspect --format '{{.Id}}' "$BACKEND_CONTAINER")"
-printf 'container smoke passed: image=%s container=%s http=%s business_code=401\n' "$image_id" "$container_id" "$http_status"
+printf 'container smoke passed: image=%s container=%s protected_code=401 captcha_code=0\n' "$image_id" "$container_id"
