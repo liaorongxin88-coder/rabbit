@@ -4,6 +4,8 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
 import com.rabbit.app.modules.house.service.HouseService;
+import com.rabbit.app.modules.rabbit.dto.BatchRabbitEntryRequest;
+import com.rabbit.app.modules.rabbit.dto.BatchRabbitEntryResult;
 import com.rabbit.app.modules.rabbit.dto.CageTransferRequest;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
 import com.rabbit.app.modules.rabbit.dto.CreateRabbitRequest;
@@ -14,6 +16,7 @@ import com.rabbit.app.modules.rabbit.dto.ReplacementRequest;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.dto.UpdateRabbitRequest;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.service.BatchRabbitEntryService;
 import com.rabbit.app.modules.rabbit.service.RangeRabbitEntryService;
 import com.rabbit.app.modules.rabbit.service.RabbitService;
 import com.rabbit.app.security.AuthContext;
@@ -39,15 +42,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class RabbitController {
     private final HouseService houseService;
     private final RabbitService rabbitService;
+    private final BatchRabbitEntryService batchRabbitEntryService;
     private final RangeRabbitEntryService rangeRabbitEntryService;
 
     public RabbitController(
         HouseService houseService,
         RabbitService rabbitService,
+        BatchRabbitEntryService batchRabbitEntryService,
         RangeRabbitEntryService rangeRabbitEntryService
     ) {
         this.houseService = houseService;
         this.rabbitService = rabbitService;
+        this.batchRabbitEntryService = batchRabbitEntryService;
         this.rangeRabbitEntryService = rangeRabbitEntryService;
     }
 
@@ -84,6 +90,17 @@ public class RabbitController {
         return ApiResponse.ok(
             rabbitService.createRabbit(userId, houseId, r, reproEntry, req.getRequestId())
         );
+    }
+
+    @PostMapping("/rabbits/batch-entry")
+    @RequiresPermission(PermissionCode.RABBIT_RABBITS_ADD)
+    public ApiResponse<BatchRabbitEntryResult> createRabbitBatch(
+        @RequestHeader("X-House-Id") Long houseId,
+        @Valid @RequestBody BatchRabbitEntryRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(batchRabbitEntryService.create(userId, houseId, req));
     }
 
     @PostMapping("/rabbits/range-entry")

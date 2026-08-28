@@ -184,6 +184,7 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
+            validateMotherReference(houseId, rabbit);
             validateDoeEntryProfile(houseId, rabbit, reproEntry);
             lockReproBatchIfRequested(houseId, reproEntry);
 
@@ -1077,10 +1078,17 @@ public class RabbitService {
         if (rabbit.getMotherId() == null) {
             return;
         }
-        Rabbit mother = rabbitMapper.selectById(houseId, rabbit.getMotherId());
+    }
+
+    private void validateMotherReference(Long houseId, Rabbit rabbit) {
+        Long motherId = rabbit.getMotherId();
+        if (motherId == null) {
+            return;
+        }
+        Rabbit mother = rabbitMapper.selectById(houseId, motherId);
         if (mother == null || !Boolean.TRUE.equals(mother.getIsActive())
-            || !"0".equals(mother.getGender())) {
-            throw new BizException(400, "关联母兔不存在或不在场");
+            || !"0".equals(mother.getType()) || !"0".equals(mother.getGender())) {
+            throw new BizException(400, "关联母兔不存在、已离场或不是种母兔");
         }
     }
 

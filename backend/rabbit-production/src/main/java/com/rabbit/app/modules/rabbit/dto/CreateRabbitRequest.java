@@ -3,6 +3,7 @@ package com.rabbit.app.modules.rabbit.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.Date;
 
@@ -10,6 +11,7 @@ public class CreateRabbitRequest {
     @NotNull(message = "cageId不能为空")
     private Long cageId;
 
+    @Positive(message = "motherId必须大于0")
     private Long motherId;
 
     // rabbits.type 与 rabbits.gender 在库里都是 varchar(1)，只靠 @NotBlank 拦不住非法值。
@@ -26,6 +28,7 @@ public class CreateRabbitRequest {
     @Size(max = 100, message = "品种过长")
     private String breed;
 
+    @Pattern(regexp = "[01]", message = "来源方式只能是 0 购入或 1 自留")
     private String arrivalMethod;
 
     @Size(max = 120, message = "供应方过长")

@@ -3,6 +3,7 @@ import { ArrowLeftRightIcon, ArrowUpRightIcon, HeartCrackIcon, SproutIcon } from
 import { toast } from 'sonner'
 import {
   createRabbit,
+  createRabbitBatch,
   promoteReplacementRabbit,
   retainRabbitsAsReplacement,
   requestId,
@@ -54,6 +55,7 @@ import {
   reproductiveOptions,
 } from '@/lib/rabbits'
 import type {
+  BatchRabbitEntryResult,
   Cage,
   Rabbit,
   ProductionBatch,
@@ -110,8 +112,12 @@ export function RabbitFormDialog({
   const [gender, setGender] = useState('0')
   const [breed, setBreed] = useState('')
   const [arrivalMethod, setArrivalMethod] = useState('0')
+  const [sourceSeller, setSourceSeller] = useState('')
+  const [motherId, setMotherId] = useState('')
   const [arrivalDate, setArrivalDate] = useState('')
   const [weight, setWeight] = useState('')
+  const [quantity, setQuantity] = useState('1')
+  const [totalWeight, setTotalWeight] = useState('')
   const [growthStage, setGrowthStage] = useState('')
   const [reproductiveStage, setReproductiveStage] = useState('')
   const [reproStage, setReproStage] = useState(NO_REPRO_ENTRY)
@@ -120,6 +126,7 @@ export function RabbitFormDialog({
   const [matingDate, setMatingDate] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [liveKits, setLiveKits] = useState('')
+  const [batchEntryResult, setBatchEntryResult] = useState<BatchRabbitEntryResult | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -137,8 +144,12 @@ export function RabbitFormDialog({
     setGender(nextGender)
     setBreed(rabbit?.breed ?? '')
     setArrivalMethod(rabbit?.arrivalMethod ?? '0')
+    setSourceSeller(rabbit?.sourceSeller ?? '')
+    setMotherId(rabbit?.motherId?.toString() ?? '')
     setArrivalDate(formatDateInput(rabbit?.arrivalDate))
     setWeight(rabbit?.weight?.toString() ?? '')
+    setQuantity('1')
+    setTotalWeight('')
     setGrowthStage(rabbit?.growthStage ?? '')
     setReproductiveStage(
       rabbit?.reproductiveStage ?? (rabbit ? '' : defaultReproductiveStage(nextType, nextGender)),
@@ -149,6 +160,7 @@ export function RabbitFormDialog({
     setMatingDate('')
     setBirthDate('')
     setLiveKits('')
+    setBatchEntryResult(null)
   }, [cages, houseId, initialCageId, open, rabbit])
 
   const availableBatches = useMemo(() => inProgressProductionBatches(batches), [batches])
@@ -170,6 +182,8 @@ export function RabbitFormDialog({
   const cageValidationMessage = !rabbit && cageId && houseId
     ? rabbitCageValidationMessage(selectedCage, type, houseId)
     : null
+  const quantityValue = Number(quantity)
+  const isBatchEntry = !rabbit && Number.isInteger(quantityValue) && quantityValue > 1
 
   function resetReproductiveStage(nextType: string, nextGender: string) {
     const options = reproductiveOptions(nextType, nextGender)
@@ -205,13 +219,39 @@ export function RabbitFormDialog({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (batchEntryResult) {
+      onOpenChange(false)
+      return
+    }
     if (!houseId || !cageId || cageValidationMessage) return
+    if (!rabbit && (!Number.isInteger(quantityValue) || quantityValue < 1 || quantityValue > 10)) {
+      toast.error('数量必须在 1 到 10 之间')
+      return
+    }
+    if (isBatchEntry && type !== '2') {
+      toast.error('种兔和后备兔一次只能录入 1 只')
+      return
+    }
+    if (isBatchEntry && (!Number.isFinite(Number(totalWeight)) || Number(totalWeight) <= 0 || Number(totalWeight) > 100)) {
+      toast.error('总重量必须在 0.01 到 100 kg 之间')
+      return
+    }
+    if (motherId && (!Number.isInteger(Number(motherId)) || Number(motherId) <= 0)) {
+      toast.error('请输入有效的母兔 ID')
+      return
+    }
+    if (selectedEntry && arrivalMethod === '0' && !sourceSeller.trim()) {
+      toast.error('购入种母兔请填写供应方')
+      return
+    }
     const data = {
       cageId: Number(cageId),
       type,
       gender,
       breed: breed.trim(),
       arrivalMethod,
+      sourceSeller: sourceSeller.trim() || undefined,
+      motherId: motherId ? Number(motherId) : undefined,
       arrivalDate: farmBusinessDateToIso(arrivalDate),
       weight: weight ? Number(weight) : undefined,
       growthStage: growthStage || undefined,
@@ -251,11 +291,39 @@ export function RabbitFormDialog({
       if (rabbit) {
         await updateRabbit(houseId, rabbit.id, data)
         toast.success('兔只资料已更新')
+        onOpenChange(false)
+      } else if (isBatchEntry) {
+        const result = await createRabbitBatch(houseId, {
+          cageId: data.cageId,
+          type: data.type,
+          gender: data.gender,
+          breed: data.breed || undefined,
+          arrivalMethod: data.arrivalMethod,
+          sourceSeller: data.sourceSeller,
+          motherId: data.motherId,
+          arrivalDate: data.arrivalDate ?? '',
+          growthStage: data.growthStage,
+          reproductiveStage: data.reproductiveStage,
+          quantity: quantityValue,
+          totalWeight: Number(totalWeight),
+        })
+        await onSaved()
+        if (result.skippedCages.length > 0) {
+          setBatchEntryResult(result)
+          if (result.enteredRabbitCount > 0) {
+            toast.success(`已录入 ${result.enteredRabbitCount} 只，未录入项见表单内结果`)
+          } else {
+            toast.error('没有兔只录入，请查看未录入原因')
+          }
+          return
+        }
+        toast.success(`已录入 ${result.enteredRabbitCount} 只`)
+        onOpenChange(false)
       } else {
         await createRabbit(houseId, { ...data, ...entry })
         toast.success(selectedEntry ? `兔只已录入，并从【${selectedEntry.stageLabel}】入轨` : '兔只已录入')
+        onOpenChange(false)
       }
-      onOpenChange(false)
       await onSaved()
     } catch {
       // Shared request feedback is sufficient.
@@ -475,7 +543,13 @@ export function RabbitFormDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="rabbit-source">来源</FieldLabel>
-                <Select value={arrivalMethod} onValueChange={setArrivalMethod}>
+                <Select
+                  value={arrivalMethod}
+                  onValueChange={(value) => {
+                    setArrivalMethod(value)
+                    setBatchEntryResult(null)
+                  }}
+                >
                   <SelectTrigger id="rabbit-source"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -495,6 +569,37 @@ export function RabbitFormDialog({
                 />
               </Field>
             </div>
+            {!rabbit && arrivalMethod === '0' ? (
+              <Field>
+                <FieldLabel htmlFor="rabbit-source-seller">供应方</FieldLabel>
+                <Input
+                  id="rabbit-source-seller"
+                  maxLength={120}
+                  value={sourceSeller}
+                  onChange={(event) => {
+                    setSourceSeller(event.target.value)
+                    setBatchEntryResult(null)
+                  }}
+                />
+              </Field>
+            ) : null}
+            {!rabbit && arrivalMethod === '1' ? (
+              <Field>
+                <FieldLabel htmlFor="rabbit-mother-id">母兔 ID（可选）</FieldLabel>
+                <Input
+                  id="rabbit-mother-id"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={motherId}
+                  onChange={(event) => {
+                    setMotherId(event.target.value)
+                    setBatchEntryResult(null)
+                  }}
+                />
+                <FieldDescription>请填写当前兔场内在栏种母兔的 ID。</FieldDescription>
+              </Field>
+            ) : null}
             <Field>
               <FieldLabel htmlFor="rabbit-weight">体重（kg）</FieldLabel>
               <Input
@@ -503,18 +608,72 @@ export function RabbitFormDialog({
                 min={0}
                 step="0.01"
                 value={weight}
-                onChange={(event) => setWeight(event.target.value)}
+                onChange={(event) => {
+                  setWeight(event.target.value)
+                  setBatchEntryResult(null)
+                }}
               />
             </Field>
+            {!rabbit ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="rabbit-quantity">数量</FieldLabel>
+                  <Input
+                    id="rabbit-quantity"
+                    type="number"
+                    min={1}
+                    max={10}
+                    inputMode="numeric"
+                    value={quantity}
+                    onChange={(event) => {
+                      setQuantity(event.target.value)
+                      setBatchEntryResult(null)
+                    }}
+                  />
+                  <FieldDescription>单次最多 10 只。</FieldDescription>
+                </Field>
+                {isBatchEntry ? (
+                  <Field>
+                    <FieldLabel htmlFor="rabbit-total-weight">总重量（kg）</FieldLabel>
+                    <Input
+                      id="rabbit-total-weight"
+                      type="number"
+                      min={0.01}
+                      max={100}
+                      step="0.01"
+                      value={totalWeight}
+                      onChange={(event) => {
+                        setTotalWeight(event.target.value)
+                        setBatchEntryResult(null)
+                      }}
+                    />
+                    <FieldDescription>将按数量折算为每只体重。</FieldDescription>
+                  </Field>
+                ) : null}
+              </div>
+            ) : null}
           </FieldGroup>
+          {batchEntryResult ? (
+            <div className="border bg-secondary p-3 text-sm">
+              <p>已录入 {batchEntryResult.enteredRabbitCount} 只。</p>
+              {batchEntryResult.skippedCages.length > 0 ? (
+                <p className="mt-1 text-muted-foreground">
+                  未录入：{batchEntryResult.skippedCages
+                    .map((item) => `${item.cageNumber || `#${item.cageId}`}：${item.rabbitCount}只，${item.reason}`)
+                    .join('；')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
             <Button
-              type="submit"
+              type={batchEntryResult ? 'button' : 'submit'}
+              onClick={batchEntryResult ? () => onOpenChange(false) : undefined}
               disabled={saving || !cageId || Boolean(cageValidationMessage) || Boolean(selectedEntry && !batchId)}
             >
               {saving ? <Spinner data-icon="inline-start" /> : null}
-              保存
+              {batchEntryResult ? '关闭' : '保存'}
             </Button>
           </DialogFooter>
         </form>

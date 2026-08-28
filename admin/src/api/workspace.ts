@@ -13,6 +13,7 @@ import {
 import { rabbitReplacementPath } from "@/lib/rabbit-replacement";
 import type {
   BatchRabbit,
+  BatchRabbitEntryResult,
   BreedingCycle,
   Cage,
   DashboardSummary,
@@ -216,6 +217,7 @@ export interface RabbitWriteInput {
   gender?: string;
   breed?: string;
   arrivalMethod?: string;
+  sourceSeller?: string;
   arrivalDate?: string;
   weight?: number;
   growthStage?: string;
@@ -243,6 +245,26 @@ export function createRabbit(
 ) {
   return workspacePostJson<Rabbit>(
     "/api/rabbits",
+    { ...data, requestId: requestId() },
+    { houseId },
+  );
+}
+
+export interface BatchRabbitEntryInput extends RabbitWriteInput {
+  type: string;
+  gender: string;
+  arrivalMethod: string;
+  arrivalDate: string;
+  quantity: number;
+  totalWeight: number;
+}
+
+export function createRabbitBatch(
+  houseId: number,
+  data: BatchRabbitEntryInput,
+) {
+  return workspacePostJson<BatchRabbitEntryResult>(
+    "/api/rabbits/batch-entry",
     { ...data, requestId: requestId() },
     { houseId },
   );
