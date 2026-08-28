@@ -79,9 +79,10 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             rabbitId
         ));
 
-        updateGrowthEntry(houseId, rabbitId, 2);
-        assertEquals(1, commodityGrowthService.advanceHouse(houseId, new Date()));
-        commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
+        Date growingNow = new Date();
+        updateGrowthEntry(houseId, rabbitId, growingNow, 2);
+        assertEquals(1, commodityGrowthService.advanceHouse(houseId, growingNow));
+        commodityDailyCareReminderService.scheduleHouse(houseId, growingNow);
         assertCareTask(
             owner,
             houseId,
@@ -92,9 +93,10 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         );
         assertEquals(1, pendingCareCount(houseId, rabbitId));
 
-        updateGrowthEntry(houseId, rabbitId, 4);
-        assertEquals(1, commodityGrowthService.advanceHouse(houseId, new Date()));
-        commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
+        Date fatteningNow = new Date();
+        updateGrowthEntry(houseId, rabbitId, fatteningNow, 4);
+        assertEquals(1, commodityGrowthService.advanceHouse(houseId, fatteningNow));
+        commodityDailyCareReminderService.scheduleHouse(houseId, fatteningNow);
         assertCareTask(
             owner,
             houseId,
@@ -105,16 +107,17 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         );
         assertEquals(1, pendingCareCount(houseId, rabbitId));
 
-        updateGrowthEntry(houseId, rabbitId, 6);
-        assertEquals(1, commodityGrowthService.advanceHouse(houseId, new Date()));
+        Date maturityNow = new Date();
+        updateGrowthEntry(houseId, rabbitId, maturityNow, 6);
+        assertEquals(1, commodityGrowthService.advanceHouse(houseId, maturityNow));
         jdbc.update(
             "delete from work_tasks where house_id = ? and rabbit_id = ?"
                 + " and task_type = 'SALE_READY'",
             houseId,
             rabbitId
         );
-        commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
-        commodityDailyCareReminderService.scheduleHouse(houseId, new Date());
+        commodityDailyCareReminderService.scheduleHouse(houseId, maturityNow);
+        commodityDailyCareReminderService.scheduleHouse(houseId, maturityNow);
         assertEquals("MATURE", jdbc.queryForObject(
             "select growth_stage from rabbits where house_id = ? and id = ?",
             String.class,
@@ -316,11 +319,11 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(content, event.get("content").asText());
     }
 
-    private void updateGrowthEntry(long houseId, long rabbitId, int daysAgo) {
+    private void updateGrowthEntry(long houseId, long rabbitId, Date now, int daysAgo) {
+        // This scenario needs an overdue stage, not an exact DATETIME threshold.
         jdbc.update(
-            "update rabbits set growth_stage_entered_at = date_sub(now(), interval ? day)"
-                + " where house_id = ? and id = ?",
-            daysAgo,
+            "update rabbits set growth_stage_entered_at = ? where house_id = ? and id = ?",
+            DateUtil.plusDays(now, -daysAgo - 1),
             houseId,
             rabbitId
         );
