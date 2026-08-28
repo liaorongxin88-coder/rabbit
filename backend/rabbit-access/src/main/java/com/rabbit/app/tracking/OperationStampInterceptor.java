@@ -12,6 +12,8 @@ import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Invocation;
 import org.apache.ibatis.plugin.Plugin;
 import org.apache.ibatis.plugin.Signature;
+import org.springframework.beans.BeanWrapper;
+import org.springframework.beans.PropertyAccessorFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
@@ -105,6 +107,10 @@ public class OperationStampInterceptor implements Interceptor {
             stamp(stamped, command, context);
             return;
         }
+        if (isLegacyStamped(parameter)) {
+            stampLegacy(parameter, command, context);
+            return;
+        }
         if (parameter instanceof Collection<?> collection) {
             for (Object item : collection) {
                 stampParameter(item, command, context);
@@ -119,7 +125,7 @@ public class OperationStampInterceptor implements Interceptor {
         }
         if (parameter instanceof Map<?, ?> map) {
             for (Object value : map.values()) {
-                if (value instanceof Stamped || value instanceof Collection<?> || value instanceof Object[]) {
+                if (value instanceof Stamped || isLegacyStamped(value) || value instanceof Collection<?> || value instanceof Object[]) {
                     stampParameter(value, command, context);
                 }
             }
@@ -138,15 +144,64 @@ public class OperationStampInterceptor implements Interceptor {
             entity.setHouseId(context.getHouseId());
         }
         if (isBlank(entity.getOperatorName())) {
-            String name = context.getOperatorName();
-            if (name == null) {
-                OperatorNameResolver resolver = operatorNameResolver.getIfAvailable();
-                name = resolver == null ? null : resolver.resolve(context.getUserId());
-            }
+            String name = operatorName(context);
             if (name != null) {
                 entity.setOperatorName(name);
             }
         }
+    }
+
+    /**
+     * T2 transitions pre-existing entities that expose the conventional JavaBean audit fields
+     * but have not yet declared {@link Stamped}. It is deliberately property-based rather than
+     * field-reflective so objects without every optional snapshot column remain unaffected.
+     */
+    private boolean isLegacyStamped(Object candidate) {
+        if (candidate == null || candidate instanceof CharSequence || candidate instanceof Number
+                || candidate instanceof Boolean || candidate instanceof Enum<?>) {
+            return false;
+        }
+        BeanWrapper bean = PropertyAccessorFactory.forBeanPropertyAccess(candidate);
+        return bean.isReadableProperty("createBy")
+                && bean.isWritableProperty("createBy")
+                && bean.isReadableProperty("updateBy")
+                && bean.isWritableProperty("updateBy");
+    }
+
+    private void stampLegacy(Object entity, SqlCommandType command, OperationContext context) {
+        BeanWrapper bean = PropertyAccessorFactory.forBeanPropertyAccess(entity);
+        String operator = context.getUserId() == null ? null : String.valueOf(context.getUserId());
+        if (command == SqlCommandType.INSERT && isBlank(value(bean, "createBy")) && operator != null) {
+            bean.setPropertyValue("createBy", operator);
+        }
+        if (isBlank(value(bean, "updateBy")) && operator != null) {
+            bean.setPropertyValue("updateBy", operator);
+        }
+        if (bean.isReadableProperty("houseId") && bean.isWritableProperty("houseId")
+                && bean.getPropertyValue("houseId") == null && context.getHouseId() != null) {
+            bean.setPropertyValue("houseId", context.getHouseId());
+        }
+        if (bean.isReadableProperty("operatorName") && bean.isWritableProperty("operatorName")
+                && isBlank(value(bean, "operatorName"))) {
+            String name = operatorName(context);
+            if (name != null) {
+                bean.setPropertyValue("operatorName", name);
+            }
+        }
+    }
+
+    private String operatorName(OperationContext context) {
+        String name = context.getOperatorName();
+        if (name != null) {
+            return name;
+        }
+        OperatorNameResolver resolver = operatorNameResolver.getIfAvailable();
+        return resolver == null ? null : resolver.resolve(context.getUserId());
+    }
+
+    private String value(BeanWrapper bean, String property) {
+        Object value = bean.getPropertyValue(property);
+        return value == null ? null : String.valueOf(value);
     }
 
     private boolean isBlank(String value) {
