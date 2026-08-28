@@ -240,7 +240,8 @@ class SaleServiceTest {
 
         SaleOrderItem line = capturedItems().get(0);
         assertEquals(ORDER_ID, line.getSaleOrderId());
-        assertEquals("9", line.getCreateBy());
+        org.junit.jupiter.api.Assertions.assertNull(line.getCreateBy(),
+                "服务层不再手写 create_by，由 MyBatis 写入拦截器补齐");
     }
 
     // ---------- 离场事件 ----------

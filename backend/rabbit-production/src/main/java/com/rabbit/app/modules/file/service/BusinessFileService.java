@@ -55,7 +55,6 @@ public class BusinessFileService {
         file.setSizeBytes((long) content.length);
         file.setSha256(sha256);
         file.setContent(content);
-        file.setCreateBy(String.valueOf(userId));
         try {
             businessFileMapper.insert(file);
             return response(file);

@@ -38,8 +38,6 @@ public class CageNfcTagService {
             t.setTagUid(tagUid);
             t.setRequestId(requestId);
             t.setRemark(remark);
-            t.setCreateBy(String.valueOf(userId));
-            t.setUpdateBy(String.valueOf(userId));
             return t;
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
@@ -62,8 +60,6 @@ public class CageNfcTagService {
             t.setTagUid(uid);
             t.setRequestId(requestId);
             t.setRemark(remark);
-            t.setCreateBy(String.valueOf(userId));
-            t.setUpdateBy(String.valueOf(userId));
             cageNfcTagMapper.upsert(t);
             requestDedupService.markDone(houseId, userId, api, requestId);
             return t;

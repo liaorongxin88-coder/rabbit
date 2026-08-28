@@ -7,6 +7,7 @@ public class WeightLog implements Stamped {
     private Long id;
     private Long houseId;
     private Long rabbitId;
+    private Long cageId;
     private Date weighTime;
     private Double weightKg;
     private String remark;
@@ -14,6 +15,7 @@ public class WeightLog implements Stamped {
     private String createBy;
     private Date createTime;
     private String updateBy;
+    private String operatorName;
     private Date updateTime;
 
     public Long getId() {
@@ -38,6 +40,14 @@ public class WeightLog implements Stamped {
 
     public void setRabbitId(Long rabbitId) {
         this.rabbitId = rabbitId;
+    }
+
+    public Long getCageId() {
+        return cageId;
+    }
+
+    public void setCageId(Long cageId) {
+        this.cageId = cageId;
     }
 
     public Date getWeighTime() {
@@ -94,6 +104,14 @@ public class WeightLog implements Stamped {
 
     public void setUpdateBy(String updateBy) {
         this.updateBy = updateBy;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 
     public Date getUpdateTime() {

@@ -74,8 +74,6 @@ public class HouseMemberService {
             member.setStatus(STATUS_ENABLED);
             member.setPerms(normalizedRole.legacyPermission());
             member.setIsAdmin(normalizedRole.administrator());
-            member.setCreateBy(operator);
-            member.setUpdateBy(operator);
             try {
                 houseUserMapper.insert(member);
             } catch (DuplicateKeyException duplicate) {
@@ -222,8 +220,6 @@ public class HouseMemberService {
             member.setStatus(STATUS_ENABLED);
             member.setPerms(requested.legacyPermission());
             member.setIsAdmin(requested.administrator());
-            member.setCreateBy(operator);
-            member.setUpdateBy(operator);
             try {
                 houseUserMapper.insert(member);
                 return requested.code();

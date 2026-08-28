@@ -42,8 +42,6 @@ public class NfcTagService {
             t.setRecordId(recordId);
             t.setRequestId(requestId);
             t.setRemark(remark);
-            t.setCreateBy(String.valueOf(userId));
-            t.setUpdateBy(String.valueOf(userId));
             return t;
         }
         requestDedupService.markProcessing(houseId, userId, api, requestId);
@@ -83,8 +81,6 @@ public class NfcTagService {
             t.setRecordId(recordId);
             t.setRequestId(requestId);
             t.setRemark(remark);
-            t.setCreateBy(String.valueOf(userId));
-            t.setUpdateBy(String.valueOf(userId));
             nfcTagMapper.upsert(t);
             requestDedupService.markDone(houseId, userId, api, requestId);
             return t;

@@ -41,8 +41,6 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new AuditLogInterceptor(auditLogService))
-                .addPathPatterns("/api/**");
         registry.addInterceptor(new PlatformAdminGuardInterceptor(platformAdminMapper))
                 .addPathPatterns("/api/admin/**");
         registry.addInterceptor(new BusinessAuthenticationInterceptor())
@@ -61,6 +59,9 @@ public class WebConfig implements WebMvcConfigurer {
                         // 客户端下载也不带 Authorization 头。
                         "/api/app-updates/*/download"
                 );
+        // Register after authentication so reverse afterCompletion order still has OperationContext bound.
+        registry.addInterceptor(new AuditLogInterceptor(auditLogService))
+                .addPathPatterns("/api/**");
         registry.addInterceptor(new AuthorizationInterceptor(accessControlService))
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(

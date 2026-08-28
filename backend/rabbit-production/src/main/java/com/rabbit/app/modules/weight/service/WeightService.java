@@ -62,6 +62,7 @@ public class WeightService {
             r.setWeighTime(DateUtil.now());
         }
         r.setHouseId(houseId);
+        r.setCageId(rabbit.getCageId());
         r.setRequestId(requestId);
         weightLogMapper.insert(r);
         // 这一处 operator 仍显式传：updateWeight 走的是 mapper 方法入参，

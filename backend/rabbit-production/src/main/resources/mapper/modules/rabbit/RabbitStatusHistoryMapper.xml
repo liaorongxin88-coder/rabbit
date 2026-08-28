@@ -4,20 +4,20 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper">
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbit_status_history (house_id, rabbit_id, batch_id, from_status, to_status, change_time, reason, related_record_id, related_record_table, create_by, update_by)
-        values (#{houseId}, #{rabbitId}, #{batchId}, #{fromStatus}, #{toStatus}, #{changeTime}, #{reason}, #{relatedRecordId}, #{relatedRecordTable}, #{createBy}, #{updateBy})
+        insert into rabbit_status_history (house_id, rabbit_id, cage_id, batch_id, from_status, to_status, change_time, reason, related_record_id, related_record_table, create_by, update_by, operator_name)
+        values (#{houseId}, #{rabbitId}, #{cageId}, #{batchId}, #{fromStatus}, #{toStatus}, #{changeTime}, #{reason}, #{relatedRecordId}, #{relatedRecordTable}, #{createBy}, #{updateBy}, #{operatorName})
     </insert>
 
     <insert id="insertBatch">
         insert into rabbit_status_history (
-            house_id, rabbit_id, batch_id, from_status, to_status, change_time,
-            reason, related_record_id, related_record_table, create_by, update_by
+            house_id, rabbit_id, cage_id, batch_id, from_status, to_status, change_time,
+            reason, related_record_id, related_record_table, create_by, update_by, operator_name
         ) values
         <foreach collection="list" item="item" separator=",">
-            (#{item.houseId}, #{item.rabbitId}, #{item.batchId}, #{item.fromStatus},
+            (#{item.houseId}, #{item.rabbitId}, #{item.cageId}, #{item.batchId}, #{item.fromStatus},
              #{item.toStatus}, #{item.changeTime}, #{item.reason},
              #{item.relatedRecordId}, #{item.relatedRecordTable},
-             #{item.createBy}, #{item.updateBy})
+             #{item.createBy}, #{item.updateBy}, #{item.operatorName})
         </foreach>
     </insert>
 

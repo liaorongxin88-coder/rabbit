@@ -1058,7 +1058,8 @@ class ReproStateMachineServiceTest {
 
         service.apply(command(ReproAction.ESTRUS).operatorName("  ").build());
 
-        assertEquals(String.valueOf(USER_ID), capturedCycle().getUpdateBy());
+        org.junit.jupiter.api.Assertions.assertNull(capturedCycle().getUpdateBy(),
+                "服务层不再手写 update_by，由 MyBatis 写入拦截器补齐");
     }
 
     // ------------------------------------------------------------ openCycleAt

@@ -74,6 +74,7 @@ public class TreatmentService {
             r.setStartDate(now);
         }
         r.setHouseId(houseId);
+        r.setCageId(rabbit.getCageId());
         r.setStatus(STATUS_OPEN);
         r.setRequestId(requestId);
         treatmentRecordMapper.insert(r);
@@ -81,6 +82,7 @@ public class TreatmentService {
         RabbitStatusHistory h = new RabbitStatusHistory();
         h.setHouseId(houseId);
         h.setRabbitId(r.getRabbitId());
+        h.setCageId(rabbit.getCageId());
         h.setFromStatus("在栏");
         h.setToStatus("治疗");
         h.setChangeTime(r.getStartDate());
@@ -124,6 +126,7 @@ public class TreatmentService {
         RabbitStatusHistory h = new RabbitStatusHistory();
         h.setHouseId(houseId);
         h.setRabbitId(tr.getRabbitId());
+        h.setCageId(tr.getCageId());
         h.setFromStatus("治疗");
         h.setToStatus("复查完成");
         h.setChangeTime(t);

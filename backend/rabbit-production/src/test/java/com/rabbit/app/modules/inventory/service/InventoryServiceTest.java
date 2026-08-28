@@ -141,7 +141,8 @@ class InventoryServiceTest {
         verify(itemMapper).insert(saved.capture());
         assertAmount("0", saved.getValue().getCurrentQty());
         assertEquals(HOUSE_ID, saved.getValue().getHouseId());
-        assertEquals("9", saved.getValue().getCreateBy());
+        org.junit.jupiter.api.Assertions.assertNull(saved.getValue().getCreateBy(),
+                "服务层不再手写 create_by，由 MyBatis 写入拦截器补齐");
     }
 
     /**

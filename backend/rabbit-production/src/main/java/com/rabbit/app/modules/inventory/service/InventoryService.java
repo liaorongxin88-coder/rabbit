@@ -67,8 +67,6 @@ public class InventoryService {
             }
             item.setHouseId(houseId);
             item.setCurrentQty(initQty);
-            item.setCreateBy(String.valueOf(userId));
-            item.setUpdateBy(String.valueOf(userId));
             inventoryItemMapper.insert(item);
 
             if (initQty.compareTo(BigDecimal.ZERO) > 0) {
@@ -80,8 +78,6 @@ public class InventoryService {
                 tx.setTxTime(DateUtil.now());
                 tx.setRemark("初始化库存");
                 tx.setRequestId(requestId);
-                tx.setCreateBy(String.valueOf(userId));
-                tx.setUpdateBy(String.valueOf(userId));
                 inventoryTxMapper.insert(tx);
             }
 
@@ -141,8 +137,6 @@ public class InventoryService {
             tx.setRefId(refId);
             tx.setRemark(remark);
             tx.setRequestId(requestId);
-            tx.setCreateBy(String.valueOf(userId));
-            tx.setUpdateBy(String.valueOf(userId));
             inventoryTxMapper.insert(tx);
 
             applyQtyDeltaWithPolicy(houseId, itemId, qtyDelta, String.valueOf(userId));

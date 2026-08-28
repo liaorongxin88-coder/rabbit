@@ -50,7 +50,6 @@ public class SettingService {
     public void updateUserSetting(Long userId, UpdateSettingRequest req) {
         GlobalSetting setting = getOrCreateUserSetting(userId);
         applyRequest(setting, req);
-        setting.setUpdateBy(String.valueOf(userId));
         int n = globalSettingMapper.updateByUser(setting);
         if (n == 0) {
             throw new BizException(400, "用户生产周期配置未初始化");
@@ -88,7 +87,6 @@ public class SettingService {
             }
         }
         applyRequest(setting, req);
-        setting.setUpdateBy(String.valueOf(userId));
         int n = globalSettingMapper.updateByHouse(setting);
         if (n == 0) {
             throw new BizException(400, "兔舍生产周期配置未初始化");
@@ -164,8 +162,6 @@ public class SettingService {
         copyCommoditySettings(setting, source);
         setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), DEFAULT_REPLACEMENT_DAYS));
         setting.setRemark(source.getRemark());
-        setting.setCreateBy(String.valueOf(userId));
-        setting.setUpdateBy(String.valueOf(userId));
         return setting;
     }
 
@@ -181,8 +177,6 @@ public class SettingService {
         copyCommoditySettings(setting, source);
         setting.setReplacementDays(valueOrDefault(source.getReplacementDays(), DEFAULT_REPLACEMENT_DAYS));
         setting.setRemark(source.getRemark());
-        setting.setCreateBy(String.valueOf(userId));
-        setting.setUpdateBy(String.valueOf(userId));
         return setting;
     }
 
@@ -200,8 +194,6 @@ public class SettingService {
         setting.setFatteningDays(DEFAULT_FATTENING_DAYS);
         setting.setSaleDays(setting.commodityMaturityDays());
         setting.setReplacementDays(DEFAULT_REPLACEMENT_DAYS);
-        setting.setCreateBy(String.valueOf(userId));
-        setting.setUpdateBy(String.valueOf(userId));
         return setting;
     }
 

@@ -7,6 +7,9 @@ public class AuditLog {
     private String traceId;
     private Long userId;
     private Long houseId;
+    private Long batchId;
+    private Long cageId;
+    private Long rabbitId;
     private String method;
     private String path;
     private String queryString;
@@ -49,6 +52,30 @@ public class AuditLog {
 
     public void setHouseId(Long houseId) {
         this.houseId = houseId;
+    }
+
+    public Long getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(Long batchId) {
+        this.batchId = batchId;
+    }
+
+    public Long getCageId() {
+        return cageId;
+    }
+
+    public void setCageId(Long cageId) {
+        this.cageId = cageId;
+    }
+
+    public Long getRabbitId() {
+        return rabbitId;
+    }
+
+    public void setRabbitId(Long rabbitId) {
+        this.rabbitId = rabbitId;
     }
 
     public String getMethod() {

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper;
+import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import java.util.Date;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,13 +33,15 @@ class DeliveryAftercareServiceTest {
 
     private BreedingPerformanceRecorder performanceRecorder;
     private RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper;
+    private RabbitMapper rabbitMapper;
     private DeliveryAftercareService service;
 
     @BeforeEach
     void setUp() {
         performanceRecorder = mock(BreedingPerformanceRecorder.class);
         rabbitAbnormalConditionMapper = mock(RabbitAbnormalConditionMapper.class);
-        service = new DeliveryAftercareService(performanceRecorder, rabbitAbnormalConditionMapper);
+        rabbitMapper = mock(RabbitMapper.class);
+        service = new DeliveryAftercareService(performanceRecorder, rabbitAbnormalConditionMapper, rabbitMapper);
     }
 
     /** 正常产只记绩效，不该凭空给母兔挂一条健康预警。 */
@@ -71,7 +74,8 @@ class DeliveryAftercareServiceTest {
         assertEquals("流产", warning.getWarningStatus());
         assertEquals(birthDate, warning.getWarningTime());
         assertEquals("全窝死胎", warning.getRemark());
-        assertEquals("op", warning.getCreateBy());
+        org.junit.jupiter.api.Assertions.assertNull(warning.getCreateBy(),
+                "服务层不再手写 create_by，由 MyBatis 写入拦截器补齐");
     }
 
     /**

@@ -38,8 +38,6 @@ public class CageHouseInitializer implements HouseInitializer {
                     cage.setRabbitCount(0);
                     cage.setIsFed(Boolean.FALSE);
                     cage.setIsEnabled(Boolean.TRUE);
-                    cage.setCreateBy(context.actorId());
-                    cage.setUpdateBy(context.actorId());
                     cages.add(cage);
                 }
             }

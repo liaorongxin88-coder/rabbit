@@ -12,6 +12,7 @@ import com.rabbit.app.common.TraceIdFilter;
 import com.rabbit.app.modules.audit.entity.AuditLog;
 import com.rabbit.app.modules.audit.service.AuditLogService;
 import com.rabbit.app.security.AuthContext;
+import com.rabbit.app.tracking.OperationContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,11 +40,13 @@ class AuditLogInterceptorTest {
         interceptor = new AuditLogInterceptor(auditLogService);
         response = new MockHttpServletResponse();
         AuthContext.clear();
+        OperationContext.clear();
     }
 
     @AfterEach
     void tearDown() {
         AuthContext.clear();
+        OperationContext.clear();
     }
 
     @Test
@@ -85,6 +88,24 @@ class AuditLogInterceptorTest {
      * 没跑过 preHandle 时（例如更早的过滤器就把请求打回了）耗时记 -1，而不是拿
      * 当前时间去减一个不存在的起点、算出一个荒谬的巨大值。
      */
+    @Test
+    void operationCoordinatesComeFromTheOperationContext() {
+        OperationContext context = OperationContext.bind(42L, 7L, "trace-abc");
+        context.setBatchId(8L);
+        context.setCageId(9L);
+        context.setRabbitId(10L);
+        MockHttpServletRequest request = get("/api/rabbits/10/weight");
+
+        interceptor.afterCompletion(request, response, new Object(), null);
+
+        AuditLog log = captured();
+        assertEquals(42L, log.getUserId());
+        assertEquals(7L, log.getHouseId());
+        assertEquals(8L, log.getBatchId());
+        assertEquals(9L, log.getCageId());
+        assertEquals(10L, log.getRabbitId());
+    }
+
     @Test
     void missingStartTimeYieldsMinusOneInsteadOfGarbage() {
         MockHttpServletRequest request = get("/api/admin/farms");

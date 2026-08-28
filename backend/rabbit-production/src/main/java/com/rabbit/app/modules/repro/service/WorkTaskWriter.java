@@ -53,8 +53,6 @@ public class WorkTaskWriter {
         task.setDueTime(request.dueTime());
         task.setStatus(TaskStatus.PENDING.name());
         task.setDedupKey(dedupKey(subjectType, subjectId, request.taskType()));
-        task.setCreateBy(request.operator());
-        task.setUpdateBy(request.operator());
         workTaskMapper.upsert(task);
         return task;
     }
@@ -202,8 +200,6 @@ public class WorkTaskWriter {
         task.setStatus(TaskStatus.PENDING.name());
         task.setDedupKey(dedupKey);
         task.setRemark(request.remark());
-        task.setCreateBy(request.operator());
-        task.setUpdateBy(request.operator());
         workTaskMapper.upsert(task);
         return task;
     }

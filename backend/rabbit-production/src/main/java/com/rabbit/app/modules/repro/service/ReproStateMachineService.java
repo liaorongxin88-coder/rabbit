@@ -179,7 +179,6 @@ public class ReproStateMachineService {
 
         // 步骤 6：关闭 / 推进周期，带乐观锁。
         closeOrAdvance(cycle, transition, occurredAt, command, operator);
-        cycle.setUpdateBy(operator);
         if (reproCycleMapper.applyTransition(cycle, expectedVersion) == 0) {
             throw new BizException(409, "状态已变化，请刷新后重试");
         }
@@ -449,8 +448,6 @@ public class ReproStateMachineService {
         link.setCurrentStatus(stage.label());
         link.setIsActive(Boolean.TRUE);
         link.setJoinDate(occurredAt);
-        link.setCreateBy(operator);
-        link.setUpdateBy(operator);
         batchRabbitMapper.insertBatch(List.of(link));
 
         RabbitStatusHistory history = new RabbitStatusHistory();
@@ -461,8 +458,6 @@ public class ReproStateMachineService {
         history.setToStatus(stage.label());
         history.setChangeTime(occurredAt);
         history.setReason("生产入轨加入批次");
-        history.setCreateBy(operator);
-        history.setUpdateBy(operator);
         rabbitStatusHistoryMapper.insert(history);
     }
 
@@ -581,8 +576,6 @@ public class ReproStateMachineService {
             : ReproStage.READY.label());
         history.setChangeTime(occurredAt);
         history.setReason("生产周期结束，退出原批次");
-        history.setCreateBy(operator);
-        history.setUpdateBy(operator);
         rabbitStatusHistoryMapper.insert(history);
     }
 
@@ -828,7 +821,6 @@ public class ReproStateMachineService {
         } else if (transition.toStage() != null) {
             cycle.setStage(transition.toStage().name());
         }
-        cycle.setUpdateBy(operator);
     }
 
     private Long maintainLitter(
@@ -857,8 +849,6 @@ public class ReproStateMachineService {
             litter.setNursingCageId(command.getNursingCageId());
             litter.setRequestId(command.getRequestId());
             litter.setRemark(command.getRemark());
-            litter.setCreateBy(operator);
-            litter.setUpdateBy(operator);
             litterMapper.insert(litter);
             syncLitterCounters(cycle, litter);
             return litter.getId();
@@ -877,7 +867,6 @@ public class ReproStateMachineService {
             litter.setNursingCageId(command.getNursingCageId() != null
                 ? command.getNursingCageId()
                 : litter.getNursingCageId());
-            litter.setUpdateBy(operator);
             litterMapper.update(litter);
             syncLitterCounters(cycle, litter);
             return litter.getId();
@@ -982,8 +971,6 @@ public class ReproStateMachineService {
         followUp.setStage(transition.followUpStage().name());
         followUp.setStageEnteredAt(occurredAt);
         followUp.setLifecycle(CycleLifecycle.OPEN.name());
-        followUp.setCreateBy(operator);
-        followUp.setUpdateBy(operator);
         reproCycleMapper.insert(followUp);
         return followUp;
     }
@@ -1018,8 +1005,6 @@ public class ReproStateMachineService {
             : DueDateCalculator.expectedBirthDate(cycle.getMatingDate()));
         cycle.setRequestId(command.requestId());
         cycle.setRemark(command.remark());
-        cycle.setCreateBy(operator);
-        cycle.setUpdateBy(operator);
         return cycle;
     }
 
@@ -1040,8 +1025,6 @@ public class ReproStateMachineService {
         litter.setCurrentNursing(orZero(command.keptKits()));
         litter.setStatus(LitterStatus.NURSING.name());
         litter.setRequestId(command.requestId());
-        litter.setCreateBy(operator);
-        litter.setUpdateBy(operator);
         return litter;
     }
 
@@ -1150,7 +1133,6 @@ public class ReproStateMachineService {
             attachment.setFileId(fileId);
             attachment.setSortNo(sort++);
             attachment.setRequestId(command.getRequestId());
-            attachment.setCreateBy(operator);
             bizAttachmentMapper.insertIgnore(attachment);
         }
     }

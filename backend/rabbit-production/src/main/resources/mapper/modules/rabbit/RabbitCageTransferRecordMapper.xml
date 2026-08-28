@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.rabbit.mapper.RabbitCageTransferRecordMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into rabbit_cage_transfer_records
+            (house_id, rabbit_id, from_cage_id, to_cage_id, transfer_type, request_id, create_by, operator_name)
+        values
+            (#{houseId}, #{rabbitId}, #{fromCageId}, #{toCageId}, #{transferType}, #{requestId}, #{createBy}, #{operatorName})
+    </insert>
+</mapper>
