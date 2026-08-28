@@ -246,7 +246,9 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
       ref.invalidate(houseCagesProvider(widget.houseId));
     } on ApiException catch (error) {
       if (mounted) {
-        setState(() => _errorMessage = error.message);
+        setState(
+          () => _errorMessage = '${error.message}，投喂信息已保留，可重新提交',
+        );
       }
     } catch (_) {
       if (mounted) {
@@ -311,8 +313,8 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => ErrorState(
                 message: '无法读取兔只：$error',
-                onRetry: () =>
-                    ref.invalidate(allActiveHouseRabbitsProvider(widget.houseId)),
+                onRetry: () => ref
+                    .invalidate(allActiveHouseRabbitsProvider(widget.houseId)),
               ),
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -325,7 +327,8 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => ErrorState(
           message: '无法确认投喂权限：$error',
-          onRetry: () => ref.invalidate(housePermissionProvider(widget.houseId)),
+          onRetry: () =>
+              ref.invalidate(housePermissionProvider(widget.houseId)),
         ),
       ),
     );
@@ -386,7 +389,8 @@ class _FeedEntryForm extends StatelessWidget {
       ..sort((left, right) => left.cageNumber.compareTo(right.cageNumber));
     final selectedRabbitCount = availableCages
         .where((cage) => selectedCageIds.contains(cage.id))
-        .fold<int>(0, (total, cage) => total + (rabbitsByCage[cage.id]?.length ?? 0));
+        .fold<int>(
+            0, (total, cage) => total + (rabbitsByCage[cage.id]?.length ?? 0));
     final palette = AppPalette.of(context);
 
     return ListView(

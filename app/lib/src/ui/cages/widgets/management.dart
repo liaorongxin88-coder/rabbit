@@ -684,7 +684,9 @@ class _PendingCommodityAllocationBand extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = AppPalette.of(context);
     return allocation.when(
-      data: (count) => Container(
+      data: (count) => count == 0
+          ? const SizedBox.shrink()
+          : Container(
         key: const ValueKey('pending-commodity-allocation'),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(

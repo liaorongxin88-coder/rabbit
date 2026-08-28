@@ -160,7 +160,12 @@ void main() {
 
     final context = tester.element(find.byType(OutboundFlowScreen));
     expect(MediaQuery.textScalerOf(context).scale(10), 20);
-    expect(find.byKey(const ValueKey('outbound-nfc-cage-capture')), findsOneWidget);
+    await _scrollSelectionUntilVisible(
+      tester,
+      find.byKey(const ValueKey('outbound-nfc-cage-capture')),
+    );
+    expect(find.byKey(const ValueKey('outbound-nfc-cage-capture')),
+        findsOneWidget);
     expect(find.text('碰标签加入笼位'), findsOneWidget);
     expect(find.text('下一步 · 1 只'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -193,7 +198,7 @@ void main() {
       find.byKey(const ValueKey('outbound-summary-early-sale')),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('1-1-1'));
+    await _scrollSelectionUntilVisible(tester, find.text('1-1-1'));
     await tester.tap(find.text('1-1-1'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('兔只操作'));
@@ -549,6 +554,26 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder,
     if (finder.evaluate().isNotEmpty) return;
   }
   fail('Expected widget was not found');
+}
+
+Future<void> _scrollSelectionUntilVisible(
+  WidgetTester tester,
+  Finder target,
+) async {
+  final scrollView = find.byKey(const ValueKey('outbound-selection-scroll'));
+  expect(scrollView, findsOneWidget);
+  final scrollable = find.descendant(
+    of: scrollView,
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable &&
+          widget.axisDirection == AxisDirection.down &&
+          widget.restorationId == null,
+    ),
+  );
+  expect(scrollable, findsOneWidget);
+  await tester.scrollUntilVisible(target, 280, scrollable: scrollable);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _scrollConfirmUntilVisible(

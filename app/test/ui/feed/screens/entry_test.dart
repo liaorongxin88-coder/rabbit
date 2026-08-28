@@ -18,8 +18,7 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
-  testWidgets('投喂录入在 360x800 和 200% 字号下可完成选择和提交',
-      (tester) async {
+  testWidgets('投喂录入在 360x800 和 200% 字号下可完成选择和提交', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -31,18 +30,17 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('feed-cage-10')));
     await tester.enterText(find.byKey(const ValueKey('feed-amount')), '1.5');
-    await tester.scrollUntilVisible(
+    await _scrollFeedUntilBuilt(
+      tester,
       find.byKey(const ValueKey('feed-submit')),
-      360,
-      scrollable: _feedScrollable(),
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('feed-submit')));
     expect(find.text('投喂完成 2 只'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('网络失败后保留输入并用相同 requestId 重试', (tester) async {
-    final gateway = _FakeFeedGateway()
-      ..error = const ApiException('网络暂不可用');
+    final gateway = _FakeFeedGateway()..error = const ApiException('网络暂不可用');
     await tester.pumpWidget(_testApp(gateway));
     await tester.pumpAndSettle();
 
@@ -53,7 +51,8 @@ void main() {
     expect(find.byKey(const ValueKey('feed-entry-error')), findsOneWidget);
     expect(find.textContaining('投喂信息已保留'), findsOneWidget);
     expect(
-      tester.widget<TextFormField>(find.byKey(const ValueKey('feed-amount')))
+      tester
+          .widget<TextFormField>(find.byKey(const ValueKey('feed-amount')))
           .controller!
           .text,
       '2',
@@ -71,9 +70,9 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('feed-cage-10')));
     await tester.enterText(find.byKey(const ValueKey('feed-amount')), '2');
-    await _tapSubmit(tester);
-    await _tapSubmit(tester);
-    await _tapSubmit(tester);
+    await _tapSubmit(tester, settle: false);
+    await _tapSubmit(tester, settle: false);
+    await _tapSubmit(tester, settle: false);
 
     expect(gateway.drafts, hasLength(1));
     gateway.pending!.complete();
@@ -81,8 +80,7 @@ void main() {
     expect(find.byKey(const ValueKey('feed-entry-success')), findsOneWidget);
   });
 
-  testWidgets('NFC 不可用时提示当前页面并保留手动选择入口',
-      (tester) async {
+  testWidgets('NFC 不可用时提示当前页面并保留手动选择入口', (tester) async {
     const channel = MethodChannel('com.rabbit.app.flutter/nfc_intents');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (_) async {
@@ -105,23 +103,34 @@ void main() {
   });
 }
 
-Finder _feedScrollable() => find.descendant(
-      of: find.byKey(const ValueKey('feed-entry-scroll')),
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.down,
-      ),
-    );
+Future<void> _scrollFeedUntilBuilt(
+  WidgetTester tester,
+  Finder target,
+) async {
+  final list = find.byKey(const ValueKey('feed-entry-scroll'));
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (target.evaluate().isNotEmpty) {
+      return;
+    }
+    await tester.drag(list, const Offset(0, -280));
+    await tester.pumpAndSettle();
+  }
+  fail('Expected feed form control was not built');
+}
 
-Future<void> _tapSubmit(WidgetTester tester) async {
+Future<void> _tapSubmit(
+  WidgetTester tester, {
+  bool settle = true,
+}) async {
   final submit = find.byKey(const ValueKey('feed-submit'));
-  await tester.scrollUntilVisible(
-    submit,
-    360,
-    scrollable: _feedScrollable(),
-  );
+  await _scrollFeedUntilBuilt(tester, submit);
+  await tester.ensureVisible(submit);
   await tester.tap(submit);
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 Widget _testApp(FeedGateway gateway) {
