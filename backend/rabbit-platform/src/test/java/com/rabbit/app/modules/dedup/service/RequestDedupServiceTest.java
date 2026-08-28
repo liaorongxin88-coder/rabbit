@@ -2,10 +2,19 @@ package com.rabbit.app.modules.dedup.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.dedup.entity.RequestDedup;
 import com.rabbit.app.modules.dedup.mapper.RequestDedupMapper;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class RequestDedupServiceTest {
@@ -117,6 +126,66 @@ class RequestDedupServiceTest {
         assertEquals("幂等响应保存失败", error.getMessage());
     }
 
+    @Test
+    void rejectsConcurrentDuplicateProcessingRequestAsBusinessError() throws Exception {
+        ConcurrentRequestDedupMapper mapper = new ConcurrentRequestDedupMapper();
+        RequestDedupService service = new RequestDedupService(mapper);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Callable<Throwable> submit = () -> {
+                ready.countDown();
+                start.await();
+                try {
+                    service.markProcessing(8L, 3L, "feed:add", "request-1");
+                    return null;
+                } catch (Throwable error) {
+                    return error;
+                }
+            };
+            Future<Throwable> firstFuture = executor.submit(submit);
+            Future<Throwable> secondFuture = executor.submit(submit);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            Throwable first = firstFuture.get(5, TimeUnit.SECONDS);
+            Throwable second = secondFuture.get(5, TimeUnit.SECONDS);
+            assertTrue(first == null ^ second == null);
+            Throwable error = first == null ? second : first;
+            assertTrue(error instanceof BizException);
+            assertEquals(429, ((BizException) error).getCode());
+            assertEquals(1, mapper.size());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void leavesCompletedRequestUntouchedWhenMarkingProcessing() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.selected = item(RequestDedupService.STATUS_DONE);
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        service.markProcessing(8L, 3L, "nfc:cage:bind", "request-1");
+
+        assertEquals(RequestDedupService.STATUS_DONE, mapper.selected.getStatus());
+        assertEquals(0, mapper.updateCalls);
+    }
+
+    @Test
+    void restartsFailedRequestWhenMarkingProcessing() {
+        FakeRequestDedupMapper mapper = new FakeRequestDedupMapper();
+        mapper.selected = item(RequestDedupService.STATUS_FAILED);
+        RequestDedupService service = new RequestDedupService(mapper);
+
+        service.markProcessing(8L, 3L, "nfc:cage:bind", "request-1");
+
+        assertEquals(RequestDedupService.STATUS_PROCESSING, mapper.selected.getStatus());
+        assertEquals(1, mapper.updateCalls);
+    }
+
     private static RequestDedup item(String status) {
         RequestDedup item = new RequestDedup();
         item.setHouseId(8L);
@@ -127,9 +196,70 @@ class RequestDedupServiceTest {
         return item;
     }
 
+    private static class ConcurrentRequestDedupMapper implements RequestDedupMapper {
+        private final ConcurrentMap<String, RequestDedup> items = new ConcurrentHashMap<>();
+
+        @Override
+        public RequestDedup selectByKey(Long houseId, Long userId, String api, String requestId) {
+            return items.get(key(houseId, userId, api, requestId));
+        }
+
+        @Override
+        public int insert(RequestDedup item) {
+            throw new AssertionError("markProcessing must use insertIgnore");
+        }
+
+        @Override
+        public int insertIgnore(RequestDedup item) {
+            return items.putIfAbsent(key(item), item) == null ? 1 : 0;
+        }
+
+        @Override
+        public int updateStatus(
+                Long houseId,
+                Long userId,
+                String api,
+                String requestId,
+                String status,
+                String errorMessage
+        ) {
+            RequestDedup item = selectByKey(houseId, userId, api, requestId);
+            if (item != null) {
+                item.setStatus(status);
+                item.setErrorMessage(errorMessage);
+            }
+            return 1;
+        }
+
+        @Override
+        public int updateStatusWithResponse(
+                Long houseId,
+                Long userId,
+                String api,
+                String requestId,
+                String status,
+                String responsePayload
+        ) {
+            return 1;
+        }
+
+        int size() {
+            return items.size();
+        }
+
+        private String key(RequestDedup item) {
+            return key(item.getHouseId(), item.getUserId(), item.getApi(), item.getRequestId());
+        }
+
+        private String key(Long houseId, Long userId, String api, String requestId) {
+            return houseId + ":" + userId + ":" + api + ":" + requestId;
+        }
+    }
+
     private static class FakeRequestDedupMapper implements RequestDedupMapper {
         int insertResult;
         int selectCalls;
+        int updateCalls;
         int responseUpdateResult = 1;
         RequestDedup selected;
 
@@ -158,6 +288,11 @@ class RequestDedupServiceTest {
                 String status,
                 String errorMessage
         ) {
+            updateCalls++;
+            if (selected != null) {
+                selected.setStatus(status);
+                selected.setErrorMessage(errorMessage);
+            }
             return 1;
         }
 
