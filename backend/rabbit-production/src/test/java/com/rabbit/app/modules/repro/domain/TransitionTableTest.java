@@ -29,6 +29,7 @@ class TransitionTableTest {
     /** 设计 §3.2 全部合法转换的期望值，格式：from|action|outcome。 */
     private static final List<String> LEGAL_KEYS = List.of(
         "READY|START_CYCLE|",
+        "READY|POSTPONE|",
         "AWAIT_ESTRUS|ESTRUS|",
         "AWAIT_MATING|MATING|",
         "AWAIT_PALPATION|PALPATION|PREGNANT",
@@ -147,16 +148,24 @@ class TransitionTableTest {
     }
 
     @Test
-    void recoveryAutomaticallyAdvancesToEstrus() {
+    void recoveryCanBeCompletedOrPostponedManually() {
         Transition recovery = TransitionTable.require(
             ReproStage.READY, ReproAction.START_CYCLE, null
         );
+        Transition postpone = TransitionTable.require(
+            ReproStage.READY, ReproAction.POSTPONE, null
+        );
 
         assertAll(
+            () -> assertTrue(ReproAction.START_CYCLE.isPostponable()),
             () -> assertFalse(recovery.closesCycle()),
             () -> assertEquals(ReproStage.AWAIT_ESTRUS, recovery.toStage()),
             () -> assertEquals(DueAnchor.IMMEDIATE, recovery.dueAnchor()),
-            () -> assertEquals(ReproEventType.RECOVERY_DONE, recovery.eventType())
+            () -> assertEquals(ReproEventType.RECOVERY_DONE, recovery.eventType()),
+            () -> assertFalse(postpone.closesCycle()),
+            () -> assertEquals(ReproStage.READY, postpone.toStage()),
+            () -> assertEquals(DueAnchor.USER_SPECIFIED, postpone.dueAnchor()),
+            () -> assertEquals(ReproEventType.POSTPONE, postpone.eventType())
         );
     }
 
@@ -248,12 +257,12 @@ class TransitionTableTest {
         );
     }
 
-    /** 每个等待态都应能推迟与离场，否则待办会卡死在那一步。 */
+    /** 休养期和每个等待态都应能推迟与离场，否则待办会卡死在那一步。 */
     @Test
-    void everyAwaitingStageCanPostponeAndRetire() {
+    void everyActionableStageCanPostponeAndRetire() {
         for (ReproStage stage : ReproStage.values()) {
             List<ReproAction> actions = TransitionTable.actionsFrom(stage);
-            if (stage.isAwaiting()) {
+            if (stage == ReproStage.READY || stage.isAwaiting()) {
                 assertTrue(actions.contains(ReproAction.POSTPONE), stage + " 应可推迟");
                 assertTrue(actions.contains(ReproAction.RETIRE), stage + " 应可离场");
             } else {

@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
@@ -47,6 +48,7 @@ class _AddBatchMembersSheetState extends ConsumerState<_AddBatchMembersSheet> {
   final _writeRequest = BatchWriteRequestController();
   final _searchController = TextEditingController();
   final _selectedRabbitIds = <int>{};
+  String? _formError;
   var _query = '';
   var _saving = false;
 
@@ -108,7 +110,10 @@ class _AddBatchMembersSheetState extends ConsumerState<_AddBatchMembersSheet> {
         'rabbitIds': selectedIds,
       }),
     );
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _formError = null;
+    });
     try {
       await ref.read(batchRepositoryProvider).addBatchRabbits(
             houseId: widget.houseId,
@@ -134,9 +139,10 @@ class _AddBatchMembersSheetState extends ConsumerState<_AddBatchMembersSheet> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _formError = message);
   }
 
   @override
@@ -233,7 +239,28 @@ class _AddBatchMembersSheetState extends ConsumerState<_AddBatchMembersSheet> {
                                 '可添加种母兔、后备母兔和商品兔；已绑定本批次的兔只不会重复显示。',
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
+                              if (_formError != null) ...[
+                                const SizedBox(height: 12),
+                                _AddMembersFormError(message: _formError!),
+                              ],
                               const SizedBox(height: 14),
+                              if (available.isNotEmpty) ...[
+                                NfcRabbitPickerButton(
+                                  key: const ValueKey('batch-add-members-nfc'),
+                                  houseId: widget.houseId,
+                                  candidates: available,
+                                  idleLabel: '碰一下添加笼内兔只',
+                                  waitingLabel: '请靠近要添加兔只所在笼位的 NFC 标签',
+                                  enabled: !_saving,
+                                  allowMultiple: true,
+                                  onSelected: (matches) => setState(
+                                    () => _selectedRabbitIds.addAll(
+                                      matches.map((rabbit) => rabbit.id),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                               TextField(
                                 key: const ValueKey('batch-add-members-search'),
                                 controller: _searchController,
@@ -485,6 +512,31 @@ class _AddMembersSelectionBar extends StatelessWidget {
             onPressed: onClear,
             icon: const Icon(Icons.clear_all_rounded),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddMembersFormError extends StatelessWidget {
+  const _AddMembersFormError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.dangerSoft,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: palette.danger),
+          const SizedBox(width: 8),
+          Expanded(child: Text(message)),
         ],
       ),
     );

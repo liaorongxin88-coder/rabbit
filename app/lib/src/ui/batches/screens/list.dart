@@ -77,7 +77,7 @@ class HouseBatchesScreen extends ConsumerWidget {
     return null;
   }
 
-  Future<void> _showCreateBatch(
+  Future<Batch?> _showCreateBatch(
     BuildContext context,
     RabbitHouse house,
   ) {
@@ -594,6 +594,26 @@ class _BatchListCard extends StatelessWidget {
                                 ),
                           ),
                         ),
+                        if (batch.pendingCompletion)
+                          Container(
+                            key: ValueKey(
+                                'batch-pending-completion-${batch.id}'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.warningSoft,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '待结束',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(color: palette.warning),
+                            ),
+                          ),
                         Text(
                           batch.dateLabel,
                           maxLines: 1,

@@ -12,6 +12,32 @@ import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
+import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
+
+class _KeptKitsFormError extends StatelessWidget {
+  const _KeptKitsFormError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: colors.error),
+          const SizedBox(width: 8),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    );
+  }
+}
 
 Future<bool> showKeptKitsAdjustmentSheet({
   required BuildContext context,
@@ -56,6 +82,7 @@ class _KeptKitsAdjustmentSheetState
   ReproLitter? _litter;
   Object? _loadError;
   int? _sourceMotherId;
+  String? _formError;
   late DateTime _occurredAt;
   var _saving = false;
 
@@ -113,7 +140,10 @@ class _KeptKitsAdjustmentSheetState
     }
     final remark = _remarkController.text.trim();
     final sourceMotherId = keptKits > litter.keptKits ? _sourceMotherId : null;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _formError = null;
+    });
     try {
       await ref.read(reproRepositoryProvider).adjustKeptKits(
             houseId: widget.houseId,
@@ -150,8 +180,10 @@ class _KeptKitsAdjustmentSheetState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(message)));
+    if (!mounted) {
+      return;
+    }
+    setState(() => _formError = message);
   }
 
   @override
@@ -235,6 +267,10 @@ class _KeptKitsAdjustmentSheetState
                     cycleRecordId: widget.cycleId,
                   ),
                   const SizedBox(height: 12),
+                  if (_formError != null) ...[
+                    _KeptKitsFormError(message: _formError!),
+                    const SizedBox(height: 12),
+                  ],
                   ListTile(
                     key: const ValueKey('kept-kits-occurred-at'),
                     contentPadding: EdgeInsets.zero,
@@ -267,7 +303,18 @@ class _KeptKitsAdjustmentSheetState
                         style: Theme.of(context).textTheme.titleSmall),
                     if (sourceMothers.isEmpty)
                       const Text('当前兔舍没有其他可选种母兔')
-                    else
+                    else ...[
+                      NfcRabbitPickerButton(
+                        key: const ValueKey('kept-kits-source-nfc'),
+                        houseId: widget.houseId,
+                        candidates: sourceMothers,
+                        idleLabel: '碰一下选择来源母兔',
+                        waitingLabel: '请靠近来源母兔所在笼位的 NFC 标签',
+                        enabled: !_saving,
+                        onSelected: (matches) =>
+                            setState(() => _sourceMotherId = matches.single.id),
+                      ),
+                      const SizedBox(height: 8),
                       ...sourceMothers.map(
                         (rabbit) => RadioListTile<int>(
                           key: ValueKey('kept-kits-source-${rabbit.id}'),
@@ -282,6 +329,7 @@ class _KeptKitsAdjustmentSheetState
                           ),
                         ),
                       ),
+                    ],
                   ],
                   const SizedBox(height: 12),
                   TextFormField(

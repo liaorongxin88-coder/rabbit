@@ -11,7 +11,7 @@ import java.util.Locale;
  */
 public enum ReproAction {
     /** T1 开始周期，可指定任意入轨阶段。 */
-    START_CYCLE("开始周期", false),
+    START_CYCLE("开始周期", true),
     /** T2 催情。 */
     ESTRUS("催情", true),
     /** T3 配种。 */

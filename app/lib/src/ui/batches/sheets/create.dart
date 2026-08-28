@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch_code.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
@@ -12,13 +13,13 @@ import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
-Future<void> showCreateBatchSheet({
+Future<Batch?> showCreateBatchSheet({
   required BuildContext context,
   required int houseId,
   required String houseName,
   DateTime Function()? now,
 }) {
-  return showAppModalSheet<void>(
+  return showAppModalSheet<Batch>(
     context: context,
     builder: (context) => _CreateBatchSheet(
       houseId: houseId,
@@ -49,6 +50,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   final _remarkController = TextEditingController();
   final _searchController = TextEditingController();
   final _selectedFemaleIds = <int>{};
+  String? _formError;
   var _saving = false;
   var _keyword = '';
 
@@ -128,7 +130,10 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       }
     }
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _formError = null;
+    });
     try {
       final remark = _remarkController.text.trim();
       final requestId = _writeRequest.requestIdFor(
@@ -140,7 +145,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
           'remark': remark,
         }),
       );
-      await ref.read(batchRepositoryProvider).createBatch(
+      final batch = await ref.read(batchRepositoryProvider).createBatch(
             houseId: widget.houseId,
             batchCode: code,
             femaleRabbitIds: _selectedFemaleIds.toList(),
@@ -153,7 +158,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
       ref.invalidate(houseBatchesProvider(widget.houseId));
       ref.invalidate(homeEventsProvider);
       final messenger = ScaffoldMessenger.maybeOf(context);
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(batch);
       messenger?.showSnackBar(
         SnackBar(
           content: Text(
@@ -177,9 +182,10 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _formError = message);
   }
 
   @override
@@ -274,6 +280,10 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
                                 text: '批次可用于母兔繁育，也可用于商品兔养育与售卖。'
                                     '可先创建空批次，再从兔只详情绑定成员。',
                               ),
+                              if (_formError != null) ...[
+                                const SizedBox(height: 12),
+                                _SheetFormError(message: _formError!),
+                              ],
                               const SizedBox(height: 14),
                               TextField(
                                 key: const ValueKey('batch-code-field'),
@@ -459,6 +469,31 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SheetFormError extends StatelessWidget {
+  const _SheetFormError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.dangerSoft,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: palette.danger),
+          const SizedBox(width: 8),
+          Expanded(child: Text(message)),
+        ],
       ),
     );
   }

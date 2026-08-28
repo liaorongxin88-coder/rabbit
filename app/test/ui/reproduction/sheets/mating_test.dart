@@ -43,16 +43,21 @@ void main() {
       ),
     );
     await _open(tester, const ValueKey('open-single-mating'));
+    await _selectMatingBatch(tester);
 
     final male = find.byKey(const ValueKey('mating-male-201'));
+    await tester.ensureVisible(male);
     expect(male, findsOneWidget);
     expect(tester.widget<RadioListTile<int>>(male).groupValue, 201);
 
     await tester.tap(find.byKey(const ValueKey('mating-method-AI')));
     await tester.pump();
 
-    expect(find.byKey(const ValueKey('mating-male-201')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('production-event-submit')));
+    await tester.ensureVisible(male);
+    expect(male, findsOneWidget);
+    final submit = find.byKey(const ValueKey('production-event-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(adapter.actionRequests, hasLength(1));
@@ -74,10 +79,15 @@ void main() {
       ),
     );
     await _open(tester, const ValueKey('open-single-mating'));
+    await _selectMatingBatch(tester);
     await tester.tap(find.byKey(const ValueKey('mating-method-AI')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mating-male-201')));
-    await tester.tap(find.byKey(const ValueKey('production-event-submit')));
+    final male = find.byKey(const ValueKey('mating-male-201'));
+    await tester.ensureVisible(male);
+    await tester.tap(male);
+    final submit = find.byKey(const ValueKey('production-event-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(adapter.actionRequests.single['matingMethod'], 'AI');
@@ -96,14 +106,34 @@ void main() {
       ),
     );
     await _open(tester, const ValueKey('open-single-mating'));
+    await _selectMatingBatch(tester);
 
     expect(find.text('暂无可用种公兔，请先在笼位录入。'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('production-event-submit')));
+    final submit = find.byKey(const ValueKey('production-event-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(adapter.actionRequests, isEmpty);
+    final error = find.byKey(const ValueKey('production-event-error'));
+    await tester.ensureVisible(error);
     expect(find.text('请选择种公兔'), findsOneWidget);
   });
+}
+
+Future<void> _selectMatingBatch(WidgetTester tester) async {
+  final field = find.byKey(const ValueKey('mating-production-batch'));
+  final scroll = find.byKey(const ValueKey('production-event-form-list'));
+  for (var attempt = 0; attempt < 10 && field.evaluate().isEmpty; attempt++) {
+    await tester.drag(scroll, const Offset(0, -220));
+    await tester.pumpAndSettle();
+  }
+  expect(field, findsOneWidget);
+  await tester.ensureVisible(field);
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(_activeBatch.batchCode).last);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _open(WidgetTester tester, Key key) async {
