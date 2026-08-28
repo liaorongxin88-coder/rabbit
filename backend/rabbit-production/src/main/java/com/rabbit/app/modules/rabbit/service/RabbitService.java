@@ -1075,9 +1075,6 @@ public class RabbitService {
             return;
         }
         rabbit.setSourceSeller(null);
-        if (rabbit.getMotherId() == null) {
-            return;
-        }
     }
 
     private void validateMotherReference(Long houseId, Rabbit rabbit) {
