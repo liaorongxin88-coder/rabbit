@@ -241,7 +241,7 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
         _amountController.clear();
         _remarkController.clear();
         _requestId = _uuid.v4();
-        _successMessage = '已录入 $rabbitIds.length 只兔的投喂记录';
+        _successMessage = '已录入 ${rabbitIds.length} 只兔的投喂记录';
       });
       ref.invalidate(houseCagesProvider(widget.houseId));
     } on ApiException catch (error) {
