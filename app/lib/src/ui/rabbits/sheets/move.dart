@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/cages/layout.dart';
@@ -184,6 +185,18 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   /// 现场的真实动作是“手里拎着兔、手机碰笼子”，在一屏笼位号里找到那一行才是不自然的。
   Future<void> _startNfcCapture() async {
     if (_nfcListening || _saving) {
+      return;
+    }
+    // 无硬件时先说明，不要让用户对着一个永远不会响的提示干等。
+    // 写标签路径（hardware.dart 里的 writePayload）一直有这个检查，读取路径漏了。
+    final available = await ref.read(nfcHardwareServiceProvider).isAvailable();
+    if (!mounted) {
+      return;
+    }
+    if (!available) {
+      setState(
+        () => _nfcHint = '设备不支持NFC或NFC未开启，请改用下方地图或列表选择',
+      );
       return;
     }
     final service = ref.read(nfcIntentServiceProvider);

@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
@@ -575,6 +576,16 @@ class _OutboundNfcCageSelectionState
       return;
     }
     try {
+      // 没有 NFC 硬件时直接说清楚，否则这里会一直停在“等待贴标签”，
+      // 用户看不出是设备不支持还是自己贴的位置不对。写标签路径一直有这个检查。
+      final available = await ref.read(nfcHardwareServiceProvider).isAvailable();
+      if (!mounted) {
+        return;
+      }
+      if (!available) {
+        setState(() => _hint = '设备不支持NFC或NFC未开启，请改用下方手动选择笼位');
+        return;
+      }
       final service = ref.read(nfcIntentServiceProvider);
       await service.initialize();
       if (!mounted) {
