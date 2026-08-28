@@ -73,8 +73,6 @@ public class DeliveryAftercareService {
         condition.setWarningTime(birthDate);
         condition.setIsDeal(Boolean.FALSE);
         condition.setRemark(remark);
-        condition.setCreateBy(operator);
-        condition.setUpdateBy(operator);
         rabbitAbnormalConditionMapper.insert(condition);
     }
 }

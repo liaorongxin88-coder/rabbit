@@ -70,8 +70,6 @@ public class SaleService {
             }
             order.setRemark(remark);
             order.setRequestId(requestId);
-            order.setCreateBy(String.valueOf(userId));
-            order.setUpdateBy(String.valueOf(userId));
             saleOrderMapper.insert(order);
 
             List<SaleOrderItem> items = new ArrayList<SaleOrderItem>();
@@ -85,8 +83,6 @@ public class SaleService {
                 it.setRabbitId(rid);
                 it.setWeight(null);
                 it.setPrice(null);
-                it.setCreateBy(String.valueOf(userId));
-                it.setUpdateBy(String.valueOf(userId));
                 items.add(it);
             }
             if (items.isEmpty()) {

@@ -87,8 +87,6 @@ public class KitPlacementService {
         record.setFemaleCount(command.femaleCount());
         record.setAvgWeight(command.avgWeight());
         record.setRemark(command.remark());
-        record.setCreateBy(command.operator());
-        record.setUpdateBy(command.operator());
         weaningRecordMapper.insert(record);
 
         performanceRecorder.recordWeaning(
@@ -179,8 +177,6 @@ public class KitPlacementService {
         kit.setIsActive(Boolean.TRUE);
         kit.setIsQuarantined(Boolean.FALSE);
         kit.setRequestId(ReproRequestIds.derive(command.requestId(), "kit-" + index));
-        kit.setCreateBy(command.operator());
-        kit.setUpdateBy(command.operator());
         return kit;
     }
 
@@ -242,8 +238,6 @@ public class KitPlacementService {
             link.setNextEventType("出售");
             link.setIsActive(Boolean.TRUE);
             link.setJoinDate(command.separatedAt());
-            link.setCreateBy(command.operator());
-            link.setUpdateBy(command.operator());
             links.add(link);
 
             RabbitStatusHistory history = new RabbitStatusHistory();
@@ -256,8 +250,6 @@ public class KitPlacementService {
             history.setReason("分笼生成仔兔");
             history.setRelatedRecordId(record.getId());
             history.setRelatedRecordTable("weaning_records");
-            history.setCreateBy(command.operator());
-            history.setUpdateBy(command.operator());
             histories.add(history);
 
             workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(

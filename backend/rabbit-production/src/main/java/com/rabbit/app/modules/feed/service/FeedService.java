@@ -118,8 +118,6 @@ public class FeedService {
 
         log.setHouseId(houseId);
         log.setFeedingRabbits(sb.toString());
-        log.setCreateBy(String.valueOf(userId));
-        log.setUpdateBy(String.valueOf(userId));
         feedLogMapper.insert(log);
 
         for (FeedLogRabbit rel : rels) {
@@ -142,8 +140,6 @@ public class FeedService {
             tx.setRefId(log.getId());
             tx.setRemark("投喂消耗:" + log.getFeedingRabbits());
             tx.setRequestId(log.getRequestId());
-            tx.setCreateBy(String.valueOf(userId));
-            tx.setUpdateBy(String.valueOf(userId));
             inventoryTxMapper.insert(tx);
             applyQtyDeltaWithPolicy(houseId, item.getId(), tx.getQtyDelta(), String.valueOf(userId));
         }

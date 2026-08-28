@@ -45,7 +45,6 @@ public class ReminderPreferenceService {
         preference.setAdvanceDays(request.getAdvanceDays() == null ? 0 : request.getAdvanceDays());
         preference.setNotifyOverdue(request.getNotifyOverdue() == null || request.getNotifyOverdue());
         preference.setTaskTypes(normalizeTaskTypes(request.getTaskTypes()));
-        preference.setUpdateBy(String.valueOf(userId));
         if (mapper.update(preference) == 0) {
             throw new BizException(409, "提醒设置已变化，请刷新后重试");
         }
@@ -59,8 +58,6 @@ public class ReminderPreferenceService {
         preference.setAdvanceDays(0);
         preference.setNotifyOverdue(true);
         preference.setTaskTypes("ALL");
-        preference.setCreateBy(String.valueOf(userId));
-        preference.setUpdateBy(String.valueOf(userId));
         return preference;
     }
 

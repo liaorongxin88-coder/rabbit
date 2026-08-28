@@ -134,8 +134,6 @@ public class NfcCageService {
             genericTag.setTargetId(request.getCageId());
             genericTag.setRequestId(request.getRequestId());
             genericTag.setRemark("签名NDEF笼位标签");
-            genericTag.setCreateBy(String.valueOf(userId));
-            genericTag.setUpdateBy(String.valueOf(userId));
             nfcTagMapper.upsert(genericTag);
 
             CageNfcTag cageTag = new CageNfcTag();
@@ -144,8 +142,6 @@ public class NfcCageService {
             cageTag.setTagUid(uid);
             cageTag.setRequestId(request.getRequestId());
             cageTag.setRemark("签名NDEF笼位标签");
-            cageTag.setCreateBy(String.valueOf(userId));
-            cageTag.setUpdateBy(String.valueOf(userId));
             cageNfcTagMapper.upsert(cageTag);
 
             requestDedupService.markDone(houseId, userId, BIND_API, request.getRequestId());

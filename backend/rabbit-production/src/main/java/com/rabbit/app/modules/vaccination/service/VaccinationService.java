@@ -96,8 +96,6 @@ public class VaccinationService {
                 row.setStatus(status);
                 row.setRemark(trimToNull(template.getRemark()));
                 row.setRequestId(requestId);
-                row.setCreateBy(operator);
-                row.setUpdateBy(operator);
                 rows.add(row);
             }
 

@@ -116,8 +116,6 @@ public class HouseService {
             house.setLayoutLayers(layers);
             house.setRemark(remark);
             house.setRequestId(requestId);
-            house.setCreateBy(createBy);
-            house.setUpdateBy(createBy);
             try {
                 rabbitHouseMapper.insert(house);
             } catch (DuplicateKeyException duplicate) {
@@ -136,8 +134,6 @@ public class HouseService {
             owner.setStatus("ENABLED");
             owner.setPerms(HouseRole.OWNER.legacyPermission());
             owner.setIsAdmin(HouseRole.OWNER.administrator());
-            owner.setCreateBy(createBy);
-            owner.setUpdateBy(createBy);
             houseUserMapper.insert(owner);
             HouseInitializationContext initializationContext = new HouseInitializationContext(
                     userId,

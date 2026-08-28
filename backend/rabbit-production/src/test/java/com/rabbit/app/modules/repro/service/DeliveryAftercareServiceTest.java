@@ -74,7 +74,8 @@ class DeliveryAftercareServiceTest {
         assertEquals("流产", warning.getWarningStatus());
         assertEquals(birthDate, warning.getWarningTime());
         assertEquals("全窝死胎", warning.getRemark());
-        assertEquals("op", warning.getCreateBy());
+        org.junit.jupiter.api.Assertions.assertNull(warning.getCreateBy(),
+                "服务层不再手写 create_by，由 MyBatis 写入拦截器补齐");
     }
 
     /**

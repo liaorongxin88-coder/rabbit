@@ -41,8 +41,6 @@ public class CageAdminService {
         c.setIsFed(Boolean.FALSE);
         c.setIsEnabled(isEnabled == null ? Boolean.TRUE : isEnabled);
         c.setRemark(remark);
-        c.setCreateBy(String.valueOf(userId));
-        c.setUpdateBy(String.valueOf(userId));
         try {
             cageMapper.insert(c);
         } catch (DuplicateKeyException e) {

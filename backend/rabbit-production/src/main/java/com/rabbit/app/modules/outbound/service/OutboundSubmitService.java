@@ -265,8 +265,6 @@ public class OutboundSubmitService {
         }
         order.setRemark(trim(input.remark()));
         order.setRequestId(input.requestId());
-        order.setCreateBy(String.valueOf(userId));
-        order.setUpdateBy(String.valueOf(userId));
         saleOrderMapper.insert(order);
         return order;
     }
@@ -296,8 +294,6 @@ public class OutboundSubmitService {
             item.setBatchIdSnapshot(frozen.getBatchIdSnapshot());
             item.setWeight(row.getWeight());
             item.setPrice(unitPrice);
-            item.setCreateBy(operator);
-            item.setUpdateBy(operator);
             result.add(item);
         }
         return result;
@@ -320,8 +316,6 @@ public class OutboundSubmitService {
         departure.setReason("EARLY_SALE".equals(item.getSelectionType()) ? item.getEarlySaleReason() : "批量销售出栏");
         departure.setRemark("saleOrder#" + orderId);
         departure.setRequestId(RequestIdUtil.deriveChild(requestId, rabbitId));
-        departure.setCreateBy(operator);
-        departure.setUpdateBy(operator);
         departureMapper.insert(departure);
 
         RabbitStatusHistory history = new RabbitStatusHistory();
@@ -334,8 +328,6 @@ public class OutboundSubmitService {
         history.setReason(departure.getReason());
         history.setRelatedRecordId(departure.getId());
         history.setRelatedRecordTable("rabbit_departure_records");
-        history.setCreateBy(operator);
-        history.setUpdateBy(operator);
         historyMapper.insert(history);
     }
 

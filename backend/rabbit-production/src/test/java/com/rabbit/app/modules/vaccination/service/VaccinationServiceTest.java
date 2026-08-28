@@ -350,8 +350,10 @@ class VaccinationServiceTest {
         VaccinationRecord row = capturedRows().get(0);
         assertEquals(HOUSE_ID, row.getHouseId());
         assertEquals(REQ, row.getRequestId());
-        assertEquals("9", row.getCreateBy());
-        assertEquals("9", row.getUpdateBy());
+        org.junit.jupiter.api.Assertions.assertNull(row.getCreateBy(),
+                "服务层不再手写 create_by，由 MyBatis 写入拦截器补齐");
+        org.junit.jupiter.api.Assertions.assertNull(row.getUpdateBy(),
+                "服务层不再手写 update_by，由 MyBatis 写入拦截器补齐");
         assertEquals(SHOT_TIME, row.getVaccinatedAt());
         assertEquals(NEXT_DUE, row.getNextDueDate());
     }

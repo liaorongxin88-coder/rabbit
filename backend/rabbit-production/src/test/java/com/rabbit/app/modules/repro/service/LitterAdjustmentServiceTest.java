@@ -474,7 +474,8 @@ class LitterAdjustmentServiceTest {
         ArgumentCaptor<ReproEvent> captor = ArgumentCaptor.forClass(ReproEvent.class);
         verify(reproEventMapper).insert(captor.capture());
         assertEquals("5", captor.getValue().getOperatorName());
-        assertEquals("5", litter.getUpdateBy());
+        org.junit.jupiter.api.Assertions.assertNull(litter.getUpdateBy(),
+                "服务层不再手写 update_by，由 MyBatis 写入拦截器补齐");
     }
 
     // ---------- 查询 ----------

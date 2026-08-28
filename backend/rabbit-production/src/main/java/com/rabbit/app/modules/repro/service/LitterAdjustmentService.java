@@ -100,7 +100,6 @@ public class LitterAdjustmentService {
         litter.setCurrentNursing(next);
         litter.setFosterIn(zero(litter.getFosterIn()) + Math.max(delta, 0));
         litter.setFosterOut(zero(litter.getFosterOut()) + Math.max(-delta, 0));
-        litter.setUpdateBy(operatorOf(operatorName, userId));
         if (litterMapper.update(litter) != 1) {
             throw new BizException(409, "窝数据已变化，请刷新后重试");
         }

@@ -128,6 +128,7 @@ public class AdminFarmService {
         farm.setLayoutLayers(layers);
         farm.setRemark(remark);
         farm.setRequestId(requestId);
+        // Platform-admin calls do not have a BusinessAuthentication OperationContext.
         farm.setCreateBy(operator);
         farm.setUpdateBy(operator);
         try {
@@ -346,10 +347,10 @@ public class AdminFarmService {
                     cage.setLayerIndex(layer);
                     cage.setStatus("0");
                     cage.setRabbitCount(0);
-                    cage.setIsFed(Boolean.FALSE);
-                    cage.setIsEnabled(Boolean.TRUE);
                     cage.setCreateBy(operator);
                     cage.setUpdateBy(operator);
+                    cage.setIsFed(Boolean.FALSE);
+                    cage.setIsEnabled(Boolean.TRUE);
                     cages.add(cage);
                 }
             }

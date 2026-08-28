@@ -101,6 +101,7 @@ public class AppUpdateService {
             release.setForceUpdate(Boolean.TRUE.equals(request.getForceUpdate()));
             release.setPublished(true);
             release.setRequestId(request.getRequestId());
+            // Platform-admin calls do not have a BusinessAuthentication OperationContext.
             release.setCreateBy(operator(adminId));
             release.setUpdateBy(operator(adminId));
             try {

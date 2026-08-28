@@ -217,8 +217,6 @@ public class BatchService {
             b.setStartDate(now);
             b.setRemark(remark);
             b.setRequestId(requestId);
-            b.setCreateBy(String.valueOf(userId));
-            b.setUpdateBy(String.valueOf(userId));
             try {
                 batchMapper.insert(b);
             } catch (DuplicateKeyException e) {
@@ -331,8 +329,6 @@ public class BatchService {
             link.setCurrentStatus(status);
             link.setIsActive(Boolean.TRUE);
             link.setJoinDate(now);
-            link.setCreateBy(String.valueOf(userId));
-            link.setUpdateBy(String.valueOf(userId));
             links.add(link);
 
             RabbitStatusHistory history = new RabbitStatusHistory();
@@ -343,8 +339,6 @@ public class BatchService {
             history.setToStatus(status);
             history.setChangeTime(now);
             history.setReason("加入批次");
-            history.setCreateBy(String.valueOf(userId));
-            history.setUpdateBy(String.valueOf(userId));
             histories.add(history);
 
         }
@@ -655,8 +649,6 @@ public class BatchService {
                 departure.setReason("批次销售出栏");
                 departure.setRemark(remark);
                 departure.setRequestId(RequestIdUtil.deriveChild(requestId, rabbitId));
-                departure.setCreateBy(String.valueOf(userId));
-                departure.setUpdateBy(String.valueOf(userId));
                 rabbitDepartureRecordMapper.insert(departure);
 
                 Cage cage = cageMapper.selectById(houseId, r.getCageId());
@@ -940,8 +932,6 @@ public class BatchService {
         h.setReason(reason);
         h.setRelatedRecordId(relatedId);
         h.setRelatedRecordTable(relatedTable);
-        h.setCreateBy(String.valueOf(userId));
-        h.setUpdateBy(String.valueOf(userId));
         rabbitStatusHistoryMapper.insert(h);
     }
 
@@ -967,8 +957,6 @@ public class BatchService {
         h.setReason(reason);
         h.setRelatedRecordId(relatedId);
         h.setRelatedRecordTable(relatedTable);
-        h.setCreateBy(String.valueOf(userId));
-        h.setUpdateBy(String.valueOf(userId));
         rabbitStatusHistoryMapper.insert(h);
     }
 

@@ -261,8 +261,6 @@ public class RabbitService {
             if (rabbit.getIsQuarantined() == null) {
                 rabbit.setIsQuarantined(Boolean.FALSE);
             }
-            rabbit.setCreateBy(String.valueOf(userId));
-            rabbit.setUpdateBy(String.valueOf(userId));
             try {
                 rabbitMapper.insert(rabbit);
             } catch (DuplicateKeyException e) {
@@ -288,8 +286,6 @@ public class RabbitService {
             h.setToStatus("入栏");
             h.setChangeTime(DateUtil.now());
             h.setReason("录入兔子" + stageAuditSuffix(rabbit.getGrowthStage(), rabbit.getReproductiveStage()));
-            h.setCreateBy(String.valueOf(userId));
-            h.setUpdateBy(String.valueOf(userId));
             rabbitStatusHistoryMapper.insert(h);
 
             scheduleEntryLifecycleTask(userId, houseId, rabbit);
@@ -337,8 +333,6 @@ public class RabbitService {
         replacement.setExpectedMatureDate(DateUtil.plusDays(startedAt, setting.getReplacementDays()));
         replacement.setIsMatureNotified(Boolean.FALSE);
         replacement.setStatus("PENDING");
-        replacement.setCreateBy(operator);
-        replacement.setUpdateBy(operator);
         replacementRecordMapper.insert(replacement);
         workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
             houseId,
@@ -905,8 +899,6 @@ public class RabbitService {
                 rr.setExpectedMatureDate(DateUtil.plusDays(now, gs.getReplacementDays()));
                 rr.setIsMatureNotified(Boolean.FALSE);
                 rr.setStatus("PENDING");
-                rr.setCreateBy(operator);
-                rr.setUpdateBy(operator);
                 replacementRecordMapper.insert(rr);
                 converted.add(new ReplacementConversionItem(
                     rabbitId, rr.getId(), targetByRabbit.get(rabbitId)
@@ -933,8 +925,6 @@ public class RabbitService {
                 h.setReason("转后备兔");
                 h.setRelatedRecordId(rr.getId());
                 h.setRelatedRecordTable("replacement_records");
-                h.setCreateBy(operator);
-                h.setUpdateBy(operator);
                 rabbitStatusHistoryMapper.insert(h);
             }
             requestDedupService.markDone(houseId, userId, api, requestId);
@@ -1035,8 +1025,6 @@ public class RabbitService {
             history.setReason("后备成熟转种");
             history.setRelatedRecordId(replacement.getId());
             history.setRelatedRecordTable("replacement_records");
-            history.setCreateBy(operator);
-            history.setUpdateBy(operator);
             rabbitStatusHistoryMapper.insert(history);
 
             requestDedupService.markDone(houseId, userId, api, requestId);
@@ -1308,8 +1296,6 @@ public class RabbitService {
         history.setChangeTime(DateUtil.now());
         history.setReason("更新生长/繁殖阶段");
         history.setRelatedRecordTable("rabbits");
-        history.setCreateBy(operator);
-        history.setUpdateBy(operator);
         rabbitStatusHistoryMapper.insert(history);
     }
 
@@ -1358,8 +1344,6 @@ public class RabbitService {
                 h.setToStatus("隔离");
                 h.setChangeTime(now);
                 h.setReason(reason == null ? "隔离" : reason);
-                h.setCreateBy(op);
-                h.setUpdateBy(op);
                 rabbitStatusHistoryMapper.insert(h);
                 requestDedupService.markDone(houseId, userId, api, requestId);
                 return;
@@ -1378,8 +1362,6 @@ public class RabbitService {
                 h.setToStatus("解除隔离");
                 h.setChangeTime(now);
                 h.setReason(reason == null ? "解除隔离" : reason);
-                h.setCreateBy(op);
-                h.setUpdateBy(op);
                 rabbitStatusHistoryMapper.insert(h);
                 requestDedupService.markDone(houseId, userId, api, requestId);
                 return;
@@ -1457,8 +1439,6 @@ public class RabbitService {
             dr.setReason(reason);
             dr.setRemark(remark);
             dr.setRequestId(requestId);
-            dr.setCreateBy(op);
-            dr.setUpdateBy(op);
             rabbitDepartureRecordMapper.insert(dr);
 
             RabbitStatusHistory h = new RabbitStatusHistory();
@@ -1471,8 +1451,6 @@ public class RabbitService {
             h.setReason(reason == null ? h.getToStatus() : reason);
             h.setRelatedRecordId(dr.getId());
             h.setRelatedRecordTable("rabbit_departure_records");
-            h.setCreateBy(op);
-            h.setUpdateBy(op);
             rabbitStatusHistoryMapper.insert(h);
 
             requestDedupService.markDone(houseId, userId, api, requestId);
