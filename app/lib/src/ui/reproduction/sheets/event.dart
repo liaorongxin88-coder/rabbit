@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,11 +7,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
+import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
@@ -18,6 +24,7 @@ import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/batches/sheets/create.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
@@ -31,6 +38,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/settings/view_models/providers.dart';
 
 enum ProductionKind {
+  recovery,
   estrus,
   mating,
   pregnancyCheck,
@@ -46,6 +54,9 @@ ProductionKind? productionKindFromEvent(EventItem event) {
     return ProductionKind.replacement;
   }
   final type = event.eventType;
+  if (type.contains('结束休养')) {
+    return ProductionKind.recovery;
+  }
   if (type.contains('配种')) {
     return ProductionKind.mating;
   }
@@ -72,6 +83,7 @@ bool eventIsActionable(EventItem event) =>
 
 ProductionKind? productionKindFromTask(ReproTask task) {
   return switch (task.action) {
+    ReproAction.startCycle => ProductionKind.recovery,
     ReproAction.estrus => ProductionKind.estrus,
     ReproAction.mating => ProductionKind.mating,
     ReproAction.palpation => ProductionKind.pregnancyCheck,
@@ -87,6 +99,7 @@ bool reproTaskIsActionable(ReproTask task) =>
 
 String reproTaskActionHint(ReproTask task) {
   return switch (task.action) {
+    ReproAction.startCycle => '结束休养',
     ReproAction.estrus => '完成催情',
     ReproAction.mating => '记录配种',
     ReproAction.palpation => '记录摸胎结果',
@@ -99,6 +112,8 @@ String reproTaskActionHint(ReproTask task) {
 
 String productionActionHint(EventItem event) {
   switch (productionKindFromEvent(event)) {
+    case ProductionKind.recovery:
+      return '结束休养';
     case ProductionKind.estrus:
       return '完成催情';
     case ProductionKind.mating:
@@ -297,6 +312,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   int? _selectedMaleId;
   int? _selectedBatchId;
   List<XFile> _images = const [];
+  String? _formError;
   var _saving = false;
 
   @override
@@ -308,7 +324,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
     final now = farmNow();
     final initial = widget.initialDate;
     _actionDate = initial == null || initial.isAfter(now) ? now : initial;
-    _selectedBatchId = widget.batchId;
+    _selectedBatchId =
+        widget.kind == ProductionKind.mating ? null : widget.batchId;
   }
 
   @override
@@ -322,6 +339,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
 
   String get _title {
     switch (widget.kind) {
+      case ProductionKind.recovery:
+        return '结束休养';
       case ProductionKind.estrus:
         return '完成催情';
       case ProductionKind.mating:
@@ -434,6 +453,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       GlobalSetting.defaults();
 
   ReproStage get _currentReminderStage => switch (widget.kind) {
+        ProductionKind.recovery => ReproStage.ready,
         ProductionKind.estrus => ReproStage.awaitEstrus,
         ProductionKind.mating => ReproStage.awaitMating,
         ProductionKind.pregnancyCheck => ReproStage.awaitPalpation,
@@ -444,6 +464,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       };
 
   ReproStage? get _nextReminderStage => switch (widget.kind) {
+        ProductionKind.recovery => null,
         ProductionKind.estrus => ReproStage.awaitMating,
         ProductionKind.mating => ReproStage.awaitPalpation,
         ProductionKind.pregnancyCheck => switch (_palpationResult) {
@@ -509,56 +530,98 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   Widget _buildMatingBatchField(AsyncValue<List<Batch>> batchesAsync) {
+    Widget buildCreateButton() => Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const ValueKey('mating-production-batch-create'),
+            onPressed: _saving ? null : _createMatingBatch,
+            icon: const Icon(Icons.add),
+            label: const Text('新建批次'),
+          ),
+        );
+
     return batchesAsync.when(
-      loading: () => const InfoNotice(
-        icon: Icons.hourglass_empty,
-        text: '正在读取进行中的生产批次…',
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const InfoNotice(
+            icon: Icons.hourglass_empty,
+            text: '正在读取进行中的生产批次…',
+          ),
+          buildCreateButton(),
+        ],
       ),
-      error: (_, __) => const InfoNotice(
-        icon: Icons.error_outline,
-        text: '生产批次读取失败，请刷新后重试。',
+      error: (_, __) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const InfoNotice(
+            icon: Icons.error_outline,
+            text: '生产批次读取失败，请刷新后重试。',
+          ),
+          buildCreateButton(),
+        ],
       ),
       data: (batches) {
         final activeBatches = _activeProductionBatches(batches);
-        if (activeBatches.isEmpty) {
-          return const InfoNotice(
-            icon: Icons.info_outline,
-            text: '当前没有进行中的生产批次。',
-          );
-        }
         final selectedId = activeBatches.any(
           (batch) => batch.id == _selectedBatchId,
         )
             ? _selectedBatchId
             : null;
-        return DropdownButtonFormField<int>(
-          key: const ValueKey('mating-production-batch'),
-          value: selectedId,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: '生产批次',
-            hintText: '请选择进行中的生产批次',
-          ),
-          items: [
-            for (final batch in activeBatches)
-              DropdownMenuItem(
-                value: batch.id,
-                child: Text(
-                  batch.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (activeBatches.isEmpty)
+              const InfoNotice(
+                icon: Icons.info_outline,
+                text: '当前没有进行中的生产批次，请新建后再提交配种。',
+              )
+            else
+              DropdownButtonFormField<int>(
+                key: const ValueKey('mating-production-batch'),
+                value: selectedId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: '生产批次',
+                  hintText: '请选择进行中的生产批次',
                 ),
+                items: [
+                  for (final batch in activeBatches)
+                    DropdownMenuItem(
+                      value: batch.id,
+                      child: Text(
+                        batch.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _selectedBatchId = value),
               ),
+            buildCreateButton(),
           ],
-          onChanged: _saving
-              ? null
-              : (value) => setState(() => _selectedBatchId = value),
         );
       },
     );
   }
 
+  Future<void> _createMatingBatch() async {
+    final batch = await showCreateBatchSheet(
+      context: context,
+      houseId: widget.houseId,
+      houseName: '兔舍 #${widget.houseId}',
+    );
+    if (!mounted || batch == null) {
+      return;
+    }
+    ref.invalidate(houseBatchesProvider(widget.houseId));
+    setState(() => _selectedBatchId = batch.id);
+  }
+
   bool get _canPostpone =>
+      widget.kind == ProductionKind.recovery ||
       widget.kind == ProductionKind.estrus ||
       widget.kind == ProductionKind.mating ||
       widget.kind == ProductionKind.pregnancyCheck ||
@@ -595,7 +658,10 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       return;
     }
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _formError = null;
+    });
     try {
       final repo = ref.read(batchRepositoryProvider);
       final rabbitRepo = ref.read(rabbitRepositoryProvider);
@@ -603,7 +669,8 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
       ReproActionResult? actionResult;
 
       final cycleId = _breedingCycleId;
-      final needsCycle = widget.kind == ProductionKind.estrus ||
+      final needsCycle = widget.kind == ProductionKind.recovery ||
+          widget.kind == ProductionKind.estrus ||
           widget.kind == ProductionKind.mating ||
           widget.kind == ProductionKind.pregnancyCheck ||
           widget.kind == ProductionKind.prepartum ||
@@ -627,6 +694,19 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           nextRemindAt: postponeDate,
           requestId: _requestIdFor({
             'postponeDate': formatBatchWriteDate(postponeDate),
+          }),
+        );
+      } else if (widget.kind == ProductionKind.recovery) {
+        final remark = _remarkController.text.trim();
+        actionResult = await reproRepo.applyAction(
+          houseId: widget.houseId,
+          cycleId: cycleId!,
+          action: ReproAction.startCycle,
+          occurredAt: _actionDate,
+          remark: remark,
+          requestId: _requestIdFor({
+            'actionDate': formatBatchWriteDateTime(_actionDate),
+            'remark': remark,
           }),
         );
       } else if (widget.kind == ProductionKind.estrus) {
@@ -872,9 +952,10 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _formError = message);
   }
 
   @override
@@ -995,6 +1076,26 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                               ],
                             ),
                           ),
+                          if (_formError != null)
+                            Container(
+                              key: const ValueKey('production-event-error'),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppPalette.of(context).dangerSoft,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    color: AppPalette.of(context).danger,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(_formError!)),
+                                ],
+                              ),
+                            ),
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: const Text('执行时间 *'),
@@ -1070,7 +1171,18 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 padding: EdgeInsets.only(top: 8),
                                 child: Text('暂无可用种公兔，请先在笼位录入。'),
                               )
-                            else
+                            else ...[
+                              NfcRabbitPickerButton(
+                                key: const ValueKey('mating-male-nfc'),
+                                houseId: widget.houseId,
+                                candidates: males,
+                                idleLabel: '碰一下选择种公兔',
+                                waitingLabel: '请靠近种公兔所在笼位的 NFC 标签',
+                                enabled: !_saving,
+                                onSelected: (matches) =>
+                                    _selectMale(matches.single.id),
+                              ),
+                              const SizedBox(height: 8),
                               ...males.map(
                                 (male) => RadioListTile<int>(
                                   key: ValueKey('mating-male-${male.id}'),
@@ -1082,6 +1194,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                   ),
                                 ),
                               ),
+                            ],
                             const SizedBox(height: 12),
                             _buildMatingBatchField(batchesAsync),
                           ],
@@ -1336,6 +1449,146 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 通过笼位 NFC 标签选中该笼里可用的兔只。
+///
+/// NFC 标签绑定的是笼位而不是兔只，因此先验证标签所属兔舍，再按笼位从当前
+/// 表单候选中筛选。单选场景要求恰好一只候选兔，批量场景可一次加入同笼兔只。
+class NfcRabbitPickerButton extends ConsumerStatefulWidget {
+  const NfcRabbitPickerButton({
+    super.key,
+    required this.houseId,
+    required this.candidates,
+    required this.idleLabel,
+    required this.waitingLabel,
+    required this.onSelected,
+    this.enabled = true,
+    this.allowMultiple = false,
+  });
+
+  final int houseId;
+  final List<Rabbit> candidates;
+  final String idleLabel;
+  final String waitingLabel;
+  final ValueChanged<List<Rabbit>> onSelected;
+  final bool enabled;
+  final bool allowMultiple;
+
+  @override
+  ConsumerState<NfcRabbitPickerButton> createState() =>
+      _NfcRabbitPickerButtonState();
+}
+
+class _NfcRabbitPickerButtonState extends ConsumerState<NfcRabbitPickerButton> {
+  StreamSubscription<NfcLaunchEvent>? _subscription;
+  StateController<bool>? _captureFlag;
+  var _listening = false;
+  String? _hint;
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    _releaseCapture();
+    super.dispose();
+  }
+
+  void _releaseCapture() {
+    _captureFlag?.state = false;
+    _captureFlag = null;
+  }
+
+  Future<void> _start() async {
+    if (_listening || !widget.enabled) {
+      return;
+    }
+    final service = ref.read(nfcIntentServiceProvider);
+    await service.initialize();
+    if (!mounted) {
+      return;
+    }
+    final flag = ref.read(nfcCaptureActiveProvider.notifier);
+    flag.state = true;
+    _captureFlag = flag;
+    setState(() {
+      _listening = true;
+      _hint = widget.waitingLabel;
+    });
+    _subscription = service.events.listen(_onNfcEvent);
+  }
+
+  void _stop({String? hint}) {
+    _subscription?.cancel();
+    _subscription = null;
+    _releaseCapture();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _listening = false;
+      _hint = hint;
+    });
+  }
+
+  Future<void> _onNfcEvent(NfcLaunchEvent event) async {
+    try {
+      final target = NfcPayloadTarget.parse(event.payload);
+      if (target.houseId != widget.houseId) {
+        _stop(hint: '该标签属于其他兔舍，未选择兔只');
+        return;
+      }
+      final binding = await ref.read(nfcRepositoryProvider).resolve(
+            houseId: widget.houseId,
+            tagUid: event.tagUid,
+            payload: event.payload,
+          );
+      if (!mounted) {
+        return;
+      }
+      final matches = widget.candidates
+          .where((rabbit) => rabbit.cageId == binding.cageId)
+          .toList(growable: false);
+      if (matches.isEmpty) {
+        _stop(hint: '该笼位没有当前可选的兔只');
+        return;
+      }
+      if (!widget.allowMultiple && matches.length != 1) {
+        _stop(hint: '该笼位有 ${matches.length} 只可选兔只，请在列表中选择');
+        return;
+      }
+      widget.onSelected(matches);
+      final rabbitLabels = matches.map((rabbit) => '#${rabbit.id}').join('、');
+      _stop(hint: '已选择兔 $rabbitLabels');
+    } catch (error) {
+      _stop(
+        hint: error is ApiException ? error.message : '读取 NFC 标签失败，请重试',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OutlinedButton.icon(
+          key: widget.key,
+          onPressed:
+              !widget.enabled || _listening ? null : () => unawaited(_start()),
+          icon: const Icon(Icons.nfc),
+          label: Text(_listening ? widget.waitingLabel : widget.idleLabel),
+        ),
+        if (_hint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _hint!,
+            key: const ValueKey('nfc-rabbit-picker-hint'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
     );
   }
 }

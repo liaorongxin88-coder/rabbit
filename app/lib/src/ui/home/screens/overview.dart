@@ -97,14 +97,15 @@ class _HomeContentState extends ConsumerState<_HomeContent>
 
   static const _tabs = [
     _FlowTab(0, '日常', ['观察', '饲喂'], Icons.restaurant_outlined),
-    _FlowTab(1, '催情', ['催情'], Icons.play_circle_outline_rounded),
-    _FlowTab(2, '配种', ['配种'], Icons.favorite_border_rounded),
-    _FlowTab(3, '摸胎', ['摸胎'], Icons.health_and_safety_outlined),
-    _FlowTab(4, '备产', ['备产'], Icons.inventory_2_outlined),
-    _FlowTab(5, '分娩', ['分娩', '生产'], Icons.child_care_outlined),
-    _FlowTab(6, '断奶', ['断奶'], Icons.call_split_rounded),
-    _FlowTab(7, '出售', ['出售'], Icons.local_shipping_outlined),
-    _FlowTab(8, '后备兔', ['后备兔', '后备成熟'], Icons.trending_up_rounded),
+    _FlowTab(1, '休养', ['结束休养'], Icons.self_improvement_outlined),
+    _FlowTab(2, '催情', ['催情'], Icons.play_circle_outline_rounded),
+    _FlowTab(3, '配种', ['配种'], Icons.favorite_border_rounded),
+    _FlowTab(4, '摸胎', ['摸胎'], Icons.health_and_safety_outlined),
+    _FlowTab(5, '备产', ['备产'], Icons.inventory_2_outlined),
+    _FlowTab(6, '分娩', ['分娩', '生产'], Icons.child_care_outlined),
+    _FlowTab(7, '断奶', ['断奶'], Icons.call_split_rounded),
+    _FlowTab(8, '出售', ['出售'], Icons.local_shipping_outlined),
+    _FlowTab(9, '后备兔', ['后备兔', '后备成熟'], Icons.trending_up_rounded),
   ];
 
   @override
@@ -115,7 +116,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     _tabController = TabController(
       length: _tabs.length,
       vsync: this,
-      initialIndex: 2,
+      initialIndex: 3,
     );
   }
 
@@ -948,6 +949,7 @@ class _EventCard extends StatelessWidget {
 
   IconData get _eventIcon {
     final type = event.eventType;
+    if (type.contains('结束休养')) return Icons.self_improvement_outlined;
     if (type.contains('配种')) return Icons.favorite_border_rounded;
     if (type.contains('摸胎')) return Icons.health_and_safety_outlined;
     if (type.contains('备产')) return Icons.inventory_2_outlined;

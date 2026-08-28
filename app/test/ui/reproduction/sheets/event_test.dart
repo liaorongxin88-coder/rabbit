@@ -71,6 +71,33 @@ void main() {
     expect(find.textContaining('配种提醒：2026-02-06'), findsOneWidget);
   });
 
+  testWidgets('recovery task requires a manual completion', (tester) async {
+    final harness = _RepositoryHarness(
+      response: {
+        'cycleId': 701,
+        'stage': 'AWAIT_ESTRUS',
+        'nextTaskId': 902,
+      },
+    );
+    addTearDown(harness.dispose);
+
+    await tester.pumpWidget(
+      _productionApp(repository: harness.repository, task: _recoveryTask),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-repro-task')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('结束休养'), findsWidgets);
+    expect(find.byKey(const ValueKey('production-postpone-switch')),
+        findsOneWidget);
+    final submit = find.byKey(const ValueKey('production-event-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(harness.adapter.requests.single['action'], 'START_CYCLE');
+  });
+
   testWidgets('custom reminder sends the suggested future date',
       (tester) async {
     final harness = _RepositoryHarness();
@@ -129,7 +156,8 @@ void main() {
         key: const ValueKey('next-reminder-stage-label'),
         expected: testCase.expected,
       );
-      await tester.tap(find.byIcon(Icons.close).last);
+      final sheet = find.byKey(const ValueKey('production-event-form-list'));
+      Navigator.of(tester.element(sheet)).pop();
       await tester.pumpAndSettle();
     }
   });
@@ -820,6 +848,9 @@ Widget _productionApp({
         (_) async => const <Rabbit>[],
       ),
       houseCagesProvider(8).overrideWith((_) async => const <Cage>[]),
+      houseBatchesProvider(8).overrideWith(
+        (_) async => const [_activeBatch],
+      ),
       houseSettingProvider(8).overrideWith(
         (_) async => HouseSettingState(
           setting: GlobalSetting.defaults(),
@@ -990,6 +1021,17 @@ final _weaningTask = ReproTask(
   cycleId: 701,
   rabbitId: 31,
   dueTime: DateTime(2026, 2, 10),
+  status: 'PENDING',
+);
+
+final _recoveryTask = ReproTask(
+  id: 800,
+  taskType: 'RECOVERY',
+  taskLabel: '休养到期',
+  action: ReproAction.startCycle,
+  cycleId: 701,
+  rabbitId: 31,
+  dueTime: DateTime(2026, 2, 2),
   status: 'PENDING',
 );
 
