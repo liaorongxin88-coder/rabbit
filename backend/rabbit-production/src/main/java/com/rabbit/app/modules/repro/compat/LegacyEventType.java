@@ -35,9 +35,9 @@ public final class LegacyEventType {
             return null;
         }
         return switch (taskType) {
-            // 旧周期从配种才开始，这两个阶段在周期级没有旧值；
-            // 沿用 batch_rabbits 的动作词，旧端至少能显示出人话。
-            case RECOVERY, ESTRUS -> "催情";
+            // 旧周期从配种才开始，待催情阶段在周期级没有旧值。
+            case RECOVERY -> "结束休养";
+            case ESTRUS -> "催情";
             case MATING -> "配种";
             case PALPATION -> "摸胎";
             case PREPARTUM -> "备产";

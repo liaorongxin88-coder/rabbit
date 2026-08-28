@@ -154,9 +154,9 @@ public final class TransitionTable {
             ));
         }
 
-        // T9 推迟：任意等待态都可推迟，阶段不变，只顺延到期时间
+        // T9 推迟：休养期和任意等待态都可推迟，阶段不变，只顺延到期时间
         for (ReproStage from : ReproStage.values()) {
-            if (from.isAwaiting()) {
+            if (from == ReproStage.READY || from.isAwaiting()) {
                 rows.add(new Transition(
                     from, ReproAction.POSTPONE, null,
                     from, false, null, null,
