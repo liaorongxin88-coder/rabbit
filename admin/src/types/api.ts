@@ -186,6 +186,7 @@ export interface Rabbit {
  houseId: number;
  cageId: number;
  motherId?: number | null;
+ sourceSeller?: string | null;
  type: string;
  gender: string;
  breed?: string | null;
@@ -215,6 +216,20 @@ export interface RangeRabbitEntrySkippedCage {
  cageId: number;
  cageNumber: string;
  reason: string;
+}
+
+export interface BatchRabbitEntrySkippedCage {
+ cageId: number;
+ cageNumber: string;
+ rabbitCount: number;
+ reason: string;
+}
+
+export interface BatchRabbitEntryResult {
+ requestedRabbitCount: number;
+ enteredRabbitCount: number;
+ replayedRabbitCount: number;
+ skippedCages: BatchRabbitEntrySkippedCage[];
 }
 
 export interface RangeRabbitEntryResult {

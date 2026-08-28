@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/cages/transfer.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_entry.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/replacement.dart';
@@ -271,6 +272,48 @@ class RabbitRepository {
       body: body,
       decode: (data) => Rabbit.fromJson(
         requireJsonObject(data, message: '录入兔只结果格式不正确'),
+      ),
+    );
+  }
+
+  Future<BatchRabbitEntryResult> createRabbitBatch({
+    required int houseId,
+    required int cageId,
+    required int quantity,
+    required double totalWeight,
+    required String type,
+    required String gender,
+    required String arrivalMethod,
+    required DateTime arrivalDate,
+    String breed = '',
+    String sourceSeller = '',
+    int? motherId,
+    String? growthStage,
+    String? reproductiveStage,
+    String? requestId,
+  }) {
+    return _api.post<BatchRabbitEntryResult>(
+      '/api/rabbits/batch-entry',
+      houseId: houseId,
+      body: {
+        'cageId': cageId,
+        'quantity': quantity,
+        'totalWeight': totalWeight,
+        'type': type,
+        'gender': gender,
+        'arrivalMethod': arrivalMethod,
+        'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
+        'requestId': requestId ?? _uuid.v4(),
+        if (breed.trim().isNotEmpty) 'breed': breed.trim(),
+        if (sourceSeller.trim().isNotEmpty) 'sourceSeller': sourceSeller.trim(),
+        if (motherId != null && motherId > 0) 'motherId': motherId,
+        if (growthStage?.trim().isNotEmpty ?? false)
+          'growthStage': growthStage!.trim(),
+        if (reproductiveStage?.trim().isNotEmpty ?? false)
+          'reproductiveStage': reproductiveStage!.trim(),
+      },
+      decode: (data) => BatchRabbitEntryResult.fromJson(
+        requireJsonObject(data, message: '批量录入结果格式不正确'),
       ),
     );
   }

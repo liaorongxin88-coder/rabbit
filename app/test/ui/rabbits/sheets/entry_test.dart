@@ -108,6 +108,118 @@ void main() {
     expect(adapter.requests.single.body.containsKey('batchId'), isFalse);
   });
 
+  testWidgets('commodity batch creation sends quantity and total weight',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    await tester.pumpWidget(
+      _commodityEntryTestApp(repository: _repository(adapter)),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final seller = find.byKey(const ValueKey('rabbit-entry-source-seller'));
+    await tester.ensureVisible(seller);
+    await tester.enterText(seller, '测试供应方');
+    final quantity = find.byKey(const ValueKey('rabbit-entry-quantity'));
+    await tester.ensureVisible(quantity);
+    await tester.enterText(quantity, '3');
+    await tester.pumpAndSettle();
+    final totalWeight = find.byKey(const ValueKey('rabbit-entry-weight'));
+    await tester.ensureVisible(totalWeight);
+    await tester.enterText(totalWeight, '7.5');
+
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    final request = adapter.requests.single;
+    expect(request.path, '/api/rabbits/batch-entry');
+    expect(request.body['quantity'], 3);
+    expect(request.body['totalWeight'], 7.5);
+    expect(request.body['sourceSeller'], '测试供应方');
+  });
+
+  testWidgets('commodity batch entry shows partial result in the form',
+      (tester) async {
+    final adapter = _CapturingAdapter(
+      responseData: {
+        'requestedRabbitCount': 3,
+        'enteredRabbitCount': 2,
+        'replayedRabbitCount': 0,
+        'skippedCages': [
+          {
+            'cageId': 13,
+            'cageNumber': 'C-01',
+            'rabbitCount': 1,
+            'reason': '商品兔笼剩余容量不足',
+          },
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      _commodityEntryTestApp(repository: _repository(adapter)),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final quantity = find.byKey(const ValueKey('rabbit-entry-quantity'));
+    await tester.ensureVisible(quantity);
+    await tester.enterText(quantity, '3');
+    await tester.pumpAndSettle();
+    final totalWeight = find.byKey(const ValueKey('rabbit-entry-weight'));
+    await tester.ensureVisible(totalWeight);
+    await tester.enterText(totalWeight, '7.5');
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    expect(
+      find.byKey(const ValueKey('rabbit-entry-batch-result')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('C-01：1只未录入'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
+  });
+
+  testWidgets('self retained entry sends the manually entered mother ID',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    await tester.pumpWidget(
+      _entryTestAppWithOverrides(
+        repository: _repository(adapter),
+        batches: const <Batch>[],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    final source = find.byKey(const ValueKey('rabbit-entry-source-method'));
+    await tester.ensureVisible(source);
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('自留').last);
+    await tester.pumpAndSettle();
+
+    final mother = find.byKey(const ValueKey('rabbit-entry-source-mother'));
+    await tester.ensureVisible(mother);
+    await tester.enterText(mother, '18');
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    expect(adapter.requests.single.body['arrivalMethod'], '1');
+    expect(adapter.requests.single.body['motherId'], 18);
+  });
+
   testWidgets(
     'breeding intake stages follow sex and keep actions above dynamic keyboards',
     (tester) async {
@@ -792,6 +904,9 @@ class _CapturedRequest {
 }
 
 class _CapturingAdapter implements HttpClientAdapter {
+  _CapturingAdapter({this.responseData});
+
+  final Object? responseData;
   final requests = <_CapturedRequest>[];
 
   @override
@@ -810,14 +925,15 @@ class _CapturingAdapter implements HttpClientAdapter {
       jsonEncode({
         'code': 0,
         'message': 'ok',
-        'data': {
-          'id': 900,
-          'houseId': 8,
-          'cageId': 13,
-          'type': '2',
-          'gender': '0',
-          'isActive': true,
-        },
+        'data': responseData ??
+            {
+              'id': 900,
+              'houseId': 8,
+              'cageId': 13,
+              'type': '2',
+              'gender': '0',
+              'isActive': true,
+            },
       }),
       200,
       headers: {

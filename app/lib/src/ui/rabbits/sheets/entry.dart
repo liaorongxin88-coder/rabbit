@@ -1,15 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/houses/permission.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_entry.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/entry_point.dart';
@@ -1018,10 +1026,14 @@ class _CreateRabbitSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
+  static const _uuid = Uuid();
+
   final _formKey = GlobalKey<FormState>();
   final _breedController = TextEditingController();
   final _weightController = TextEditingController();
+  final _quantityController = TextEditingController(text: '1');
   final _sourceSellerController = TextEditingController();
+  final _motherIdController = TextEditingController();
   final _totalKitsController = TextEditingController();
   final _liveKitsController = TextEditingController();
   final _keptKitsController = TextEditingController();
@@ -1040,10 +1052,20 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   DateTime? _birthDate;
   int? _entryMaleRabbitId;
   MatingMethod _entryMatingMethod = MatingMethod.natural;
-  int? _sourceMotherId;
+  StreamSubscription<NfcLaunchEvent>? _nfcSubscription;
+  StateController<bool>? _captureFlag;
+  BatchRabbitEntryResult? _batchEntryResult;
+  String? _batchRequestId;
+  String? _nfcHint;
+  String? _submitError;
+  var _nfcListening = false;
   var _saving = false;
 
   bool get _isEdit => widget.rabbit != null;
+
+  int get _quantity => int.tryParse(_quantityController.text.trim()) ?? 0;
+
+  bool get _isBatchEntry => !_isEdit && _quantity > 1;
 
   Rabbit get _rabbit => widget.rabbit!;
 
@@ -1066,7 +1088,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       _arrivalMethod =
           rabbit.arrivalMethod.isEmpty ? '0' : rabbit.arrivalMethod;
       _sourceSellerController.text = rabbit.sourceSeller;
-      _sourceMotherId = rabbit.motherId;
+      _motherIdController.text = rabbit.motherId?.toString() ?? '';
       _breedController.text = rabbit.breed;
       final weight = rabbit.weight;
       if (weight != null && weight > 0) {
@@ -1089,19 +1111,121 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
 
   @override
   void dispose() {
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _releaseNfcCapture();
     _breedController.dispose();
     _weightController.dispose();
+    _quantityController.dispose();
     _sourceSellerController.dispose();
+    _motherIdController.dispose();
     _totalKitsController.dispose();
     _liveKitsController.dispose();
     _keptKitsController.dispose();
     super.dispose();
   }
 
+  void _releaseNfcCapture() {
+    _captureFlag?.state = false;
+    _captureFlag = null;
+  }
+
+  Future<void> _startMotherNfcCapture() async {
+    if (_nfcListening || _saving) {
+      return;
+    }
+    try {
+      final service = ref.read(nfcIntentServiceProvider);
+      await service.initialize();
+      if (!mounted) {
+        return;
+      }
+      final flag = ref.read(nfcCaptureActiveProvider.notifier);
+      flag.state = true;
+      _captureFlag = flag;
+      setState(() {
+        _nfcListening = true;
+        _nfcHint = '请将手机靠近母兔所在笼位的 NFC 标签';
+      });
+      _nfcSubscription = service.events.listen(_onMotherNfcEvent);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _nfcHint = 'NFC 暂不可用，请手动输入母兔 ID');
+      }
+    }
+  }
+
+  void _stopMotherNfcCapture({String? hint}) {
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _releaseNfcCapture();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _nfcListening = false;
+      _nfcHint = hint;
+    });
+  }
+
+  Future<void> _onMotherNfcEvent(NfcLaunchEvent event) async {
+    try {
+      final target = NfcPayloadTarget.parse(event.payload);
+      if (target.houseId != widget.houseId) {
+        _stopMotherNfcCapture(hint: '该标签属于其他兔舍，未关联母兔');
+        return;
+      }
+      final binding = await ref.read(nfcRepositoryProvider).resolve(
+            houseId: widget.houseId,
+            tagUid: event.tagUid,
+            payload: event.payload,
+          );
+      final rabbits =
+          await ref.read(rabbitRepositoryProvider).listRabbitsForCage(
+                houseId: widget.houseId,
+                cageId: binding.cageId,
+              );
+      if (!mounted) {
+        return;
+      }
+      final mothers = rabbits
+          .where(
+            (rabbit) =>
+                rabbit.id > 0 &&
+                rabbit.isActive &&
+                rabbit.type == '0' &&
+                rabbit.gender == '0',
+          )
+          .toList();
+      if (mothers.length != 1) {
+        _stopMotherNfcCapture(
+          hint: mothers.isEmpty
+              ? '该笼位没有在栏种母兔，请手动输入母兔 ID'
+              : '该笼位有多只种母兔，请手动输入母兔 ID',
+        );
+        return;
+      }
+      final mother = mothers.single;
+      _motherIdController.text = '${mother.id}';
+      _batchRequestId = null;
+      _batchEntryResult = null;
+      _submitError = null;
+      _stopMotherNfcCapture(hint: '已关联母兔 #${mother.id}');
+    } catch (error) {
+      _stopMotherNfcCapture(
+        hint: error is ApiException ? error.message : '读取标签失败，请重试',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = (mediaQuery.size.height - keyboardInset).clamp(
+      0.0,
+      mediaQuery.size.height,
+    );
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -1110,20 +1234,26 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       child: SafeArea(
         top: false,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.9),
+          constraints: BoxConstraints(maxHeight: availableHeight * 0.92),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildHeader(context),
                 Flexible(
-                  fit: FlexFit.loose,
                   child: SingleChildScrollView(
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                    child: _buildFormBody(context),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildHeader(context),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                          child: _buildFormBody(context),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 _buildActionBar(context),
@@ -1169,19 +1299,6 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   }
 
   Widget _buildFormBody(BuildContext context) {
-    final rabbits =
-        ref.watch(allActiveHouseRabbitsProvider(widget.houseId)).valueOrNull ??
-            const <Rabbit>[];
-    final sourceMothers = rabbits
-        .where(
-          (rabbit) =>
-              rabbit.id > 0 &&
-              rabbit.isActive &&
-              rabbit.gender == '0' &&
-              rabbit.type == '0',
-        )
-        .toList()
-      ..sort((left, right) => left.id.compareTo(right.id));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1280,43 +1397,89 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 DropdownMenuItem(value: '0', child: Text('购入')),
                 DropdownMenuItem(value: '1', child: Text('自留')),
               ],
-              onChanged: _saving || (!_isEdit && !_canOpenReproEntry)
+              onChanged: _saving
                   ? null
                   : (value) => setState(() {
                         _arrivalMethod = value ?? _arrivalMethod;
                         if (_arrivalMethod == '0') {
-                          _sourceMotherId = null;
+                          _motherIdController.clear();
                         } else {
                           _sourceSellerController.clear();
                         }
+                        _batchRequestId = null;
+                        _batchEntryResult = null;
+                        _submitError = null;
                       }),
             ),
-            TextFormField(
-              key: const ValueKey('rabbit-entry-weight'),
-              controller: _weightController,
-              decoration: const InputDecoration(
-                labelText: '体重',
-                suffixText: 'kg',
-              ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              textInputAction: TextInputAction.next,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(
-                  RegExp(r'^\d*\.?\d{0,2}'),
+            if (!_isEdit)
+              TextFormField(
+                key: const ValueKey('rabbit-entry-quantity'),
+                controller: _quantityController,
+                decoration: const InputDecoration(
+                  labelText: '数量',
+                  helperText: '单次最多 10 只',
                 ),
-              ],
-              validator: (value) {
-                if (!_canOpenReproEntry || _reproStage == null) {
+                enabled: !_saving,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (_) => setState(() {
+                  _batchRequestId = null;
+                  _batchEntryResult = null;
+                  _submitError = null;
+                }),
+                validator: (value) {
+                  final quantity = int.tryParse(value?.trim() ?? '');
+                  if (quantity == null || quantity < 1 || quantity > 10) {
+                    return '数量必须在 1 到 10 之间';
+                  }
+                  if (quantity > 1 && _type != '2') {
+                    return '种兔和后备兔一次只能录入 1 只';
+                  }
                   return null;
-                }
-                final weight = double.tryParse(value?.trim() ?? '');
-                return weight == null || weight <= 0 ? '请填写种母兔体重' : null;
-              },
-            ),
+                },
+              )
+            else
+              const SizedBox.shrink(),
           ],
         ),
-        if (_canOpenReproEntry && _arrivalMethod == '0') ...[
+        const SizedBox(height: 12),
+        TextFormField(
+          key: const ValueKey('rabbit-entry-weight'),
+          controller: _weightController,
+          decoration: InputDecoration(
+            labelText: _isBatchEntry ? '总重量' : '体重',
+            suffixText: 'kg',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.next,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+          ],
+          onChanged: (_) {
+            if (_isBatchEntry) {
+              setState(() {
+                _batchRequestId = null;
+                _batchEntryResult = null;
+                _submitError = null;
+              });
+            }
+          },
+          validator: (value) {
+            final weight = double.tryParse(value?.trim() ?? '');
+            if (_isBatchEntry) {
+              if (weight == null || weight <= 0) {
+                return '请填写总重量';
+              }
+              return weight > 100 ? '总重量不能超过 100 kg' : null;
+            }
+            if (!_canOpenReproEntry || _reproStage == null) {
+              return null;
+            }
+            return weight == null || weight <= 0 ? '请填写种母兔体重' : null;
+          },
+        ),
+        if (!_isEdit && _arrivalMethod == '0') ...[
           const SizedBox(height: 12),
           TextFormField(
             key: const ValueKey('rabbit-entry-source-seller'),
@@ -1332,31 +1495,50 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             },
           ),
         ],
-        if (_canOpenReproEntry && _arrivalMethod == '1') ...[
+        if (!_isEdit && _arrivalMethod == '1') ...[
           const SizedBox(height: 12),
-          DropdownButtonFormField<int?>(
+          TextFormField(
             key: const ValueKey('rabbit-entry-source-mother'),
-            value: sourceMothers.any((rabbit) => rabbit.id == _sourceMotherId)
-                ? _sourceMotherId
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: '母兔（可选）'),
-            items: [
-              const DropdownMenuItem<int?>(value: null, child: Text('不关联母兔')),
-              for (final mother in sourceMothers)
-                DropdownMenuItem<int?>(
-                  value: mother.id,
-                  child: Text(
-                    '兔 #${mother.id} · ${mother.breed.isEmpty ? '未填品种' : mother.breed}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-            onChanged: _saving
-                ? null
-                : (value) => setState(() => _sourceMotherId = value),
+            controller: _motherIdController,
+            decoration: InputDecoration(
+              labelText: '母兔 ID（可选）',
+              hintText: '输入母兔 ID，或碰一下母兔所在笼位',
+              suffixIcon: IconButton(
+                key: const ValueKey('rabbit-entry-source-mother-nfc'),
+                tooltip: _nfcListening ? '正在读取 NFC 标签' : '碰一下母兔所在笼位',
+                onPressed: _saving || _nfcListening
+                    ? null
+                    : () => unawaited(_startMotherNfcCapture()),
+                icon: const Icon(Icons.nfc),
+              ),
+            ),
+            enabled: !_saving,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() {
+              _batchRequestId = null;
+              _batchEntryResult = null;
+              _submitError = null;
+            }),
+            validator: (value) {
+              final text = value?.trim() ?? '';
+              if (text.isEmpty) {
+                return null;
+              }
+              return int.tryParse(text) == null || int.parse(text) <= 0
+                  ? '请输入有效的母兔 ID'
+                  : null;
+            },
           ),
+          if (_nfcHint != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _nfcHint!,
+              key: const ValueKey('rabbit-entry-source-mother-nfc-hint'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ],
     );
@@ -1778,29 +1960,70 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                child: const Text('取消'),
+            if (_submitError != null) ...[
+              Container(
+                key: const ValueKey('rabbit-entry-submit-error'),
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: palette.dangerSoft,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: palette.danger.withAlpha(90)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.error_outline, color: palette.danger),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_submitError!)),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                key: const ValueKey('rabbit-entry-submit'),
-                onPressed: _saving ? null : _save,
-                child: _saving
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(_isEdit ? '保存' : '确定'),
+            ],
+            if (_batchEntryResult case final result?) ...[
+              InfoNotice(
+                key: const ValueKey('rabbit-entry-batch-result'),
+                icon: Icons.info_outline,
+                text: _batchResultMessage(result),
               ),
+              const SizedBox(height: 10),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _saving ? null : () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    key: const ValueKey('rabbit-entry-submit'),
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _batchEntryResult != null
+                                ? '关闭'
+                                : _isEdit
+                                    ? '保存'
+                                    : '确定',
+                          ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1808,7 +2031,26 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     );
   }
 
+  String _batchResultMessage(BatchRabbitEntryResult result) {
+    final skipped = result.skippedCages
+        .map((item) =>
+            '${item.cageLabel}：${item.rabbitCount}只未录入，${item.reason}')
+        .join('；');
+    final entered = result.enteredRabbitCount;
+    if (skipped.isEmpty) {
+      return entered > 0 ? '已录入 $entered 只' : '本次请求已完成';
+    }
+    return entered > 0 ? '已录入 $entered 只；$skipped' : skipped;
+  }
+
   Future<void> _save() async {
+    if (_saving) {
+      return;
+    }
+    if (_batchEntryResult != null) {
+      Navigator.of(context).pop();
+      return;
+    }
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -1818,12 +2060,14 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     final batchId = _reproStage == null ? null : _selectedInProgressBatchId();
     final missingFact = _missingEntryFact();
     if (missingFact != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(missingFact)),
-      );
+      setState(() => _submitError = missingFact);
       return;
     }
-    setState(() => _saving = true);
+    _stopMotherNfcCapture();
+    setState(() {
+      _saving = true;
+      _submitError = null;
+    });
     try {
       if (!_isEdit) {
         final freshCages = await _refreshCreateCages();
@@ -1837,9 +2081,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           rabbitType: _type,
         );
         if (!validation.isValid) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(validation.message!)),
-          );
+          setState(() => _submitError = validation.message!);
           return;
         }
       }
@@ -1856,6 +2098,38 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               growthStage: _growthStage,
               reproductiveStage: _reproductiveStage,
             );
+      } else if (_isBatchEntry) {
+        final requestId = _batchRequestId ?? _uuid.v4();
+        _batchRequestId = requestId;
+        final result =
+            await ref.read(rabbitRepositoryProvider).createRabbitBatch(
+                  houseId: widget.houseId,
+                  cageId: _createCage.id,
+                  quantity: _quantity,
+                  totalWeight: double.parse(_weightController.text.trim()),
+                  type: _type,
+                  gender: _gender,
+                  breed: _breedController.text,
+                  arrivalMethod: _arrivalMethod,
+                  sourceSeller: _sourceSellerController.text,
+                  motherId: int.tryParse(_motherIdController.text.trim()),
+                  arrivalDate: _arrivalDate!,
+                  growthStage: _growthStage,
+                  reproductiveStage: _reproductiveStage,
+                  requestId: requestId,
+                );
+        ref.invalidate(houseRabbitsProvider(widget.houseId));
+        ref.invalidate(houseCagesProvider(widget.houseId));
+        ref.invalidate(homeEventsProvider);
+        if (result.skippedCages.isNotEmpty) {
+          setState(() {
+            _batchEntryResult = result;
+            _submitError = result.enteredRabbitCount == 0
+                ? _batchResultMessage(result)
+                : null;
+          });
+          return;
+        }
       } else {
         await ref.read(rabbitRepositoryProvider).createRabbit(
               houseId: widget.houseId,
@@ -1865,7 +2139,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               breed: _breedController.text,
               arrivalMethod: _arrivalMethod,
               sourceSeller: _sourceSellerController.text,
-              motherId: _sourceMotherId,
+              motherId: int.tryParse(_motherIdController.text.trim()),
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
@@ -1895,10 +2169,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       if (!mounted) {
         return;
       }
-      final message = error is ApiException ? error.message : error.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      final message = error is ApiException ? error.message : '提交失败，请检查网络后重试';
+      setState(() => _submitError = message);
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -1911,9 +2183,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       return await ref.refresh(houseCagesProvider(widget.houseId).future);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('笼位状态刷新失败，请检查网络后重试')),
-        );
+        setState(() => _submitError = '笼位状态刷新失败，请检查网络后重试');
       }
       return null;
     }
