@@ -151,6 +151,9 @@ export function WorkspaceProductionPage() {
   const [batchMotherCounts, setBatchMotherCounts] = useState<
     Record<number, number | null>
   >({});
+  const [batchOpenCycleCounts, setBatchOpenCycleCounts] = useState<
+    Record<number, number | null>
+  >({});
   const [rabbits, setRabbits] = useState<Rabbit[]>([]);
   const [cages, setCages] = useState<Cage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -193,6 +196,7 @@ export function WorkspaceProductionPage() {
     if (!workspace.selectedHouse) {
       setBatches([]);
       setBatchMotherCounts({});
+      setBatchOpenCycleCounts({});
       setRabbits([]);
       setCages([]);
       return;
@@ -206,14 +210,22 @@ export function WorkspaceProductionPage() {
       ]);
       setBatches(nextBatches);
       setBatchMotherCounts({});
+      setBatchOpenCycleCounts({});
       setRabbits(nextRabbits);
       setCages(nextCages);
 
-      const batchRabbitResults = await Promise.allSettled(
-        nextBatches.map((batch) =>
-          listBatchRabbits(workspace.selectedHouse!.id, batch.id),
+      const [batchRabbitResults, batchCycleResults] = await Promise.all([
+        Promise.allSettled(
+          nextBatches.map((batch) =>
+            listBatchRabbits(workspace.selectedHouse!.id, batch.id),
+          ),
         ),
-      );
+        Promise.allSettled(
+          nextBatches.map((batch) =>
+            listBreedingCycles(workspace.selectedHouse!.id, batch.id),
+          ),
+        ),
+      ]);
       setBatchMotherCounts(
         Object.fromEntries(
           batchRabbitResults.map((result, index) => [
@@ -225,9 +237,22 @@ export function WorkspaceProductionPage() {
           ]),
         ),
       );
+      setBatchOpenCycleCounts(
+        Object.fromEntries(
+          batchCycleResults.map((result, index) => [
+            nextBatches[index].id,
+            result.status === "fulfilled"
+              ? result.value.filter(
+                  (cycle) => cycle.lifecycle?.toUpperCase() !== "CLOSED",
+                ).length
+              : null,
+          ]),
+        ),
+      );
     } catch {
       setBatches([]);
       setBatchMotherCounts({});
+      setBatchOpenCycleCounts({});
       setRabbits([]);
       setCages([]);
     } finally {
@@ -314,16 +339,22 @@ export function WorkspaceProductionPage() {
                         ID {batch.id}
                       </p>
                     </div>
-                    <Badge
-                      className="shrink-0"
-                      variant={
-                        isCompletedBatchStatus(batch.status)
-                          ? "secondary"
-                          : "default"
-                      }
-                    >
-                      {batchStatusLabel(batch.status)}
-                    </Badge>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Badge
+                        variant={
+                          isCompletedBatchStatus(batch.status)
+                            ? "secondary"
+                            : "default"
+                        }
+                      >
+                        {batchStatusLabel(batch.status)}
+                      </Badge>
+                      {batch.pendingCompletion ? (
+                        <span className="text-xs text-muted-foreground">
+                          待手动结束
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
@@ -347,6 +378,14 @@ export function WorkspaceProductionPage() {
                       <dt className="text-xs text-muted-foreground">母兔数</dt>
                       <dd className="mt-1 font-medium tabular-nums">
                         {formatMotherCount(batchMotherCounts[batch.id])}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-xs text-muted-foreground">
+                        未结束周期
+                      </dt>
+                      <dd className="mt-1 font-medium tabular-nums">
+                        {formatMotherCount(batchOpenCycleCounts[batch.id])}
                       </dd>
                     </div>
                     <div className="col-span-2 min-w-0">
@@ -397,6 +436,7 @@ export function WorkspaceProductionPage() {
                     <TableHead>开始日期</TableHead>
                     <TableHead>结束日期</TableHead>
                     <TableHead>母兔数</TableHead>
+                    <TableHead>未结束周期</TableHead>
                     <TableHead>备注</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
@@ -413,20 +453,30 @@ export function WorkspaceProductionPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            isCompletedBatchStatus(batch.status)
-                              ? "secondary"
-                              : "default"
-                          }
-                        >
-                          {batchStatusLabel(batch.status)}
-                        </Badge>
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge
+                            variant={
+                              isCompletedBatchStatus(batch.status)
+                                ? "secondary"
+                                : "default"
+                            }
+                          >
+                            {batchStatusLabel(batch.status)}
+                          </Badge>
+                          {batch.pendingCompletion ? (
+                            <span className="text-xs text-muted-foreground">
+                              待手动结束
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell>{formatDate(batch.startDate)}</TableCell>
                       <TableCell>{formatDate(batch.endDate)}</TableCell>
                       <TableCell className="tabular-nums">
                         {formatMotherCount(batchMotherCounts[batch.id])}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatMotherCount(batchOpenCycleCounts[batch.id])}
                       </TableCell>
                       <TableCell className="max-w-64 truncate">
                         {batch.remark || "-"}
@@ -471,6 +521,7 @@ export function WorkspaceProductionPage() {
 
       <BatchActionDialog
         batch={actionBatch}
+        batches={batches}
         houseId={workspace.selectedHouse?.id ?? null}
         rabbits={rabbits}
         cages={cages}
@@ -642,7 +693,7 @@ function CreateBatchDialog({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!houseId || selectedIds.length === 0) return;
+    if (!houseId) return;
     setSaving(true);
     try {
       await createBatch(houseId, {
@@ -663,7 +714,7 @@ function CreateBatchDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button disabled={disabled || femaleRabbits.length === 0}>
+        <Button disabled={disabled}>
           <PlusIcon data-icon="inline-start" />
           新建批次
         </Button>
@@ -805,7 +856,7 @@ function CreateBatchDialog({
             >
               取消
             </Button>
-            <Button type="submit" disabled={saving || selectedIds.length === 0}>
+            <Button type="submit" disabled={saving || !code.trim()}>
               {saving ? <Spinner data-icon="inline-start" /> : null}创建批次
             </Button>
           </DialogFooter>
@@ -817,6 +868,7 @@ function CreateBatchDialog({
 
 function BatchActionDialog({
   batch,
+  batches,
   houseId,
   rabbits,
   cages,
@@ -825,6 +877,7 @@ function BatchActionDialog({
   onSaved,
 }: {
   batch: ProductionBatch | null;
+  batches: ProductionBatch[];
   houseId: number | null;
   rabbits: Rabbit[];
   cages: Cage[];
@@ -836,6 +889,11 @@ function BatchActionDialog({
   const [batchRabbits, setBatchRabbits] = useState<BatchRabbit[]>([]);
   const [breedingCycles, setBreedingCycles] = useState<BreedingCycle[]>([]);
   const [breedingCycleId, setBreedingCycleId] = useState("");
+  const [matingBatchId, setMatingBatchId] = useState("");
+  const [matingBatchCode, setMatingBatchCode] = useState("");
+  const [createdMatingBatch, setCreatedMatingBatch] =
+    useState<ProductionBatch | null>(null);
+  const [creatingMatingBatch, setCreatingMatingBatch] = useState(false);
   const [stillbirthCount, setStillbirthCount] = useState("");
   /** 阶段→可执行动作，服务端下发；决定「记录流产」是否出现。 */
   const [stageActions, setStageActions] = useState<Record<string, string[]>>(
@@ -877,6 +935,10 @@ function BatchActionDialog({
     setBatchRabbits([]);
     setBreedingCycles([]);
     setBreedingCycleId("");
+    setMatingBatchId("");
+    setMatingBatchCode("");
+    setCreatedMatingBatch(null);
+    setCreatingMatingBatch(false);
     setRabbitId("");
     setMotherSearch("");
     setMotherPage(1);
@@ -1004,6 +1066,22 @@ function BatchActionDialog({
     const stage = cycle?.stage ?? "";
     return Boolean(stage) && (stageActions[stage] ?? []).includes("ABORTION");
   }, [selectedMotherCycles, breedingCycleId, stageActions]);
+  const matingBatches = useMemo(() => {
+    const candidates = [
+      ...batches,
+      ...(createdMatingBatch ? [createdMatingBatch] : []),
+    ];
+    const unique = new Map<number, ProductionBatch>();
+    for (const candidate of candidates) {
+      if (
+        !isCompletedBatchStatus(candidate.status) &&
+        candidate.id !== batch?.id
+      ) {
+        unique.set(candidate.id, candidate);
+      }
+    }
+    return [...unique.values()].sort((left, right) => right.id - left.id);
+  }, [batches, batch?.id, createdMatingBatch]);
 
   const filteredActiveMothers = useMemo(() => {
     const keyword = motherSearch.trim().toLowerCase();
@@ -1023,6 +1101,32 @@ function BatchActionDialog({
     (motherPage - 1) * BATCH_MOTHER_PAGE_SIZE,
     motherPage * BATCH_MOTHER_PAGE_SIZE,
   );
+
+  async function createMatingBatch() {
+    if (!houseId) return;
+    const batchCode = matingBatchCode.trim();
+    if (!batchCode) {
+      toast.error("请填写新批次编号");
+      return;
+    }
+    setCreatingMatingBatch(true);
+    try {
+      const created = await createBatch(houseId, {
+        batchCode,
+        femaleRabbitIds: [],
+      });
+      setCreatedMatingBatch(created);
+      setMatingBatchId(String(created.id));
+      setMatingBatchCode("");
+      await onSaved();
+      toast.success(`批次 ${created.batchCode} 已创建并选中`);
+    } catch {
+      // Shared request feedback is sufficient.
+    } finally {
+      setCreatingMatingBatch(false);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!batch || !houseId || isCompletedBatchStatus(batch.status)) return;
@@ -1145,9 +1249,14 @@ function BatchActionDialog({
           };
           break;
         case "mating":
+          if (!matingBatchId) {
+            toast.error("请选择或新建配种归属批次");
+            return;
+          }
           data = {
             action: reproAction,
             occurredAt: timestamp,
+            batchId: Number(matingBatchId),
             maleRabbitId: Number(maleRabbitId),
             matingMethod: "NATURAL",
             remark: remark.trim(),
@@ -1434,23 +1543,70 @@ function BatchActionDialog({
               </Field>
             ) : null}
             {action === "mating" ? (
-              <Field>
-                <FieldLabel htmlFor="male-rabbit">种公兔</FieldLabel>
-                <Select value={maleRabbitId} onValueChange={setMaleRabbitId}>
-                  <SelectTrigger id="male-rabbit">
-                    <SelectValue placeholder="选择种公兔" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {maleRabbits.map((rabbit) => (
-                        <SelectItem key={rabbit.id} value={String(rabbit.id)}>
-                          兔 #{rabbit.id} · 笼位 #{rabbit.cageId}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
+              <>
+                <Field>
+                  <FieldLabel htmlFor="male-rabbit">种公兔</FieldLabel>
+                  <Select value={maleRabbitId} onValueChange={setMaleRabbitId}>
+                    <SelectTrigger id="male-rabbit">
+                      <SelectValue placeholder="选择种公兔" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {maleRabbits.map((rabbit) => (
+                          <SelectItem key={rabbit.id} value={String(rabbit.id)}>
+                            兔 #{rabbit.id} · 笼位 #{rabbit.cageId}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="mating-batch">
+                    配种归属批次
+                  </FieldLabel>
+                  <Select value={matingBatchId} onValueChange={setMatingBatchId}>
+                    <SelectTrigger id="mating-batch">
+                      <SelectValue placeholder="选择另一进行中批次" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {matingBatches.map((candidate) => (
+                          <SelectItem
+                            key={candidate.id}
+                            value={String(candidate.id)}
+                          >
+                            {candidate.batchCode}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    血配的下一轮必须落到其他批次，不会沿用当前批次。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      id="mating-batch-code"
+                      value={matingBatchCode}
+                      maxLength={BATCH_CODE_MAX_LENGTH}
+                      placeholder="新批次编号"
+                      onChange={(event) => setMatingBatchCode(event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={creatingMatingBatch || !matingBatchCode.trim()}
+                      onClick={() => void createMatingBatch()}
+                    >
+                      {creatingMatingBatch ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : null}
+                      新建并选择
+                    </Button>
+                  </div>
+                </Field>
+              </>
             ) : null}
             {action === "departure" ? (
               <>

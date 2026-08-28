@@ -268,6 +268,8 @@ export interface ProductionBatch {
  houseId: number;
  batchCode: string;
  status: string;
+ /** 批次内没有活跃成员，可由人员手动结束。 */
+ pendingCompletion?: boolean;
  startDate?: string | null;
  endDate?: string | null;
  remark?: string | null;
