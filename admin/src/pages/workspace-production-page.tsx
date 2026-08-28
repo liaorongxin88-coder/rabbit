@@ -1562,10 +1562,11 @@ function BatchActionDialog({
                   </Select>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="mating-batch">
-                    配种归属批次
-                  </FieldLabel>
-                  <Select value={matingBatchId} onValueChange={setMatingBatchId}>
+                  <FieldLabel htmlFor="mating-batch">配种归属批次</FieldLabel>
+                  <Select
+                    value={matingBatchId}
+                    onValueChange={setMatingBatchId}
+                  >
                     <SelectTrigger id="mating-batch">
                       <SelectValue placeholder="选择另一进行中批次" />
                     </SelectTrigger>
@@ -1591,7 +1592,9 @@ function BatchActionDialog({
                       value={matingBatchCode}
                       maxLength={BATCH_CODE_MAX_LENGTH}
                       placeholder="新批次编号"
-                      onChange={(event) => setMatingBatchCode(event.target.value)}
+                      onChange={(event) =>
+                        setMatingBatchCode(event.target.value)
+                      }
                     />
                     <Button
                       type="button"
