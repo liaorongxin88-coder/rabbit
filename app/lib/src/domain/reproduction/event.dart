@@ -74,7 +74,7 @@ class EventItem {
     if (date == null) {
       return false;
     }
-    return localDateOnly(date).isBefore(localDateOnly(DateTime.now()));
+    return localDateOnly(date).isBefore(farmToday());
   }
 
   bool get isDue {
@@ -85,7 +85,7 @@ class EventItem {
     if (date == null) {
       return false;
     }
-    return localDateOnly(date) == localDateOnly(DateTime.now());
+    return localDateOnly(date) == farmToday();
   }
 
   String get statusLabel {

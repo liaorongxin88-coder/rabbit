@@ -9,6 +9,7 @@ import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 void main() {
   testWidgets('failed parturition clears defaults and fixes live kits at zero',
@@ -107,7 +108,7 @@ void main() {
 
     final dateTile = find.widgetWithText(ListTile, '执行时间 *');
     expect(dateTile, findsOneWidget);
-    final now = DateTime.now();
+    final now = farmNow();
     final today = '${now.year.toString().padLeft(4, '0')}-'
         '${now.month.toString().padLeft(2, '0')}-'
         '${now.day.toString().padLeft(2, '0')}';

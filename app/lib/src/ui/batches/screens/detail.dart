@@ -994,7 +994,7 @@ class _HouseBatchDetailScreenState
       return '';
     }
     // 同样走兔场时区，否则跨 UTC 日界的待办会比提醒页早一天变成逾期。
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final eventDay = localDateOnly(date);
     if (eventDay.isBefore(today)) {
       return 'overdue';

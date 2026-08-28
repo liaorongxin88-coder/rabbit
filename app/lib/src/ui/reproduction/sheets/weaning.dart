@@ -127,7 +127,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   }
 
   Future<void> _pickPostponeDate() async {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final setting =
         ref.read(houseSettingProvider(widget.houseId)).valueOrNull?.setting ??
             GlobalSetting.defaults();
@@ -164,7 +164,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       reminderDateLabelForStage(ReproStage.awaitEstrus);
 
   DateTime get _suggestedNextReminderDate {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     return reminderInitialDate(
       suggested: suggestedReminderDate(
         stage: ReproStage.awaitEstrus,
@@ -182,7 +182,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           : _customNextReminderDate ?? _suggestedNextReminderDate;
 
   Future<void> _pickCustomNextReminderDate() async {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final lastDate = today.add(const Duration(days: 3650));
     final picked = await showDatePicker(
       context: context,

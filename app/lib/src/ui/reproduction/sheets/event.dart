@@ -302,7 +302,10 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
+    // 农场墙上时间：_actionDate 会作为 occurredAt 提交，写入前由 farmDateTimeToUtc
+    // 按 UTC+8 重新解释。用设备 now() 会被当成农场时间原样提交，设备不在 UTC+8
+    // 时业务日期会落到错误的一天。
+    final now = farmNow();
     final initial = widget.initialDate;
     _actionDate = initial == null || initial.isAfter(now) ? now : initial;
     _selectedBatchId = widget.batchId;
@@ -351,7 +354,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
 
   /// 复查日期按兔场的配种至摸胎时长预填，并且只允许今天及以后。
   Future<void> _pickRecheckDate() async {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final suggested = suggestedReminderDate(
       stage: ReproStage.awaitPalpation,
       setting: _reminderSetting,
@@ -378,7 +381,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   Future<void> _pickPostponeDate() async {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final suggested = suggestedReminderDate(
       stage: _currentReminderStage,
       setting: _reminderSetting,
@@ -405,7 +408,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   Future<void> _pickCustomNextReminderDate() async {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     final lastDate = today.add(const Duration(days: 3650));
     final picked = await showDatePicker(
       context: context,
@@ -470,7 +473,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
   }
 
   DateTime get _suggestedNextReminderDate {
-    final today = localDateOnly(DateTime.now());
+    final today = farmToday();
     return reminderInitialDate(
       suggested: suggestedReminderDate(
         stage: _nextReminderStage!,

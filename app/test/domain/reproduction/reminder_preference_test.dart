@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/reminder_preference.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 void main() {
   test('reminder preference filters event types and overdue events', () {
@@ -56,7 +57,7 @@ EventItem _event(String type, {required String status}) {
     recordId: 1,
     category: '生产周期',
     eventType: type,
-    eventDate: DateTime.now(),
+    eventDate: farmNow(),
     batchId: null,
     rabbitId: 1,
     status: status,

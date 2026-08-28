@@ -21,7 +21,7 @@ DateTime suggestedReminderDate({
   required GlobalSetting setting,
   DateTime? from,
 }) {
-  final base = localDateOnly(from ?? DateTime.now());
+  final base = from == null ? farmToday() : localDateOnly(from);
   final configuredDays = switch (stage) {
     ReproStage.ready => setting.postpartumDays,
     ReproStage.awaitEstrus => setting.postpartumDays,
@@ -43,7 +43,7 @@ DateTime reminderInitialDate({
   DateTime? now,
   DateTime? latest,
 }) {
-  final today = localDateOnly(now ?? DateTime.now());
+  final today = now == null ? farmToday() : localDateOnly(now);
   final candidate = localDateOnly(selected ?? suggested);
   if (candidate.isBefore(today)) {
     return today;
@@ -81,6 +81,28 @@ DateTime localDateOnly(DateTime value) {
   final farmValue = farmLocalDateTime(value);
   return DateTime(farmValue.year, farmValue.month, farmValue.day);
 }
+
+/// 农场当前日期（Asia/Shanghai 墙上时间的年月日）。
+///
+/// 必须先 `toUtc()`。`DateTime.now()` 带设备时区身份，而 [farmLocalDateTime] 对
+/// 非 UTC 值原样返回——那条分支是留给日历选择器的，选择器值没有时区身份，它的
+/// 年月日就是农场日期。把 `now()` 直接传进去会得到**设备本地日期**：设备不在
+/// UTC+8 时就会偏移一天，跨零点前后提交的业务日期会落到错误的一天，而这种错误
+/// 不会报错，只会静默写进单据。
+///
+/// 想取“今天”一律用这个函数，不要写 `localDateOnly(DateTime.now())`。
+DateTime farmToday() {
+  final now = farmNow();
+  return DateTime(now.year, now.month, now.day);
+}
+
+/// 农场此刻的墙上时间（Asia/Shanghai，无时区身份）。
+///
+/// 写入路径上的日期字段都是“农场墙上时间”语义：提交前由 [farmDateTimeToUtc]
+/// 按 UTC+8 重新解释。所以预填“现在”时必须用本函数，不能直接用
+/// `DateTime.now()`——后者带的是设备墙上时间，会被当成农场时间原样提交，
+/// 设备不在 UTC+8 时整个时刻就错位了。
+DateTime farmNow() => farmLocalDateTime(DateTime.now().toUtc());
 
 /// Interprets a picker value as an Asia/Shanghai wall-clock time.
 ///

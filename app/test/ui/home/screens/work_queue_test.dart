@@ -10,13 +10,14 @@ import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/home/screens/overview.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 
 void main() {
   testWidgets('production queue filters remain usable at true 200 percent text',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final now = DateTime.now();
+    final now = farmNow();
     final events = [
       EventItem(
         recordId: 11,
@@ -178,7 +179,7 @@ void main() {
       recordId: 21,
       category: '生产周期',
       eventType: '催情',
-      eventDate: DateTime.now(),
+      eventDate: farmNow(),
       batchId: 9,
       rabbitId: 301,
       status: 'due',
@@ -277,7 +278,7 @@ void main() {
       recordId: 41,
       category: '后备成熟',
       eventType: '后备兔成熟',
-      eventDate: DateTime.now(),
+      eventDate: farmNow(),
       batchId: null,
       rabbitId: 501,
       status: 'due',
@@ -338,7 +339,7 @@ void main() {
       recordId: 31,
       category: '生产周期',
       eventType: '配种',
-      eventDate: DateTime.now(),
+      eventDate: farmNow(),
       batchId: 9,
       rabbitId: 401,
       status: 'due',
@@ -422,7 +423,7 @@ void main() {
       recordId: 61,
       category: '生产',
       eventType: '生长饲喂观察',
-      eventDate: DateTime.now(),
+      eventDate: farmNow(),
       batchId: null,
       rabbitId: 701,
       status: 'due',

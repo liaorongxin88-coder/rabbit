@@ -2037,7 +2037,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
 
 DateTime _dateOnly(DateTime value) => localDateOnly(value);
 
-DateTime _farmToday() => localDateOnly(DateTime.now().toUtc());
+DateTime _farmToday() => farmToday();
 
 class _StageOption {
   const _StageOption(this.value, this.label);
