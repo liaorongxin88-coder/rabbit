@@ -104,17 +104,6 @@ public class RequestDedupService {
         if (requestId == null || requestId.trim().isEmpty()) {
             return;
         }
-        RequestDedup old = requestDedupMapper.selectByKey(houseId, userId, api, requestId);
-        if (old != null) {
-            if (STATUS_DONE.equals(old.getStatus())) {
-                return;
-            }
-            if (STATUS_PROCESSING.equals(old.getStatus())) {
-                throw new BizException(429, "请求处理中，请稍后重试");
-            }
-            requestDedupMapper.updateStatus(houseId, userId, api, requestId, STATUS_PROCESSING, null);
-            return;
-        }
         RequestDedup item = new RequestDedup();
         item.setHouseId(houseId);
         item.setUserId(userId);
@@ -122,7 +111,21 @@ public class RequestDedupService {
         item.setRequestId(requestId);
         item.setStatus(STATUS_PROCESSING);
         item.setErrorMessage(null);
-        requestDedupMapper.insert(item);
+        if (requestDedupMapper.insertIgnore(item) > 0) {
+            return;
+        }
+
+        RequestDedup old = requestDedupMapper.selectByKey(houseId, userId, api, requestId);
+        if (old == null) {
+            throw new BizException(409, "请求幂等状态异常，请稍后重试");
+        }
+        if (STATUS_DONE.equals(old.getStatus())) {
+            return;
+        }
+        if (STATUS_PROCESSING.equals(old.getStatus())) {
+            throw new BizException(429, "请求处理中，请稍后重试");
+        }
+        requestDedupMapper.updateStatus(houseId, userId, api, requestId, STATUS_PROCESSING, null);
     }
 
     @Transactional
