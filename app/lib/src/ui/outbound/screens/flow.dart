@@ -1,9 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
@@ -420,6 +427,8 @@ class _SelectionView extends ConsumerWidget {
                   onSelectionChanged: (value) =>
                       controller.setMode(value.first),
                 ),
+                const SizedBox(height: 12),
+                _OutboundNfcCageSelection(entry: entry, state: state),
                 if (state.mode == OutboundSelectionMode.house) ...[
                   const SizedBox(height: 12),
                   SizedBox(
@@ -529,6 +538,153 @@ class _SelectionView extends ConsumerWidget {
           SliverToBoxAdapter(child: SizedBox(height: largeText ? 148 : 104)),
         ],
       ),
+    );
+  }
+}
+
+class _OutboundNfcCageSelection extends ConsumerStatefulWidget {
+  const _OutboundNfcCageSelection({
+    required this.entry,
+    required this.state,
+  });
+
+  final OutboundEntry entry;
+  final OutboundState state;
+
+  @override
+  ConsumerState<_OutboundNfcCageSelection> createState() =>
+      _OutboundNfcCageSelectionState();
+}
+
+class _OutboundNfcCageSelectionState
+    extends ConsumerState<_OutboundNfcCageSelection> {
+  StreamSubscription<NfcLaunchEvent>? _nfcSubscription;
+  StateController<bool>? _captureFlag;
+  String? _hint;
+  var _listening = false;
+
+  @override
+  void dispose() {
+    _nfcSubscription?.cancel();
+    _captureFlag?.state = false;
+    super.dispose();
+  }
+
+  Future<void> _start() async {
+    if (_listening) {
+      return;
+    }
+    try {
+      final service = ref.read(nfcIntentServiceProvider);
+      await service.initialize();
+      if (!mounted) {
+        return;
+      }
+      final flag = ref.read(nfcCaptureActiveProvider.notifier);
+      flag.state = true;
+      _captureFlag = flag;
+      setState(() {
+        _listening = true;
+        _hint = '请将手机靠近要出库笼位的 NFC 标签';
+      });
+      _nfcSubscription = service.events.listen(_onNfcEvent);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _hint = '无法使用 NFC，请检查系统授权后重试');
+      }
+    }
+  }
+
+  void _stop({String? hint}) {
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _captureFlag?.state = false;
+    _captureFlag = null;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _listening = false;
+      _hint = hint;
+    });
+  }
+
+  Future<void> _onNfcEvent(NfcLaunchEvent event) async {
+    try {
+      final target = NfcPayloadTarget.parse(event.payload);
+      if (target.houseId != widget.entry.houseId) {
+        _stop(hint: '该标签属于其它兔舍，未加入出库清单');
+        return;
+      }
+      final binding = await ref.read(nfcRepositoryProvider).resolve(
+            houseId: widget.entry.houseId,
+            tagUid: event.tagUid,
+            payload: event.payload,
+          );
+      if (!mounted) {
+        return;
+      }
+      final cageRabbits = widget.state.rabbits
+          .where((rabbit) => rabbit.cageId == binding.cageId)
+          .toList();
+      if (cageRabbits.isEmpty) {
+        _stop(hint: '该笼位不在当前出库范围内，请刷新后重试');
+        return;
+      }
+      final normalCount =
+          cageRabbits.where((rabbit) => rabbit.isNormal).length;
+      if (normalCount == 0) {
+        _stop(hint: '${cageRabbits.first.cageNumber} 没有可批量选择的兔只');
+        return;
+      }
+      ref
+          .read(outboundControllerProvider(widget.entry).notifier)
+          .selectCage(binding.cageId);
+      _stop(
+        hint: '已加入 ${cageRabbits.first.cageNumber} 的 $normalCount 只可出库兔',
+      );
+    } catch (error) {
+      _stop(
+        hint: error is ApiException ? error.message : '读取标签失败，请重试',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          key: const ValueKey('outbound-nfc-cage-capture'),
+          onPressed: _listening ? () => _stop(hint: '已停止读取 NFC 标签') : _start,
+          icon: Icon(_listening ? Icons.stop_circle_outlined : Icons.nfc),
+          label: Text(_listening ? '停止读取 NFC 标签' : '碰标签加入笼位'),
+        ),
+        if (_hint != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            key: const ValueKey('outbound-nfc-cage-hint'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _listening ? palette.primarySoft : palette.warningSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _listening ? Icons.nfc : Icons.info_outline,
+                  color: _listening ? palette.primary : palette.warning,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_hint!)),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

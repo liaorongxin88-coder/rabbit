@@ -47,6 +47,29 @@ void main() {
     expect(await store.readPendingRequest(101, 8), isNull);
   });
 
+  test('NFC cage selection adds eligible rabbits without reversing selection',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 102, houseId: 8, entryType: 'HOUSE'),
+      repository: FakeOutboundGateway(),
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    controller.toggleCage(10);
+    expect(controller.state.selectedRabbitIds, isEmpty);
+
+    controller.selectCage(10);
+    expect(controller.state.selectedRabbitIds, {1});
+    controller.selectCage(10);
+    expect(controller.state.selectedRabbitIds, {1});
+    expect(controller.state.selectedRabbitIds.contains(2), isFalse);
+    expect(controller.state.selectedRabbitIds.contains(3), isFalse);
+  });
+
   test('bulk selection excludes exceptional rabbits and survives filtering',
       () async {
     SharedPreferences.setMockInitialValues({});

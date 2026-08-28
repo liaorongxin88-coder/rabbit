@@ -160,6 +160,8 @@ void main() {
 
     final context = tester.element(find.byType(OutboundFlowScreen));
     expect(MediaQuery.textScalerOf(context).scale(10), 20);
+    expect(find.byKey(const ValueKey('outbound-nfc-cage-capture')), findsOneWidget);
+    expect(find.text('碰标签加入笼位'), findsOneWidget);
     expect(find.text('下一步 · 1 只'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('下一步 · 1 只'));
@@ -191,6 +193,7 @@ void main() {
       find.byKey(const ValueKey('outbound-summary-early-sale')),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('1-1-1'));
     await tester.tap(find.text('1-1-1'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('兔只操作'));

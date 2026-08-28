@@ -430,6 +430,10 @@ class OutboundController extends StateNotifier<OutboundState> {
 
   void toggleCage(int cageId) => _toggleNormalScope(
       state.rabbits.where((rabbit) => rabbit.cageId == cageId));
+
+  /// NFC 碰笼位的语义是“把这笼加入出库清单”，不是再次扫描时反选。
+  void selectCage(int cageId) => _selectNormalScope(
+      state.rabbits.where((rabbit) => rabbit.cageId == cageId));
   void toggleRow(String rowCode) => _toggleNormalScope(
       state.rabbits.where((rabbit) => rabbit.rowCode == rowCode));
   void toggleHouse() => _toggleNormalScope(state.rabbits);
@@ -667,6 +671,19 @@ class OutboundController extends StateNotifier<OutboundState> {
         ? selected.removeAll(ids)
         : selected.addAll(ids);
     _selectionChanged(selected, state.earlySaleReasons);
+  }
+
+  void _selectNormalScope(Iterable<OutboundRabbit> scope) {
+    if (_editingLocked) return;
+    final ids = scope
+        .where((rabbit) => rabbit.isNormal)
+        .map((rabbit) => rabbit.rabbitId)
+        .toSet();
+    if (ids.isEmpty || ids.every(state.selectedRabbitIds.contains)) return;
+    _selectionChanged(
+      {...state.selectedRabbitIds, ...ids},
+      state.earlySaleReasons,
+    );
   }
 
   void _selectionChanged(Set<int> selected, Map<int, String> reasons) {
