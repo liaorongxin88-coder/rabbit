@@ -583,6 +583,43 @@ T4 事件流泛化和 T6 统一读接口因此推到波次 3 —— 它们要动
 登录页协议提示被键盘遮挡这条开放项归 B4 —— 它正好要动那个页面加验证码。
 波次 1 判定它是既有缺陷、不在 A1~A5 范围，现在有了归属。
 
+### 5.10 波次 2 合并记录
+
+| 泳道 | 交付 | 合并提交 | 合并时单测 | 合并时 e2e |
+| --- | --- | --- | --- | --- |
+| B1 | 追踪链 T2 + T5 + T3，V48/V49/V50 | `78490ba` | 1071 全绿 | 228 通过 / 0 失败 / 3 跳过 |
+
+B1 的实测数字：`.setCreateBy(` 与 `.setUpdateBy(` 调用点从 **141 降到 14**，其中 2 处是
+`OperationStampInterceptor` 自己的回填，6 处是有意留下的例外（`AppUpdateService` 2 处、
+`AdminFarmService` 4 处）—— 平台兔场管理和 OTA 发布走的是平台管理员身份，没有
+`OperationContext`，必须写入 `platform` 操作人。剩下 6 处在测试里。
+
+e2e 日志里能看到切面顺序约束在运行时被验了：
+`contextAspect=0 < transaction=1000 < eventAspect=2000`。这正是设计期定死的三条约束之一。
+
+开放项：存量清洗未在非空的生产级库上验证过。这和波次 1 的 V44/V45/V46 是同一个缺口 ——
+验收库 `rabbit_app_acceptance` 是 e2e 夹具残留，同构兔场，不代表生产库存量情况。
+
+#### 一条新的工程教训：batch 改写会溢出 worktree
+
+合并 B1 时发现主工作树里躺着 **24 个后端 service 的未提交改动、133 行 `;` 空语句垃圾**：
+
+```java
+-            order.setCreateBy(String.valueOf(userId));
+-            order.setUpdateBy(String.valueOf(userId));
++            ;
++            ;
+```
+
+B1 把批量替换跑到了主 checkout（`/Users/texas/Workspace/rabbit`）而不是自己的 worktree，
+之后在 worktree 里重做了一遍正确的，**垃圾留在主树没清**。分支本身是干净的，
+所以从交付物看不出问题，只有 `git merge` 拒绝合并时才暴露。
+
+worktree 隔离的是 **git 状态**，不是 **文件系统路径**。agent 只要写出绝对路径或在命令里
+`cd` 到仓库根，就能直接改到主树上。下一波要在提示词里写死：
+**所有路径必须相对于当前工作目录，绝不得出现 `/Users/texas/Workspace/rabbit` 这个字面路径**，
+尤其是 `sed -i` / `find -exec` / `xargs` 这类批量改写。合并前也要先看主树的 `git status`。
+
 ---
 
 ## 六、执行检查点
