@@ -49,6 +49,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   ImageCaptcha? _imageCaptcha;
   String? _imageCaptchaError;
   var _loadingImageCaptcha = false;
+  // 后端返回 501 表示图片验证码整体未启用，此时应放行登录；
+  // 503 才是「服务暂时不可用」，那种情况仍然要拦住。
+  var _imageCaptchaNotRequired = false;
   var _legalConsentError = false;
   CarrierAuthService? _activeCarrierAuthService;
   var _horizontalDragDelta = 0.0;
@@ -352,16 +355,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 },
                 onFieldSubmitted: (_) => _submitAccount(),
               ),
-              const SizedBox(height: 14),
-              _ImageCaptchaInput(
-                captcha: _imageCaptcha,
-                controller: _captchaCodeController,
-                loading: _loadingImageCaptcha,
-                error: _imageCaptchaError,
-                enabled: !_submitting,
-                onRefresh: _loadImageCaptcha,
-                onSubmitted: _submitAccount,
-              ),
+              if (!_imageCaptchaNotRequired) ...[
+                const SizedBox(height: 14),
+                _ImageCaptchaInput(
+                  captcha: _imageCaptcha,
+                  controller: _captchaCodeController,
+                  loading: _loadingImageCaptcha,
+                  error: _imageCaptchaError,
+                  enabled: !_submitting,
+                  onRefresh: _loadImageCaptcha,
+                  onSubmitted: _submitAccount,
+                ),
+              ],
             ],
           ),
         ),
@@ -403,13 +408,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
       _captchaCodeController.clear();
-      setState(() => _imageCaptcha = captcha);
+      setState(() {
+        _imageCaptcha = captcha;
+        _imageCaptchaNotRequired = false;
+      });
     } catch (error) {
       if (mounted) {
+        final notRequired = error is ApiException && error.businessCode == 501;
         setState(() {
           _imageCaptcha = null;
-          _imageCaptchaError =
-              error is ApiException ? error.message : '图片验证码加载失败，请刷新后重试';
+          _imageCaptchaNotRequired = notRequired;
+          _imageCaptchaError = notRequired
+              ? null
+              : error is ApiException
+              ? error.message
+              : '图片验证码加载失败，请刷新后重试';
         });
       }
     } finally {
@@ -572,7 +585,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
     final captcha = _imageCaptcha;
-    if (captcha == null) {
+    // 验证码未启用时后端不校验，也不会发图，这里不能再拦住提交，
+    // 否则关掉验证码反而会让所有人登不进去。
+    if (captcha == null && !_imageCaptchaNotRequired) {
       setState(() => _imageCaptchaError = '图片验证码尚未加载，请刷新后重试');
       unawaited(_loadImageCaptcha());
       return;
@@ -585,8 +600,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return controller.login(
         _userNameController.text.trim(),
         _passwordController.text.trim(),
-        captchaId: captcha.captchaId,
-        captchaCode: _captchaCodeController.text.trim().toUpperCase(),
+        captchaId: captcha?.captchaId ?? '',
+        captchaCode: captcha == null
+            ? ''
+            : _captchaCodeController.text.trim().toUpperCase(),
       );
     });
     if (mounted) {

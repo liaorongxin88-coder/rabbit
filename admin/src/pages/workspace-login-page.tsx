@@ -35,6 +35,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { getWorkspaceSession, setWorkspaceSession } from "@/lib/auth";
+import { ApiError } from "@/lib/request";
 import type { ImageCaptcha } from "@/types/api";
 
 export function WorkspaceLoginPage() {
@@ -48,6 +49,9 @@ export function WorkspaceLoginPage() {
   const [captchaCode, setCaptchaCode] = useState("");
   const [captchaLoading, setCaptchaLoading] = useState(true);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
+  // 501 表示图片验证码在本部署未启用，后端也不会校验，此时必须放行登录；
+  // 503 才是服务暂时不可用，那种情况仍然拦住。
+  const [captchaNotRequired, setCaptchaNotRequired] = useState(false);
 
   const loadCaptcha = useCallback(async () => {
     setCaptchaLoading(true);
@@ -55,12 +59,17 @@ export function WorkspaceLoginPage() {
     try {
       setCaptcha(await getWorkspaceImageCaptcha());
       setCaptchaCode("");
+      setCaptchaNotRequired(false);
     } catch (error) {
       setCaptcha(null);
+      const notRequired = error instanceof ApiError && error.code === 501;
+      setCaptchaNotRequired(notRequired);
       setCaptchaError(
-        error instanceof Error
-          ? error.message
-          : "图片验证码加载失败，请刷新重试",
+        notRequired
+          ? null
+          : error instanceof Error
+            ? error.message
+            : "图片验证码加载失败，请刷新重试",
       );
     } finally {
       setCaptchaLoading(false);
@@ -77,7 +86,7 @@ export function WorkspaceLoginPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!captcha) {
+    if (!captcha && !captchaNotRequired) {
       setCaptchaError("图片验证码尚未准备好，请刷新后重试");
       return;
     }
@@ -86,8 +95,8 @@ export function WorkspaceLoginPage() {
       const session = await loginWorkspace({
         userName: userName.trim(),
         password,
-        captchaId: captcha.captchaId,
-        captchaCode: captchaCode.trim().toUpperCase(),
+        captchaId: captcha?.captchaId ?? "",
+        captchaCode: captcha ? captchaCode.trim().toUpperCase() : "",
       });
       setWorkspaceSession(session);
       toast.success("已进入兔场工作台");
@@ -147,10 +156,11 @@ export function WorkspaceLoginPage() {
                     onChange={(event) => setPassword(event.target.value)}
                   />
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="workspace-captcha-code">
-                    图片验证码
-                  </FieldLabel>
+                {captchaNotRequired ? null : (
+                  <Field>
+                    <FieldLabel htmlFor="workspace-captcha-code">
+                      图片验证码
+                    </FieldLabel>
                   <div className="flex items-center gap-2">
                     <div className="flex h-10 min-w-33 items-center justify-center overflow-hidden rounded-md border bg-background px-1">
                       {captcha ? (
@@ -191,10 +201,11 @@ export function WorkspaceLoginPage() {
                       }
                     />
                   </div>
-                  {captchaError ? (
-                    <p className="text-xs text-destructive">{captchaError}</p>
-                  ) : null}
-                </Field>
+                    {captchaError ? (
+                      <p className="text-xs text-destructive">{captchaError}</p>
+                    ) : null}
+                  </Field>
+                )}
               </FieldGroup>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (

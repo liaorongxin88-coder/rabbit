@@ -91,6 +91,22 @@ class ImageCaptchaServiceTest {
         service.verifyAndConsume(null, null);
     }
 
+    /**
+     * 未启用必须是 501，不能和缓存不可用的 503 混为一谈：
+     * 两端登录页靠这个码决定是放行提交还是拦住。如果这里退回 503，
+     * 关掉验证码会让所有人彻底登不进去。
+     */
+    @Test
+    void disabledCaptchaReportsNotImplementedSoClientsCanSkipIt() {
+        ImageCaptchaService service = new ImageCaptchaService(
+                new FakeStore(), false, "", 4, 300, 5, () -> "ABCD"
+        );
+
+        BizException error = assertThrows(BizException.class, service::issue);
+
+        assertEquals(501, error.getCode());
+    }
+
     private ImageCaptchaService service(FakeStore store) {
         return new ImageCaptchaService(store, true, SECRET, 4, 300, 5, () -> "ABCD");
     }

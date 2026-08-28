@@ -18,6 +18,20 @@ type JsonBody = object | string
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
+/**
+ * 携带业务码的错误，让调用方能区分「功能未启用」（501）和「服务不可用」（503）。
+ * 仍然继承 Error，现有的 `error instanceof Error ? error.message` 写法不受影响。
+ */
+export class ApiError extends Error {
+  readonly code: number
+
+  constructor(message: string, code: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+  }
+}
+
 function getRequestErrorMessage(error: unknown) {
   if (error instanceof TypeError && error.message === 'Failed to fetch') {
     return '无法连接 API 服务，请检查网络或跨域配置'
@@ -73,10 +87,13 @@ function createRequestClient(
             if (hadSession) {
               toast.error(message)
             }
-            throw new Error(message)
+            throw new ApiError(message, payload.code)
           }
-          toast.error(message)
-          throw new Error(message)
+          // 501 表示该功能在本部署未启用，由调用方决定如何降级，不该弹成错误。
+          if (payload.code !== 501) {
+            toast.error(message)
+          }
+          throw new ApiError(message, payload.code)
         }
         return payload.data
       },
