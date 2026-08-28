@@ -15,6 +15,8 @@ public class ApplicationSecretValidator {
             @Value("${app.auth.phone-hash-secret:}") String phoneHashSecret,
             @Value("${app.sms.enabled:false}") boolean smsEnabled,
             @Value("${app.sms.code-secret:}") String smsCodeSecret,
+            @Value("${app.captcha.enabled:true}") boolean captchaEnabled,
+            @Value("${app.captcha.code-secret:}") String captchaCodeSecret,
             @Value("${app.cache.provider:none}") String cacheProvider
     ) {
         requireConfigured("APP_JWT_SECRET", jwtSecret);
@@ -24,6 +26,10 @@ public class ApplicationSecretValidator {
         if (smsEnabled) {
             requireConfigured("APP_SMS_CODE_SECRET", smsCodeSecret);
             requireSmsCache(cacheProvider);
+        }
+        if (captchaEnabled) {
+            requireConfigured("APP_CAPTCHA_CODE_SECRET", captchaCodeSecret);
+            requireCaptchaCache(cacheProvider);
         }
     }
 
@@ -50,6 +56,15 @@ public class ApplicationSecretValidator {
         if (!"redis".equals(normalized) && !"valkey".equals(normalized)) {
             throw new IllegalArgumentException(
                     "APP_CACHE_PROVIDER must be redis or valkey when APP_SMS_ENABLED=true"
+            );
+        }
+    }
+
+    private static void requireCaptchaCache(String cacheProvider) {
+        String normalized = cacheProvider == null ? "" : cacheProvider.trim().toLowerCase(Locale.ROOT);
+        if (!"redis".equals(normalized) && !"valkey".equals(normalized)) {
+            throw new IllegalArgumentException(
+                    "APP_CACHE_PROVIDER must be redis or valkey when APP_CAPTCHA_ENABLED=true"
             );
         }
     }

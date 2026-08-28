@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { KeyRoundIcon, LogInIcon, ShieldCheckIcon } from 'lucide-react'
+import { KeyRoundIcon, LogInIcon, RefreshCwIcon, ShieldCheckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  getWorkspaceImageCaptcha,
   loginWorkspace,
   resetWorkspacePasswordBySms,
   sendWorkspaceSmsCode,
@@ -23,6 +24,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { getWorkspaceSession, setWorkspaceSession } from '@/lib/auth'
+import type { ImageCaptcha } from '@/types/api'
 
 export function WorkspaceLoginPage() {
   const navigate = useNavigate()
@@ -31,6 +33,28 @@ export function WorkspaceLoginPage() {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
+  const [captcha, setCaptcha] = useState<ImageCaptcha | null>(null)
+  const [captchaCode, setCaptchaCode] = useState('')
+  const [captchaLoading, setCaptchaLoading] = useState(true)
+  const [captchaError, setCaptchaError] = useState<string | null>(null)
+
+  const loadCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    setCaptchaError(null)
+    try {
+      setCaptcha(await getWorkspaceImageCaptcha())
+      setCaptchaCode('')
+    } catch (error) {
+      setCaptcha(null)
+      setCaptchaError(error instanceof Error ? error.message : '图片验证码加载失败，请刷新重试')
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadCaptcha()
+  }, [loadCaptcha])
 
   if (getWorkspaceSession()) {
     return <Navigate to="/workspace/dashboard" replace />
@@ -38,9 +62,18 @@ export function WorkspaceLoginPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!captcha) {
+      setCaptchaError('图片验证码尚未准备好，请刷新后重试')
+      return
+    }
     setSubmitting(true)
     try {
-      const session = await loginWorkspace({ userName: userName.trim(), password })
+      const session = await loginWorkspace({
+        userName: userName.trim(),
+        password,
+        captchaId: captcha.captchaId,
+        captchaCode: captchaCode.trim().toUpperCase(),
+      })
       setWorkspaceSession(session)
       toast.success('已进入兔场工作台')
       const from = (location.state as { from?: Location } | null)?.from?.pathname
@@ -51,6 +84,7 @@ export function WorkspaceLoginPage() {
       // The shared request layer reports the business error.
     } finally {
       setSubmitting(false)
+      void loadCaptcha()
     }
   }
 
@@ -93,6 +127,48 @@ export function WorkspaceLoginPage() {
                     required
                     onChange={(event) => setPassword(event.target.value)}
                   />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="workspace-captcha-code">图片验证码</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 min-w-33 items-center justify-center overflow-hidden rounded-md border bg-background px-1">
+                      {captcha ? (
+                        <img
+                          className="h-9 w-32 object-contain"
+                          src={`data:image/png;base64,${captcha.imageBase64}`}
+                          alt="图片验证码"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {captchaLoading ? '加载中' : '加载失败'}
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={captchaLoading || submitting}
+                      aria-label="刷新图片验证码"
+                      title="刷新图片验证码"
+                      onClick={() => void loadCaptcha()}
+                    >
+                      <RefreshCwIcon data-icon="inline" />
+                    </Button>
+                    <Input
+                      id="workspace-captcha-code"
+                      className="min-w-0 flex-1"
+                      value={captchaCode}
+                      inputMode="text"
+                      autoComplete="off"
+                      maxLength={4}
+                      required
+                      disabled={!captcha || captchaLoading || submitting}
+                      placeholder="输入图中字符"
+                      onChange={(event) => setCaptchaCode(event.target.value.toUpperCase())}
+                    />
+                  </div>
+                  {captchaError ? <p className="text-xs text-destructive">{captchaError}</p> : null}
                 </Field>
               </FieldGroup>
               <Button type="submit" disabled={submitting}>

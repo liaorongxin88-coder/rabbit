@@ -38,6 +38,7 @@ import type {
   WeaningSeparationResult,
   WorkspaceSession,
   WorkspaceUserProfile,
+  ImageCaptcha,
   SmsCodeDelivery,
 } from "@/types/api";
 import type { RabbitSaleRequest } from "@/types/rabbit-sale";
@@ -47,7 +48,16 @@ export function requestId() {
   return crypto.randomUUID();
 }
 
-export function loginWorkspace(data: { userName: string; password: string }) {
+export function getWorkspaceImageCaptcha() {
+  return workspaceGetJson<ImageCaptcha>("/api/auth/captcha");
+}
+
+export function loginWorkspace(data: {
+  userName: string;
+  password: string;
+  captchaId: string;
+  captchaCode: string;
+}) {
   return workspacePostJson<WorkspaceSession>("/api/auth/login", data);
 }
 

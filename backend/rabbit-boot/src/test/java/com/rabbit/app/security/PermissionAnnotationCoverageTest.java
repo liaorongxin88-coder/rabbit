@@ -17,6 +17,7 @@ class PermissionAnnotationCoverageTest {
     private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
             "AdminAuthController#login",
             "AuthController#register",
+            "AuthController#issueImageCaptcha",
             "AuthController#login",
             "AuthController#sendSmsCode",
             "AuthController#phoneLogin",

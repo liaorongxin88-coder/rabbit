@@ -93,6 +93,12 @@ app:
       sign-name: ${APP_SMS_SIGN_NAME:}
       template-code: ${APP_SMS_TEMPLATE_CODE:}
       template-param-name: ${APP_SMS_TEMPLATE_PARAM_NAME:code}
+  captcha:
+    enabled: ${APP_CAPTCHA_ENABLED:true}
+    code-secret: ${APP_CAPTCHA_CODE_SECRET:}
+    code-length: ${APP_CAPTCHA_CODE_LENGTH:4}
+    ttl-seconds: ${APP_CAPTCHA_TTL_SECONDS:300}
+    max-attempts: ${APP_CAPTCHA_MAX_ATTEMPTS:5}
   phone-one-tap:
     enabled: ${APP_PHONE_ONE_TAP_ENABLED:false}
     allowed-providers: ${APP_PHONE_ONE_TAP_ALLOWED_PROVIDERS:aliyun}
