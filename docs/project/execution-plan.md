@@ -799,6 +799,105 @@ B1 合并时留的开放项是「存量清洗未在非空的生产级库上验�
 
 ---
 
+### 5.12 缺陷修复轮（C1–C5，2026-08-28）
+
+起因是 B5 设备复验挖到的一个 500：投喂页连点两次提交，第二次把 MyBatis 原文和
+`jar:nested:/app/app.jar/!BOOT-INF/lib/rabbit-platform-0.0.1-SN` 直接返给了客户端。
+查下去发现不是投喂的问题，是平台级的。按用户「群攻」的要求拆成并发泳道。
+
+#### 泳道与落地
+
+| 泳道 | 范围 | 结果 |
+| --- | --- | --- |
+| C1 | `RequestDedupService.markProcessing` 改原子写入 | 合并 `370bff4` |
+| C2 | `GlobalExceptionHandler` 兜底不再回显原始异常 | 合并 `503d8d7` |
+| C3 | 权限拒绝 + NFC 不可用设备验证 | 只读，无代码改动 |
+| C4 | `CommodityDailyCareReminderIT` flaky 根治 | 合并 `3470a92` |
+| C5 | NFC 注入验证（C3 的补课） | 捡到文案缺陷，修复 `e01f969` |
+
+#### 两个根因
+
+**幂等竞态。** `markProcessing` 先 `selectByKey` 再裸 `insert`，重放或并发必然撞
+`request_dedup.uk_request_dedup` 抛 `DuplicateKeyException`。同文件里的 `begin()`
+早就用了 `insertIgnore`，两者写法不一致。全仓 31 处 `markProcessing` 调用点走的都是
+有问题的那条，只有 5 处波次 1/2 的新代码用了安全的 `begin()`。C1 只改方法本身，
+31 个调用点一个没动。
+
+**兜底泄漏。** `handleOther` 是 `return ApiResponse.error(500, e.getMessage())`，
+而且被 `GlobalExceptionHandlerTest` 用「钉住现状」的注释固定住了。注释里写了
+「对前端不友好」，但没人动。这次连同两个测试一起改掉，理由写进测试注释：
+泄漏是真实发生过的，不是假想风险。
+
+#### flaky 用例：假设被推翻
+
+原假设是 MySQL 与 JVM 时区不一致。C4 实测两边都是 `+08`，**假设不成立**。
+真因是夹具用 MySQL `date_sub(now(), interval ? day)` 写阶段进入时间、推进逻辑
+却用 JVM `Date` 判定，两个时钟各走各的，锚点又正好压在 `DATETIME` 阈值上，
+日界处必然抖。改为每阶段捕获一个 `Date` 共用，锚点落在阈值之外。
+
+此前 `eaa6528` 那次稳定化只换了开头一个锚点，后三次 `updateGrowthEntry` 仍走
+MySQL `now()`，没覆盖真正的失败点。
+
+生产侧不受影响：`growth_stage_entered_at` 一律由 JVM 传参写入，该列用 MySQL
+`now()` 的写入点为 0，`advanceHouse` 也是外部传时间。纯测试改动。
+
+#### 真库回放
+
+用 `rabbit-c-verify`（18082，接克隆库 `rabbit_app_wave2`）复现原始场景：
+同一 `requestId` 并发打两次 `POST /api/feed-logs`，得到一个 `code=0`、
+一个 `code=409`「请求幂等状态异常，请稍后重试」，`feed_logs` 恰好 1 行，
+jar 路径泄漏消失。
+
+并发落 409 而不是 429，是因为 REPEATABLE READ 下失败方看不见未提交的行——
+这是 `begin()` 本来就有的语义，不是新缺陷。
+
+#### NFC 注入：方案被证伪
+
+模拟器没有 NFC 栈（特性、系统服务、`adb emu` 命令三处皆无）。本轮尝试用
+`am start` 投递 `NDEF_DISCOVERED` intent 绕过，**这条路走不通**：
+`MainActivity.kt:76` 读的是 `getParcelableArrayExtra(EXTRA_NDEF_MESSAGES)`，
+而 `am start -d <uri>` 只设 data URI，不生成 NDEF Parcelable。
+
+主会话验证时只确认了 intent **送达**就下了「可用」的结论，没往下确认 app 能否
+**解析**。C5 按此配方打了 6 发空包弹，三项 NFC 结论因此作废——是没测到，不是缺陷。
+
+**NFC 读取路径在模拟器上无法验证**，需要真机加实体标签，或在 debug 构建里加
+合成 `NdefMessage` 的钩子。真机 `00152155M000372` 有完整 NFC 栈（含 HCE）。
+
+#### 确立的结论
+
+- 权限拒绝通过：只读账号入口隐藏且有中文提示，服务端 `api_code=403`，审计表 5 条佐证
+- 无硬件不提示坐实：`flow.dart` 捕获初始化异常、`move.dart` 不捕获，**两者都不查
+  `NfcHardwareService.isAvailable()`**，而写标签路径（`hardware.dart:32`）查了
+- C1/C2 的修复在设备上确认：投喂双击只发一条请求、`api_code=0`、无堆栈
+- 新缺陷已修：`entry.dart:244` 的 `'$rabbitIds.length'` 少了花括号，用户看到
+  `已录入 [970].length 只兔的投喂记录`；全仓同类写法仅此一处
+
+#### 门禁
+
+| 项 | 结果 |
+| --- | --- |
+| 后端单元测试 | 927 全绿（platform 98 / access 239 / production 441 / reporting 130 / boot 19） |
+| 全量 e2e | 231 用例、0 失败、3 跳过 |
+| `CommodityDailyCareReminderIT` | 完整套件内 3 用例全绿 |
+| Flutter | 分析器干净、403 测试通过 |
+
+#### 教训
+
+**验证要验到端点，不能停在中间信号。** intent「送达」和 app「解析成功」是两件事，
+把前者当后者，等于给下游发了个半成品配方，白烧一个 agent 近一小时。
+
+**比较分支要用真实 merge-base。** C1 从 C2 合并前的提交切出，`main..branch`
+会假报它改了 C2 的文件。用 `git merge-base` 重算才看到真实的 2 个文件。
+
+**别拿单点采样当趋势。** 中途判断 C5「没产出截图」，实际是 glob 只匹配了顶层、
+漏了 `app/build/verification/` 子目录；判断它「一直没开始注入」，实际它在校正消息
+送达前一分钟就已自己开始。两次都是测量方法的问题，不是 agent 的问题。
+
+**冲突预测准了不等于要串行。** C1/C2 按文件切分，零重叠、零冲突、可以早合。
+
+---
+
 ## 六、执行检查点
 
 开工前：
@@ -829,3 +928,15 @@ T1 交付时必须同时给出：
 - [x] 每个 agent 分配独立 e2e schema（`_b1` 到 `_b5`）
 - [x] 验证窗口错峰：B5 不分配设备，排到最后
 - [x] 提示词里要求结束前自查 `git status`，不得留 `pi-agent:` 通用提交
+
+缺陷修复轮（C1–C5）结清：
+
+- [x] 幂等竞态、兜底泄漏、flaky 用例均已合并并过门禁
+- [x] 修复在真实克隆库上回放确认（一个 `code=0` 一个 `code=409`，1 行数据）
+- [x] 权限拒绝设备验证完成，审计表有佐证
+- [ ] **NFC 读取路径仍未验证**：注入方案已证伪，需真机
+  `00152155M000372` 加实体标签，或 debug 构建加合成 `NdefMessage` 的钩子；
+  可先用系统自带的写标签功能写一张再读回，形成闭环
+- [ ] `flow.dart:578-590` 与 `move.dart:189-201` 补上
+  `NfcHardwareService.isAvailable()` 检查（写标签路径已有，照搬即可）
+- [ ] 非法 JSON 返回 500 而非 400，旧问题，本轮未动
