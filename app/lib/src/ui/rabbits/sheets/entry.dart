@@ -1221,6 +1221,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = (mediaQuery.size.height - keyboardInset).clamp(
+      0.0,
+      mediaQuery.size.height,
+    );
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -1229,20 +1233,26 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       child: SafeArea(
         top: false,
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.9),
+          constraints: BoxConstraints(maxHeight: availableHeight * 0.92),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildHeader(context),
                 Flexible(
-                  fit: FlexFit.loose,
                   child: SingleChildScrollView(
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                    child: _buildFormBody(context),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildHeader(context),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                          child: _buildFormBody(context),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 _buildActionBar(context),
