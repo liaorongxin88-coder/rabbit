@@ -52,6 +52,7 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
             ref.invalidate(housesProvider);
             ref.invalidate(houseCagesProvider(houseId));
             ref.invalidate(houseBreedingRabbitsProvider(houseId));
+            ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
           },
           icon: const Icon(Icons.refresh),
         ),
@@ -79,19 +80,32 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
                 expandForLargeText: true,
                 onBack: () => context.go('/houses/${house.id}'),
                 footer: canEdit
-                    ? Tooltip(
-                        message: '整舍批量出库',
-                        child: FilledButton.icon(
-                          key: const ValueKey('house-outbound-action'),
-                          onPressed: () => context.push(
-                            '/houses/$houseId/outbound?entryType=HOUSE',
+                    ? Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            key: const ValueKey('house-feed-entry-action'),
+                            onPressed: () =>
+                                context.push('/houses/$houseId/feed'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            icon: const Icon(Icons.restaurant_outlined),
+                            label: const Text('投喂录入'),
                           ),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
+                          FilledButton.icon(
+                            key: const ValueKey('house-outbound-action'),
+                            onPressed: () => context.push(
+                              '/houses/$houseId/outbound?entryType=HOUSE',
+                            ),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            icon: const Icon(Icons.local_shipping_outlined),
+                            label: const Text('整舍批量出库'),
                           ),
-                          icon: const Icon(Icons.local_shipping_outlined),
-                          label: const Text('整舍批量出库'),
-                        ),
+                        ],
                       )
                     : null,
               ),

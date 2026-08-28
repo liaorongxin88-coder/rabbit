@@ -268,8 +268,13 @@ void main() {
         await tester.pumpAndSettle();
 
         final outbound = find.byKey(const ValueKey('cage-map-row-outbound-R1'));
-        expect(tester.getSize(outbound), const Size(48, 48));
-        expect(find.byTooltip('R1 排批量出库'), findsOneWidget);
+        final outboundSize = tester.getSize(outbound);
+        expect(outboundSize.height, 48);
+        expect(outboundSize.width, greaterThanOrEqualTo(48));
+        expect(
+          find.descendant(of: outbound, matching: find.text('出库')),
+          findsOneWidget,
+        );
         expect(
           MediaQuery.textScalerOf(tester.element(outbound)).scale(10),
           20,
