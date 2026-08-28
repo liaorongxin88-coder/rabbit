@@ -305,8 +305,7 @@ class RabbitRepository {
         'arrivalDate': DateFormat('yyyy-MM-dd').format(arrivalDate),
         'requestId': requestId ?? _uuid.v4(),
         if (breed.trim().isNotEmpty) 'breed': breed.trim(),
-        if (sourceSeller.trim().isNotEmpty)
-          'sourceSeller': sourceSeller.trim(),
+        if (sourceSeller.trim().isNotEmpty) 'sourceSeller': sourceSeller.trim(),
         if (motherId != null && motherId > 0) 'motherId': motherId,
         if (growthStage?.trim().isNotEmpty ?? false)
           'growthStage': growthStage!.trim(),

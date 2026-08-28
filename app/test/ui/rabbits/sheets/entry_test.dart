@@ -925,14 +925,15 @@ class _CapturingAdapter implements HttpClientAdapter {
       jsonEncode({
         'code': 0,
         'message': 'ok',
-        'data': responseData ?? {
-          'id': 900,
-          'houseId': 8,
-          'cageId': 13,
-          'type': '2',
-          'gender': '0',
-          'isActive': true,
-        },
+        'data': responseData ??
+            {
+              'id': 900,
+              'houseId': 8,
+              'cageId': 13,
+              'type': '2',
+              'gender': '0',
+              'isActive': true,
+            },
       }),
       200,
       headers: {

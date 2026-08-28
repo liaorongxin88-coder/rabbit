@@ -1180,10 +1180,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
             tagUid: event.tagUid,
             payload: event.payload,
           );
-      final rabbits = await ref.read(rabbitRepositoryProvider).listRabbitsForCage(
-            houseId: widget.houseId,
-            cageId: binding.cageId,
-          );
+      final rabbits =
+          await ref.read(rabbitRepositoryProvider).listRabbitsForCage(
+                houseId: widget.houseId,
+                cageId: binding.cageId,
+              );
       if (!mounted) {
         return;
       }
@@ -2032,7 +2033,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
 
   String _batchResultMessage(BatchRabbitEntryResult result) {
     final skipped = result.skippedCages
-        .map((item) => '${item.cageLabel}：${item.rabbitCount}只未录入，${item.reason}')
+        .map((item) =>
+            '${item.cageLabel}：${item.rabbitCount}只未录入，${item.reason}')
         .join('；');
     final entered = result.enteredRabbitCount;
     if (skipped.isEmpty) {
@@ -2099,22 +2101,23 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       } else if (_isBatchEntry) {
         final requestId = _batchRequestId ?? _uuid.v4();
         _batchRequestId = requestId;
-        final result = await ref.read(rabbitRepositoryProvider).createRabbitBatch(
-              houseId: widget.houseId,
-              cageId: _createCage.id,
-              quantity: _quantity,
-              totalWeight: double.parse(_weightController.text.trim()),
-              type: _type,
-              gender: _gender,
-              breed: _breedController.text,
-              arrivalMethod: _arrivalMethod,
-              sourceSeller: _sourceSellerController.text,
-              motherId: int.tryParse(_motherIdController.text.trim()),
-              arrivalDate: _arrivalDate!,
-              growthStage: _growthStage,
-              reproductiveStage: _reproductiveStage,
-              requestId: requestId,
-            );
+        final result =
+            await ref.read(rabbitRepositoryProvider).createRabbitBatch(
+                  houseId: widget.houseId,
+                  cageId: _createCage.id,
+                  quantity: _quantity,
+                  totalWeight: double.parse(_weightController.text.trim()),
+                  type: _type,
+                  gender: _gender,
+                  breed: _breedController.text,
+                  arrivalMethod: _arrivalMethod,
+                  sourceSeller: _sourceSellerController.text,
+                  motherId: int.tryParse(_motherIdController.text.trim()),
+                  arrivalDate: _arrivalDate!,
+                  growthStage: _growthStage,
+                  reproductiveStage: _reproductiveStage,
+                  requestId: requestId,
+                );
         ref.invalidate(houseRabbitsProvider(widget.houseId));
         ref.invalidate(houseCagesProvider(widget.houseId));
         ref.invalidate(homeEventsProvider);
@@ -2166,9 +2169,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       if (!mounted) {
         return;
       }
-      final message = error is ApiException
-          ? error.message
-          : '提交失败，请检查网络后重试';
+      final message = error is ApiException ? error.message : '提交失败，请检查网络后重试';
       setState(() => _submitError = message);
     } finally {
       if (mounted) {
