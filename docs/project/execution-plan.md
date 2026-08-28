@@ -591,6 +591,10 @@ T4 事件流泛化和 T6 统一读接口因此推到波次 3 —— 它们要动
 | B2 | 决策 1 契约 + F11 + F14 + F8 批次侧 + 3 个 NFC 触点 | `198f053` | 914 全绿 | 见开放项 |
 | B3 | F7 表单补齐 + 批量入栏 + F5 母兔 NFC | `eaead00` | 914 全绿 | 230 通过 / 0 失败 / 3 跳过 |
 | B5 | F6 投喂页 + F10 待分配 + F8 笼位侧 + F4 出售 NFC | `94fc00c` | —（纯前端） | Flutter 403 全通过 |
+| B4 | F2 异常手动录入 + F3 图片验证码 | `798e9a1` | 923 全绿 | 231 通过 / 0 失败 / 3 跳过 |
+
+波次 2 收官状态（`86a987c`）：后端单测 923、e2e 231、Flutter 403、admin lint 与 build 均通过。
+**V51 和 V52 两个预留迁移号都没用上，波次 3 从 V51 开始。**
 
 **单测基数订正：914，不是 1071。** 合并 B1 时报的 1071 是错的 —— 当时没有 `clean`，
 `target/surefire-reports/` 里混着上一轮的陈旧 XML，包括已被删除的测试类的报告。
@@ -702,6 +706,54 @@ B5 在 245 次工具调用、785.0k token 处**停死超过 65 分钟**，四次
 
 开放项：B5 从未分配到设备，**投喂录入、笼位文字操作、出售 NFC 的设备端人工验证全部欠缺**，
 只有组件测试兑现了 360x800 / 200% 基线。这是本波最大的验证空白。
+
+#### 验证码：一个 agent 发现不了的跨层缺陷
+
+B4 的验证码后端、app 端、admin 端分开看都是对的，合起来却是坏的。
+`.env.example` 把 `APP_CAPTCHA_ENABLED` 写成「紧急维护窗口之外保持开启」，暗示关掉就能绕过，
+实际链路是：
+
+```text
+APP_CAPTCHA_ENABLED=false
+  → issue() 的 requireEnabled() 抛 503
+  → 前端拿不到图，captcha 保持 null
+  → login.dart:575 与 workspace-login-page.tsx:65 在 null 时 return
+  → 两端彻底登不进去
+```
+
+讽刺的是后端本来就放行的 —— `verifyAndConsume` 开头就是 `if (!enabled) return;`。
+**是前端的空值拦截把路堵死的。** 同理，Redis/Valkey 宕机时 `UnavailableImageCaptchaStore`
+三个方法全是 `throw`，类名里的「Unavailable」让人以为是优雅降级，实际是全员锁死，
+而唯一的逃生开关本身也是坏的。
+
+修法（`86a987c`）：`BizException` 只带 `code` + `message`，而两种情况同为 503，
+所以把「未启用」改成 **501**（仓库未占用，语义是本服务未启用该功能），
+「服务不可用」保持 503。两端据此分支：501 放行提交并隐藏输入框，503 保持拦住。
+admin 的 `request.ts` 原本抛 `new Error(message)` 丢掉了业务码，新增 `ApiError` 承载。
+
+运维路径现在通了：Redis 挂掉 → 设 `APP_CAPTCHA_ENABLED=false` 重启 → 能登录救火。
+
+`.env.example` 的默认值翻转（`APP_CACHE_PROVIDER` none→redis 等）只影响新部署，
+存量 `.env` 不会被覆盖；真正卡升级的是 `docker-compose.yml` 里
+`APP_CAPTCHA_CODE_SECRET` 的 `:?` 硬失败，但这和既有的 `APP_PHONE_HASH_SECRET:?` 是同一套约定。
+
+出图样式同时重写：原先旋转支点步长 25 与绘制步长 27 不一致（字符越靠右偏移越大）、
+排版不看真实字宽（M 与 2 的间隙差 6 倍）、未水平居中、干扰线是 5 条等长直线、
+噪点灰度 130~229 在白底上不可见。现改为 3 倍分辨率、按真实字宽排版居中、
+绕字形自身中心旋转、贝塞尔曲线干扰；base64从约 5 KB 升到 16 KB，登录页只加载一次。
+
+#### 已确认的 flaky 用例（需跟进）
+
+`CommodityDailyCareReminderIT.schedulesStageSpecificDailyCareWithContentAndClearsItAtMaturity`
+**已被两次独立观测到偶发失败**（B2 一次，合并 B4 后一次），同一份代码复跑即通过。
+
+失败点在 line 83：`assertEquals(1, commodityGrowthService.advanceHouse(houseId, new Date()))`
+报 `expected: <1> but was: <0>`，即「入栏 2 天后应推进阶段」没推进。
+
+可疑点：造数用 MySQL `date_sub(now(), interval ? day)`（带时间分量），判定用 JVM `new Date()`
+再按养殖场时区取「今天」。两边时区与截断方式不一致时，天数差会在 1 和 2 之间抑扬。
+历史上已有 `eaa6528 fix(repro): stabilize daily care integration` 尝试稳定过它，说明不是新问题。
+**建议波次 3 把它当作一个独立缺陷修，而不是继续依赖复跑。**
 
 ---
 
