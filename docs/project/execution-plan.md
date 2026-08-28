@@ -587,7 +587,13 @@ T4 事件流泛化和 T6 统一读接口因此推到波次 3 —— 它们要动
 
 | 泳道 | 交付 | 合并提交 | 合并时单测 | 合并时 e2e |
 | --- | --- | --- | --- | --- |
-| B1 | 追踪链 T2 + T5 + T3，V48/V49/V50 | `78490ba` | 1071 全绿 | 228 通过 / 0 失败 / 3 跳过 |
+| B1 | 追踪链 T2 + T5 + T3，V48/V49/V50 | `78490ba` | 914 全绿 | 228 通过 / 0 失败 / 3 跳过 |
+| B2 | 决策 1 契约 + F11 + F14 + F8 批次侧 + 3 个 NFC 触点 | `198f053` | 914 全绿 | 见开放项 |
+
+**单测基数订正：914，不是 1071。** 合并 B1 时报的 1071 是错的 —— 当时没有 `clean`，
+`target/surefire-reports/` 里混着上一轮的陈旧 XML，包括已被删除的测试类的报告。
+`mvn clean test` 之后的真实分布是 platform 95 / access 232 / production 438 /
+reporting 130 / boot 19。以后统计测试数必须先 `clean`，否则删掉的测试还会被计进去。
 
 B1 的实测数字：`.setCreateBy(` 与 `.setUpdateBy(` 调用点从 **141 降到 14**，其中 2 处是
 `OperationStampInterceptor` 自己的回填，6 处是有意留下的例外（`AppUpdateService` 2 处、
@@ -619,6 +625,43 @@ worktree 隔离的是 **git 状态**，不是 **文件系统路径**。agent 只
 `cd` 到仓库根，就能直接改到主树上。下一波要在提示词里写死：
 **所有路径必须相对于当前工作目录，绝不得出现 `/Users/texas/Workspace/rabbit` 这个字面路径**，
 尤其是 `sed -i` / `find -exec` / `xargs` 这类批量改写。合并前也要先看主树的 `git status`。
+
+#### B2 的两个自主判断
+
+F14 留了两个我没有替它拿主意的问题，B2 的结论和依据：
+
+**休养待办支持延期。** `ReproAction.START_CYCLE` 的 `postponable` 从 `false` 翻成 `true`，
+`TransitionTable` 的 T9 POSTPONE 规则从 `from.isAwaiting()` 扩到
+`from == ReproStage.READY || from.isAwaiting()`。理由是休养和其他待办一样可能暂不适合执行，
+延期只改提醒日期、不推进状态，语义上站得住。
+
+**不清理历史 RECOVERY 待办。** 删掉自动推进的 job 之后，存量待办会一次性浮出来。
+B2 没有单方面写数据清洗迁移，而是确认列表按到期时间和 ID 稳定排序、单页上限 200 条，
+把分批处理的策略留给业务决定。这个判断是对的 —— 存量口径不该由 agent 定。
+
+顺带把 `LegacyEventType` 里 `case RECOVERY, ESTRUS -> "催情"` 拆开了：休养变成用户手动动作
+之后，它不该再和催情共用一个词，`RECOVERY` 现在显示「结束休养」。
+
+B2 与已合并的 B1 **零冲突面**，19 个文件全部落在 batches / reproduction / home /
+admin 生产页，没有越界。
+
+开放项：B2 报告首轮 e2e 的商品兔日常照护用例偶发失败、复跑通过。这是一个 flaky 信号，
+合并后的 e2e 门禁要盯这个用例是否重现。另外它的设备验证用的是临时账号，
+没有真实生产数据和 NFC 实体标签，网络失败 / 重复提交 / 权限拒绝 / NFC 实扫仍需在验收兔舍补测。
+
+#### 关于 B4 的 Redis 默认值：警报比最初判断的小
+
+最初担心 B4 把 `APP_CACHE_PROVIDER` 从 `none` 翻成 `redis` 会让登录硬依赖 Redis。
+实际查下来有两个缓解事实：
+
+1. `ImageCaptchaStoreConfiguration` 复用了既有的 `CacheConfiguration.CacheEnabledCondition`，
+   即 `"redis".equals(provider) || "valkey".equals(provider)`，**没有硬编码 redis**。
+   本机环境实际跑的是 `APP_CACHE_PROVIDER=valkey`，验证码存储照常工作。
+2. `ApplicationSecretValidator.requireSmsCache` 早就规定 `APP_SMS_ENABLED=true` 时
+   provider 必须是 redis 或 valkey。生产配置本来就开着短信，**缓存本来就是硬依赖**。
+
+真正受影响的只有「关短信 + cache=none」的环境，它们需要补 cache 或设
+`APP_CAPTCHA_ENABLED=false`。这仍然需要人确认，但不是原先以为的破坏性变更。
 
 ---
 
