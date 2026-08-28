@@ -605,6 +605,27 @@ export function removeHouseMember(houseId: number, userId: number) {
  * admin 只读不写：接种是站在笼前完成的现场动作，录入入口在 App，
  * 后台承担的是回查和核对。
  */
+export function uploadWorkspaceImage(houseId: number, file: File) {
+  const form = new FormData();
+  form.set("file", file);
+  return workspacePostJson<{ fileId: string }>("/api/business-files/images", form, {
+    houseId,
+  });
+}
+
+export function createWorkspaceAbnormalCondition(
+  houseId: number,
+  data: {
+    rabbitId: number;
+    warningStatus: string;
+    imageFileId: string;
+    remark: string;
+    requestId: string;
+  },
+) {
+  return workspacePostJson<void>("/api/abnormal", data, { houseId });
+}
+
 export function listRabbitVaccinations(houseId: number, rabbitId: number) {
   return workspaceGetJson<VaccinationRecord[]>("/api/vaccinations", {
     houseId,

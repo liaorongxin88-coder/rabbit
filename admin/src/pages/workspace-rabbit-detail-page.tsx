@@ -10,6 +10,7 @@ import {
   ShoppingCartIcon,
   SproutIcon,
   SyringeIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import {
   getRabbit,
@@ -27,6 +28,7 @@ import {
   RabbitReplacementDialog,
   RabbitTransferDialog,
 } from "@/components/rabbit-operation-dialogs";
+import { RabbitAbnormalDialog } from "@/components/rabbit-abnormal-dialog";
 import { RabbitSaleDialog } from "@/components/rabbit-sale-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,12 +85,17 @@ export function WorkspaceRabbitDetailPage() {
   const [replacementOpen, setReplacementOpen] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
   const [departureOpen, setDepartureOpen] = useState(false);
+  const [abnormalOpen, setAbnormalOpen] = useState(false);
   const canEdit = hasPermission(workspace.permission, "rabbit:rabbits:edit");
   const canControl = hasPermission(
     workspace.permission,
     "rabbit:rabbits:control",
   );
   const canSell = hasPermission(workspace.permission, "rabbit:sales:add");
+  const canCreateAbnormal = hasPermission(
+    workspace.permission,
+    "rabbit:abnormal:edit",
+  );
   const canReadRepro = hasPermission(
     workspace.permission,
     "rabbit:batches:query",
@@ -272,6 +279,14 @@ export function WorkspaceRabbitDetailPage() {
                 出售出栏
               </Button>
             ) : null}
+            <Button
+              variant="outline"
+              disabled={!canCreateAbnormal || !rabbit.isActive}
+              onClick={() => setAbnormalOpen(true)}
+            >
+              <TriangleAlertIcon data-icon="inline-start" />
+              新增异常
+            </Button>
             <Button
               variant="destructive"
               disabled={!canEdit || !rabbit.isActive}
@@ -467,6 +482,12 @@ export function WorkspaceRabbitDetailPage() {
         rabbit={saleOpen ? rabbit : null}
         houseId={workspace.selectedHouse.id}
         onOpenChange={setSaleOpen}
+        onSaved={load}
+      />
+      <RabbitAbnormalDialog
+        rabbit={abnormalOpen ? rabbit : null}
+        houseId={workspace.selectedHouse.id}
+        onOpenChange={setAbnormalOpen}
         onSaved={load}
       />
       <RabbitDepartureDialog

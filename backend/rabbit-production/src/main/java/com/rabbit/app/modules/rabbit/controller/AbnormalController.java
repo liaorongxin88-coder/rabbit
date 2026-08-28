@@ -4,10 +4,12 @@ import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
+import com.rabbit.app.modules.rabbit.dto.CreateAbnormalRequest;
 import com.rabbit.app.modules.rabbit.dto.DealRequest;
 import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.modules.rabbit.service.AbnormalService;
 import com.rabbit.app.security.AuthContext;
 import com.rabbit.app.security.permission.PermissionCode;
 import com.rabbit.app.security.permission.RequiresPermission;
@@ -33,13 +35,16 @@ public class AbnormalController {
     private final RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper;
     private final RabbitMapper rabbitMapper;
     private final RequestDedupService requestDedupService;
+    private final AbnormalService abnormalService;
 
     public AbnormalController(HouseService houseService, RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper,
-                              RabbitMapper rabbitMapper, RequestDedupService requestDedupService) {
+                              RabbitMapper rabbitMapper, RequestDedupService requestDedupService,
+                              AbnormalService abnormalService) {
         this.houseService = houseService;
         this.rabbitAbnormalConditionMapper = rabbitAbnormalConditionMapper;
         this.rabbitMapper = rabbitMapper;
         this.requestDedupService = requestDedupService;
+        this.abnormalService = abnormalService;
     }
 
     @GetMapping("/abnormal")
@@ -50,6 +55,18 @@ public class AbnormalController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "view");
         return ApiResponse.ok(rabbitAbnormalConditionMapper.selectByHouse(houseId, isDeal));
+    }
+
+    @PostMapping("/abnormal")
+    @RequiresPermission(PermissionCode.RABBIT_ABNORMAL_EDIT)
+    public ApiResponse<Void> create(
+            @RequestHeader("X-House-Id") Long houseId,
+            @Valid @RequestBody CreateAbnormalRequest req
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        abnormalService.create(houseId, userId, req);
+        return ApiResponse.ok(null);
     }
 
     @PostMapping("/abnormal/{id}/deal")

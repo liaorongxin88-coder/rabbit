@@ -157,6 +157,52 @@ class RabbitRepository {
     );
   }
 
+  Future<String> uploadImage({
+    required int houseId,
+    required String filePath,
+    String? fileName,
+  }) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    return _api.postMultipart<String>(
+      '/api/business-files/images',
+      houseId: houseId,
+      body: form,
+      decode: (data) {
+        if (data is Map) {
+          final fileId = data['fileId'];
+          if (fileId is String && fileId.isNotEmpty) {
+            return fileId;
+          }
+        }
+        throw const FormatException('图片上传结果格式不正确');
+      },
+    );
+  }
+
+  Future<void> createAbnormalCondition({
+    required int houseId,
+    required int rabbitId,
+    required String warningStatus,
+    required String imageFileId,
+    required String remark,
+    required String requestId,
+  }) {
+    return _api.post<void>(
+      '/api/abnormal',
+      houseId: houseId,
+      body: {
+        'rabbitId': rabbitId,
+        'warningStatus': warningStatus.trim(),
+        'imageFileId': imageFileId,
+        'remark': remark.trim(),
+        'requestId': requestId,
+      },
+      decode: (_) {},
+    );
+  }
+
   Future<List<RabbitBatchMembership>> listRabbitBatchMemberships({
     required int houseId,
     required int rabbitId,
