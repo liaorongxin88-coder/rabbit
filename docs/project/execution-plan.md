@@ -755,6 +755,48 @@ admin 的 `request.ts` 原本抛 `new Error(message)` 丢掉了业务码，新�
 历史上已有 `eaa6528 fix(repro): stabilize daily care integration` 尝试稳定过它，说明不是新问题。
 **建议波次 3 把它当作一个独立缺陷修，而不是继续依赖复跑。**
 
+### 5.11 迁移在非空真实库上的验证（开放项已关闭）
+
+B1 合并时留的开放项是「存量清洗未在非空的生产级库上验证过」，波次 1 的 V44/V45/V46 也同样。
+现已补验：把开发库 `rabbit_app`（**208 个兔舍、1149 只兔、1761 个笼位、47 张表**，停在 V42）
+克隆为 `rabbit_app_wave2`，在副本上用主线镜像跑完整迁移。**原库未动。**
+
+结果：**V43 到 V50 共 8 个迁移全部成功，耗时 3.142 秒**，服务正常启动，
+兔舍/兔只/笼位行数迁移前后一致，验证码端点可用。
+
+**V50 的回填在真实数据上是有效的**（这是之前无法确认的部分）：
+
+| 表 | 行数 | `cage_id` 回填 |
+| --- | --- | --- |
+| `rabbit_status_history` | 1039 | 1039 |
+| `rabbit_departure_records` | 312 | 312 |
+| `treatment_records` | 25 | 25 |
+| `rabbit_abnormal_conditions` | 25 | 25 |
+| `weight_logs` / `vaccination_records` | 0 | —（本就无数据） |
+
+共 1401 行历史记录拿到了笼位快照，覆盖率 100%。迁移注释里诚实标了精度局限：
+*“Historical rows did not retain a cage. This is the best available snapshot for existing data”* ——
+历史行用的是兔只**当前**笼位作近似，不是当时笼位。
+
+新建的 `rabbit_cage_transfer_records` 台账迁移后为 0 行，**这是设计如此**：
+它从新的移笼操作开始累积，V50 里没有也不应该有 `insert`。
+
+**V48 归一化的残留值经核查无害**：`batches` 有 32/295、`breeding_cycles` 有 11/243 行的
+`create_by` 仍为非数字，但实际值是 `v42`×31、`v44`×1、`v27`×10、`migration`×1 ——
+**都是早期迁移自己写入的标记，不是未转换的人名**。V48 按 `sys_user` 匹配，匹配不上就不动，行为正确。
+代价是这 43 行的 `operator_name` 为空，展示时无操作人，对迁移合成行而言可接受。
+
+#### 顺带发现：开发库的 V42 checksum 不匹配
+
+`rabbit_app` 里已应用的 V42 checksum 为 `1564751218`，与仓库里
+`V42__enforce_open_cycle_batch_membership.sql` 当前内容不一致，导致直接启动会被
+`FlywayValidateException` 拦住。但该文件在 git 里只有 `f2b22de` 一次提交、从未被修改，
+指向历史被 squash 重写（仓库里确实有 `pre-squash/wave1-20260827` 分支）。
+
+本次验证用 `SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false` 绕过，**但这个不一致会卡住任何
+从 V42 升级的环境**。部署前需要对存量库跑一次 `flyway repair`，否则服务启动不来。
+这一条建议写进发布步骤。
+
 ---
 
 ## 六、执行检查点
