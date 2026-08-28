@@ -132,24 +132,24 @@ class GlobalExceptionHandlerTest {
         assertEquals("page不合法", response.getMessage());
     }
 
-    @Test
-    void anUnexpectedExceptionBecomesAServerError() {
-        ApiResponse<Void> response = handler.handleOther(new IllegalStateException("连接池耗尽"));
-
-        assertEquals(500, response.getCode());
-        assertEquals("连接池耗尽", response.getMessage());
-    }
-
     /**
-     * 记录既有行为：没有 message 的异常会返回 message 为 null 的 500。
-     * 这对前端不算友好，但改动会影响所有调用方，先钉住现状，避免无意识地漂移。
+     * 兜底响应不能透传异常 message，因为其中可能包含 SQL、表名或部署路径。
      */
     @Test
-    void anExceptionWithoutAMessageYieldsANullMessage() {
+    void anUnexpectedExceptionBecomesAGenericServerError() {
+        ApiResponse<Void> response = handler.handleOther(new IllegalStateException(
+                "Error updating database: request_dedup.uk_request_dedup at jar:nested:/app/app.jar"));
+
+        assertEquals(500, response.getCode());
+        assertEquals("系统异常，请稍后重试", response.getMessage());
+    }
+
+    @Test
+    void anExceptionWithoutAMessageAlsoGetsTheGenericServerError() {
         ApiResponse<Void> response = handler.handleOther(new NullPointerException());
 
         assertEquals(500, response.getCode());
-        assertNull(response.getMessage());
+        assertEquals("系统异常，请稍后重试", response.getMessage());
     }
 
     /**
