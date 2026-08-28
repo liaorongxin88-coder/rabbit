@@ -7,6 +7,7 @@
         <id column="id" property="id"/>
         <result column="house_id" property="houseId"/>
         <result column="rabbit_id" property="rabbitId"/>
+        <result column="cage_id" property="cageId"/>
         <result column="vaccine_name" property="vaccineName"/>
         <result column="vaccine_batch_no" property="vaccineBatchNo"/>
         <result column="dose" property="dose"/>
@@ -19,24 +20,25 @@
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
         <result column="update_by" property="updateBy"/>
+        <result column="operator_name" property="operatorName"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
     <sql id="Cols">
-        id, house_id, rabbit_id, vaccine_name, vaccine_batch_no, dose, route,
+        id, house_id, rabbit_id, cage_id, vaccine_name, vaccine_batch_no, dose, route,
         vaccinated_at, next_due_date, status, remark, request_id,
-        create_by, create_time, update_by, update_time
+        create_by, create_time, update_by, operator_name, update_time
     </sql>
 
     <insert id="insertBatch" useGeneratedKeys="true" keyProperty="id">
         insert into vaccination_records
-        (house_id, rabbit_id, vaccine_name, vaccine_batch_no, dose, route,
-         vaccinated_at, next_due_date, status, remark, request_id, create_by, update_by)
+        (house_id, rabbit_id, cage_id, vaccine_name, vaccine_batch_no, dose, route,
+         vaccinated_at, next_due_date, status, remark, request_id, create_by, update_by, operator_name)
         values
         <foreach collection="items" item="it" separator=",">
-            (#{it.houseId}, #{it.rabbitId}, #{it.vaccineName}, #{it.vaccineBatchNo},
+            (#{it.houseId}, #{it.rabbitId}, #{it.cageId}, #{it.vaccineName}, #{it.vaccineBatchNo},
              #{it.dose}, #{it.route}, #{it.vaccinatedAt}, #{it.nextDueDate},
-             #{it.status}, #{it.remark}, #{it.requestId}, #{it.createBy}, #{it.updateBy})
+             #{it.status}, #{it.remark}, #{it.requestId}, #{it.createBy}, #{it.updateBy}, #{it.operatorName})
         </foreach>
     </insert>
 
@@ -56,10 +58,10 @@
     </select>
 
     <select id="selectDueByHouse" resultMap="Map">
-        select vr.id, vr.house_id, vr.rabbit_id, vr.vaccine_name, vr.vaccine_batch_no,
+        select vr.id, vr.house_id, vr.rabbit_id, vr.cage_id, vr.vaccine_name, vr.vaccine_batch_no,
                vr.dose, vr.route, vr.vaccinated_at, vr.next_due_date, vr.status,
                vr.remark, vr.request_id, vr.create_by, vr.create_time,
-               vr.update_by, vr.update_time
+               vr.update_by, vr.operator_name, vr.update_time
         from vaccination_records vr
         inner join rabbits r
           on r.house_id = vr.house_id

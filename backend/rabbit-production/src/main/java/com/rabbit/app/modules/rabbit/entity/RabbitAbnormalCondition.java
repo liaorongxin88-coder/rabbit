@@ -1,10 +1,12 @@
 package com.rabbit.app.modules.rabbit.entity;
 
+import com.rabbit.app.common.Stamped;
 import java.util.Date;
 
-public class RabbitAbnormalCondition {
+public class RabbitAbnormalCondition implements Stamped {
     private Long id;
     private Long rabbitId;
+    private Long cageId;
     private Long houseId;
     private String warningStatus;
     private Date warningTime;
@@ -14,6 +16,7 @@ public class RabbitAbnormalCondition {
     private String createBy;
     private Date createTime;
     private String updateBy;
+    private String operatorName;
     private Date updateTime;
 
     public Long getId() {
@@ -30,6 +33,14 @@ public class RabbitAbnormalCondition {
 
     public void setRabbitId(Long rabbitId) {
         this.rabbitId = rabbitId;
+    }
+
+    public Long getCageId() {
+        return cageId;
+    }
+
+    public void setCageId(Long cageId) {
+        this.cageId = cageId;
     }
 
     public Long getHouseId() {
@@ -102,6 +113,14 @@ public class RabbitAbnormalCondition {
 
     public void setUpdateBy(String updateBy) {
         this.updateBy = updateBy;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 
     public Date getUpdateTime() {

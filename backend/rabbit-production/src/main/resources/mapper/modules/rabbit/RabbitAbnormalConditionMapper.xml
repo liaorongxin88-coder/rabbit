@@ -4,8 +4,8 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper">
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into rabbit_abnormal_conditions (rabbit_id, house_id, warning_status, warning_time, img_url, remark, is_deal, create_by, update_by)
-        values (#{rabbitId}, #{houseId}, #{warningStatus}, #{warningTime}, #{imgUrl}, #{remark}, #{isDeal}, #{createBy}, #{updateBy})
+        insert into rabbit_abnormal_conditions (rabbit_id, cage_id, house_id, warning_status, warning_time, img_url, remark, is_deal, create_by, update_by, operator_name)
+        values (#{rabbitId}, #{cageId}, #{houseId}, #{warningStatus}, #{warningTime}, #{imgUrl}, #{remark}, #{isDeal}, #{createBy}, #{updateBy}, #{operatorName})
     </insert>
 
     <select id="selectByHouse" resultType="com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition">
@@ -38,7 +38,7 @@
         from rabbit_abnormal_conditions a
                  join rabbits r on r.id = a.rabbit_id and r.house_id = a.house_id
         where a.house_id = #{houseId}
-          and r.cage_id = #{cageId}
+          and a.cage_id = #{cageId}
           and a.is_deal = false
     </select>
 
@@ -47,7 +47,7 @@
         from rabbit_abnormal_conditions a
                  join rabbits r on r.id = a.rabbit_id and r.house_id = a.house_id
         where a.house_id = #{houseId}
-          and r.cage_id = #{cageId}
+          and a.cage_id = #{cageId}
         order by a.warning_time desc, a.id desc
         limit 1
     </select>

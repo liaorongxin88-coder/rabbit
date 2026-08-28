@@ -77,7 +77,7 @@ public class VaccinationService {
                 throw new BizException(400, "下次接种日期必须晚于本次接种时间");
             }
 
-            assertAllVaccinable(houseId, targets);
+            Map<Long, Rabbit> rabbitsById = assertAllVaccinable(houseId, targets);
 
             String operator = String.valueOf(userId);
             String status = nextDueDate == null ? STATUS_DONE : STATUS_SCHEDULED;
@@ -86,6 +86,7 @@ public class VaccinationService {
                 VaccinationRecord row = new VaccinationRecord();
                 row.setHouseId(houseId);
                 row.setRabbitId(rabbitId);
+                row.setCageId(rabbitsById.get(rabbitId).getCageId());
                 row.setVaccineName(vaccineName);
                 row.setVaccineBatchNo(trimToNull(template.getVaccineBatchNo()));
                 row.setDose(trimToNull(template.getDose()));
@@ -160,7 +161,7 @@ public class VaccinationService {
      * 已经打出去了，静默漏掉几只会让人以为整笼都打过。宁可报清楚是哪几只出问题，
      * 让人改完再提交。
      */
-    private void assertAllVaccinable(Long houseId, List<Long> targets) {
+    private Map<Long, Rabbit> assertAllVaccinable(Long houseId, List<Long> targets) {
         List<Rabbit> found = rabbitMapper.selectByIdsForUpdate(houseId, targets);
         Map<Long, Rabbit> byId = found.stream()
             .filter(r -> r != null && r.getId() != null)
@@ -182,6 +183,7 @@ public class VaccinationService {
         if (!inactive.isEmpty()) {
             throw new BizException(400, "兔子不在场：" + describe(inactive));
         }
+        return byId;
     }
 
     private String describe(List<Long> ids) {

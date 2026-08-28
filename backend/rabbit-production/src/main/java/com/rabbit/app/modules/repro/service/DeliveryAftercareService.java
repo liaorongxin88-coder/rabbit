@@ -1,7 +1,9 @@
 package com.rabbit.app.modules.repro.service;
 
+import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper;
+import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import java.util.Date;
 import org.springframework.stereotype.Service;
 
@@ -28,13 +30,16 @@ public class DeliveryAftercareService {
 
     private final BreedingPerformanceRecorder performanceRecorder;
     private final RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper;
+    private final RabbitMapper rabbitMapper;
 
     public DeliveryAftercareService(
         BreedingPerformanceRecorder performanceRecorder,
-        RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper
+        RabbitAbnormalConditionMapper rabbitAbnormalConditionMapper,
+        RabbitMapper rabbitMapper
     ) {
         this.performanceRecorder = performanceRecorder;
         this.rabbitAbnormalConditionMapper = rabbitAbnormalConditionMapper;
+        this.rabbitMapper = rabbitMapper;
     }
 
     /**
@@ -58,8 +63,12 @@ public class DeliveryAftercareService {
         }
         // 失败产挂预警而不是淘汰：让人看见并决定，而不是替人决定。
         RabbitAbnormalCondition condition = new RabbitAbnormalCondition();
+        Rabbit mother = rabbitMapper.selectById(houseId, motherRabbitId);
         condition.setHouseId(houseId);
         condition.setRabbitId(motherRabbitId);
+        if (mother != null && houseId.equals(mother.getHouseId())) {
+            condition.setCageId(mother.getCageId());
+        }
         condition.setWarningStatus("流产");
         condition.setWarningTime(birthDate);
         condition.setIsDeal(Boolean.FALSE);

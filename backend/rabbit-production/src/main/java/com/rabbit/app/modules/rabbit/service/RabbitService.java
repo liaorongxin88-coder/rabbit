@@ -26,9 +26,11 @@ import com.rabbit.app.modules.rabbit.dto.ReplacementConversionItem;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.domain.CommodityGrowthStage;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.entity.RabbitCageTransferRecord;
 import com.rabbit.app.modules.rabbit.entity.RabbitDepartureRecord;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
+import com.rabbit.app.modules.rabbit.mapper.RabbitCageTransferRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
@@ -44,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -67,11 +70,13 @@ public class RabbitService {
     private final OperatorNameResolver operatorNameResolver;
     private final RabbitStatusHistoryMapper rabbitStatusHistoryMapper;
     private final RabbitDepartureRecordMapper rabbitDepartureRecordMapper;
+    private final RabbitCageTransferRecordMapper rabbitCageTransferRecordMapper;
     private final RequestDedupService requestDedupService;
     private final WorkTaskWriter workTaskWriter;
     private final HouseService houseService;
     private final int commodityCageCapacity;
 
+    @Autowired
     public RabbitService(
             RabbitMapper rabbitMapper,
             CageMapper cageMapper,
@@ -85,6 +90,7 @@ public class RabbitService {
             OperatorNameResolver operatorNameResolver,
             RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
             RabbitDepartureRecordMapper rabbitDepartureRecordMapper,
+            RabbitCageTransferRecordMapper rabbitCageTransferRecordMapper,
             RequestDedupService requestDedupService,
             WorkTaskWriter workTaskWriter,
             HouseService houseService,
@@ -102,11 +108,51 @@ public class RabbitService {
         this.operatorNameResolver = operatorNameResolver;
         this.rabbitStatusHistoryMapper = rabbitStatusHistoryMapper;
         this.rabbitDepartureRecordMapper = rabbitDepartureRecordMapper;
+        this.rabbitCageTransferRecordMapper = rabbitCageTransferRecordMapper;
         this.requestDedupService = requestDedupService;
         this.workTaskWriter = workTaskWriter;
         this.houseService = houseService;
         this.commodityCageCapacity =
             commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
+    }
+
+    public RabbitService(
+            RabbitMapper rabbitMapper,
+            CageMapper cageMapper,
+            SettingService settingService,
+            ReplacementRecordMapper replacementRecordMapper,
+            BatchRabbitMapper batchRabbitMapper,
+            BatchMapper batchMapper,
+            BreedingCycleMapper breedingCycleMapper,
+            ReproActionService reproActionService,
+            ReproStateMachineService reproStateMachineService,
+            OperatorNameResolver operatorNameResolver,
+            RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
+            RabbitDepartureRecordMapper rabbitDepartureRecordMapper,
+            RequestDedupService requestDedupService,
+            WorkTaskWriter workTaskWriter,
+            HouseService houseService,
+            int commodityCageCapacity
+    ) {
+        this(
+            rabbitMapper,
+            cageMapper,
+            settingService,
+            replacementRecordMapper,
+            batchRabbitMapper,
+            batchMapper,
+            breedingCycleMapper,
+            reproActionService,
+            reproStateMachineService,
+            operatorNameResolver,
+            rabbitStatusHistoryMapper,
+            rabbitDepartureRecordMapper,
+            null,
+            requestDedupService,
+            workTaskWriter,
+            houseService,
+            commodityCageCapacity
+        );
     }
 
     /**
@@ -237,6 +283,7 @@ public class RabbitService {
             RabbitStatusHistory h = new RabbitStatusHistory();
             h.setHouseId(houseId);
             h.setRabbitId(rabbit.getId());
+            h.setCageId(rabbit.getCageId());
             h.setFromStatus(null);
             h.setToStatus("入栏");
             h.setChangeTime(DateUtil.now());
@@ -444,6 +491,9 @@ public class RabbitService {
             } catch (DuplicateKeyException e) {
                 throw new BizException(409, "该繁殖笼已有在栏种兔，请刷新后重试");
             }
+            if (!r.getCageId().equals(newCageId)) {
+                recordCageTransfer(houseId, rabbitId, r.getCageId(), newCageId, "BASE_INFO", requestId);
+            }
             if (!sameStage(r.getGrowthStage(), stages.getGrowthStage())
                     || !sameStage(r.getReproductiveStage(), stages.getReproductiveStage())) {
                 insertStageHistory(
@@ -453,6 +503,7 @@ public class RabbitService {
                     r.getReproductiveStage(),
                     stages.getGrowthStage(),
                     stages.getReproductiveStage(),
+                    newCageId,
                     String.valueOf(userId)
                 );
             }
@@ -653,6 +704,8 @@ public class RabbitService {
                     houseId, targetCageId, 1, movingPurpose, op) != 1) {
                 throw new BizException(409, "目标笼位状态已变化，请刷新后重试");
             }
+            recordCageTransfer(houseId, rabbitId, sourceCageId, targetCageId, CageTransferResult.MODE_SWAP, requestId);
+            recordCageTransfer(houseId, occupant.getId(), targetCageId, sourceCageId, CageTransferResult.MODE_SWAP, requestId);
             requestDedupService.markDone(houseId, userId, api, requestId);
             return new CageTransferResult(
                     CageTransferResult.MODE_SWAP,
@@ -701,6 +754,7 @@ public class RabbitService {
         } catch (DuplicateKeyException e) {
             throw new BizException(409, "该繁殖笼已有在栏种兔，请刷新后重试");
         }
+        recordCageTransfer(houseId, moving.getId(), sourceCage.getId(), targetCage.getId(), mode, requestId);
         requestDedupService.markDone(houseId, userId, api, requestId);
         return new CageTransferResult(mode, moving.getId(), sourceCage.getId(), targetCage.getId(), null);
     }
@@ -831,6 +885,12 @@ public class RabbitService {
                 if (rabbitMapper.updateTypeAndCage(houseId, rabbitId, "1", targetByRabbit.get(rabbitId), operator) != 1) {
                     throw new BizException(409, "兔子状态已变化: " + rabbitId);
                 }
+                Long sourceCageId = lockedRabbits.stream()
+                    .filter(rabbit -> rabbitId.equals(rabbit.getId()))
+                    .map(Rabbit::getCageId)
+                    .findFirst()
+                    .orElseThrow(() -> new BizException(409, "原笼位已变化: " + rabbitId));
+                recordCageTransfer(houseId, rabbitId, sourceCageId, targetByRabbit.get(rabbitId), "REPLACEMENT_CONVERSION", requestId);
                 workTaskWriter.cancelCommodityDailyCareForRabbit(houseId, rabbitId, operator);
                 workTaskWriter.completeForRabbit(
                     houseId, rabbitId, TaskType.SALE_READY, operator
@@ -866,6 +926,7 @@ public class RabbitService {
                 RabbitStatusHistory h = new RabbitStatusHistory();
                 h.setHouseId(houseId);
                 h.setRabbitId(rabbitId);
+                h.setCageId(targetByRabbit.get(rabbitId));
                 h.setFromStatus("商品兔");
                 h.setToStatus("后备兔");
                 h.setChangeTime(now);
@@ -983,6 +1044,27 @@ public class RabbitService {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
+    }
+
+    private void recordCageTransfer(
+            Long houseId,
+            Long rabbitId,
+            Long fromCageId,
+            Long toCageId,
+            String transferType,
+            String requestId
+    ) {
+        if (rabbitCageTransferRecordMapper == null) {
+            return;
+        }
+        RabbitCageTransferRecord record = new RabbitCageTransferRecord();
+        record.setHouseId(houseId);
+        record.setRabbitId(rabbitId);
+        record.setFromCageId(fromCageId);
+        record.setToCageId(toCageId);
+        record.setTransferType(transferType);
+        record.setRequestId(requestId);
+        rabbitCageTransferRecordMapper.insert(record);
     }
 
     private Cage pickReplacementCage(List<Cage> cages, Map<Long, Integer> projectedCounts,
@@ -1214,11 +1296,13 @@ public class RabbitService {
             String oldReproductiveStage,
             String newGrowthStage,
             String newReproductiveStage,
+            Long cageId,
             String operator
     ) {
         RabbitStatusHistory history = new RabbitStatusHistory();
         history.setHouseId(houseId);
         history.setRabbitId(rabbitId);
+        history.setCageId(cageId);
         history.setFromStatus(stageSummary(oldGrowthStage, oldReproductiveStage));
         history.setToStatus(stageSummary(newGrowthStage, newReproductiveStage));
         history.setChangeTime(DateUtil.now());
@@ -1269,6 +1353,7 @@ public class RabbitService {
                 RabbitStatusHistory h = new RabbitStatusHistory();
                 h.setHouseId(houseId);
                 h.setRabbitId(rabbitId);
+                h.setCageId(r.getCageId());
                 h.setFromStatus("在栏");
                 h.setToStatus("隔离");
                 h.setChangeTime(now);
@@ -1288,6 +1373,7 @@ public class RabbitService {
                 RabbitStatusHistory h = new RabbitStatusHistory();
                 h.setHouseId(houseId);
                 h.setRabbitId(rabbitId);
+                h.setCageId(r.getCageId());
                 h.setFromStatus("隔离");
                 h.setToStatus("解除隔离");
                 h.setChangeTime(now);
@@ -1365,6 +1451,7 @@ public class RabbitService {
             RabbitDepartureRecord dr = new RabbitDepartureRecord();
             dr.setHouseId(houseId);
             dr.setRabbitId(rabbitId);
+            dr.setCageId(r.getCageId());
             dr.setDepartureType(t);
             dr.setDepartureDate(now);
             dr.setReason(reason);
@@ -1377,6 +1464,7 @@ public class RabbitService {
             RabbitStatusHistory h = new RabbitStatusHistory();
             h.setHouseId(houseId);
             h.setRabbitId(rabbitId);
+            h.setCageId(r.getCageId());
             h.setFromStatus("在栏");
             h.setToStatus("death".equals(t) ? "死亡" : ("cull".equals(t) ? "淘汰" : "出售出栏"));
             h.setChangeTime(now);

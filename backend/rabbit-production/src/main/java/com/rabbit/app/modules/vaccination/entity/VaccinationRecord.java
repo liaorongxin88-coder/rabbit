@@ -1,11 +1,13 @@
 package com.rabbit.app.modules.vaccination.entity;
 
+import com.rabbit.app.common.Stamped;
 import java.util.Date;
 
-public class VaccinationRecord {
+public class VaccinationRecord implements Stamped {
     private Long id;
     private Long houseId;
     private Long rabbitId;
+    private Long cageId;
     private String vaccineName;
     private String vaccineBatchNo;
     private String dose;
@@ -18,6 +20,7 @@ public class VaccinationRecord {
     private String createBy;
     private Date createTime;
     private String updateBy;
+    private String operatorName;
     private Date updateTime;
 
     public Long getId() {
@@ -42,6 +45,14 @@ public class VaccinationRecord {
 
     public void setRabbitId(Long rabbitId) {
         this.rabbitId = rabbitId;
+    }
+
+    public Long getCageId() {
+        return cageId;
+    }
+
+    public void setCageId(Long cageId) {
+        this.cageId = cageId;
     }
 
     public String getVaccineName() {
@@ -138,6 +149,14 @@ public class VaccinationRecord {
 
     public void setUpdateBy(String updateBy) {
         this.updateBy = updateBy;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 
     public Date getUpdateTime() {
