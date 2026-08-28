@@ -578,7 +578,8 @@ class _OutboundNfcCageSelectionState
     try {
       // 没有 NFC 硬件时直接说清楚，否则这里会一直停在“等待贴标签”，
       // 用户看不出是设备不支持还是自己贴的位置不对。写标签路径一直有这个检查。
-      final available = await ref.read(nfcHardwareServiceProvider).isAvailable();
+      final available =
+          await ref.read(nfcHardwareServiceProvider).isAvailable();
       if (!mounted) {
         return;
       }
@@ -642,8 +643,7 @@ class _OutboundNfcCageSelectionState
         _stop(hint: '该笼位不在当前出库范围内，请刷新后重试');
         return;
       }
-      final normalCount =
-          cageRabbits.where((rabbit) => rabbit.isNormal).length;
+      final normalCount = cageRabbits.where((rabbit) => rabbit.isNormal).length;
       if (normalCount == 0) {
         _stop(hint: '${cageRabbits.first.cageNumber} 没有可批量选择的兔只');
         return;
