@@ -42,6 +42,8 @@ app:
       password: admin123456
   wechat:
     enabled: false
+  captcha:
+    enabled: false
   sms:
     enabled: true
     code-secret: e2e-only-sms-code-secret-0123456789abcdef

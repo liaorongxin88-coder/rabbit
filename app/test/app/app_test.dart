@@ -14,6 +14,7 @@ import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/storage/app_settings.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/auth/image_captcha.dart';
 import 'package:rabbit_flutter/src/domain/auth/session.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
@@ -936,6 +937,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('请阅读并同意《隐私政策》与《用户协议》'), findsOneWidget);
+    expect(find.byKey(const ValueKey('legal-consent-error')), findsOneWidget);
   });
 
   test('persists and clears local app settings', () async {
@@ -1038,6 +1040,16 @@ class _FakeAuthRepository extends AuthRepository {
     return const SmsCodeDelivery(
       expiresInSeconds: 300,
       retryAfterSeconds: 60,
+    );
+  }
+
+  @override
+  Future<ImageCaptcha> getImageCaptcha() async {
+    return const ImageCaptcha(
+      captchaId: 'aabbccddeeff00112233445566778899',
+      imageBase64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLZ4QAAAABJRU5ErkJggg==',
+      expiresInSeconds: 300,
     );
   }
 

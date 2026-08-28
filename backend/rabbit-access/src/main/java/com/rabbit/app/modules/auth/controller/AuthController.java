@@ -3,6 +3,7 @@ package com.rabbit.app.modules.auth.controller;
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.auth.dto.AuthTokenResponse;
+import com.rabbit.app.modules.auth.dto.ImageCaptchaResponse;
 import com.rabbit.app.modules.auth.dto.LoginRequest;
 import com.rabbit.app.modules.auth.dto.PhoneLoginRequest;
 import com.rabbit.app.modules.auth.dto.PhoneOneTapLoginRequest;
@@ -16,6 +17,7 @@ import com.rabbit.app.modules.auth.dto.UpdateUserProfileRequest;
 import com.rabbit.app.modules.auth.dto.UserProfileResponse;
 import com.rabbit.app.modules.auth.dto.WechatLoginRequest;
 import com.rabbit.app.modules.auth.service.AuthService;
+import com.rabbit.app.modules.auth.service.ImageCaptchaService;
 import com.rabbit.app.modules.auth.service.PhoneAuthService;
 import com.rabbit.app.modules.auth.service.PhoneOneTapLoginService;
 import com.rabbit.app.modules.auth.service.SmsVerificationService;
@@ -39,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    private final ImageCaptchaService imageCaptchaService;
     private final WechatService wechatService;
     private final SmsVerificationService smsVerificationService;
     private final PhoneAuthService phoneAuthService;
@@ -46,12 +49,14 @@ public class AuthController {
 
     public AuthController(
             AuthService authService,
+            ImageCaptchaService imageCaptchaService,
             WechatService wechatService,
             SmsVerificationService smsVerificationService,
             PhoneAuthService phoneAuthService,
             PhoneOneTapLoginService phoneOneTapLoginService
     ) {
         this.authService = authService;
+        this.imageCaptchaService = imageCaptchaService;
         this.wechatService = wechatService;
         this.smsVerificationService = smsVerificationService;
         this.phoneAuthService = phoneAuthService;
@@ -63,8 +68,14 @@ public class AuthController {
         return ApiResponse.ok(authService.register(req.getUserName(), req.getPassword()));
     }
 
+    @GetMapping("/captcha")
+    public ApiResponse<ImageCaptchaResponse> issueImageCaptcha() {
+        return ApiResponse.ok(imageCaptchaService.issue());
+    }
+
     @PostMapping("/login")
     public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest req) {
+        imageCaptchaService.verifyAndConsume(req.getCaptchaId(), req.getCaptchaCode());
         return ApiResponse.ok(authService.login(req.getUserName(), req.getPassword()));
     }
 

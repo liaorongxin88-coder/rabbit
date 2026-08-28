@@ -33,7 +33,11 @@ void main() {
         await tester.tap(find.text('账号'));
         await tester.pumpAndSettle();
         final resetButton = find.text('忘记密码');
-        await tester.ensureVisible(resetButton);
+        await tester.drag(
+          find.byType(ListView),
+          const Offset(0, -160),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(resetButton);
         await tester.pumpAndSettle();
 

@@ -13,6 +13,7 @@ AccessKey、短信签名和模板编号不会下发到 Flutter。
 ```bash
 export APP_PHONE_HASH_SECRET="$(openssl rand -hex 32)"
 export APP_SMS_CODE_SECRET="$(openssl rand -hex 32)"
+export APP_CAPTCHA_CODE_SECRET="$(openssl rand -hex 32)"
 export ALIBABA_CLOUD_ACCESS_KEY_ID="<RAM AccessKey ID>"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="<RAM AccessKey Secret>"
 export APP_SMS_SIGN_NAME="<审核通过的签名>"
@@ -21,12 +22,44 @@ export APP_SMS_TEMPLATE_PARAM_NAME="code"
 export APP_CACHE_PROVIDER="redis"
 export APP_CACHE_HOST="<redis-or-valkey-host>"
 export APP_SMS_ENABLED=true
+export APP_CAPTCHA_ENABLED=true
 ```
 
 先配置 Redis/Valkey 和所有短信参数，最后再启用 `APP_SMS_ENABLED`。短信开启但
 `APP_CACHE_PROVIDER` 不是 `redis`/`valkey` 时，后端会拒绝启动。模板变量不是 `code` 时，只修改
 `APP_SMS_TEMPLATE_PARAM_NAME`。短信服务中国站默认 Endpoint 为
 `dysmsapi.aliyuncs.com`，需要覆盖时使用 `APP_SMS_ALIYUN_ENDPOINT`。
+
+## 密码登录图片验证码
+
+用户名密码登录在认证前必须通过图片验证码。它和短信验证码共用 Redis/Valkey 的
+短期安全状态策略，但 challenge 使用随机 ID，不关联手机号或兔舍。
+
+签发验证码：
+
+```http
+GET /api/auth/captcha
+```
+
+响应中的 `captchaId` 与 `imageBase64` 必须一起提交。`expiresInSeconds` 默认是 `300`。
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "userName":"operator",
+  "password":"secure-password",
+  "captchaId":"32位小写十六进制challenge ID",
+  "captchaCode":"ABCD"
+}
+```
+
+验证码默认使用 4 位不易混淆的字母和数字，错误 5 次后锁定并删除。一次校验成功也会删除，
+所以用户名或密码错误后客户端必须刷新图片验证码再提交。图片验证码缓存不可用时，签发和校验
+都返回 503；`APP_CAPTCHA_ENABLED=true` 时，缓存不是 Redis/Valkey 或未设置
+`APP_CAPTCHA_CODE_SECRET` 会阻止后端启动。仅在明确的维护窗口才可设置
+`APP_CAPTCHA_ENABLED=false`，测试环境也可用该开关保留现有认证用例。
 
 ## 接口
 
@@ -148,12 +181,12 @@ Content-Type: application/json
 ## 安全策略
 
 - MySQL 不再保存验证码、请求 IP 或验证码发送历史。
-- Redis/Valkey key 只包含手机号 HMAC、请求 IP HMAC、purpose 和随机 token，不含明文手机号/IP。
+- Redis/Valkey key 只包含手机号 HMAC、请求 IP HMAC、purpose 和随机 token，不含明文手机号/IP；图片验证码只保存随机 challenge ID、HMAC 摘要和错误次数。
 - 验证码只以 HMAC-SHA256 摘要进入缓存，默认 5 分钟自动过期。
 - 同一手机号默认 60 秒内只能发送一次。
 - 同一手机号默认每小时最多 5 次、每天最多 10 次。
 - 同一来源 IP 默认每小时最多 20 次。
-- 单个验证码默认最多允许 5 次错误尝试。
+- 单个验证码默认最多允许 5 次错误尝试；图片验证码成功、过期或锁定后都会删除。
 - 阿里云发送失败的验证码不能用于登录。
 - 发送、限流、错误次数和单次消费均由 Redis/Valkey Lua 脚本原子执行。
 - 缓存不可用时发送和校验均返回 503，不回退到 MySQL，也不绕过校验。

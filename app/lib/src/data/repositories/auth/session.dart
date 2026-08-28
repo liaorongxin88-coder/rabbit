@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/auth/session.dart';
 import 'package:rabbit_flutter/src/domain/auth/carrier.dart';
+import 'package:rabbit_flutter/src/domain/auth/image_captcha.dart';
 import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
 import 'package:rabbit_flutter/src/domain/profile/profile.dart';
 
@@ -20,8 +21,34 @@ class AuthRepository {
 
   Stream<void> get unauthorizedEvents => _api.unauthorizedEvents;
 
-  Future<AuthSession> login(String userName, String password) {
-    return _authenticate('/api/auth/login', userName, password);
+  Future<ImageCaptcha> getImageCaptcha() {
+    return _api.get<ImageCaptcha>(
+      '/api/auth/captcha',
+      decode: (data) {
+        final captcha = ImageCaptcha.fromJson(
+          requireJsonObject(data, message: '图片验证码格式不正确'),
+        );
+        if (!captcha.isValid) {
+          throw const ApiException('图片验证码格式不正确');
+        }
+        return captcha;
+      },
+    );
+  }
+
+  Future<AuthSession> login(
+    String userName,
+    String password, {
+    required String captchaId,
+    required String captchaCode,
+  }) {
+    return _authenticate(
+      '/api/auth/login',
+      userName,
+      password,
+      captchaId: captchaId,
+      captchaCode: captchaCode,
+    );
   }
 
   Future<AuthSession> register(String userName, String password) {
@@ -121,13 +148,17 @@ class AuthRepository {
   Future<AuthSession> _authenticate(
     String path,
     String userName,
-    String password,
-  ) {
+    String password, {
+    String? captchaId,
+    String? captchaCode,
+  }) {
     return _api.post<AuthSession>(
       path,
       body: {
         'userName': userName,
         'password': password,
+        if (captchaId != null) 'captchaId': captchaId,
+        if (captchaCode != null) 'captchaCode': captchaCode,
       },
       decode: _decodeSession,
     );

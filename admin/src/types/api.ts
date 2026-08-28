@@ -423,6 +423,12 @@ export interface BreedingCycle {
  closeReason?: string | null;
 }
 
+export interface ImageCaptcha {
+ captchaId: string;
+ imageBase64: string;
+ expiresInSeconds: number;
+}
+
 export type RabbitDepartureType = "cull" | "death";
 
 export interface RabbitDepartureRequest {

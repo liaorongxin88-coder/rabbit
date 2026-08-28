@@ -69,8 +69,20 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     }
   }
 
-  Future<void> login(String userName, String password) {
-    return _authenticate(() => _repository.login(userName, password));
+  Future<void> login(
+    String userName,
+    String password, {
+    required String captchaId,
+    required String captchaCode,
+  }) {
+    return _authenticate(
+      () => _repository.login(
+        userName,
+        password,
+        captchaId: captchaId,
+        captchaCode: captchaCode,
+      ),
+    );
   }
 
   Future<void> register(String userName, String password) {

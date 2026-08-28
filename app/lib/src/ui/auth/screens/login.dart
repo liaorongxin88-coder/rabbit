@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:rabbit_flutter/src/config/legal.dart';
 import 'package:rabbit_flutter/src/data/services/auth/carrier.dart';
 import 'package:rabbit_flutter/src/data/services/auth/phone_number.dart';
 import 'package:rabbit_flutter/src/domain/auth/carrier.dart';
+import 'package:rabbit_flutter/src/domain/auth/image_captcha.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
 import 'package:rabbit_flutter/src/ui/auth/screens/legal.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
@@ -32,7 +34,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _codeController = TextEditingController();
   final _userNameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _captchaCodeController = TextEditingController();
   final _phoneFocusNode = FocusNode();
+  final _legalConsentKey = GlobalKey();
   var _mode = _LoginMode.phone;
   var _passwordVisible = false;
   var _submitting = false;
@@ -42,6 +46,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   var _phoneFocused = false;
   var _agreedToTerms = false;
   var _carrierAuthorizing = false;
+  ImageCaptcha? _imageCaptcha;
+  String? _imageCaptchaError;
+  var _loadingImageCaptcha = false;
+  var _legalConsentError = false;
   CarrierAuthService? _activeCarrierAuthService;
   var _horizontalDragDelta = 0.0;
   Timer? _resendTimer;
@@ -67,6 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _codeController.dispose();
     _userNameController.dispose();
     _passwordController.dispose();
+    _captchaCodeController.dispose();
     super.dispose();
   }
 
@@ -142,10 +151,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     _LegalConsentRow(
+                      key: _legalConsentKey,
                       agreed: _agreedToTerms,
                       enabled: !_submitting && !_sendingCode,
+                      error: _legalConsentError ? _legalConsentReminder : null,
                       onChanged: (value) {
-                        setState(() => _agreedToTerms = value);
+                        setState(() {
+                          _agreedToTerms = value;
+                          if (value) {
+                            _legalConsentError = false;
+                          }
+                        });
                       },
                       onOpenPrivacyPolicy: () => _openLegalDocument(
                         title: LegalDocuments.privacyPolicyTitle,
@@ -184,13 +200,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_agreedToTerms) {
       return true;
     }
-    _showMessage(_legalConsentReminder);
+    setState(() => _legalConsentError = true);
+    FocusManager.instance.primaryFocus?.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _legalConsentKey.currentContext;
+      if (target != null) {
+        Scrollable.ensureVisible(
+          target,
+          alignment: 0.8,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      }
+    });
     return false;
   }
 
   void _selectMode(_LoginMode mode) {
     if (_mode == mode) return;
     setState(() => _mode = mode);
+    if (mode == _LoginMode.account) {
+      unawaited(_loadImageCaptcha());
+    }
   }
 
   void _finishModeSwipe() {
@@ -321,6 +352,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 },
                 onFieldSubmitted: (_) => _submitAccount(),
               ),
+              const SizedBox(height: 14),
+              _ImageCaptchaInput(
+                captcha: _imageCaptcha,
+                controller: _captchaCodeController,
+                loading: _loadingImageCaptcha,
+                error: _imageCaptchaError,
+                enabled: !_submitting,
+                onRefresh: _loadImageCaptcha,
+                onSubmitted: _submitAccount,
+              ),
             ],
           ),
         ),
@@ -346,6 +387,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _loadImageCaptcha() async {
+    if (_loadingImageCaptcha) {
+      return;
+    }
+    setState(() {
+      _loadingImageCaptcha = true;
+      _imageCaptchaError = null;
+    });
+    try {
+      final captcha = await ref.read(authRepositoryProvider).getImageCaptcha();
+      if (!mounted) {
+        return;
+      }
+      _captchaCodeController.clear();
+      setState(() => _imageCaptcha = captcha);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _imageCaptcha = null;
+          _imageCaptchaError =
+              error is ApiException ? error.message : '图片验证码加载失败，请刷新后重试';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingImageCaptcha = false);
+      }
+    }
   }
 
   Future<void> _openResetPassword() async {
@@ -500,6 +571,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!_ensureLegalConsent()) {
       return;
     }
+    final captcha = _imageCaptcha;
+    if (captcha == null) {
+      setState(() => _imageCaptchaError = '图片验证码尚未加载，请刷新后重试');
+      unawaited(_loadImageCaptcha());
+      return;
+    }
     if (!_accountFormKey.currentState!.validate()) {
       return;
     }
@@ -508,8 +585,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return controller.login(
         _userNameController.text.trim(),
         _passwordController.text.trim(),
+        captchaId: captcha.captchaId,
+        captchaCode: _captchaCodeController.text.trim().toUpperCase(),
       );
     });
+    if (mounted) {
+      unawaited(_loadImageCaptcha());
+    }
   }
 
   Future<void> _runAuth(Future<void> Function() action) async {
@@ -735,6 +817,130 @@ class _ResetPasswordDialogState extends ConsumerState<_ResetPasswordDialog> {
   }
 }
 
+class _ImageCaptchaInput extends StatelessWidget {
+  const _ImageCaptchaInput({
+    required this.captcha,
+    required this.controller,
+    required this.loading,
+    required this.error,
+    required this.enabled,
+    required this.onRefresh,
+    required this.onSubmitted,
+  });
+
+  final ImageCaptcha? captcha;
+  final TextEditingController controller;
+  final bool loading;
+  final String? error;
+  final bool enabled;
+  final VoidCallback onRefresh;
+  final VoidCallback onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final image = SizedBox(
+      height: 52,
+      width: 132,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.line),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: captcha == null
+            ? Center(
+                child: Text(
+                  loading ? '加载中' : '加载失败',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            : Image.memory(
+                base64Decode(captcha!.imageBase64),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Text('图片无效'),
+                ),
+              ),
+      ),
+    );
+    final refresh = SizedBox.square(
+      dimension: 52,
+      child: OutlinedButton(
+        key: const ValueKey('image-captcha-refresh'),
+        onPressed: enabled && !loading ? onRefresh : null,
+        child: const Icon(Icons.refresh),
+      ),
+    );
+    final input = TextFormField(
+      key: const ValueKey('image-captcha-field'),
+      controller: controller,
+      enabled: enabled && !loading && captcha != null,
+      textCapitalization: TextCapitalization.characters,
+      textInputAction: TextInputAction.done,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z2-9]')),
+        LengthLimitingTextInputFormatter(4),
+      ],
+      decoration: const InputDecoration(
+        hintText: '输入图中字符',
+        prefixIcon: Icon(Icons.shield_outlined),
+        floatingLabelBehavior: FloatingLabelBehavior.never,
+      ),
+      validator: (value) {
+        if (captcha == null) {
+          return '图片验证码尚未加载';
+        }
+        if (!RegExp(r'^[a-zA-Z2-9]{4}$').hasMatch(value?.trim() ?? '')) {
+          return '请输入4位图片验证码';
+        }
+        return null;
+      },
+      onFieldSubmitted: (_) => onSubmitted(),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('图片验证码', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (largeText)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [image, const SizedBox(width: 8), refresh]),
+              const SizedBox(height: 10),
+              input,
+            ],
+          )
+        else
+          Row(
+            children: [
+              image,
+              const SizedBox(width: 8),
+              refresh,
+              const SizedBox(width: 8),
+              Expanded(child: input),
+            ],
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              error!,
+              key: const ValueKey('image-captcha-error'),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: palette.danger),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _SmsLoginDivider extends StatelessWidget {
   const _SmsLoginDivider();
 
@@ -760,8 +966,10 @@ class _SmsLoginDivider extends StatelessWidget {
 
 class _LegalConsentRow extends StatelessWidget {
   const _LegalConsentRow({
+    super.key,
     required this.agreed,
     required this.enabled,
+    required this.error,
     required this.onChanged,
     required this.onOpenPrivacyPolicy,
     required this.onOpenUserAgreement,
@@ -769,6 +977,7 @@ class _LegalConsentRow extends StatelessWidget {
 
   final bool agreed;
   final bool enabled;
+  final String? error;
   final ValueChanged<bool> onChanged;
   final VoidCallback onOpenPrivacyPolicy;
   final VoidCallback onOpenUserAgreement;
@@ -782,40 +991,61 @@ class _LegalConsentRow extends StatelessWidget {
         );
     final baseStyle = Theme.of(context).textTheme.bodyMedium;
 
-    return Row(
-      key: const ValueKey('legal-consent-row'),
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox.square(
-          dimension: 48,
-          child: Checkbox(
-            key: const ValueKey('legal-consent-checkbox'),
-            value: agreed,
-            onChanged: enabled ? (value) => onChanged(value ?? false) : null,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _LegalTextFragment(text: '请阅读并同意', style: baseStyle),
-              _LegalLinkButton(
-                key: const ValueKey('privacy-policy-link'),
-                label: '《隐私政策》',
-                style: linkStyle,
-                onPressed: onOpenPrivacyPolicy,
+        Row(
+          key: const ValueKey('legal-consent-row'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox.square(
+              dimension: 48,
+              child: Checkbox(
+                key: const ValueKey('legal-consent-checkbox'),
+                value: agreed,
+                onChanged:
+                    enabled ? (value) => onChanged(value ?? false) : null,
               ),
-              _LegalTextFragment(text: '与', style: baseStyle),
-              _LegalLinkButton(
-                key: const ValueKey('user-agreement-link'),
-                label: '《用户协议》',
-                style: linkStyle,
-                onPressed: onOpenUserAgreement,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _LegalTextFragment(text: '请阅读并同意', style: baseStyle),
+                  _LegalLinkButton(
+                    key: const ValueKey('privacy-policy-link'),
+                    label: '《隐私政策》',
+                    style: linkStyle,
+                    onPressed: onOpenPrivacyPolicy,
+                  ),
+                  _LegalTextFragment(text: '与', style: baseStyle),
+                  _LegalLinkButton(
+                    key: const ValueKey('user-agreement-link'),
+                    label: '《用户协议》',
+                    style: linkStyle,
+                    onPressed: onOpenUserAgreement,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        if (error != null)
+          Padding(
+            key: const ValueKey('legal-consent-error'),
+            padding: const EdgeInsets.only(left: 52, top: 4),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                error!,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: palette.danger),
+              ),
+            ),
+          ),
       ],
     );
   }

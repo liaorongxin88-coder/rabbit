@@ -25,14 +25,24 @@ void main() {
     addTearDown(container.dispose);
 
     final auth = container.read(authControllerProvider.notifier);
-    await auth.login('view-user', 'password');
+    await auth.login(
+      'view-user',
+      'password',
+      captchaId: 'test-captcha',
+      captchaCode: 'ABCD',
+    );
     final viewPermission = await container.read(
       housePermissionProvider(8).future,
     );
     expect(viewPermission.canEdit, isFalse);
 
     await auth.logout();
-    await auth.login('control-user', 'password');
+    await auth.login(
+      'control-user',
+      'password',
+      captchaId: 'test-captcha',
+      captchaCode: 'ABCD',
+    );
     final controlPermission = await container.read(
       housePermissionProvider(8).future,
     );
@@ -53,12 +63,22 @@ void main() {
     addTearDown(container.dispose);
 
     final auth = container.read(authControllerProvider.notifier);
-    await auth.login('view-user', 'password');
+    await auth.login(
+      'view-user',
+      'password',
+      captchaId: 'test-captcha',
+      captchaCode: 'ABCD',
+    );
     final first = await container.read(houseMembersProvider(8).future);
     expect(first.single.userName, 'member-for-view-user');
 
     await auth.logout();
-    await auth.login('control-user', 'password');
+    await auth.login(
+      'control-user',
+      'password',
+      captchaId: 'test-captcha',
+      captchaCode: 'ABCD',
+    );
     final second = await container.read(houseMembersProvider(8).future);
 
     expect(second.single.userName, 'member-for-control-user');
@@ -76,7 +96,12 @@ void main() {
     addTearDown(container.dispose);
 
     final auth = container.read(authControllerProvider.notifier);
-    await auth.login('view-user', 'password');
+    await auth.login(
+      'view-user',
+      'password',
+      captchaId: 'test-captcha',
+      captchaCode: 'ABCD',
+    );
 
     await auth.reconcileHouseIds(const [8, 9]);
     expect(container.read(authControllerProvider).valueOrNull?.houseId, 9);
@@ -96,7 +121,12 @@ class _SwitchingAuthRepository extends AuthRepository {
   _SwitchingAuthRepository() : super(ApiClient(_MemorySessionStore()));
 
   @override
-  Future<AuthSession> login(String userName, String password) async {
+  Future<AuthSession> login(
+    String userName,
+    String password, {
+    required String captchaId,
+    required String captchaCode,
+  }) async {
     return AuthSession(
       token: 'token-$userName',
       userId: userName == 'view-user' ? 1 : 2,

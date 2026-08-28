@@ -11,6 +11,7 @@ class ApplicationSecretValidatorTest {
     private static final String ADMIN_JWT_SECRET = "unit-admin-jwt-secret-0123456789abcdef";
     private static final String PHONE_HASH_SECRET = "unit-phone-hash-secret-0123456789abcdef";
     private static final String SMS_CODE_SECRET = "unit-sms-code-secret-0123456789abcdef";
+    private static final String CAPTCHA_CODE_SECRET = "unit-captcha-code-secret-0123456789abcdef";
 
     @Test
     void acceptsDistinctConfiguredSecretsWithSmsDisabled() {
@@ -82,6 +83,24 @@ class ApplicationSecretValidatorTest {
                 });
     }
 
+    @Test
+    void requiresCaptchaSecretAndRedisWhenCaptchaIsEnabled() {
+        runner(JWT_SECRET, ADMIN_JWT_SECRET, PHONE_HASH_SECRET, false, "")
+                .withPropertyValues("app.captcha.enabled=true")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(rootCause(context.getStartupFailure()).getMessage())
+                            .contains("APP_CAPTCHA_CODE_SECRET");
+                });
+        runner(JWT_SECRET, ADMIN_JWT_SECRET, PHONE_HASH_SECRET, false, "")
+                .withPropertyValues(
+                        "app.captcha.enabled=true",
+                        "app.captcha.code-secret=" + CAPTCHA_CODE_SECRET,
+                        "app.cache.provider=redis"
+                )
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
     private void assertFailure(
             String jwtSecret,
             String adminJwtSecret,
@@ -112,7 +131,8 @@ class ApplicationSecretValidatorTest {
                         "app.admin.jwt.secret=" + adminJwtSecret,
                         "app.auth.phone-hash-secret=" + phoneHashSecret,
                         "app.sms.enabled=" + smsEnabled,
-                        "app.sms.code-secret=" + smsCodeSecret
+                        "app.sms.code-secret=" + smsCodeSecret,
+                        "app.captcha.enabled=false"
                 );
     }
 
