@@ -929,8 +929,8 @@ class _ReproActionAdapter implements HttpClientAdapter {
               // 服务端发的是瞬时，含义是农场的 2026-02-06。拿设备本地
               // DateTime(2026,2,6) 取 epoch 会跟着设备时区走，设备在 UTC+8
               // 以东时换算回农场日期就提前了一天。
-              'nextDueTime':
-                  farmDateTimeToUtc(DateTime(2026, 2, 6)).millisecondsSinceEpoch,
+              'nextDueTime': farmDateTimeToUtc(DateTime(2026, 2, 6))
+                  .millisecondsSinceEpoch,
             };
 
   final Map<String, dynamic> response;
