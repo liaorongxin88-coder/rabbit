@@ -18,6 +18,7 @@ import {
   deleteCage,
   listBatches,
   listCages,
+  listPendingWeaningRecords,
   listRabbits,
   listReproEntryPoints,
   listReproStageActions,
@@ -76,7 +77,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { Cage, ProductionBatch, Rabbit } from "@/types/api";
+import type {
+  Cage,
+  PendingWeaningRecord,
+  ProductionBatch,
+  Rabbit,
+} from "@/types/api";
 
 const cageStatusLabels: Record<string, string> = {
   "0": "空闲",
@@ -119,6 +125,8 @@ export function WorkspaceLivestockPage() {
   >({});
   const [entryPoints, setEntryPoints] = useState<ReproEntryPoint[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
+  const [pendingCommodityAllocationCount, setPendingCommodityAllocationCount] =
+    useState<number | null>(null);
   const reproLoadVersion = useRef(0);
   const canEdit = hasPermission(workspace.permission, "rabbit:rabbits:edit");
   const canControl = hasPermission(workspace.permission, "rabbit:cages:edit");
@@ -154,6 +162,7 @@ export function WorkspaceLivestockPage() {
     setReproStageLabels({});
     setEntryPoints([]);
     setBatches([]);
+    setPendingCommodityAllocationCount(null);
     if (!workspace.selectedHouse || !canReadRepro) {
       return;
     }
@@ -170,12 +179,29 @@ export function WorkspaceLivestockPage() {
       );
       setEntryPoints(entries);
       setBatches(nextBatches);
+      try {
+        const pendingRecords = await Promise.all(
+          nextBatches.map((batch) =>
+            listPendingWeaningRecords(houseId, batch.id),
+          ),
+        );
+        if (loadVersion !== reproLoadVersion.current) return;
+        setPendingCommodityAllocationCount(
+          pendingRecords
+            .flatMap((records: PendingWeaningRecord[]) => records)
+            .reduce((total, record) => total + record.waitingCount, 0),
+        );
+      } catch {
+        if (loadVersion !== reproLoadVersion.current) return;
+        setPendingCommodityAllocationCount(null);
+      }
     } catch {
       if (loadVersion !== reproLoadVersion.current) return;
       // 字典拿不到时退回英文枚举与旧阶段字段，列表不应该因此变成空页。
       setReproStageLabels({});
       setEntryPoints([]);
       setBatches([]);
+      setPendingCommodityAllocationCount(null);
     }
   }, [canReadRepro, workspace.selectedHouse]);
 
@@ -407,6 +433,16 @@ export function WorkspaceLivestockPage() {
                   <CardDescription>
                     新增笼位和启停笼位需要控制权限。
                   </CardDescription>
+                  {canReadRepro ? (
+                    <p
+                      className="text-sm text-muted-foreground"
+                      data-testid="pending-commodity-allocation-count"
+                    >
+                      {pendingCommodityAllocationCount === null
+                        ? "待分配入笼商品兔读取失败，可刷新重试"
+                        : `待分配入笼商品兔 ${pendingCommodityAllocationCount} 只`}
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   onClick={() => setCageDialog({ open: true, cage: null })}

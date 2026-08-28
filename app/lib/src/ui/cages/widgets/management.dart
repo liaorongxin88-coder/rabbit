@@ -170,6 +170,8 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
     final cages = ref.watch(houseCagesProvider(houseId));
     final rabbits = ref.watch(houseBreedingRabbitsProvider(houseId));
     final permission = ref.watch(housePermissionProvider(houseId));
+    final pendingAllocation =
+        ref.watch(pendingCommodityAllocationCountProvider(houseId));
     final palette = AppPalette.of(context);
 
     return SectionCard(
@@ -196,6 +198,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
+                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
@@ -207,6 +210,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
+                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
                 },
               ),
               error: (_, __) => _CageHeader(
@@ -217,6 +221,7 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
+                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
@@ -229,6 +234,11 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _NfcStatusBand(houseId: houseId),
+                const SizedBox(height: 12),
+                _PendingCommodityAllocationBand(
+                  houseId: houseId,
+                  allocation: pendingAllocation,
+                ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _searchController,
@@ -237,10 +247,10 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _keyword.isEmpty
                         ? null
-                        : IconButton(
-                            tooltip: '清空搜索',
-                            icon: const Icon(Icons.close),
+                        : TextButton(
+                            key: const ValueKey('cage-search-clear'),
                             onPressed: _searchController.clear,
+                            child: const Text('清空'),
                           ),
                   ),
                 ),
@@ -378,18 +388,14 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             if (!canEdit || row.rowCode == 'LEGACY') {
               return null;
             }
-            return IconButton(
+            return TextButton.icon(
               key: ValueKey('cage-map-row-outbound-${row.rowCode}'),
-              tooltip: '${row.rowCode} 排批量出库',
-              constraints: const BoxConstraints.tightFor(
-                width: 48,
-                height: 48,
-              ),
               onPressed: () => context.push(
                 '/houses/$houseId/outbound?entryType=ROW'
                 '&rowCode=${Uri.encodeQueryComponent(row.rowCode)}',
               ),
               icon: const Icon(Icons.local_shipping_outlined),
+              label: const Text('出库'),
             );
           },
         ),
@@ -629,10 +635,10 @@ class _NfcStatusBand extends ConsumerWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-              IconButton(
-                tooltip: '批量写标签',
+              TextButton.icon(
                 onPressed: () => context.go('/houses/$houseId/nfc/write'),
-                icon: const Icon(Icons.chevron_right),
+                icon: const Icon(Icons.nfc),
+                label: const Text('写标签'),
               ),
             ],
           ),
@@ -651,12 +657,91 @@ class _NfcStatusBand extends ConsumerWidget {
             Icon(Icons.warning_amber_outlined, color: palette.warning),
             const SizedBox(width: 10),
             const Expanded(child: Text('NFC 状态加载失败，请重试')),
-            IconButton(
+            TextButton.icon(
               key: const ValueKey('nfc-status-retry'),
-              tooltip: '重试 NFC 状态',
               onPressed: () =>
                   ref.invalidate(nfcCageWriteQueueProvider(houseId)),
               icon: const Icon(Icons.refresh),
+              label: const Text('重试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingCommodityAllocationBand extends ConsumerWidget {
+  const _PendingCommodityAllocationBand({
+    required this.houseId,
+    required this.allocation,
+  });
+
+  final int houseId;
+  final AsyncValue<int> allocation;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = AppPalette.of(context);
+    return allocation.when(
+      data: (count) => Container(
+        key: const ValueKey('pending-commodity-allocation'),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: count > 0 ? palette.warningSoft : palette.successSoft,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.call_split_outlined,
+                  color: count > 0 ? palette.warning : palette.success,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '待分配入笼商品兔 $count 只',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            if (count > 0)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const ValueKey('pending-commodity-allocation-action'),
+                  onPressed: () => context.push('/houses/$houseId/batches'),
+                  icon: const Icon(Icons.arrow_forward_outlined),
+                  label: const Text('去分配'),
+                ),
+              ),
+          ],
+        ),
+      ),
+      loading: () => const LinearProgressIndicator(
+        key: ValueKey('pending-commodity-allocation-loading'),
+      ),
+      error: (_, __) => Container(
+        key: const ValueKey('pending-commodity-allocation-error'),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.warningSoft,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_outlined, color: palette.warning),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('待分配数量加载失败，请重试')),
+            TextButton(
+              onPressed: () =>
+                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId)),
+              child: const Text('重试'),
             ),
           ],
         ),
@@ -730,10 +815,11 @@ class _CageHeader extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        IconButton(
-          tooltip: '刷新笼位',
+        TextButton.icon(
+          key: const ValueKey('cage-refresh'),
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh),
+          label: const Text('刷新'),
         ),
         FilledButton.icon(
           key: const ValueKey('cage-range-entry'),
@@ -819,11 +905,10 @@ class _CreateCagesSheetState extends ConsumerState<_CreateCagesSheet> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  IconButton(
-                    tooltip: '关闭',
+                  TextButton(
                     onPressed:
                         _saving ? null : () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
+                    child: const Text('关闭'),
                   ),
                 ],
               ),
