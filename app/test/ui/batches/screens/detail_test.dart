@@ -384,6 +384,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('待配种').last);
     await tester.pumpAndSettle();
+    await _scrollDetailUntilVisible(
+      tester,
+      find.byKey(const ValueKey('batch-member-filter-summary')),
+    );
     expect(find.text('显示 1 / 1 个标签'), findsOneWidget);
 
     members = const [
@@ -400,6 +404,10 @@ void main() {
     container.invalidate(batchMembersProvider(request));
     await tester.pumpAndSettle();
 
+    await _scrollDetailUntilVisible(
+      tester,
+      find.byKey(const ValueKey('batch-member-filter-summary')),
+    );
     expect(find.text('显示 1 / 1 个标签'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

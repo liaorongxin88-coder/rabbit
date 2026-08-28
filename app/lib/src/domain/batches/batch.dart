@@ -9,6 +9,7 @@ class Batch {
     required this.startDate,
     required this.endDate,
     required this.remark,
+    this.pendingCompletion = false,
   });
 
   final int id;
@@ -18,6 +19,9 @@ class Batch {
   final DateTime? startDate;
   final DateTime? endDate;
   final String remark;
+
+  /// 批次内已无活跃成员，服务端提示可由人员手动结束。
+  final bool pendingCompletion;
 
   String get title => batchCode.isEmpty ? '批次 #$id' : batchCode;
 
@@ -46,6 +50,7 @@ class Batch {
       startDate: _parseDate(json['startDate']),
       endDate: _parseDate(json['endDate']),
       remark: json['remark'] as String? ?? '',
+      pendingCompletion: _boolValue(json['pendingCompletion']),
     );
   }
 
@@ -54,6 +59,13 @@ class Batch {
       return DateTime.tryParse(value);
     }
     return null;
+  }
+
+  static bool _boolValue(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) return value.toLowerCase() == 'true' || value == '1';
+    return false;
   }
 
   static int _intValue(Object? value) {

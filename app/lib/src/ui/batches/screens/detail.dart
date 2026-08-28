@@ -1105,11 +1105,11 @@ class _BatchHeader extends StatelessWidget {
               ),
               // 已完成的批次也能改名，所以不跟着下面那组按钮一起被 completed 关掉。
               if (canEdit)
-                IconButton(
+                TextButton.icon(
                   key: const ValueKey('batch-rename-button'),
-                  tooltip: '修改批次编号',
                   onPressed: saving ? null : onRename,
                   icon: const Icon(Icons.edit_outlined),
+                  label: const Text('修改编号'),
                 ),
               _LabelChip(
                 label:
@@ -1124,6 +1124,18 @@ class _BatchHeader extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
+          if (batch.pendingCompletion && !completed) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: const ValueKey('batch-pending-completion-notice'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppPalette.of(context).warningSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('当前没有活跃追踪标签，可手动结束批次。'),
+            ),
+          ],
           if (batch.remark.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -1165,6 +1177,15 @@ class _BatchMetrics extends StatelessWidget {
     final mothers = members
         .where((item) => item.isActivityActive && item.batchRole == 'breeding')
         .length;
+    // 服务端的批次约束保证同一只母兔在同一批次最多一条开放周期。
+    final openCycles = members
+        .where(
+          (item) =>
+              item.batchRole == 'breeding' &&
+              item.isActive &&
+              item.currentCycleId != null,
+        )
+        .length;
     final commodity = members
         .where((item) => item.isActivityActive && item.batchRole == 'fattening')
         .length;
@@ -1185,6 +1206,7 @@ class _BatchMetrics extends StatelessWidget {
               _MetricTile(width: width, label: '全部标签', value: members.length),
               _MetricTile(width: width, label: '活跃标签', value: active),
               _MetricTile(width: width, label: '繁殖母兔', value: mothers),
+              _MetricTile(width: width, label: '未结束周期', value: openCycles),
               _MetricTile(width: width, label: '商品兔', value: commodity),
               _MetricTile(width: width, label: '当前带仔', value: nursing),
               _MetricTile(
@@ -1289,13 +1311,12 @@ class _MemberFilters extends StatelessWidget {
               prefixIcon: const Icon(Icons.search),
               suffixIcon: query.isEmpty
                   ? null
-                  : IconButton(
-                      tooltip: '清除搜索',
+                  : TextButton(
                       onPressed: () {
                         controller.clear();
                         onQueryChanged('');
                       },
-                      icon: const Icon(Icons.close),
+                      child: const Text('清除'),
                     ),
             ),
           ),
@@ -1364,10 +1385,10 @@ class _MemberFilters extends StatelessWidget {
                 ),
               ),
               if (hasFilters)
-                IconButton(
-                  tooltip: '重置筛选',
+                TextButton.icon(
                   onPressed: onReset,
                   icon: const Icon(Icons.filter_alt_off_outlined),
+                  label: const Text('重置筛选'),
                 ),
             ],
           ),
@@ -1471,10 +1492,10 @@ class _BatchSelectionBar extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('已选择 ${selected.length} 只母兔')),
-                IconButton(
-                  tooltip: '清除选择',
+                TextButton.icon(
                   onPressed: saving ? null : onClear,
                   icon: const Icon(Icons.close),
+                  label: const Text('清除选择'),
                 ),
               ],
             ),
@@ -1611,38 +1632,49 @@ class _BatchMemberCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              if (onAction != null)
-                IconButton(
-                  key: ValueKey('batch-member-action-${item.rabbitId}'),
-                  tooltip: actionLabel,
-                  onPressed: saving ? null : onAction,
-                  icon: Icon(_memberActionIcon(item, selectableAction)),
-                ),
-              if (onAbortion != null)
-                IconButton(
-                  key: ValueKey('batch-member-abortion-${item.rabbitId}'),
-                  tooltip: '记录流产',
-                  onPressed: saving ? null : onAbortion,
-                  icon: const Icon(Icons.report_problem_outlined),
-                ),
-              if (onDeparture != null)
-                IconButton(
-                  key: ValueKey('batch-member-departure-${item.rabbitId}'),
-                  // 跟表单标题保持一致：离场表单已是全兔种通用的「登记离场」，
-                  // 入口写「母兔离场」会让人以为是另一个功能。
-                  tooltip: '登记离场',
-                  onPressed: saving ? null : onDeparture,
-                  icon: const Icon(Icons.exit_to_app_outlined),
-                ),
-              if (onRemove != null)
-                IconButton(
-                  key: ValueKey('batch-member-remove-${item.rabbitId}'),
-                  tooltip: '移除批次标签',
-                  onPressed: saving ? null : onRemove,
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
             ],
           ),
+          if (onAction != null ||
+              onAbortion != null ||
+              onDeparture != null ||
+              onRemove != null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (onAction != null)
+                  TextButton.icon(
+                    key: ValueKey('batch-member-action-${item.rabbitId}'),
+                    onPressed: saving ? null : onAction,
+                    icon: Icon(_memberActionIcon(item, selectableAction)),
+                    label: Text(actionLabel),
+                  ),
+                if (onAbortion != null)
+                  TextButton.icon(
+                    key: ValueKey('batch-member-abortion-${item.rabbitId}'),
+                    onPressed: saving ? null : onAbortion,
+                    icon: const Icon(Icons.report_problem_outlined),
+                    label: const Text('记录流产'),
+                  ),
+                if (onDeparture != null)
+                  TextButton.icon(
+                    key: ValueKey('batch-member-departure-${item.rabbitId}'),
+                    onPressed: saving ? null : onDeparture,
+                    icon: const Icon(Icons.exit_to_app_outlined),
+                    label: const Text('登记离场'),
+                  ),
+                if (onRemove != null)
+                  TextButton.icon(
+                    key: ValueKey('batch-member-remove-${item.rabbitId}'),
+                    onPressed: saving ? null : onRemove,
+                    icon: const Icon(Icons.remove_circle_outline),
+                    label: const Text('移除标签'),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
