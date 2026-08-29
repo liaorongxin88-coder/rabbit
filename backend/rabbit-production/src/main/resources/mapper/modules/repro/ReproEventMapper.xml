@@ -40,6 +40,14 @@
         )
     </insert>
 
+    <!--
+      事件流是追加旁路，不能反过来弄挂业务写入：
+      同一 (house_id, request_id, operation_code, target_type, target_id, event_type)
+      重放时交给 uk_re_request_target 吃掉，而不是抛唯一键异常回滚整个事务。
+      这里用 on duplicate key 而不是 insert ignore，是为了只屏蔽重复键，
+      截断、约束等其他错误仍然硬失败。
+      空更新写 create_time 而不是主键：对自增列做 id = id 会报 MySQL 1869。
+    -->
     <insert id="insertBatch">
         insert into repro_events (
             tenant_id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id, cage_id,
@@ -55,6 +63,7 @@
                 #{event.operatorId}, #{event.operatorName}, #{event.requestId}, now()
             )
         </foreach>
+        on duplicate key update create_time = create_time
     </insert>
 
     <select id="selectByRequestId" resultMap="Map">
