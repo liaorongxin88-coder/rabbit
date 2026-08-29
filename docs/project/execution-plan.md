@@ -989,6 +989,19 @@ T1 交付时必须同时给出：
 - [x] 迁移从 V51 开始；V52 不预分配
 - [x] 五条初始泳道和 D1 → D6 串行链已写入 5.13
 - [ ] 评审 T4 的 `repro_events` 扩列、批量 Sink 和唯一键方案
-- [ ] 冻结 F13 四项指标的 API 字段名与空值语义
+- [x] F13 API 已冻结为 `GET /api/batches/{batchId}/statistics`，字段为
+  `totalLitters/totalKits/totalLiveKits/totalWeaned`，无记录返回 0
 - [ ] 准备真机 `00152155M000372` 和至少一张可反复写入的实体 NFC 标签
 - [x] D5 只提供人工部署脚本，不启用 CI 自动部署（用户已明确当前 CI 不负责直接部署）
+
+下一阶段启动记录（2026-08-29）：
+
+| 泳道 | Agent ID | 模型 / 思考 | 基线 | 状态 |
+| --- | --- | --- | --- | --- |
+| D1 T4 | `9647e5c1-357c-42f` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
+| D2 F13 后端 | `4cef86b5-0a2b-413` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
+| D3 F13 Admin | `c0734ded-d47a-493` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
+| D4 F13 App | `00926434-57ca-40a` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
+| D5 契约与发布 | `5a10c895-33cf-44d` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
+
+五条泳道都使用独立 worktree。当前 `adb devices` 无在线设备；D3 用浏览器，D4 先跑 widget 测试，NFC 真机窗口待设备上线后安排。D6 在 D1 合并并冻结事件读模型前不启动。
