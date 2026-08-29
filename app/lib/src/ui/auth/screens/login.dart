@@ -887,6 +887,12 @@ class _ImageCaptchaInput extends StatelessWidget {
       child: OutlinedButton(
         key: const ValueKey('image-captcha-refresh'),
         onPressed: enabled && !loading ? onRefresh : null,
+        // 按钮默认的左右内边距会把 52 宽的方形挤到只剩几个像素的内容区，
+        // 图标字形装不下就向右溢出，看上去像没居中。图标按钮不需要这个内边距。
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+        ),
         child: const Icon(Icons.refresh),
       ),
     );
