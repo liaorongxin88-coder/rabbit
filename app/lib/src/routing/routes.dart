@@ -21,6 +21,7 @@ import 'package:rabbit_flutter/src/ui/profile/screens/overview.dart';
 import 'package:rabbit_flutter/src/ui/nfc/screens/error.dart';
 import 'package:rabbit_flutter/src/ui/nfc/screens/write.dart';
 import 'package:rabbit_flutter/src/ui/nfc/screens/setup.dart';
+import 'package:rabbit_flutter/src/ui/operation_events/screens/list.dart';
 import 'package:rabbit_flutter/src/ui/outbound/view_models/controller.dart';
 import 'package:rabbit_flutter/src/ui/outbound/screens/flow.dart';
 import 'package:rabbit_flutter/src/ui/settings/screens/overview.dart';
@@ -193,6 +194,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
                 child: HouseDetailScreen(houseId: houseId),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/houses/:houseId/operation-events',
+            pageBuilder: (context, state) {
+              final houseId =
+                  int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              return NoTransitionPage(
+                child: HouseOperationEventsScreen(houseId: houseId),
               );
             },
           ),

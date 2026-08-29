@@ -6,7 +6,9 @@ import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/operation_events/event.dart';
 
 final operationEventsRepositoryProvider = Provider<OperationEventsRepository>(
-  (ref) => OperationEventsRepository(ref.watch(apiClientProvider)),
+  (ref) {
+    return OperationEventsRepository(ref.watch(apiClientProvider));
+  },
 );
 
 class OperationEventsRepository {

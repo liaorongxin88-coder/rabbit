@@ -199,6 +199,19 @@ class _HouseDetailContent extends ConsumerWidget {
             actionLabel: '查看批次',
             onTap: () => context.go('/houses/${house.id}/batches'),
           ),
+          if (perm.canViewAudit) ...[
+            const SizedBox(height: 10),
+            _DetailEntryCard(
+              key: const ValueKey('house-operation-events-entry'),
+              icon: Icons.history_outlined,
+              iconColor: palette.primary,
+              iconBackground: palette.primarySoft,
+              title: '操作记录',
+              message: '查看当前兔舍内已留痕的投喂、接种等操作。',
+              actionLabel: '查看记录',
+              onTap: () => context.go('/houses/${house.id}/operation-events'),
+            ),
+          ],
           if (perm.canControl) ...[
             const SizedBox(height: 10),
             _DetailEntryCard(
