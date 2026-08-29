@@ -5,6 +5,7 @@ import com.rabbit.app.modules.appupdate.dto.AppUpdateCheckResponse;
 import com.rabbit.app.modules.appupdate.dto.CreateAppReleaseRequest;
 import com.rabbit.app.modules.appupdate.dto.UpdateAppReleaseStatusRequest;
 import com.rabbit.app.modules.appupdate.entity.AppRelease;
+import com.rabbit.app.modules.appupdate.support.MojibakeText;
 import com.rabbit.app.modules.appupdate.mapper.AppReleaseMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import java.net.URI;
@@ -85,6 +86,7 @@ public class AppUpdateService {
                 return previousAttempt;
             }
             validateDownloadUrl(request.getDownloadUrl());
+            String releaseNotes = normalizeReleaseNotes(request.getReleaseNotes());
             AppRelease existing = appReleaseMapper.selectByPlatformAndBuild(ANDROID, request.getBuildNumber());
             if (existing != null) {
                 throw new BizException(409, "该构建号已发布");
@@ -97,7 +99,7 @@ public class AppUpdateService {
             release.setDownloadUrl(request.getDownloadUrl().trim());
             release.setSha256(request.getSha256().trim().toLowerCase(Locale.ROOT));
             release.setApkSizeBytes(request.getApkSizeBytes());
-            release.setReleaseNotes(request.getReleaseNotes() == null ? "" : request.getReleaseNotes().trim());
+            release.setReleaseNotes(releaseNotes);
             release.setForceUpdate(Boolean.TRUE.equals(request.getForceUpdate()));
             release.setPublished(true);
             release.setRequestId(request.getRequestId());
@@ -178,6 +180,25 @@ public class AppUpdateService {
             throw new BizException(404, "版本清单不存在");
         }
         return release;
+    }
+
+    /**
+     * 挡住 UTF-8 被当成 latin1 读过一遍的更新说明。
+     *
+     * <p>1.0.8 就是这么发出去的，全场区设备都显示乱码，事后只能改库。
+     * 发布走的是手工调接口，没有界面能提前看出问题，所以在这里失败掉，
+     * 并且把还原出来的原文放进报错里，发布的人一眼能看出自己想发的是什么。
+     */
+    private String normalizeReleaseNotes(String rawNotes) {
+        if (rawNotes == null) {
+            return "";
+        }
+        String trimmed = rawNotes.trim();
+        String repaired = MojibakeText.repair(trimmed);
+        if (repaired != null) {
+            throw new BizException(400, "releaseNotes 存在编码问题，请以 UTF-8 重新提交。识别到的原文：" + repaired);
+        }
+        return trimmed;
     }
 
     private void validateDownloadUrl(String rawUrl) {
