@@ -18,6 +18,10 @@ public class ReproEvent {
     private Long litterId;
     private Long motherRabbitId;
     private Long batchId;
+    private Long cageId;
+    private String operationCode;
+    private String targetType;
+    private Long targetId;
     private String eventType;
     private String fromStage;
     private String toStage;
@@ -86,6 +90,38 @@ public class ReproEvent {
 
     public void setBatchId(Long batchId) {
         this.batchId = batchId;
+    }
+
+    public Long getCageId() {
+        return cageId;
+    }
+
+    public void setCageId(Long cageId) {
+        this.cageId = cageId;
+    }
+
+    public String getOperationCode() {
+        return operationCode;
+    }
+
+    public void setOperationCode(String operationCode) {
+        this.operationCode = operationCode;
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public void setTargetType(String targetType) {
+        this.targetType = targetType;
+    }
+
+    public Long getTargetId() {
+        return targetId;
+    }
+
+    public void setTargetId(Long targetId) {
+        this.targetId = targetId;
     }
 
     public String getEventType() {

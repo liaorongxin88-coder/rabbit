@@ -11,6 +11,10 @@
         <result column="litter_id" property="litterId"/>
         <result column="mother_rabbit_id" property="motherRabbitId"/>
         <result column="batch_id" property="batchId"/>
+        <result column="cage_id" property="cageId"/>
+        <result column="operation_code" property="operationCode"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
         <result column="event_type" property="eventType"/>
         <result column="from_stage" property="fromStage"/>
         <result column="to_stage" property="toStage"/>
@@ -24,14 +28,33 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         insert into repro_events (
-            tenant_id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id,
-            event_type, from_stage, to_stage, occurred_at, payload,
-            operator_id, operator_name, request_id, create_time
+            tenant_id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id, cage_id,
+            operation_code, target_type, target_id, event_type, from_stage, to_stage, occurred_at,
+            payload, operator_id, operator_name, request_id, create_time
         ) values (
-            #{tenantId}, #{houseId}, #{cycleId}, #{litterId}, #{motherRabbitId}, #{batchId},
+            #{tenantId}, #{houseId}, #{cycleId}, #{litterId}, #{motherRabbitId}, #{batchId}, #{cageId},
+            coalesce(#{operationCode}, 'repro:state-machine'),
+            coalesce(#{targetType}, 'RABBIT'), coalesce(#{targetId}, #{motherRabbitId}),
             #{eventType}, #{fromStage}, #{toStage}, #{occurredAt}, #{payload},
             #{operatorId}, #{operatorName}, #{requestId}, now()
         )
+    </insert>
+
+    <insert id="insertBatch">
+        insert into repro_events (
+            tenant_id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id, cage_id,
+            operation_code, target_type, target_id, event_type, from_stage, to_stage, occurred_at,
+            payload, operator_id, operator_name, request_id, create_time
+        ) values
+        <foreach collection="events" item="event" separator=",">
+            (
+                #{event.tenantId}, #{event.houseId}, #{event.cycleId}, #{event.litterId},
+                #{event.motherRabbitId}, #{event.batchId}, #{event.cageId},
+                #{event.operationCode}, #{event.targetType}, #{event.targetId}, #{event.eventType},
+                #{event.fromStage}, #{event.toStage}, #{event.occurredAt}, #{event.payload},
+                #{event.operatorId}, #{event.operatorName}, #{event.requestId}, now()
+            )
+        </foreach>
     </insert>
 
     <select id="selectByRequestId" resultMap="Map">

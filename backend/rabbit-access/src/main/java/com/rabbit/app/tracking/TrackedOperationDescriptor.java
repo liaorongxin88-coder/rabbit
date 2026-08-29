@@ -22,6 +22,8 @@ public final class TrackedOperationDescriptor {
     private final Expression batchId;
     private final Expression cageId;
     private final Expression rabbitId;
+    private final String targetType;
+    private final Expression targetId;
 
     TrackedOperationDescriptor(
             String code,
@@ -32,7 +34,9 @@ public final class TrackedOperationDescriptor {
             Expression requestId,
             Expression batchId,
             Expression cageId,
-            Expression rabbitId
+            Expression rabbitId,
+            String targetType,
+            Expression targetId
     ) {
         this.code = code;
         this.eventType = eventType;
@@ -43,6 +47,8 @@ public final class TrackedOperationDescriptor {
         this.batchId = batchId;
         this.cageId = cageId;
         this.rabbitId = rabbitId;
+        this.targetType = targetType;
+        this.targetId = targetId;
     }
 
     public String getCode() {
@@ -79,6 +85,14 @@ public final class TrackedOperationDescriptor {
 
     public Long rabbitId(StandardEvaluationContext context) {
         return evaluateId(rabbitId, context);
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public Long targetId(StandardEvaluationContext context) {
+        return evaluateId(targetId, context);
     }
 
     public String requestId(StandardEvaluationContext context) {

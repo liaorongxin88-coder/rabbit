@@ -68,6 +68,12 @@ public @interface TrackedOperation {
 
     String rabbitId() default "";
 
+    /** 目标资源类型，如 {@code RABBIT}、{@code BATCH}、{@code INVENTORY_ITEM}。 */
+    String targetType() default "";
+
+    /** 目标资源 ID，允许引用 {@code #result.id}。 */
+    String targetId() default "";
+
     /**
      * 是否接管幂等记账。开启后由外层切面在<b>事务外</b>执行
      * markProcessing / markDone / markFailed，业务方法只需读

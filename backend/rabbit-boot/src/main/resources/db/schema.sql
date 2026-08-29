@@ -916,21 +916,27 @@ CREATE TABLE IF NOT EXISTS repro_events (
   house_id BIGINT NOT NULL,
   cycle_id BIGINT,
   litter_id BIGINT,
-  mother_rabbit_id BIGINT NOT NULL,
+  mother_rabbit_id BIGINT,
   batch_id BIGINT,
+  cage_id BIGINT,
+  operation_code VARCHAR(64) NOT NULL DEFAULT 'repro:state-machine',
+  target_type VARCHAR(32) NOT NULL DEFAULT 'RABBIT',
+  target_id BIGINT,
   event_type VARCHAR(32) NOT NULL,
   from_stage VARCHAR(20),
   to_stage VARCHAR(20),
   occurred_at DATETIME NOT NULL,
   payload JSON,
   operator_id BIGINT,
-  operator_name VARCHAR(64) NOT NULL,
-  request_id VARCHAR(64) NOT NULL,
+  operator_name VARCHAR(64),
+  request_id VARCHAR(64),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_re_request (house_id, request_id),
+  UNIQUE KEY uk_re_request_target (house_id, request_id, operation_code, target_type, target_id, event_type),
   KEY idx_re_cycle (house_id, cycle_id, id),
   KEY idx_re_mother_time (house_id, mother_rabbit_id, occurred_at),
-  KEY idx_re_house_time (house_id, occurred_at, id)
+  KEY idx_re_house_time (house_id, occurred_at, id),
+  KEY idx_re_target_time (house_id, target_type, target_id, occurred_at, id),
+  KEY idx_re_cage_time (house_id, cage_id, occurred_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS litters (
