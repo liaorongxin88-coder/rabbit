@@ -84,7 +84,11 @@ jobs:
 
       - name: Check shell scripts
         if: env.RUN == 'true'
-        run: shellcheck scripts/ci/*.sh deploy/scripts/*.sh deploy/remote/*.sh
+        run: shellcheck scripts/ci/*.sh deploy/scripts/*.sh deploy/remote/*.sh deploy/tests/*.sh
+
+      - name: Run offline deploy script tests
+        if: env.RUN == 'true'
+        run: bash deploy/tests/admin-release-scripts-test.sh
 
       - name: Check local Markdown links
         if: env.RUN == 'true'
