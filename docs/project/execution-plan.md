@@ -1005,3 +1005,40 @@ T1 交付时必须同时给出：
 | D5 契约与发布 | `5a10c895-33cf-44d` | `gpt-5.6-terra` / `xhigh` | `f68d728` | 进行中 |
 
 五条泳道都使用独立 worktree。当前 `adb devices` 无在线设备；D3 用浏览器，D4 先跑 widget 测试，NFC 真机窗口待设备上线后安排。D6 在 D1 合并并冻结事件读模型前不启动。
+
+#### 5.13.1 D1–D5 合并记录（2026-08-29）
+
+五条泳道已全部合并，基线 `f68d728`，共 19 个提交。
+
+| 泳道 | 合并提交 | 内容 |
+| --- | --- | --- |
+| D2 | `b477dc0` | `GET /api/batches/{batchId}/statistics`，四项计数，批次不存在返回 404 |
+| D4 | `7be73f1` | App 批次详情展示四项统计 |
+| D3 | `37755e0` | Admin 「当前生产批次」区展示四项统计 |
+| D5 | `5f50f07` | 非法 JSON 返回 400；Admin/OTA 人工发布脚本 |
+| D1 | `d8fc347` | V51 事件流泛化，`@TrackedOperation` 从 11 处扩到 40 处 |
+
+F13 字段契约在开工前就冻结为 `totalLitters`、`totalKits`、`totalLiveKits`、
+`totalWeaned`，三端各自开发后合并无冲突。
+
+合并后在主线修掉的四个问题：
+
+1. `b4c9b70` App 把统计的 loading/error 并进了整页 gate，统计接口一慢一失败就会锁死批次成员和操作区，改为统计区独立加载与重试。
+2. `5edf090` Admin 浏览器脚本在重试成功后才截图，`network-failure.png` 里反而是正常统计，证据与命名不符。
+3. `4f3cbd8` V51 的 `uk_re_request_target` 会让重放事件撞 1062，普通 `insert` 会把用户写入一起回滚；改为 `on duplicate key` 空更新，并新增走真实数据库的 `OperationEventReplayIT`。注意空更新不能写在自增主键上，否则报 MySQL 1869。
+4. `77b7fda` D1 给已自管幂等的服务加了 `dedup = true`，切面先占 PROCESSING，服务内部再 `markProcessing` 就撞上自己，完整 e2e 里 235 个用例挂了 115 个（429）。规则已写进 `TrackedOperation` 文档：**一个操作只能有一个幂等归属方**。
+
+验证结果：
+
+- 后端单测 936 通过（platform 99、access 239、production 449、reporting 130、boot 19）。
+- 完整 e2e `_main51` 235 通过、3 跳过、0 失败。
+- V51 在填充数据的克隆库上从 V50 升级成功，645 行历史事件的 `target_id` 全部回填正确。
+- 非法 JSON 的四种形态（截断、类型不符、空 body、非 JSON 文本）在真实 HTTP 上均返回 400 与稳定文案，无 Jackson 细节外泄。
+- Admin lint/build/58 单测与浏览器脚本通过；App analyzer 干净、420 测试通过。
+
+遗留项：
+
+- `LargeHouseOutboundSubmitScaleIT` 对机器负载敏感（同代码下 137s、146s 通过，并行占用时 357s 超时），它不应与其他重任务同时跑。
+- 历史上有两条 `batch_id` 为空的旧繁育周期产崽记录，不计入任何批次统计，属归属缺口而非统计实现问题。
+- D1 终止时注解铺到 40 处，与计划的约 45 处仍有差距，剩余入口待 D6 阶段补齐。
+- 真机 NFC 闭环仍未安排；本轮无在线设备，D3/D4 均未做设备验收。
