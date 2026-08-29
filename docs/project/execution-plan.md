@@ -1042,3 +1042,46 @@ F13 字段契约在开工前就冻结为 `totalLitters`、`totalKits`、`totalLi
 - 历史上有两条 `batch_id` 为空的旧繁育周期产崽记录，不计入任何批次统计，属归属缺口而非统计实现问题。
 - D1 终止时注解铺到 40 处，与计划的约 45 处仍有差距，剩余入口待 D6 阶段补齐。
 - 真机 NFC 闭环仍未安排；本轮无在线设备，D3/D4 均未做设备验收。
+
+#### 5.13.2 D6 读接口契约冻结（2026-08-29）
+
+D1 已合并，事件持久化契约稳定，T6 拆成三条并行泳道。契约在开工前冻结，
+理由和 F13 一样：三端各写各的，只有字段先定死才能零冲突合并。
+
+**端点**：`GET /api/operation-events`，请求头 `X-House-Id`。
+
+**权限**：复用已存在的 `PermissionCode.RABBIT_AUDIT_LIST`（HOUSE 域，MANAGER 档），
+不新增权限码。这是审计面而不是普通列表，VIEWER 不应能枚举全场操作；
+客户端据此隐藏入口，而不是让用户点进去吃 403。
+
+**分页**：按 `(occurred_at DESC, id DESC)` 做 keyset，游标对客户端不透明。
+这里刻意不用仓库里通用的 `{total, page, size}`：
+
+- 事件流是追加写，翻页期间不断有新行插入，offset 分页会让操作员漏行或看到重复；
+- 对一张只增不减的审计表每次请求 `count(*)`，正是要避开的成本；
+- D1 建的 `idx_re_target_time (house_id, target_type, target_id, occurred_at, id)` 直接支撑 keyset。
+
+非法游标返回 400 与稳定中文文案，不能是 500。
+
+**响应**：`{ items, nextCursor, hasMore }`，不返回 total。
+
+**条目字段**（冻结）：`id`、`occurredAt`、`operationCode`、`eventType`、`eventLabel`、
+`targetType`、`targetId`、`cageId`、`batchId`、`rabbitId`、`cycleId`、`litterId`、
+`fromStage`、`toStage`、`operatorId`、`operatorName`。
+
+`payload` 与 `requestId` 不外泄，延续 `ReproEventView` 既有边界；
+`operatorName` 是展示名快照，不得 join `sys_user` 取现名。
+
+**过滤**：`targetType`、`targetId`、`operationCode`、`cageId`、`batchId`、
+`occurredFrom`、`occurredTo`、`cursor`、`limit`（默认 50，夹在 1..200）。
+只给 `targetId` 不给 `targetType` 返回 400。
+
+| 泳道 | 范围 | 门禁 |
+| --- | --- | --- |
+| D6A | 后端端点、Mapper、游标编解码 | 模块单测 + `_d6_t6` 新增 IT |
+| D6B | Admin 消费方 | lint/build/单测 + 浏览器脚本 |
+| D6C | App 消费方 | `./rabbit check`，无设备则不做设备验收 |
+
+三条泳道都不得改 `ReproEventMapper.xml` 的 `insertBatch`、V51，或任何
+`@TrackedOperation` 的 `dedup` 取值。消费端沿用 D3/D4 的教训：
+该区块自己加载、自己重试，失败不拖垮所在页面。
