@@ -2,6 +2,7 @@ package com.rabbit.app.modules.batch.service;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.entity.Batch;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.entity.WeaningRecordAllocation;
@@ -159,6 +160,10 @@ public class BatchService {
         );
     }
 
+    @TrackedOperation(
+        code = "batch.create", eventType = "BATCH_CREATED", targetType = "BATCH",
+        targetId = "#result.id", dedup = true
+    )
     @Transactional
     public Batch createBatch(
         Long userId,
@@ -349,6 +354,10 @@ public class BatchService {
     /**
      * 向已存在的批次追加兔只，并按兔只类型派生批次用途。
      */
+    @TrackedOperation(
+        code = "batch.addMembers", eventType = "BATCH_MEMBERS_ADDED", batchId = "#batchId",
+        targetType = "BATCH", targetId = "#batchId", dedup = true
+    )
     @Transactional
     public void addMembers(
         Long userId,
@@ -394,6 +403,10 @@ public class BatchService {
      * 归属的周期保持不动，避免新标签篡改旧批次的结束语义。
      *
      */
+    @TrackedOperation(
+        code = "batch.removeMember", eventType = "BATCH_MEMBER_REMOVED", batchId = "#batchId",
+        targetType = "BATCH", targetId = "#batchId", rabbitId = "#rabbitId", dedup = true
+    )
     @Transactional
     public void removeMember(
         Long userId,
@@ -534,6 +547,10 @@ public class BatchService {
 
 
 
+    @TrackedOperation(
+        code = "batch.sale", eventType = "BATCH_SOLD", batchId = "#batchId",
+        targetType = "BATCH", targetId = "#batchId", dedup = true
+    )
     @Transactional
     public void sale(
         Long userId,
@@ -703,6 +720,10 @@ public class BatchService {
         }
     }
 
+    @TrackedOperation(
+        code = "batch.completeBatch", eventType = "BATCH_COMPLETED", batchId = "#batchId",
+        targetType = "BATCH", targetId = "#batchId", dedup = true
+    )
     @Transactional
     public void completeBatch(
         Long userId,
@@ -801,6 +822,10 @@ public class BatchService {
      * 不影响任何生产数据，批次的身份始终是主键。编号没有唯一约束，这里也不额外拦重名，
      * 与建批次时的口径保持一致。
      */
+    @TrackedOperation(
+        code = "batch.rename", eventType = "BATCH_RENAMED", batchId = "#batchId",
+        targetType = "BATCH", targetId = "#batchId", dedup = true
+    )
     @Transactional
     public Batch renameBatch(
         Long userId,

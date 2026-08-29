@@ -8,6 +8,7 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.nfc.dto.NfcResolvedTarget;
 import com.rabbit.app.modules.nfc.entity.NfcTag;
 import com.rabbit.app.modules.nfc.mapper.NfcTagMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,10 @@ public class NfcTagService {
         this.requestDedupService = requestDedupService;
     }
 
+    @TrackedOperation(
+        code = "nfc:bind", codeExpression = "'nfc:bind:' + #targetType",
+        eventType = "NFC_BOUND", targetType = "NFC_TAG", targetId = "#targetId", dedup = true
+    )
     @Transactional
     public NfcTag bind(Long userId, Long houseId, String tagUid, String targetType, Long targetId, Long rabbitId, Long recordId, String remark, String requestId) {
         String api = "nfc:bind:" + (targetType == null ? "" : targetType);

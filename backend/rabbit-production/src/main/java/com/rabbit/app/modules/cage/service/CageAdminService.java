@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.cage.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.modules.cage.dto.CageCountRow;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
@@ -26,6 +27,9 @@ public class CageAdminService {
         this.rabbitMapper = rabbitMapper;
     }
 
+    @TrackedOperation(
+        code = "cage:create", eventType = "CAGE_CREATED", targetType = "CAGE", targetId = "#result.id"
+    )
     @Transactional
     public Cage create(Long userId, Long houseId, String cageNumber, String rowCode, Integer layerIndex,
                        Integer positionIndex, String remark, Boolean isEnabled) {
@@ -49,6 +53,10 @@ public class CageAdminService {
         return c;
     }
 
+    @TrackedOperation(
+        code = "cage:update", eventType = "CAGE_UPDATED", targetType = "CAGE", targetId = "#id"
+    )
+    @Transactional
     public Cage update(Long userId, Long houseId, Long id, String cageNumber, String rowCode, Integer layerIndex,
                        Integer positionIndex, String remark, Boolean isEnabled) {
         houseService.assertHousePermission(userId, houseId, "control");
@@ -102,6 +110,10 @@ public class CageAdminService {
         return value != null && value > 0 ? value : null;
     }
 
+    @TrackedOperation(
+        code = "cage:delete", eventType = "CAGE_DELETED", targetType = "CAGE", targetId = "#id"
+    )
+    @Transactional
     public void delete(Long userId, Long houseId, Long id) {
         houseService.assertHousePermission(userId, houseId, "control");
         Cage existing = cageMapper.selectById(houseId, id);
@@ -118,6 +130,10 @@ public class CageAdminService {
         }
     }
 
+    @TrackedOperation(
+        code = "cage:recount", eventType = "CAGE_COUNT_RECORDED", targetType = "CAGE", targetId = "#id"
+    )
+    @Transactional
     public Cage setRabbitCount(Long userId, Long houseId, Long id, int rabbitCount) {
         houseService.assertHousePermission(userId, houseId, "control");
         Cage existing = cageMapper.selectById(houseId, id);
@@ -128,6 +144,7 @@ public class CageAdminService {
         return cageMapper.selectById(houseId, id);
     }
 
+    @TrackedOperation(code = "cage:recount-all", eventType = "CAGE_COUNTS_RECOUNTED", targetType = "CAGE")
     @Transactional
     public int recountRabbitCount(Long userId, Long houseId) {
         houseService.assertHousePermission(userId, houseId, "control");

@@ -49,6 +49,7 @@ public class TrackedOperationRegistry {
         }
         TrackedOperationDescriptor descriptor = new TrackedOperationDescriptor(
                 annotation.code(),
+                parse(annotation.codeExpression()),
                 annotation.eventType(),
                 annotation.dedup(),
                 parse(annotation.houseId()),

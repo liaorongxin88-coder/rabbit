@@ -6,6 +6,7 @@ import com.rabbit.app.modules.inventory.entity.InventoryItem;
 import com.rabbit.app.modules.inventory.entity.InventoryTx;
 import com.rabbit.app.modules.inventory.mapper.InventoryItemMapper;
 import com.rabbit.app.modules.inventory.mapper.InventoryTxMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.util.DateUtil;
 import java.math.BigDecimal;
 import java.util.Date;
@@ -36,6 +37,10 @@ public class InventoryService {
         this.casRetryTimes = casRetryTimes <= 0 ? 5 : casRetryTimes;
     }
 
+    @TrackedOperation(
+        code = "inventory:item:create", eventType = "INVENTORY_ITEM_CREATED",
+        targetType = "INVENTORY_ITEM", targetId = "#result.id", dedup = true
+    )
     @Transactional
     public InventoryItem createItem(Long userId, Long houseId, InventoryItem item, BigDecimal initQty, String requestId) {
         String api = "inventory:item:create";
@@ -100,6 +105,11 @@ public class InventoryService {
         return inventoryItemMapper.selectById(houseId, itemId);
     }
 
+    @TrackedOperation(
+        code = "inventory:tx", codeExpression = "'inventory:tx:' + #txType",
+        eventType = "INVENTORY_TRANSACTION_RECORDED", targetType = "INVENTORY_ITEM",
+        targetId = "#itemId", dedup = true
+    )
     @Transactional
     public void addTx(Long userId, Long houseId, Long itemId, String txType, BigDecimal qtyDelta, Date txTime, String remark, String requestId, String refTable, Long refId) {
         String api = "inventory:tx:" + (txType == null ? "" : txType);

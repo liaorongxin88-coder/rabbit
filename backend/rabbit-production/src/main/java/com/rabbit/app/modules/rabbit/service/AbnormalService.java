@@ -8,6 +8,7 @@ import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitAbnormalCondition;
 import com.rabbit.app.modules.rabbit.mapper.RabbitAbnormalConditionMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.util.Date;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,10 @@ public class AbnormalService {
         this.requestDedupService = requestDedupService;
     }
 
+    @TrackedOperation(
+        code = CREATE_API, eventType = "RABBIT_ABNORMAL_RECORDED", requestId = "#request.requestId",
+        targetType = "RABBIT", targetId = "#request.rabbitId", dedup = true
+    )
     @Transactional
     public void create(Long houseId, Long userId, CreateAbnormalRequest request) {
         String requestId = request.getRequestId();

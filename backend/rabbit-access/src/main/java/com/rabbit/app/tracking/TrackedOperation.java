@@ -42,6 +42,9 @@ public @interface TrackedOperation {
      */
     String code();
 
+    /** 可选的动态操作码表达式，例如 {@code "'inventory:tx:' + #txType"}。 */
+    String codeExpression() default "";
+
     /**
      * 事件类型。留空表示只绑上下文与幂等、不产生事件（例如纯改名类写操作）。
      */

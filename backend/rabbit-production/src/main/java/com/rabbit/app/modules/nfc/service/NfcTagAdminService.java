@@ -5,6 +5,7 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.nfc.dto.NfcTagView;
 import com.rabbit.app.modules.nfc.mapper.CageNfcTagMapper;
 import com.rabbit.app.modules.nfc.mapper.NfcTagMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class NfcTagAdminService {
         return nfcTagMapper.selectViewPage(houseId, normalizeUid(tagUid), normalizeType(targetType), targetId, offset, ps);
     }
 
+    @TrackedOperation(code = "nfc:unbind", eventType = "NFC_UNBOUND", targetType = "NFC_TAG")
     @Transactional
     public void unbind(Long userId, Long houseId, String tagUid) {
         houseService.assertHousePermission(userId, houseId, "control");

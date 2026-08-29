@@ -112,7 +112,7 @@ public class OperationEventAspect {
             targetType = targetId == null ? "OPERATION" : "RABBIT";
         }
         return OperationEvent.from(context)
-                .operationCode(descriptor.getCode())
+                .operationCode(descriptor.code(spel))
                 .eventType(descriptor.getEventType())
                 .targetType(targetType)
                 .targetId(targetId)

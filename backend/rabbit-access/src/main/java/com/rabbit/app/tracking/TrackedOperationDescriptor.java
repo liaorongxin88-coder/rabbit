@@ -14,6 +14,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 public final class TrackedOperationDescriptor {
 
     private final String code;
+    private final Expression codeExpression;
     private final String eventType;
     private final boolean dedup;
     private final Expression houseId;
@@ -27,6 +28,7 @@ public final class TrackedOperationDescriptor {
 
     TrackedOperationDescriptor(
             String code,
+            Expression codeExpression,
             String eventType,
             boolean dedup,
             Expression houseId,
@@ -39,6 +41,7 @@ public final class TrackedOperationDescriptor {
             Expression targetId
     ) {
         this.code = code;
+        this.codeExpression = codeExpression;
         this.eventType = eventType;
         this.dedup = dedup;
         this.houseId = houseId;
@@ -57,6 +60,11 @@ public final class TrackedOperationDescriptor {
 
     public String getEventType() {
         return eventType;
+    }
+
+    public String code(StandardEvaluationContext context) {
+        String resolved = evaluateText(codeExpression, context);
+        return resolved == null || resolved.isBlank() ? code : resolved;
     }
 
     public boolean hasEventType() {
