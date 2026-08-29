@@ -11,6 +11,7 @@ import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch_code.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/statistics.dart';
 import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
@@ -83,6 +84,7 @@ class _HouseBatchDetailScreenState
       setState(_resetSelectionState);
     }
     ref.invalidate(batchDetailProvider(_request));
+    ref.invalidate(batchStatisticsProvider(_request));
     ref.invalidate(batchMembersProvider(_request));
     ref.invalidate(pendingWeaningRecordsProvider(_request));
     ref.invalidate(houseBatchesProvider(widget.houseId));
@@ -93,6 +95,7 @@ class _HouseBatchDetailScreenState
     try {
       final futures = <Future<Object?>>[
         ref.read(batchDetailProvider(_request).future),
+        ref.read(batchStatisticsProvider(_request).future),
         ref.read(batchMembersProvider(_request).future),
         ref.read(pendingWeaningRecordsProvider(_request).future),
         ref.read(houseBatchesProvider(widget.houseId).future),
@@ -119,6 +122,7 @@ class _HouseBatchDetailScreenState
   @override
   Widget build(BuildContext context) {
     final batch = ref.watch(batchDetailProvider(_request));
+    final statistics = ref.watch(batchStatisticsProvider(_request));
     final members = ref.watch(batchMembersProvider(_request));
     final pendingWeanings = ref.watch(pendingWeaningRecordsProvider(_request));
     final permission = ref.watch(housePermissionProvider(widget.houseId));
@@ -137,23 +141,27 @@ class _HouseBatchDetailScreenState
           icon: const Icon(Icons.refresh),
         ),
       ],
-      child: _buildBody(batch, members, pendingWeanings, permission),
+      child:
+          _buildBody(batch, statistics, members, pendingWeanings, permission),
     );
   }
 
   Widget _buildBody(
     AsyncValue<Batch> batch,
+    AsyncValue<BatchStatistics> statistics,
     AsyncValue<List<BatchRabbitItem>> members,
     AsyncValue<List<PendingWeaningRecord>> pendingWeanings,
     AsyncValue<dynamic> permission,
   ) {
     if (batch.isLoading ||
+        statistics.isLoading ||
         members.isLoading ||
         pendingWeanings.isLoading ||
         permission.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     final error = batch.error ??
+        statistics.error ??
         members.error ??
         pendingWeanings.error ??
         permission.error;
@@ -165,6 +173,7 @@ class _HouseBatchDetailScreenState
     }
 
     final currentBatch = batch.requireValue;
+    final currentStatistics = statistics.requireValue;
     final allMembers = members.requireValue;
     final pendingRecords = pendingProductionRecords(
       pendingWeanings.requireValue,
@@ -221,7 +230,7 @@ class _HouseBatchDetailScreenState
       child: ListView.builder(
         key: const ValueKey('batch-detail-member-list'),
         padding: AppSpacing.pagePadding,
-        itemCount: 9 + (filtered.isEmpty ? 1 : filtered.length),
+        itemCount: 11 + (filtered.isEmpty ? 1 : filtered.length),
         itemBuilder: (context, index) {
           switch (index) {
             case 0:
@@ -245,17 +254,21 @@ class _HouseBatchDetailScreenState
             case 3:
               return const SizedBox(height: 12);
             case 4:
+              return _BatchStatistics(statistics: currentStatistics);
+            case 5:
+              return const SizedBox(height: 12);
+            case 6:
               return _PendingWeaningSection(
                 records: pendingRecords,
                 canEdit: canSeparate,
                 saving: _saving,
                 onSeparate: _separateWeaning,
               );
-            case 5:
+            case 7:
               return pendingRecords.isEmpty
                   ? const SizedBox.shrink()
                   : const SizedBox(height: 12);
-            case 6:
+            case 8:
               return _MemberFilters(
                 controller: _searchController,
                 query: _query,
@@ -273,9 +286,9 @@ class _HouseBatchDetailScreenState
                     _updateFilter(() => _activity = value),
                 onReset: _resetFilters,
               );
-            case 7:
+            case 9:
               return const SizedBox(height: 12);
-            case 8:
+            case 10:
               return canEdit
                   ? _BatchSelectionBar(
                       visible: filtered,
@@ -309,7 +322,7 @@ class _HouseBatchDetailScreenState
             );
           }
 
-          final item = filtered[index - 9];
+          final item = filtered[index - 11];
           final action = _isEstrusSelectable(item) ? _BulkMode.estrus : null;
           return Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -1222,8 +1235,74 @@ class _BatchMetrics extends StatelessWidget {
   }
 }
 
+class _BatchStatistics extends StatelessWidget {
+  const _BatchStatistics({required this.statistics});
+
+  final BatchStatistics statistics;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('生产统计', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth - 8) / 2;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _MetricTile(
+                    key: const ValueKey('batch-statistics-total-litters'),
+                    width: width,
+                    label: '产崽窝数',
+                    value: statistics.totalLitters,
+                  ),
+                  _MetricTile(
+                    key: const ValueKey('batch-statistics-total-kits'),
+                    width: width,
+                    label: '产崽总数',
+                    value: statistics.totalKits,
+                  ),
+                  _MetricTile(
+                    key: const ValueKey('batch-statistics-total-live-kits'),
+                    width: width,
+                    label: '活崽总数',
+                    value: statistics.totalLiveKits,
+                  ),
+                  _MetricTile(
+                    key: const ValueKey('batch-statistics-total-weaned'),
+                    width: width,
+                    label: '断奶数量',
+                    value: statistics.totalWeaned,
+                  ),
+                ],
+              );
+            },
+          ),
+          if (statistics.isEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '暂无产崽记录',
+              key: const ValueKey('batch-statistics-empty'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: palette.muted,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _MetricTile extends StatelessWidget {
   const _MetricTile({
+    super.key,
     required this.width,
     required this.label,
     required this.value,
@@ -1249,10 +1328,17 @@ class _MetricTile extends StatelessWidget {
         children: [
           Text(
             '$value',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 3),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ],
       ),
     );

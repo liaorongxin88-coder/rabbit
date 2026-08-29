@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/statistics.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
 import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
@@ -64,6 +65,26 @@ final batchDetailProvider =
     final cancelToken = CancelToken();
     ref.onDispose(cancelToken.cancel);
     return ref.watch(batchRepositoryProvider).getBatch(
+          houseId: request.houseId,
+          batchId: request.batchId,
+          cancelToken: cancelToken,
+        );
+  },
+);
+
+final batchStatisticsProvider =
+    FutureProvider.autoDispose.family<BatchStatistics, BatchDetailRequest>(
+  (ref, request) async {
+    final userId = ref.watch(authenticatedUserIdProvider);
+    if (userId <= 0) {
+      return const BatchStatistics.empty();
+    }
+    if (request.houseId <= 0 || request.batchId <= 0) {
+      throw ArgumentError('批次路径参数不正确');
+    }
+    final cancelToken = CancelToken();
+    ref.onDispose(cancelToken.cancel);
+    return ref.watch(batchRepositoryProvider).getBatchStatistics(
           houseId: request.houseId,
           batchId: request.batchId,
           cancelToken: cancelToken,
