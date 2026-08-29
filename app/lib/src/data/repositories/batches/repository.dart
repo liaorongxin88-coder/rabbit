@@ -6,6 +6,7 @@ import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/batches/statistics.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
 import 'package:rabbit_flutter/src/domain/batches/weaning.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
@@ -116,6 +117,21 @@ class BatchRepository {
       cancelToken: cancelToken,
       decode: (data) => Batch.fromJson(
         requireJsonObject(data, message: '批次详情格式不正确'),
+      ),
+    );
+  }
+
+  Future<BatchStatistics> getBatchStatistics({
+    required int houseId,
+    required int batchId,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<BatchStatistics>(
+      '/api/batches/$batchId/statistics',
+      houseId: houseId,
+      cancelToken: cancelToken,
+      decode: (data) => BatchStatistics.fromJson(
+        requireJsonObject(data, message: '批次统计格式不正确'),
       ),
     );
   }
