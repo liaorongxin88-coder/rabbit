@@ -229,6 +229,8 @@ async function main() {
       "narrow viewport has horizontal overflow",
     );
 
+    await page.setViewportSize(DESKTOP);
+
     scenario = "empty";
     await page.reload();
     await page
@@ -247,6 +249,11 @@ async function main() {
       .getByText("批次统计读取失败，请重试。")
       .waitFor();
     await expectEnabled(page.getByRole("button", { name: "录入兔只" }));
+    // 先存失败态本身，否则截图只能证明重试后的成功页面。
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, "network-failure.png"),
+      fullPage: true,
+    });
     const batchListBeforeRetry = batchListRequests;
     const statisticsBeforeRetry = statisticsRequests;
     scenario = "ready";
@@ -257,7 +264,7 @@ async function main() {
     assert.ok(statisticsRequests > statisticsBeforeRetry);
     expectStatisticsNetworkFailure = false;
     await page.screenshot({
-      path: path.join(ARTIFACT_DIR, "network-failure.png"),
+      path: path.join(ARTIFACT_DIR, "retry-recovered.png"),
       fullPage: true,
     });
 
