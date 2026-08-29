@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.operation.mapper.OperationEventMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.repro.entity.ReproEvent">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="cycle_id" property="cycleId"/>
+        <result column="litter_id" property="litterId"/>
+        <result column="mother_rabbit_id" property="motherRabbitId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="cage_id" property="cageId"/>
+        <result column="operation_code" property="operationCode"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="event_type" property="eventType"/>
+        <result column="from_stage" property="fromStage"/>
+        <result column="to_stage" property="toStage"/>
+        <result column="occurred_at" property="occurredAt"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="operator_name" property="operatorName"/>
+    </resultMap>
+
+    <!--
+      keyset 分页：house_id 永远在最前，租户隔离不依赖调用方记得加条件。
+
+      游标条件写成 (occurred_at < ?) or (occurred_at = ? and id < ?)，
+      而不是简单的 id <：occurred_at 是业务时间，允许补录，所以它和自增 id
+      并不同序，只按 id 翻页会漏掉补录进来的历史事件。
+
+      payload 和 request_id 不在查询列里，从 SQL 层面就杜绝外泄。
+    -->
+    <select id="selectPage" resultMap="Map">
+        select
+            id, house_id, cycle_id, litter_id, mother_rabbit_id, batch_id, cage_id,
+            operation_code, target_type, target_id, event_type, from_stage, to_stage,
+            occurred_at, operator_id, operator_name
+        from repro_events
+        where house_id = #{houseId}
+        <if test="targetType != null">
+            and target_type = #{targetType}
+        </if>
+        <if test="targetId != null">
+            and target_id = #{targetId}
+        </if>
+        <if test="operationCode != null">
+            and operation_code = #{operationCode}
+        </if>
+        <if test="cageId != null">
+            and cage_id = #{cageId}
+        </if>
+        <if test="batchId != null">
+            and batch_id = #{batchId}
+        </if>
+        <if test="occurredFrom != null">
+            and occurred_at &gt;= #{occurredFrom}
+        </if>
+        <if test="occurredTo != null">
+            and occurred_at &lt;= #{occurredTo}
+        </if>
+        <if test="cursorOccurredAt != null">
+            and (
+                occurred_at &lt; #{cursorOccurredAt}
+                or (occurred_at = #{cursorOccurredAt} and id &lt; #{cursorId})
+            )
+        </if>
+        order by occurred_at desc, id desc
+        limit #{limit}
+    </select>
+</mapper>
