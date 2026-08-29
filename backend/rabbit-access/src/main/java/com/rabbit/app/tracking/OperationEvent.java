@@ -16,6 +16,8 @@ public final class OperationEvent {
 
     private final String operationCode;
     private final String eventType;
+    private final String targetType;
+    private final Long targetId;
     private final Long houseId;
     private final Long batchId;
     private final Long cageId;
@@ -30,6 +32,8 @@ public final class OperationEvent {
     private OperationEvent(Builder builder) {
         this.operationCode = builder.operationCode;
         this.eventType = builder.eventType;
+        this.targetType = builder.targetType;
+        this.targetId = builder.targetId;
         this.houseId = builder.houseId;
         this.batchId = builder.batchId;
         this.cageId = builder.cageId;
@@ -68,6 +72,14 @@ public final class OperationEvent {
 
     public String getEventType() {
         return eventType;
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public Long getTargetId() {
+        return targetId;
     }
 
     public Long getHouseId() {
@@ -113,6 +125,7 @@ public final class OperationEvent {
     @Override
     public String toString() {
         return "OperationEvent{" + operationCode + "/" + eventType
+                + ", target=" + targetType + "/" + targetId
                 + ", house=" + houseId + ", batch=" + batchId + ", cage=" + cageId
                 + ", rabbit=" + rabbitId + ", operator=" + operatorId + "/" + operatorName
                 + ", requestId=" + requestId + ", traceId=" + traceId + '}';
@@ -121,6 +134,8 @@ public final class OperationEvent {
     public static final class Builder {
         private String operationCode;
         private String eventType;
+        private String targetType;
+        private Long targetId;
         private Long houseId;
         private Long batchId;
         private Long cageId;
@@ -139,6 +154,16 @@ public final class OperationEvent {
 
         public Builder eventType(String value) {
             this.eventType = value;
+            return this;
+        }
+
+        public Builder targetType(String value) {
+            this.targetType = value;
+            return this;
+        }
+
+        public Builder targetId(Long value) {
+            this.targetId = value;
             return this;
         }
 

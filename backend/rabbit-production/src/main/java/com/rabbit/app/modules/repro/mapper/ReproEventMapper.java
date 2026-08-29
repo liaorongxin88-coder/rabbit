@@ -15,6 +15,8 @@ public interface ReproEventMapper {
 
     int insert(ReproEvent event);
 
+    int insertBatch(@Param("events") List<ReproEvent> events);
+
     /**
      * 幂等回查：uk_re_request 冲突时用它取回首次写入的事件，把重复提交变成「返回上次结果」。
      */

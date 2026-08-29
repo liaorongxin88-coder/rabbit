@@ -9,6 +9,7 @@ import com.rabbit.app.modules.sale.entity.SaleOrder;
 import com.rabbit.app.modules.sale.entity.SaleOrderItem;
 import com.rabbit.app.modules.sale.mapper.SaleOrderItemMapper;
 import com.rabbit.app.modules.sale.mapper.SaleOrderMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.util.DateUtil;
 import com.rabbit.app.util.RequestIdUtil;
 import java.math.BigDecimal;
@@ -33,6 +34,10 @@ public class SaleService {
         this.requestDedupService = requestDedupService;
     }
 
+    @TrackedOperation(
+        code = "sale:create", eventType = "SALE_CREATED", targetType = "SALE_ORDER",
+        targetId = "#result.id", dedup = true
+    )
     @Transactional
     public SaleOrder create(Long userId, Long houseId, List<Long> rabbitIds, Date saleTime, Double totalWeight, BigDecimal unitPrice, String customer, String remark, String requestId) {
         String api = "sale:create";

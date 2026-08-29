@@ -14,6 +14,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 public final class TrackedOperationDescriptor {
 
     private final String code;
+    private final Expression codeExpression;
     private final String eventType;
     private final boolean dedup;
     private final Expression houseId;
@@ -22,9 +23,12 @@ public final class TrackedOperationDescriptor {
     private final Expression batchId;
     private final Expression cageId;
     private final Expression rabbitId;
+    private final String targetType;
+    private final Expression targetId;
 
     TrackedOperationDescriptor(
             String code,
+            Expression codeExpression,
             String eventType,
             boolean dedup,
             Expression houseId,
@@ -32,9 +36,12 @@ public final class TrackedOperationDescriptor {
             Expression requestId,
             Expression batchId,
             Expression cageId,
-            Expression rabbitId
+            Expression rabbitId,
+            String targetType,
+            Expression targetId
     ) {
         this.code = code;
+        this.codeExpression = codeExpression;
         this.eventType = eventType;
         this.dedup = dedup;
         this.houseId = houseId;
@@ -43,6 +50,8 @@ public final class TrackedOperationDescriptor {
         this.batchId = batchId;
         this.cageId = cageId;
         this.rabbitId = rabbitId;
+        this.targetType = targetType;
+        this.targetId = targetId;
     }
 
     public String getCode() {
@@ -51,6 +60,11 @@ public final class TrackedOperationDescriptor {
 
     public String getEventType() {
         return eventType;
+    }
+
+    public String code(StandardEvaluationContext context) {
+        String resolved = evaluateText(codeExpression, context);
+        return resolved == null || resolved.isBlank() ? code : resolved;
     }
 
     public boolean hasEventType() {
@@ -79,6 +93,14 @@ public final class TrackedOperationDescriptor {
 
     public Long rabbitId(StandardEvaluationContext context) {
         return evaluateId(rabbitId, context);
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public Long targetId(StandardEvaluationContext context) {
+        return evaluateId(targetId, context);
     }
 
     public String requestId(StandardEvaluationContext context) {

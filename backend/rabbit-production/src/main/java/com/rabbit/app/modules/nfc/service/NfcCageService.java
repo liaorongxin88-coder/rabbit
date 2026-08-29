@@ -14,6 +14,8 @@ import com.rabbit.app.modules.nfc.entity.CageNfcTag;
 import com.rabbit.app.modules.nfc.entity.NfcTag;
 import com.rabbit.app.modules.nfc.mapper.CageNfcTagMapper;
 import com.rabbit.app.modules.nfc.mapper.NfcTagMapper;
+import com.rabbit.app.tracking.OperationContext;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,11 +79,19 @@ public class NfcCageService {
         return result;
     }
 
+    @TrackedOperation(
+        code = BIND_API, eventType = "CAGE_NFC_BOUND", requestId = "#request.requestId",
+        cageId = "#request.cageId", targetType = "CAGE", targetId = "#request.cageId"
+    )
     @Transactional
     public NfcCageBindingView bind(Long userId, Long houseId, BindNfcCageRequest request) {
         RequestDedupService.BeginResult beginResult =
                 requestDedupService.begin(houseId, userId, BIND_API, request.getRequestId());
         if (beginResult == RequestDedupService.BeginResult.DONE) {
+            OperationContext context = OperationContext.current();
+            if (context != null) {
+                context.setDedupReplay(true);
+            }
             houseService.assertHousePermission(userId, houseId, "control");
             NfcCagePayloadCodec.ParsedPayload parsed = payloadCodec.verify(request.getPayload());
             Cage existingCage = cageMapper.selectById(houseId, request.getCageId());

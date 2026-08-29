@@ -13,6 +13,9 @@ import com.rabbit.app.modules.inventory.mapper.InventoryItemMapper;
 import com.rabbit.app.modules.inventory.mapper.InventoryTxMapper;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.tracking.OperationContext;
+import com.rabbit.app.tracking.OperationEvent;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.util.DateUtil;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -59,6 +62,7 @@ public class FeedService {
         this.casRetryTimes = casRetryTimes <= 0 ? 5 : casRetryTimes;
     }
 
+    @TrackedOperation(code = "feed:add", eventType = "FEED_RECORDED", dedup = true)
     @Transactional
     public void addFeedLog(Long userId, Long houseId, FeedLog log, List<Long> rabbitIds) {
         String api = "feed:add";
@@ -124,6 +128,7 @@ public class FeedService {
             rel.setFeedLogId(log.getId());
         }
         feedLogRabbitMapper.insertBatch(rels);
+        recordEvents(rels);
 
         if (log.getItemId() != null && log.getItemId() > 0) {
             InventoryItem item = inventoryItemMapper.selectById(houseId, log.getItemId());
@@ -151,6 +156,22 @@ public class FeedService {
         } catch (RuntimeException e) {
             requestDedupService.markFailed(houseId, userId, api, log == null ? null : log.getRequestId(), e.getMessage());
             throw e;
+        }
+    }
+
+    private void recordEvents(List<FeedLogRabbit> rows) {
+        OperationContext context = OperationContext.current();
+        if (context == null) {
+            return;
+        }
+        for (FeedLogRabbit row : rows) {
+            context.recordEvent(OperationEvent.from(context)
+                .operationCode("feed:add")
+                .eventType("FEED_RECORDED")
+                .targetType("RABBIT")
+                .targetId(row.getRabbitId())
+                .cageId(row.getCageId())
+                .build());
         }
     }
 

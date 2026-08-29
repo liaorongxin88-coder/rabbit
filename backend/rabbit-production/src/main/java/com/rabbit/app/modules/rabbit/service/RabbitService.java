@@ -38,6 +38,7 @@ import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -196,6 +197,10 @@ public class RabbitService {
         }
     }
 
+    @TrackedOperation(
+        code = "rabbit.create", eventType = "RABBIT_CREATED", targetType = "RABBIT",
+        targetId = "#result.id", cageId = "#rabbit.cageId", dedup = true
+    )
     @Transactional
     public Rabbit createRabbit(Long userId, Long houseId, Rabbit rabbit, String requestId) {
         return createRabbit(userId, houseId, rabbit, null, requestId);
@@ -378,6 +383,10 @@ public class RabbitService {
         return rabbitMapper.selectPageByHouse(houseId, cageId, type, active, offset, pageSize);
     }
 
+    @TrackedOperation(
+        code = "rabbit.updateBaseInfo", eventType = "RABBIT_UPDATED", targetType = "RABBIT",
+        targetId = "#rabbitId", cageId = "#cageId", dedup = true
+    )
     @Transactional
     public Rabbit updateBaseInfo(
             Long userId,
@@ -534,6 +543,10 @@ public class RabbitService {
      * <p>目标笼的用途一律从在栏兔实行推导，而不是读 {@code cages.status}：后者是反范式
      * 冷数据，一旦漂移就会把合笼、对调判断得完全相反。
      */
+    @TrackedOperation(
+        code = "rabbit.transferCage", eventType = "RABBIT_CAGE_TRANSFERRED", targetType = "RABBIT",
+        targetId = "#rabbitId", cageId = "#targetCageId", dedup = true
+    )
     @Transactional
     public CageTransferResult transferCage(
             Long userId,
@@ -754,6 +767,10 @@ public class RabbitService {
         return new CageTransferResult(mode, moving.getId(), sourceCage.getId(), targetCage.getId(), null);
     }
 
+    @TrackedOperation(
+        code = "rabbit.toReplacement", eventType = "RABBITS_CONVERTED_TO_REPLACEMENT",
+        targetType = "RABBIT_BATCH", dedup = true
+    )
     @Transactional
     public ReplacementConversionResponse convertToReplacement(Long userId, Long houseId, List<Long> rabbitIds, boolean forceExitBatch, Long targetCageId, String requestId) {
         houseService.assertHousePermission(userId, houseId, "control");
@@ -954,6 +971,10 @@ public class RabbitService {
     }
 
     /** 后备兔成熟后原笼转种兔笼；母兔同时进入无批次的待催情周期。 */
+    @TrackedOperation(
+        code = "rabbit.promoteReplacement", eventType = "RABBIT_PROMOTED", targetType = "RABBIT",
+        targetId = "#rabbitId", dedup = true
+    )
     @Transactional
     public void promoteReplacement(
         Long userId,
@@ -1317,6 +1338,10 @@ public class RabbitService {
         return "生长阶段:" + growthStage + "；繁殖阶段:" + reproductiveStage;
     }
 
+    @TrackedOperation(
+        code = "rabbit:event", codeExpression = "'rabbit:event:' + #eventType",
+        eventType = "RABBIT_EVENT", targetType = "RABBIT", targetId = "#rabbitId", dedup = true
+    )
     @Transactional
     public void rabbitEvent(Long userId, Long houseId, Long rabbitId, String eventType, Date actionDate, String reason, String remark, boolean forceExitBatch, String requestId) {
         String api = "rabbit:event:" + (eventType == null ? "" : eventType);

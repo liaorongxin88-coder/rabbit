@@ -7,6 +7,9 @@ import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.vaccination.dto.VaccinationBatchResult;
 import com.rabbit.app.modules.vaccination.entity.VaccinationRecord;
 import com.rabbit.app.modules.vaccination.mapper.VaccinationRecordMapper;
+import com.rabbit.app.tracking.OperationContext;
+import com.rabbit.app.tracking.OperationEvent;
+import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.util.DateUtil;
 import java.util.ArrayList;
 import java.util.Date;
@@ -50,6 +53,7 @@ public class VaccinationService {
         this.requestDedupService = requestDedupService;
     }
 
+    @TrackedOperation(code = "vaccination:create", eventType = "VACCINATION_RECORDED", dedup = true)
     @Transactional
     public VaccinationBatchResult create(Long userId,
                                          Long houseId,
@@ -105,12 +109,29 @@ public class VaccinationService {
                 houseId, targets, vaccineName, requestId, operator
             );
             vaccinationRecordMapper.insertBatch(rows);
+            recordEvents(rows);
 
             requestDedupService.markDone(houseId, userId, api, requestId);
             return new VaccinationBatchResult(rows.size(), rows);
         } catch (RuntimeException e) {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
+        }
+    }
+
+    private void recordEvents(List<VaccinationRecord> rows) {
+        OperationContext context = OperationContext.current();
+        if (context == null) {
+            return;
+        }
+        for (VaccinationRecord row : rows) {
+            context.recordEvent(OperationEvent.from(context)
+                .operationCode("vaccination:create")
+                .eventType("VACCINATION_RECORDED")
+                .targetType("RABBIT")
+                .targetId(row.getRabbitId())
+                .cageId(row.getCageId())
+                .build());
         }
     }
 

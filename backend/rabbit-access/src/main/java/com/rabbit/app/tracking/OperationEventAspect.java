@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.core.annotation.Order;
+import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -60,6 +61,9 @@ public class OperationEventAspect {
         }
 
         Object result = joinPoint.proceed();
+        StandardEvaluationContext spel = registry.evaluationContext(
+                method, joinPoint.getTarget(), joinPoint.getArgs());
+        registry.bindResult(spel, result);
 
         OperationContext context = OperationContext.current();
         if (context == null) {
@@ -74,10 +78,7 @@ public class OperationEventAspect {
         List<OperationEvent> events = new ArrayList<>(context.drainPendingEvents());
         if (descriptor.hasEventType() && events.isEmpty()) {
             // 业务方法没有自己登记事件（非批量场景），由切面按上下文补一条。
-            events.add(OperationEvent.from(context)
-                    .operationCode(descriptor.getCode())
-                    .eventType(descriptor.getEventType())
-                    .build());
+            events.add(defaultEvent(context, descriptor, spel));
         }
         if (events.isEmpty()) {
             return result;
@@ -95,6 +96,27 @@ public class OperationEventAspect {
             sink.append(events);
         }
         return result;
+    }
+
+    private OperationEvent defaultEvent(
+            OperationContext context,
+            TrackedOperationDescriptor descriptor,
+            StandardEvaluationContext spel
+    ) {
+        Long targetId = descriptor.targetId(spel);
+        if (targetId == null) {
+            targetId = context.getRabbitId();
+        }
+        String targetType = descriptor.getTargetType();
+        if (targetType == null || targetType.isBlank()) {
+            targetType = targetId == null ? "OPERATION" : "RABBIT";
+        }
+        return OperationEvent.from(context)
+                .operationCode(descriptor.code(spel))
+                .eventType(descriptor.getEventType())
+                .targetType(targetType)
+                .targetId(targetId)
+                .build();
     }
 
     private Method targetMethod(ProceedingJoinPoint joinPoint) {

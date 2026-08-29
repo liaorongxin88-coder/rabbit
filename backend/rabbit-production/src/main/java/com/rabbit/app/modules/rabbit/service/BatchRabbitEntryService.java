@@ -10,6 +10,8 @@ import com.rabbit.app.modules.rabbit.dto.BatchRabbitEntryRequest;
 import com.rabbit.app.modules.rabbit.dto.BatchRabbitEntryResult;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.tracking.OperationContext;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -47,6 +49,10 @@ public class BatchRabbitEntryService {
         this.commodityCageCapacity = commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
     }
 
+    @TrackedOperation(
+        code = API, eventType = "RABBIT_BATCH_ENTERED", requestId = "#request.requestId",
+        cageId = "#request.cageId", targetType = "CAGE", targetId = "#request.cageId"
+    )
     @Transactional
     public BatchRabbitEntryResult create(
         Long userId,
@@ -65,6 +71,7 @@ public class BatchRabbitEntryService {
             payloadHash(request)
         );
         if (dedup == RequestDedupService.BeginResult.DONE) {
+            OperationContext.currentOrBind().setDedupReplay(true);
             return replayedResult(houseId, userId, requestId);
         }
 

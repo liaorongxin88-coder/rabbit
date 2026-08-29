@@ -182,9 +182,15 @@ class SchemaSqlV24Test {
     @Test
     void schemaContainsReproEventStoreAndTaskCenter() {
         assertAll(
-            () -> assertContains(table("repro_events"), "unique key uk_re_request (house_id, request_id)"),
+            () -> assertContains(
+                table("repro_events"),
+                "unique key uk_re_request_target (house_id, request_id, operation_code, target_type, target_id, event_type)"
+            ),
+            () -> assertContains(table("repro_events"), "operation_code varchar(64) not null"),
+            () -> assertContains(table("repro_events"), "target_type varchar(32) not null"),
+            () -> assertContains(table("repro_events"), "target_id bigint"),
+            () -> assertContains(table("repro_events"), "cage_id bigint"),
             () -> assertContains(table("repro_events"), "operator_id bigint"),
-            () -> assertContains(table("repro_events"), "operator_name varchar(64) not null"),
             () -> assertContains(table("repro_events"), "payload json"),
             () -> assertContains(table("litters"), "unique key uk_lt_cycle (house_id, cycle_id)"),
             () -> assertContains(table("litters"), "current_nursing int not null default 0"),

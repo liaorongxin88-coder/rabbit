@@ -7,6 +7,7 @@ import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.nfc.entity.CageNfcTag;
 import com.rabbit.app.modules.nfc.mapper.CageNfcTagMapper;
+import com.rabbit.app.tracking.TrackedOperation;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,10 @@ public class CageNfcTagService {
         this.requestDedupService = requestDedupService;
     }
 
+    @TrackedOperation(
+        code = "cage:nfc:bind", eventType = "CAGE_NFC_BOUND", cageId = "#cageId",
+        targetType = "CAGE", targetId = "#cageId", dedup = true
+    )
     @Transactional
     public CageNfcTag bind(Long userId, Long houseId, Long cageId, String tagUid, String remark, String requestId) {
         String api = "cage:nfc:bind";

@@ -49,6 +49,7 @@ public class TrackedOperationRegistry {
         }
         TrackedOperationDescriptor descriptor = new TrackedOperationDescriptor(
                 annotation.code(),
+                parse(annotation.codeExpression()),
                 annotation.eventType(),
                 annotation.dedup(),
                 parse(annotation.houseId()),
@@ -56,7 +57,9 @@ public class TrackedOperationRegistry {
                 parse(annotation.requestId()),
                 parse(annotation.batchId()),
                 parse(annotation.cageId()),
-                parse(annotation.rabbitId())
+                parse(annotation.rabbitId()),
+                annotation.targetType(),
+                parse(annotation.targetId())
         );
         cache.put(method, descriptor);
         return descriptor;

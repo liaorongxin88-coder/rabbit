@@ -31,6 +31,8 @@ class TrackedOperationRegistryTest {
         assertEquals(77L, descriptor.rabbitId(context));
         assertEquals(5L, descriptor.batchId(context));
         assertEquals(9L, descriptor.cageId(context));
+        assertEquals("RABBIT", descriptor.getTargetType());
+        assertEquals(77L, descriptor.targetId(context));
     }
 
     @Test
@@ -90,6 +92,8 @@ class TrackedOperationRegistryTest {
                 rabbitId = "#r.rabbitId",
                 batchId = "#r.batchId",
                 cageId = "#r.cageId",
+                targetType = "RABBIT",
+                targetId = "#r.rabbitId",
                 dedup = true
         )
         public Payload create(Long userId, Long houseId, Payload r, String requestId) {

@@ -19,6 +19,8 @@ import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.repro.service.KitPlacementService;
 import com.rabbit.app.modules.repro.service.KitSeparationCommand;
 import com.rabbit.app.modules.repro.service.OperatorNameResolver;
+import com.rabbit.app.tracking.OperationContext;
+import com.rabbit.app.tracking.TrackedOperation;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
@@ -72,6 +74,10 @@ public class BatchWeaningSeparationService {
         this.commodityCageCapacity = commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
     }
 
+    @TrackedOperation(
+        code = API, eventType = "WEANING_SEPARATED", requestId = "#request.requestId",
+        batchId = "#batchId", targetType = "WEANING_RECORD", targetId = "#weaningRecordId"
+    )
     @Transactional
     public WeaningSeparationResult separate(
         Long userId,
@@ -95,6 +101,7 @@ public class BatchWeaningSeparationService {
             payloadHash(batchId, weaningRecordId, request, allocations)
         );
         if (dedup == RequestDedupService.BeginResult.DONE) {
+            OperationContext.currentOrBind().setDedupReplay(true);
             return replayedResult(houseId, userId, requestId);
         }
         if ("已完成".equals(batch.getStatus())) {

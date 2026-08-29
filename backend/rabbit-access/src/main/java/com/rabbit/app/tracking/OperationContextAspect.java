@@ -79,15 +79,16 @@ public class OperationContextAspect {
 
         StandardEvaluationContext spel = registry.evaluationContext(method, joinPoint.getTarget(), joinPoint.getArgs());
         applyIdentifiers(context, descriptor, spel);
-        context.setOperationCode(descriptor.getCode());
+        String operationCode = descriptor.code(spel);
+        context.setOperationCode(operationCode);
 
         boolean dedupActive = descriptor.isDedup() && hasText(context.getRequestId());
         if (dedupActive) {
             context.setDedupReplay(requestDedupService.shouldSkipAsDone(
-                    context.getHouseId(), context.getUserId(), descriptor.getCode(), context.getRequestId()));
+                    context.getHouseId(), context.getUserId(), operationCode, context.getRequestId()));
             if (!context.isDedupReplay()) {
                 requestDedupService.markProcessing(
-                        context.getHouseId(), context.getUserId(), descriptor.getCode(), context.getRequestId());
+                        context.getHouseId(), context.getUserId(), operationCode, context.getRequestId());
             }
         } else {
             context.setDedupReplay(false);
@@ -100,13 +101,13 @@ public class OperationContextAspect {
                 // 此刻业务事务已经提交（事务通知是内层）。markDone 必须在提交之后，
                 // 否则「已完成」会先于数据落地，重试时回放出一条并不存在的记录。
                 requestDedupService.markDone(
-                        context.getHouseId(), context.getUserId(), descriptor.getCode(), context.getRequestId());
+                        context.getHouseId(), context.getUserId(), operationCode, context.getRequestId());
             }
             return result;
         } catch (RuntimeException e) {
             if (dedupActive && !replay) {
                 requestDedupService.markFailed(
-                        context.getHouseId(), context.getUserId(), descriptor.getCode(),
+                        context.getHouseId(), context.getUserId(), operationCode,
                         context.getRequestId(), e.getMessage());
             }
             throw e;
