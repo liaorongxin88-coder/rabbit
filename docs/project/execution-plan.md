@@ -1085,3 +1085,38 @@ D1 已合并，事件持久化契约稳定，T6 拆成三条并行泳道。契�
 三条泳道都不得改 `ReproEventMapper.xml` 的 `insertBatch`、V51，或任何
 `@TrackedOperation` 的 `dedup` 取值。消费端沿用 D3/D4 的教训：
 该区块自己加载、自己重试，失败不拖垮所在页面。
+
+#### 5.13.3 D6 合并记录（2026-08-29）
+
+三条泳道全部落地，基线 `8714bcb`。
+
+| 泳道 | 提交 | 内容 |
+| --- | --- | --- |
+| D6A | `3973506` | `GET /api/operation-events`：keyset 翻页、目标与时间过滤、`rabbit:audit:list` |
+| D6B | `280279e` | Admin 兔只详情的操作事件区块 |
+| D6C | `78f27b9` | App 兔舍操作记录入口与游标列表 |
+
+D6A 与 D6B 由主会话直接完成：两个子代理连续以 `terminated` 收场（D6B 两次、D6A 一次），
+其中两次工具调用数为 0，属传输层故障而非任务失败，同一份任务书连挂两次后不再原样重试。
+
+**发现：注解不等于发事件。** `rabbit-production` 有 32 处 `@TrackedOperation`，
+但真正调用 `context.recordEvent` 的只有 FeedService 和 VaccinationService。
+注解只绑定 OperationContext（补 `audit_logs` 坐标、可选接管幂等），本身不写事件行。
+所以事件流当前只装三类东西：繁育状态机事件、投喂、接种；建兔只、转笼、批次操作、
+销售、NFC 绑定都不在里面。
+
+这是写 IT 时撞出来的：断言「建兔只应留一条 `rabbit.create`」实际得到 0 条。
+D1 自报的遗留是「注解 40 处 vs 计划 45 处」，听起来是数量差距，真实差距是性质上的。
+`OperationEventReadIT.mostWriteOperationsDoNotEmitEventsYet` 钉住现状，
+等发射补齐后它会失败，提醒人改成正向断言，而不是默默缺数据。
+
+设计取舍：游标编码 `(occurred_at, id)` 而非单纯 id，因为 `occurred_at` 允许补录、
+与自增 id 不同序，只按 id 翻页会漏掉补录进来的历史事件；`payload` 与 `request_id`
+不进查询列，从 SQL 层杜绝外泄；读口单独建 mapper，不动 append-only 的写口。
+
+门禁：后端单测 948（platform 99、access 239、production 461、reporting 130、boot 19），
+完整 e2e `_main_d6` 241 通过 / 3 跳过 / 0 失败，App analyzer 干净、428 测试通过，
+Admin lint/build 干净、65 单测通过、浏览器脚本 7 张截图逐张核对。
+
+遗留：事件发射覆盖面待补（约 30 个写入口）；本轮无在线设备，Admin 与 App 均未做设备验收；
+真机 NFC 闭环仍未安排。
