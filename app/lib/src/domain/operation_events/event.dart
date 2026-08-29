@@ -107,6 +107,9 @@ class OperationEvent {
   }
 
   static DateTime? _dateTime(Object? value) {
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt(), isUtc: true);
+    }
     if (value is! String || value.trim().isEmpty) {
       return null;
     }
@@ -223,8 +226,9 @@ class OperationEventsQuery {
       if (_text(operationCode) case final value?) 'operationCode': value,
       if (cageId != null) 'cageId': cageId,
       if (batchId != null) 'batchId': batchId,
-      if (occurredFrom != null) 'occurredFrom': occurredFrom!.toIso8601String(),
-      if (occurredTo != null) 'occurredTo': occurredTo!.toIso8601String(),
+      if (occurredFrom != null)
+        'occurredFrom': occurredFrom!.millisecondsSinceEpoch,
+      if (occurredTo != null) 'occurredTo': occurredTo!.millisecondsSinceEpoch,
       if (_text(cursor) case final value?) 'cursor': value,
       'limit': limit,
     };
