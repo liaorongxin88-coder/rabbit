@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import {
   createCage,
   deleteCage,
+  getBatchStatistics,
   listBatches,
   listCages,
   listPendingWeaningRecords,
@@ -25,12 +26,14 @@ import {
   updateCage,
 } from "@/api/workspace";
 import type { ReproEntryPoint } from "@/api/workspace";
+import { BatchStatisticsSummary } from "@/components/batch-statistics";
 import { CageAttentionLegend, CageMap } from "@/components/cage-map";
 import { PageHeader } from "@/components/page-header";
 import { HousePermissionBadge } from "@/components/permission-badge";
 import { RabbitFormDialog } from "@/components/rabbit-operation-dialogs";
 import { RabbitRangeEntryDialog } from "@/components/rabbit-range-entry-dialog";
 import { buildCageLayout, cageAcceptsMoreRabbits } from "@/lib/cage-map";
+import { inProgressProductionBatches } from "@/lib/rabbit-repro-entry";
 import { rabbitStageSummary, rabbitTypeLabel } from "@/lib/rabbits";
 import { hasPermission, useWorkspace } from "@/lib/workspace";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +81,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+  BatchStatistics,
   Cage,
   PendingWeaningRecord,
   ProductionBatch,
@@ -125,9 +129,18 @@ export function WorkspaceLivestockPage() {
   >({});
   const [entryPoints, setEntryPoints] = useState<ReproEntryPoint[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
+  const [reproLoading, setReproLoading] = useState(false);
+  const [reproLoadFailed, setReproLoadFailed] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [batchStatistics, setBatchStatistics] =
+    useState<BatchStatistics | null>(null);
+  const [batchStatisticsStatus, setBatchStatisticsStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [pendingCommodityAllocationCount, setPendingCommodityAllocationCount] =
     useState<number | null>(null);
   const reproLoadVersion = useRef(0);
+  const batchStatisticsLoadVersion = useRef(0);
   const canEdit = hasPermission(workspace.permission, "rabbit:rabbits:edit");
   const canControl = hasPermission(workspace.permission, "rabbit:cages:edit");
   const canReadRepro = hasPermission(
@@ -159,13 +172,19 @@ export function WorkspaceLivestockPage() {
 
   const loadReproDictionaries = useCallback(async () => {
     const loadVersion = ++reproLoadVersion.current;
+    batchStatisticsLoadVersion.current += 1;
     setReproStageLabels({});
     setEntryPoints([]);
     setBatches([]);
+    setReproLoadFailed(false);
+    setBatchStatistics(null);
+    setBatchStatisticsStatus("idle");
     setPendingCommodityAllocationCount(null);
     if (!workspace.selectedHouse || !canReadRepro) {
+      setReproLoading(false);
       return;
     }
+    setReproLoading(true);
     const houseId = workspace.selectedHouse.id;
     try {
       const [stages, entries, nextBatches] = await Promise.all([
@@ -201,9 +220,60 @@ export function WorkspaceLivestockPage() {
       setReproStageLabels({});
       setEntryPoints([]);
       setBatches([]);
+      setReproLoadFailed(true);
       setPendingCommodityAllocationCount(null);
+    } finally {
+      if (loadVersion === reproLoadVersion.current) {
+        setReproLoading(false);
+      }
     }
   }, [canReadRepro, workspace.selectedHouse]);
+
+  const currentBatches = useMemo(
+    () => inProgressProductionBatches(batches),
+    [batches],
+  );
+  const currentBatch = useMemo(
+    () =>
+      currentBatches.find((batch) => String(batch.id) === selectedBatchId) ??
+      null,
+    [currentBatches, selectedBatchId],
+  );
+
+  useEffect(() => {
+    setSelectedBatchId((current) =>
+      currentBatches.some((batch) => String(batch.id) === current)
+        ? current
+        : String(currentBatches[0]?.id ?? ""),
+    );
+  }, [currentBatches]);
+
+  const loadBatchStatistics = useCallback(async () => {
+    const loadVersion = ++batchStatisticsLoadVersion.current;
+    const houseId = workspace.selectedHouse?.id;
+    if (
+      !houseId ||
+      !canReadRepro ||
+      !currentBatch ||
+      currentBatch.houseId !== houseId
+    ) {
+      setBatchStatistics(null);
+      setBatchStatisticsStatus("idle");
+      return;
+    }
+    setBatchStatistics(null);
+    setBatchStatisticsStatus("loading");
+    try {
+      const nextStatistics = await getBatchStatistics(houseId, currentBatch.id);
+      if (loadVersion !== batchStatisticsLoadVersion.current) return;
+      setBatchStatistics(nextStatistics);
+      setBatchStatisticsStatus("ready");
+    } catch {
+      if (loadVersion !== batchStatisticsLoadVersion.current) return;
+      setBatchStatistics(null);
+      setBatchStatisticsStatus("error");
+    }
+  }, [canReadRepro, currentBatch, workspace.selectedHouse]);
 
   useEffect(() => {
     void load();
@@ -212,6 +282,10 @@ export function WorkspaceLivestockPage() {
   useEffect(() => {
     void loadReproDictionaries();
   }, [loadReproDictionaries]);
+
+  useEffect(() => {
+    void loadBatchStatistics();
+  }, [loadBatchStatistics]);
 
   const filteredCages = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -262,7 +336,9 @@ export function WorkspaceLivestockPage() {
             <HousePermissionBadge permission={workspace.permission} />
             <Button
               variant="outline"
-              onClick={() => void load()}
+              onClick={() =>
+                void Promise.all([load(), loadReproDictionaries()])
+              }
               disabled={loading || !workspace.selectedHouse}
             >
               <RefreshCwIcon data-icon="inline-start" />
@@ -271,6 +347,68 @@ export function WorkspaceLivestockPage() {
           </>
         }
       />
+
+      {workspace.selectedHouse && canReadRepro ? (
+        <section
+          className="motion-section border-y py-4"
+          aria-labelledby="current-batch-statistics-title"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2
+                id="current-batch-statistics-title"
+                className="text-base font-semibold"
+              >
+                当前生产批次
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                产崽和断奶统计随所选批次更新。
+              </p>
+            </div>
+            {!reproLoading && currentBatches.length > 0 ? (
+              <Select
+                value={selectedBatchId}
+                onValueChange={setSelectedBatchId}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-52"
+                  aria-label="选择当前生产批次"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {currentBatches.map((batch) => (
+                      <SelectItem key={batch.id} value={String(batch.id)}>
+                        {batch.batchCode}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            ) : null}
+          </div>
+          <div className="mt-4">
+            {reproLoading ? (
+              <BatchStatisticsSummary statistics={null} status="loading" />
+            ) : reproLoadFailed ? (
+              <p className="text-sm text-muted-foreground" role="alert">
+                当前批次读取失败，请刷新后重试。
+              </p>
+            ) : currentBatches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                当前没有进行中的批次。建立批次后会显示统计。
+              </p>
+            ) : (
+              <BatchStatisticsSummary
+                statistics={batchStatistics}
+                status={batchStatisticsStatus}
+                onRetry={() => void loadBatchStatistics()}
+              />
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {!workspace.selectedHouse ? (
         <Empty>
