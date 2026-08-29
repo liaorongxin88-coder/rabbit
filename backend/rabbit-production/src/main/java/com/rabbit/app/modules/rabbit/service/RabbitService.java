@@ -197,15 +197,18 @@ public class RabbitService {
         }
     }
 
+    /**
+     * 建兔只。
+     *
+     * <p>只保留这一个入口：曾经还有一个不带 reproEntry 的四参重载，追踪注解就贴在
+     * 那上面，而控制器和范围入栏走的是这个五参方法 —— 结果单只建兔一直没有留痕，
+     * 反而只有批量入栏（唯一走四参重载的调用方）能发出事件。删掉重载而不是两边都贴，
+     * 是因为同类自调用本来就绕过代理，重载存在一天，这个坑就会再踩一次。
+     */
     @TrackedOperation(
         code = "rabbit.create", eventType = "RABBIT_CREATED", targetType = "RABBIT",
         targetId = "#result.id", cageId = "#rabbit.cageId"
     )
-    @Transactional
-    public Rabbit createRabbit(Long userId, Long houseId, Rabbit rabbit, String requestId) {
-        return createRabbit(userId, houseId, rabbit, null, requestId);
-    }
-
     @Transactional
     public Rabbit createRabbit(
         Long userId,

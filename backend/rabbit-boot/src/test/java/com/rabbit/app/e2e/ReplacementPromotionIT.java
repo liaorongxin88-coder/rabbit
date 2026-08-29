@@ -2,6 +2,7 @@ package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.rabbit.app.modules.rabbit.service.CommodityGrowthService;
+import com.rabbit.app.util.DateUtil;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
@@ -300,16 +301,27 @@ public class ReplacementPromotionIT extends E2eTestSupport {
     }
 
     private void assertCommodityGrowthStage(long houseId, long rabbitId, int daysSinceEntry, String expectedStage) {
+        // 入栏时间和推进时刻必须来自同一个时钟，而且不能恰好卡在阈值上。
+        //
+        // 旧写法用 MySQL 的 now() 算入栏时间、JVM 的 new Date() 做推进，而判定是
+        // date_add(entered_at, N day) <= #{now}，代入后变成 mysqlNow <= jvmNow，
+        // 两个时钟差一点就翻面。改成同一个时刻后仍会间歇失败：
+        // DATETIME 是秒精度，写入时对毫秒四舍五入，向上舍入就会把入栏时间推迟不足一秒，
+        // 恰好让等号不成立——能不能过取决于当前时刻的毫秒位，实质是抛硬币。
+        //
+        // 阶段窗口相隔以天计，因此多给一小时余量既能消除秒级歧义，又不会跨到下一阶段。
+        Date now = new Date();
+        Date enteredAt = new Date(DateUtil.plusDays(now, -daysSinceEntry).getTime() - 3_600_000L);
         jdbc.update(
             "update rabbits set growth_stage = 'JUVENILE',"
-                + " growth_stage_entered_at = date_sub(now(), interval ? day)"
+                + " growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
-            daysSinceEntry,
+            enteredAt,
             houseId,
             rabbitId
         );
 
-        Assertions.assertEquals(1, commodityGrowthService.advanceHouse(houseId, new java.util.Date()));
+        Assertions.assertEquals(1, commodityGrowthService.advanceHouse(houseId, now));
         Assertions.assertEquals(expectedStage, jdbc.queryForObject(
             "select growth_stage from rabbits where house_id = ? and id = ?",
             String.class,

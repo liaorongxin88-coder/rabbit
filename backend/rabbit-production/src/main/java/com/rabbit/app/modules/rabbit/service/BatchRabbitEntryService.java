@@ -108,6 +108,7 @@ public class BatchRabbitEntryService {
                 userId,
                 houseId,
                 rabbit(request, cage.getId(), individualWeight),
+                null,
                 childRequestId
             );
             entered++;

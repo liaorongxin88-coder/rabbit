@@ -64,30 +64,6 @@ class OperationEventReadIT extends E2eTestSupport {
         Assertions.assertFalse(page.has("total"), "游标分页刻意不返回 total");
     }
 
-    /**
-     * 当前覆盖面的基准线。
-     *
-     * <p>D1 给三十多个写方法铺了 {@code @TrackedOperation}，但注解只绑定
-     * OperationContext，并不自动写事件行；真正调 {@code recordEvent} 的只有
-     * 投喂和接种两处。所以建兔只这类操作目前不会进流水。
-     *
-     * <p>这条用例钉住现状而不是认可现状：等后续把发射补到其他写入口，
-     * 它会失败，提醒人回来改断言，而不是默默地一直缺数据。
-     */
-    @Test
-    void mostWriteOperationsDoNotEmitEventsYet() {
-        JsonNode page = api.getOk(
-            "/api/operation-events?targetType=RABBIT&targetId=" + rabbitId, owner.token, houseId
-        );
-
-        for (JsonNode item : page.get("items")) {
-            Assertions.assertNotEquals(
-                "rabbit.create", item.path("operationCode").asText(),
-                "建兔只已能发事件了，请把这条基准线用例改成正向断言"
-            );
-        }
-    }
-
     @Test
     void anotherHouseCannotSeeTheseEvents() {
         UserSession outsider = register("opevt_out");
