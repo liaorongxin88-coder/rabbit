@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -30,6 +31,16 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(409, response.getCode());
         assertEquals("库存不足", response.getMessage());
+        assertNull(response.getData());
+    }
+
+    @Test
+    void aMalformedJsonRequestBodyGetsASafeStableMessage() {
+        ApiResponse<Void> response = handler.handleUnreadableBody(new HttpMessageNotReadableException(
+                "Cannot deserialize field requestId from payload {invalid json}", null, null));
+
+        assertEquals(400, response.getCode());
+        assertEquals("请求体格式错误", response.getMessage());
         assertNull(response.getData());
     }
 
