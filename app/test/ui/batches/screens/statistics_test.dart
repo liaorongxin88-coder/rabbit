@@ -14,7 +14,7 @@ import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 void main() {
-  testWidgets('shows a loading state while batch statistics load',
+  testWidgets('statistics load in their own section without blocking the batch',
       (tester) async {
     final completer = Completer<BatchStatistics>();
 
@@ -23,10 +23,23 @@ void main() {
       statistics: () => completer.future,
       settle: false,
     );
+    await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // 统计还在加载，批次详情主体必须已经可用。
+    expect(
+        find.byKey(const ValueKey('batch-detail-member-list')), findsOneWidget);
+    expect(find.text('STATS-11'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('batch-statistics-loading')),
+      findsOneWidget,
+    );
+
     completer.complete(const BatchStatistics.empty());
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('batch-statistics-loading')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -84,16 +97,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows a retryable error when batch statistics fail to load',
+  testWidgets('a statistics failure keeps the rest of the batch usable',
       (tester) async {
     await _pumpDetail(
       tester,
       statistics: () async => throw const ApiException('网络不可用'),
     );
 
-    expect(find.text('加载失败'), findsOneWidget);
-    expect(find.text('网络不可用'), findsOneWidget);
-    expect(find.text('重试'), findsOneWidget);
+    // 统计失败只影响统计区块。
+    expect(
+        find.byKey(const ValueKey('batch-statistics-error')), findsOneWidget);
+    expect(find.textContaining('网络不可用'), findsOneWidget);
+    expect(find.text('重试统计'), findsOneWidget);
+
+    // 主体仍然可用，不能整页退化成加载失败。
+    expect(
+        find.byKey(const ValueKey('batch-detail-member-list')), findsOneWidget);
+    expect(find.text('STATS-11'), findsOneWidget);
+    expect(find.text('加载失败'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('retrying statistics reloads only the statistics request',
+      (tester) async {
+    var statisticsRequests = 0;
+    var batchRequests = 0;
+
+    await _pumpDetail(
+      tester,
+      statistics: () async {
+        statisticsRequests++;
+        throw const ApiException('网络不可用');
+      },
+      onBatchRequest: () => batchRequests++,
+    );
+
+    expect(statisticsRequests, 1);
+    expect(batchRequests, 1);
+
+    await tester.ensureVisible(find.text('重试统计'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试统计'));
+    await tester.pumpAndSettle();
+
+    expect(statisticsRequests, 2);
+    expect(batchRequests, 1);
     expect(tester.takeException(), isNull);
   });
 
@@ -128,22 +176,24 @@ Future<void> _pumpDetail(
   required Future<BatchStatistics> Function() statistics,
   TextScaler textScaler = TextScaler.noScaling,
   bool settle = true,
+  VoidCallback? onBatchRequest,
 }) async {
   const request = BatchDetailRequest(houseId: 8, batchId: 11);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        batchDetailProvider(request).overrideWith(
-          (_) async => const Batch(
+        batchDetailProvider(request).overrideWith((_) async {
+          onBatchRequest?.call();
+          return const Batch(
             id: 11,
             houseId: 8,
-            batchCode: 'STAT-11',
+            batchCode: 'STATS-11',
             status: '进行中',
             startDate: null,
             endDate: null,
             remark: '',
-          ),
-        ),
+          );
+        }),
         batchStatisticsProvider(request).overrideWith((_) => statistics()),
         batchMembersProvider(request).overrideWith((_) async => const []),
         pendingWeaningRecordsProvider(request)

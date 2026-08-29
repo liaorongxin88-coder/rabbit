@@ -110,6 +110,11 @@ class _HouseBatchDetailScreenState
     }
   }
 
+  /// 只重新拉取生产统计，不连带刷新批次详情和成员列表。
+  void _refreshStatistics() {
+    ref.invalidate(batchStatisticsProvider(_request));
+  }
+
   void _resetSelectionState() {
     _selectedRabbitIds.clear();
     _selectionAction = null;
@@ -153,15 +158,15 @@ class _HouseBatchDetailScreenState
     AsyncValue<List<PendingWeaningRecord>> pendingWeanings,
     AsyncValue<dynamic> permission,
   ) {
+    // 生产统计是附加信息：它自己在区块内加载和重试，
+    // 慢或失败都不应该挡住批次成员和现有操作。
     if (batch.isLoading ||
-        statistics.isLoading ||
         members.isLoading ||
         pendingWeanings.isLoading ||
         permission.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     final error = batch.error ??
-        statistics.error ??
         members.error ??
         pendingWeanings.error ??
         permission.error;
@@ -173,7 +178,6 @@ class _HouseBatchDetailScreenState
     }
 
     final currentBatch = batch.requireValue;
-    final currentStatistics = statistics.requireValue;
     final allMembers = members.requireValue;
     final pendingRecords = pendingProductionRecords(
       pendingWeanings.requireValue,
@@ -254,7 +258,10 @@ class _HouseBatchDetailScreenState
             case 3:
               return const SizedBox(height: 12);
             case 4:
-              return _BatchStatistics(statistics: currentStatistics);
+              return _BatchStatistics(
+                statistics: statistics,
+                onRetry: _refreshStatistics,
+              );
             case 5:
               return const SizedBox(height: 12);
             case 6:
@@ -1236,9 +1243,10 @@ class _BatchMetrics extends StatelessWidget {
 }
 
 class _BatchStatistics extends StatelessWidget {
-  const _BatchStatistics({required this.statistics});
+  const _BatchStatistics({required this.statistics, required this.onRetry});
 
-  final BatchStatistics statistics;
+  final AsyncValue<BatchStatistics> statistics;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -1249,53 +1257,92 @@ class _BatchStatistics extends StatelessWidget {
         children: [
           Text('生产统计', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = (constraints.maxWidth - 8) / 2;
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _MetricTile(
-                    key: const ValueKey('batch-statistics-total-litters'),
-                    width: width,
-                    label: '产崽窝数',
-                    value: statistics.totalLitters,
-                  ),
-                  _MetricTile(
-                    key: const ValueKey('batch-statistics-total-kits'),
-                    width: width,
-                    label: '产崽总数',
-                    value: statistics.totalKits,
-                  ),
-                  _MetricTile(
-                    key: const ValueKey('batch-statistics-total-live-kits'),
-                    width: width,
-                    label: '活崽总数',
-                    value: statistics.totalLiveKits,
-                  ),
-                  _MetricTile(
-                    key: const ValueKey('batch-statistics-total-weaned'),
-                    width: width,
-                    label: '断奶数量',
-                    value: statistics.totalWeaned,
-                  ),
-                ],
-              );
-            },
-          ),
-          if (statistics.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              '暂无产崽记录',
-              key: const ValueKey('batch-statistics-empty'),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.muted,
-                  ),
+          statistics.when(
+            loading: () => const Padding(
+              key: ValueKey('batch-statistics-loading'),
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
             ),
-          ],
+            error: (error, _) => Column(
+              key: const ValueKey('batch-statistics-error'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '统计加载失败：${_errorMessage(error)}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: palette.muted,
+                      ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: onRetry,
+                    child: const Text('重试统计'),
+                  ),
+                ),
+              ],
+            ),
+            data: (value) => _metrics(context, palette, value),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _metrics(
+    BuildContext context,
+    AppPalette palette,
+    BatchStatistics statistics,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth - 8) / 2;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetricTile(
+                  key: const ValueKey('batch-statistics-total-litters'),
+                  width: width,
+                  label: '产崽窝数',
+                  value: statistics.totalLitters,
+                ),
+                _MetricTile(
+                  key: const ValueKey('batch-statistics-total-kits'),
+                  width: width,
+                  label: '产崽总数',
+                  value: statistics.totalKits,
+                ),
+                _MetricTile(
+                  key: const ValueKey('batch-statistics-total-live-kits'),
+                  width: width,
+                  label: '活崽总数',
+                  value: statistics.totalLiveKits,
+                ),
+                _MetricTile(
+                  key: const ValueKey('batch-statistics-total-weaned'),
+                  width: width,
+                  label: '断奶数量',
+                  value: statistics.totalWeaned,
+                ),
+              ],
+            );
+          },
+        ),
+        if (statistics.isEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            '暂无产崽记录',
+            key: const ValueKey('batch-statistics-empty'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: palette.muted,
+                ),
+          ),
+        ],
+      ],
     );
   }
 }
