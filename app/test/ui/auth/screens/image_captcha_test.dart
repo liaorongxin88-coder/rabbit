@@ -38,8 +38,8 @@ void main() {
 
     final buttonRect = tester.getRect(button);
     final iconRect = tester.getRect(icon);
-    final iconSize =
-        tester.widget<Icon>(icon).size ?? IconTheme.of(tester.element(icon)).size!;
+    final iconSize = tester.widget<Icon>(icon).size ??
+        IconTheme.of(tester.element(icon)).size!;
 
     // 按钮默认左右内边距会把图标盒挤到只剩几个像素宽，字形随后向右溢出绘制，
     // 看上去就是图标不居中。这里校验图标盒拿到了完整宽度，没有被挤压。
