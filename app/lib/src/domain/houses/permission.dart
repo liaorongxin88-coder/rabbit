@@ -32,6 +32,8 @@ class HousePermission {
   bool get canManageMembers =>
       hasPermission('rabbit:house-members:list') || isAdmin;
 
+  bool get canViewAudit => hasPermission('rabbit:audit:list') || isAdmin;
+
   String get roleLabel {
     if (isAdmin) {
       return '所有者';
