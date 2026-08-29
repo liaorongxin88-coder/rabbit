@@ -165,9 +165,27 @@ class _UpdateCard extends ConsumerWidget {
       AppUpdatePhase.available => '发现新版本 ${state.release!.versionName}',
       AppUpdatePhase.failed => state.message ?? '检查更新失败',
       AppUpdatePhase.downloading => '正在下载更新包',
-      AppUpdatePhase.permissionRequired => '下载完成，等待安装授权',
-      AppUpdatePhase.installing => '系统安装器已打开',
+      AppUpdatePhase.permissionRequired => '安装包已下载完成，等待安装授权',
+      AppUpdatePhase.installing => '安装包已下载完成，系统安装器已打开',
       _ => '检查新版本并安装',
+    };
+    final controller = ref.read(appUpdateControllerProvider.notifier);
+
+    // 包已经下好了就得给个入口。系统安装器是弹层，在旁边随手点一下就没了；
+    // 以前这种情况下卡片只剩一个「检查更新」，重新检查也回不到安装这一步，
+    // 只能等下次启动弹窗。包在本地，重新拉起安装不会重下。
+    final (String, VoidCallback)? primaryAction = switch (state.phase) {
+      AppUpdatePhase.available => ('立即更新', controller.startDownload),
+      AppUpdatePhase.permissionRequired => (
+          '去授权并安装',
+          controller.authorizeAndInstall
+        ),
+      AppUpdatePhase.installing => ('重新打开安装', controller.authorizeAndInstall),
+      AppUpdatePhase.failed when state.release != null => (
+          '重新下载',
+          controller.startDownload,
+        ),
+      _ => null,
     };
 
     return SectionCard(
@@ -180,6 +198,15 @@ class _UpdateCard extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(description, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 14),
+          if (primaryAction != null) ...[
+            FilledButton.icon(
+              key: const ValueKey('app-update-card-primary-action'),
+              onPressed: primaryAction.$2,
+              icon: const Icon(Icons.download_done_outlined),
+              label: Text(primaryAction.$1),
+            ),
+            const SizedBox(height: 8),
+          ],
           OutlinedButton.icon(
             key: const ValueKey('app-update-check-button'),
             onPressed: checking || downloading

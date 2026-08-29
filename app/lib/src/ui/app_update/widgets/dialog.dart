@@ -95,12 +95,19 @@ class _AppUpdateDialog extends ConsumerWidget {
           ),
         ];
       case AppUpdatePhase.installing:
+        // 系统安装器是弹层，误触一下就没了。之前这里只有一个退出按钮，
+        // 包已经在本地却没地方重新拉起安装。这个按钮不会重新下载。
         return [
           if (canUseLater)
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('暂时继续使用'),
             ),
+          FilledButton(
+            key: const ValueKey('app-update-reopen-installer'),
+            onPressed: controller.authorizeAndInstall,
+            child: const Text('重新打开安装'),
+          ),
         ];
       case AppUpdatePhase.failed:
         return [
