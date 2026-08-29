@@ -366,7 +366,10 @@ export function WorkspaceLivestockPage() {
               </p>
             </div>
             {!reproLoading && currentBatches.length > 0 ? (
-              <Select value={selectedBatchId} onValueChange={setSelectedBatchId}>
+              <Select
+                value={selectedBatchId}
+                onValueChange={setSelectedBatchId}
+              >
                 <SelectTrigger
                   className="w-full sm:w-52"
                   aria-label="选择当前生产批次"

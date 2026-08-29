@@ -47,9 +47,7 @@ export function BatchStatisticsSummary({
 
   if (!statistics) {
     return (
-      <p className="text-sm text-muted-foreground">
-        当前批次暂无产崽记录。
-      </p>
+      <p className="text-sm text-muted-foreground">当前批次暂无产崽记录。</p>
     );
   }
 
