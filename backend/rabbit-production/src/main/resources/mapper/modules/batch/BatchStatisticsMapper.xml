@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.batch.mapper.BatchStatisticsMapper">
+    <select id="selectByBatch" resultType="com.rabbit.app.modules.batch.dto.BatchStatistics">
+        select count(l.id) as totalLitters,
+               ifnull(sum(l.total_kits), 0) as totalKits,
+               ifnull(sum(l.live_kits), 0) as totalLiveKits,
+               ifnull(sum(l.weaned_count), 0) as totalWeaned
+        from batches b
+        left join litters l on l.house_id = b.house_id and l.batch_id = b.id
+        where b.house_id = #{houseId} and b.id = #{batchId}
+        group by b.id
+    </select>
+</mapper>

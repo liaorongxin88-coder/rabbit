@@ -7,6 +7,7 @@ import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.dto.TaskView;
 import com.rabbit.app.modules.repro.service.WorkTaskService;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
+import com.rabbit.app.modules.batch.dto.BatchStatistics;
 import com.rabbit.app.modules.batch.dto.CompleteBatchRequest;
 import com.rabbit.app.modules.batch.dto.SeparateWeaningRecordRequest;
 import com.rabbit.app.modules.batch.dto.WeaningSeparationResult;
@@ -18,6 +19,7 @@ import com.rabbit.app.modules.batch.entity.BreedingCycle;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.service.BatchCodeFallbackResolver;
 import com.rabbit.app.modules.batch.service.BatchService;
+import com.rabbit.app.modules.batch.service.BatchStatisticsService;
 import com.rabbit.app.modules.batch.service.BatchWeaningSeparationService;
 import com.rabbit.app.modules.event.dto.EventItem;
 import com.rabbit.app.modules.event.service.EventService;
@@ -53,6 +55,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BatchController {
     private final HouseService houseService;
     private final BatchService batchService;
+    private final BatchStatisticsService batchStatisticsService;
     private final BatchCodeFallbackResolver batchCodeFallbackResolver;
     private final BatchWeaningSeparationService batchWeaningSeparationService;
     private final BatchRabbitMapper batchRabbitMapper;
@@ -65,6 +68,7 @@ public class BatchController {
     public BatchController(
         HouseService houseService,
         BatchService batchService,
+        BatchStatisticsService batchStatisticsService,
         BatchCodeFallbackResolver batchCodeFallbackResolver,
         BatchWeaningSeparationService batchWeaningSeparationService,
         BatchRabbitMapper batchRabbitMapper,
@@ -76,6 +80,7 @@ public class BatchController {
         this.workTaskService = workTaskService;
         this.houseService = houseService;
         this.batchService = batchService;
+        this.batchStatisticsService = batchStatisticsService;
         this.batchCodeFallbackResolver = batchCodeFallbackResolver;
         this.batchWeaningSeparationService = batchWeaningSeparationService;
         this.batchRabbitMapper = batchRabbitMapper;
@@ -163,6 +168,17 @@ public class BatchController {
             throw new BizException(400, "批次不存在");
         }
         return ApiResponse.ok(b);
+    }
+
+    @GetMapping("/batches/{batchId}/statistics")
+    @RequiresPermission(PermissionCode.RABBIT_BATCHES_QUERY)
+    public ApiResponse<BatchStatistics> getBatchStatistics(
+            @RequestHeader("X-House-Id") Long houseId,
+            @PathVariable("batchId") Long batchId
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "view");
+        return ApiResponse.ok(batchStatisticsService.getStatistics(houseId, batchId));
     }
 
     @GetMapping("/batches/{batchId}/batch-rabbits")
