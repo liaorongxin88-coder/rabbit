@@ -40,7 +40,10 @@ class BootTestPlacementTest {
             // 读 boot 资源目录下的 db/schema.sql。
             "SchemaSqlV24Test",
             // 被测类 SecurityConfig 就在 boot。
-            "SecurityConfigTest"
+            "SecurityConfigTest",
+            // 扫四个业务模块的源码找 @TrackedOperation 的贴错位置，
+            // 放进任何单一模块都只能看见自己那一部分。
+            "TrackedOperationPlacementTest"
     );
 
     @Test
