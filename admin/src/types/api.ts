@@ -291,6 +291,13 @@ export interface ProductionBatch {
  createTime?: string | null;
 }
 
+export interface BatchStatistics {
+ totalLitters: number;
+ totalKits: number;
+ totalLiveKits: number;
+ totalWeaned: number;
+}
+
 export interface PendingWeaningRecord {
  id: number;
  batchId: number;

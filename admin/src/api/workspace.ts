@@ -14,6 +14,7 @@ import { rabbitReplacementPath } from "@/lib/rabbit-replacement";
 import type {
   BatchRabbit,
   BatchRabbitEntryResult,
+  BatchStatistics,
   BreedingCycle,
   Cage,
   DashboardSummary,
@@ -341,6 +342,13 @@ export function transferRabbitCage(
 
 export function listBatches(houseId: number) {
   return workspaceGetJson<ProductionBatch[]>("/api/batches", { houseId });
+}
+
+export function getBatchStatistics(houseId: number, batchId: number) {
+  return workspaceGetJson<BatchStatistics>(
+    `/api/batches/${batchId}/statistics`,
+    { houseId },
+  );
 }
 
 export function createBatch(
