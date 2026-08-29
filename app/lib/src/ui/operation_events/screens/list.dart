@@ -64,7 +64,8 @@ class _HouseOperationEventsScreenState
         ),
         error: (error, _) => ErrorState(
           message: error.toString(),
-          onRetry: () => ref.invalidate(housePermissionProvider(widget.houseId)),
+          onRetry: () =>
+              ref.invalidate(housePermissionProvider(widget.houseId)),
         ),
       ),
     );
@@ -94,12 +95,11 @@ class _HouseOperationEventsScreenState
       _loadMoreError = null;
     });
     try {
-      final page = await ref
-          .read(operationEventsRepositoryProvider)
-          .listOperationEvents(
-            houseId: widget.houseId,
-            query: const OperationEventsQuery(limit: _pageSize),
-          );
+      final page =
+          await ref.read(operationEventsRepositoryProvider).listOperationEvents(
+                houseId: widget.houseId,
+                query: const OperationEventsQuery(limit: _pageSize),
+              );
       if (!mounted) {
         return;
       }
@@ -130,12 +130,11 @@ class _HouseOperationEventsScreenState
       _loadMoreError = null;
     });
     try {
-      final page = await ref
-          .read(operationEventsRepositoryProvider)
-          .listOperationEvents(
-            houseId: widget.houseId,
-            query: OperationEventsQuery(cursor: cursor, limit: _pageSize),
-          );
+      final page =
+          await ref.read(operationEventsRepositoryProvider).listOperationEvents(
+                houseId: widget.houseId,
+                query: OperationEventsQuery(cursor: cursor, limit: _pageSize),
+              );
       if (!mounted) {
         return;
       }
