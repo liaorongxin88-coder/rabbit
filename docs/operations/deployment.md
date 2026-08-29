@@ -81,6 +81,49 @@ curl -i http://127.0.0.1:8080/api/houses
 
 生产部署和回滚的自动化顺序见 [CI/CD 与发布](ci-cd.md)。
 
+## Admin 静态包人工发布
+
+Admin 发布由运维人员在已下载并核验的制品上手动调用，CI 仍只构建和保存制品。本组脚本不会设置 `BACKEND_AUTO_DEPLOY`，也不会改变标签推送的部署行为。
+
+Nginx 的静态 `root` 必须指向 `ADMIN_DEPLOY_PATH/current`。同一个 server block 必须包含 `/api/` 的 `proxy_pass`；脚本先运行 `nginx -t` 并检查该 location，再从 Admin HTTPS 域名探测 `/api/houses`。探测接受 HTTP `200` 或 `401`，但必须返回业务 `code=401`。
+
+调用 [`deploy/scripts/deploy-admin.sh`](../../deploy/scripts/deploy-admin.sh) 前，显式提供以下环境变量：
+
+- `ADMIN_DEPLOY_HOST`、`ADMIN_DEPLOY_USER`、`ADMIN_DEPLOY_PATH` 和可选 `ADMIN_DEPLOY_PORT`、`ADMIN_DEPLOY_SSH_KEY`。
+- `ADMIN_BUNDLE`、`ADMIN_BUNDLE_SHA256`、`ADMIN_RELEASE_ID`、`ADMIN_SOURCE_SHA`。
+- `ADMIN_PUBLIC_URL` 和远端 `ADMIN_NGINX_CONFIG`。
+
+脚本先校验本地 tar.gz 的 SHA-256，再把包和远端激活脚本传到临时目录。远端在锁内解压到不可变的 `releases/<release-id>`，备份上一份静态目录，原子切换 `current` 链接，并把 hash、旧目录、备份、Nginx 配置和探测状态写入本地及远端证据文件。静态包切换后的任一验证失败会恢复上一份 `current`。
+
+先用 `--dry-run` 检查入参；它不会连接远端：
+
+```bash
+ADMIN_DEPLOY_HOST=<ssh-host> \
+ADMIN_DEPLOY_USER=<ssh-user> \
+ADMIN_DEPLOY_PATH=<remote-release-root> \
+ADMIN_BUNDLE=<admin-bundle.tar.gz> \
+ADMIN_BUNDLE_SHA256=<artifact-sha256> \
+ADMIN_RELEASE_ID=<release-id> \
+ADMIN_SOURCE_SHA=<full-git-sha> \
+ADMIN_PUBLIC_URL=<admin-https-url> \
+ADMIN_NGINX_CONFIG=<remote-nginx-config> \
+./deploy/scripts/deploy-admin.sh --dry-run
+```
+
+## OTA 版本清单人工登记
+
+[`deploy/scripts/register-app-release.sh`](../../deploy/scripts/register-app-release.sh) 只调用现有的 `POST /api/admin/app-updates`，不连接数据库也不拼接 SQL。它从签名 APK 计算大小和 SHA-256，使用 `jq` 序列化 JSON，并以 `APP_RELEASE_REQUEST_ID` 调用现有幂等接口。重试必须使用同一个 request ID，脚本会验证响应中的版本、下载地址、摘要和构建号。
+
+该脚本需要运维人员通过现有平台管理员登录流程取得有发布权限的 JWT，并把令牌放入权限受限的 `APP_RELEASE_ADMIN_TOKEN_FILE`。令牌的签发、保管和过期处理仍是人工步骤，脚本不会新增部署身份或保存令牌。其余必填参数是 `APP_RELEASE_API_BASE_URL`、`APP_RELEASE_APK`、`APP_RELEASE_VERSION_NAME`、`APP_RELEASE_BUILD_NUMBER`、`APP_RELEASE_DOWNLOAD_URL` 和 `APP_RELEASE_REQUEST_ID`；可选 `APP_RELEASE_NOTES_FILE`、`APP_RELEASE_FORCE_UPDATE` 和 `APP_RELEASE_EVIDENCE_FILE`。同样可先运行 `--dry-run`，不会发送 API 请求。
+
+离线夹具不访问生产环境，可在改动发布脚本后执行：
+
+```bash
+bash -n deploy/scripts/*.sh deploy/remote/*.sh deploy/tests/*.sh
+shellcheck deploy/scripts/*.sh deploy/remote/*.sh deploy/tests/*.sh
+./deploy/tests/admin-release-scripts-test.sh
+```
+
 ## 时间和安全
 
 - 后端、数据库和容器统一使用 `Asia/Shanghai`，避免提醒和到期日跨时区偏移。
