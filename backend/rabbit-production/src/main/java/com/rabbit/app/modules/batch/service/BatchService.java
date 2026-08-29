@@ -162,7 +162,7 @@ public class BatchService {
 
     @TrackedOperation(
         code = "batch.create", eventType = "BATCH_CREATED", targetType = "BATCH",
-        targetId = "#result.id", dedup = true
+        targetId = "#result.id"
     )
     @Transactional
     public Batch createBatch(
@@ -356,7 +356,7 @@ public class BatchService {
      */
     @TrackedOperation(
         code = "batch.addMembers", eventType = "BATCH_MEMBERS_ADDED", batchId = "#batchId",
-        targetType = "BATCH", targetId = "#batchId", dedup = true
+        targetType = "BATCH", targetId = "#batchId"
     )
     @Transactional
     public void addMembers(
@@ -405,7 +405,7 @@ public class BatchService {
      */
     @TrackedOperation(
         code = "batch.removeMember", eventType = "BATCH_MEMBER_REMOVED", batchId = "#batchId",
-        targetType = "BATCH", targetId = "#batchId", rabbitId = "#rabbitId", dedup = true
+        targetType = "BATCH", targetId = "#batchId", rabbitId = "#rabbitId"
     )
     @Transactional
     public void removeMember(
@@ -549,7 +549,7 @@ public class BatchService {
 
     @TrackedOperation(
         code = "batch.sale", eventType = "BATCH_SOLD", batchId = "#batchId",
-        targetType = "BATCH", targetId = "#batchId", dedup = true
+        targetType = "BATCH", targetId = "#batchId"
     )
     @Transactional
     public void sale(
@@ -722,7 +722,7 @@ public class BatchService {
 
     @TrackedOperation(
         code = "batch.completeBatch", eventType = "BATCH_COMPLETED", batchId = "#batchId",
-        targetType = "BATCH", targetId = "#batchId", dedup = true
+        targetType = "BATCH", targetId = "#batchId"
     )
     @Transactional
     public void completeBatch(
@@ -824,7 +824,7 @@ public class BatchService {
      */
     @TrackedOperation(
         code = "batch.rename", eventType = "BATCH_RENAMED", batchId = "#batchId",
-        targetType = "BATCH", targetId = "#batchId", dedup = true
+        targetType = "BATCH", targetId = "#batchId"
     )
     @Transactional
     public Batch renameBatch(

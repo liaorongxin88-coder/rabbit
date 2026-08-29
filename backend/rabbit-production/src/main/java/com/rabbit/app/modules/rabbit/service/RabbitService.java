@@ -199,7 +199,7 @@ public class RabbitService {
 
     @TrackedOperation(
         code = "rabbit.create", eventType = "RABBIT_CREATED", targetType = "RABBIT",
-        targetId = "#result.id", cageId = "#rabbit.cageId", dedup = true
+        targetId = "#result.id", cageId = "#rabbit.cageId"
     )
     @Transactional
     public Rabbit createRabbit(Long userId, Long houseId, Rabbit rabbit, String requestId) {
@@ -385,7 +385,7 @@ public class RabbitService {
 
     @TrackedOperation(
         code = "rabbit.updateBaseInfo", eventType = "RABBIT_UPDATED", targetType = "RABBIT",
-        targetId = "#rabbitId", cageId = "#cageId", dedup = true
+        targetId = "#rabbitId", cageId = "#cageId"
     )
     @Transactional
     public Rabbit updateBaseInfo(
@@ -545,7 +545,7 @@ public class RabbitService {
      */
     @TrackedOperation(
         code = "rabbit.transferCage", eventType = "RABBIT_CAGE_TRANSFERRED", targetType = "RABBIT",
-        targetId = "#rabbitId", cageId = "#targetCageId", dedup = true
+        targetId = "#rabbitId", cageId = "#targetCageId"
     )
     @Transactional
     public CageTransferResult transferCage(
@@ -769,7 +769,7 @@ public class RabbitService {
 
     @TrackedOperation(
         code = "rabbit.toReplacement", eventType = "RABBITS_CONVERTED_TO_REPLACEMENT",
-        targetType = "RABBIT_BATCH", dedup = true
+        targetType = "RABBIT_BATCH"
     )
     @Transactional
     public ReplacementConversionResponse convertToReplacement(Long userId, Long houseId, List<Long> rabbitIds, boolean forceExitBatch, Long targetCageId, String requestId) {
@@ -973,7 +973,7 @@ public class RabbitService {
     /** 后备兔成熟后原笼转种兔笼；母兔同时进入无批次的待催情周期。 */
     @TrackedOperation(
         code = "rabbit.promoteReplacement", eventType = "RABBIT_PROMOTED", targetType = "RABBIT",
-        targetId = "#rabbitId", dedup = true
+        targetId = "#rabbitId"
     )
     @Transactional
     public void promoteReplacement(
@@ -1340,7 +1340,7 @@ public class RabbitService {
 
     @TrackedOperation(
         code = "rabbit:event", codeExpression = "'rabbit:event:' + #eventType",
-        eventType = "RABBIT_EVENT", targetType = "RABBIT", targetId = "#rabbitId", dedup = true
+        eventType = "RABBIT_EVENT", targetType = "RABBIT", targetId = "#rabbitId"
     )
     @Transactional
     public void rabbitEvent(Long userId, Long houseId, Long rabbitId, String eventType, Date actionDate, String reason, String remark, boolean forceExitBatch, String requestId) {

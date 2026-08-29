@@ -28,7 +28,7 @@ public class NfcTagService {
 
     @TrackedOperation(
         code = "nfc:bind", codeExpression = "'nfc:bind:' + #targetType",
-        eventType = "NFC_BOUND", targetType = "NFC_TAG", targetId = "#targetId", dedup = true
+        eventType = "NFC_BOUND", targetType = "NFC_TAG", targetId = "#targetId"
     )
     @Transactional
     public NfcTag bind(Long userId, Long houseId, String tagUid, String targetType, Long targetId, Long rabbitId, Long recordId, String remark, String requestId) {

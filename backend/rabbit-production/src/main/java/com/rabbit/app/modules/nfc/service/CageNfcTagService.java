@@ -27,7 +27,7 @@ public class CageNfcTagService {
 
     @TrackedOperation(
         code = "cage:nfc:bind", eventType = "CAGE_NFC_BOUND", cageId = "#cageId",
-        targetType = "CAGE", targetId = "#cageId", dedup = true
+        targetType = "CAGE", targetId = "#cageId"
     )
     @Transactional
     public CageNfcTag bind(Long userId, Long houseId, Long cageId, String tagUid, String remark, String requestId) {

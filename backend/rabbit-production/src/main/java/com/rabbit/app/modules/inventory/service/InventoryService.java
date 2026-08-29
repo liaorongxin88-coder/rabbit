@@ -39,7 +39,7 @@ public class InventoryService {
 
     @TrackedOperation(
         code = "inventory:item:create", eventType = "INVENTORY_ITEM_CREATED",
-        targetType = "INVENTORY_ITEM", targetId = "#result.id", dedup = true
+        targetType = "INVENTORY_ITEM", targetId = "#result.id"
     )
     @Transactional
     public InventoryItem createItem(Long userId, Long houseId, InventoryItem item, BigDecimal initQty, String requestId) {
@@ -108,7 +108,7 @@ public class InventoryService {
     @TrackedOperation(
         code = "inventory:tx", codeExpression = "'inventory:tx:' + #txType",
         eventType = "INVENTORY_TRANSACTION_RECORDED", targetType = "INVENTORY_ITEM",
-        targetId = "#itemId", dedup = true
+        targetId = "#itemId"
     )
     @Transactional
     public void addTx(Long userId, Long houseId, Long itemId, String txType, BigDecimal qtyDelta, Date txTime, String remark, String requestId, String refTable, Long refId) {

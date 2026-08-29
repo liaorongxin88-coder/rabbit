@@ -36,7 +36,7 @@ public class SaleService {
 
     @TrackedOperation(
         code = "sale:create", eventType = "SALE_CREATED", targetType = "SALE_ORDER",
-        targetId = "#result.id", dedup = true
+        targetId = "#result.id"
     )
     @Transactional
     public SaleOrder create(Long userId, Long houseId, List<Long> rabbitIds, Date saleTime, Double totalWeight, BigDecimal unitPrice, String customer, String remark, String requestId) {

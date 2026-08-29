@@ -96,16 +96,30 @@ public class ReproApiIT extends E2eTestSupport {
         // 事件流是给人看的审计记录：事故复盘要靠它回答「谁做的」。
         // 存 userId 等于把这个问题推给每个读取方，而事后 join 出来的是
         // 「现在的名字」，不是「当时的名字」。
+        //
+        // V51 之后 repro_events 同时承载非繁育操作（夹具建批次就会写一条
+        // batch.create），所以这里按 operation_code 收敛到繁育状态机事件。
         List<String> operators = jdbc.queryForList(
-            "select operator_name from repro_events where house_id = ? order by id",
+            "select operator_name from repro_events where house_id = ? "
+                + "and operation_code = 'repro:state-machine' order by id",
             String.class, f.houseId
         );
-        Assertions.assertEquals(2, operators.size(), "开启周期 + 催情共两条事件");
+        Assertions.assertEquals(2, operators.size(), "开启周期 + 催情共两条繁育事件");
         for (String operator : operators) {
             Assertions.assertEquals(
                 f.userName, operator,
                 "operator_name 应当是展示名快照，而不是 userId 字符串"
             );
+        }
+
+        // 新铺的通用操作流也得带同一份展示名，否则审计到一半就断了。
+        List<String> trackedOperators = jdbc.queryForList(
+            "select operator_name from repro_events where house_id = ? "
+                + "and operation_code <> 'repro:state-machine' order by id",
+            String.class, f.houseId
+        );
+        for (String operator : trackedOperators) {
+            Assertions.assertEquals(f.userName, operator, "通用操作事件也要存展示名");
         }
     }
 

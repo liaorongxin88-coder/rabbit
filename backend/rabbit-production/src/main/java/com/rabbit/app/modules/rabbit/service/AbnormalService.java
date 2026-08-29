@@ -36,7 +36,7 @@ public class AbnormalService {
 
     @TrackedOperation(
         code = CREATE_API, eventType = "RABBIT_ABNORMAL_RECORDED", requestId = "#request.requestId",
-        targetType = "RABBIT", targetId = "#request.rabbitId", dedup = true
+        targetType = "RABBIT", targetId = "#request.rabbitId"
     )
     @Transactional
     public void create(Long houseId, Long userId, CreateAbnormalRequest request) {

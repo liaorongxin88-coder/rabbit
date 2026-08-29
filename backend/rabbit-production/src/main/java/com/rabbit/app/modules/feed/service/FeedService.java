@@ -62,7 +62,7 @@ public class FeedService {
         this.casRetryTimes = casRetryTimes <= 0 ? 5 : casRetryTimes;
     }
 
-    @TrackedOperation(code = "feed:add", eventType = "FEED_RECORDED", dedup = true)
+    @TrackedOperation(code = "feed:add", eventType = "FEED_RECORDED")
     @Transactional
     public void addFeedLog(Long userId, Long houseId, FeedLog log, List<Long> rabbitIds) {
         String api = "feed:add";

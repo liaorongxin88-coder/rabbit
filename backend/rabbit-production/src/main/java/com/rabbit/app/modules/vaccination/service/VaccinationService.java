@@ -53,7 +53,7 @@ public class VaccinationService {
         this.requestDedupService = requestDedupService;
     }
 
-    @TrackedOperation(code = "vaccination:create", eventType = "VACCINATION_RECORDED", dedup = true)
+    @TrackedOperation(code = "vaccination:create", eventType = "VACCINATION_RECORDED")
     @Transactional
     public VaccinationBatchResult create(Long userId,
                                          Long houseId,

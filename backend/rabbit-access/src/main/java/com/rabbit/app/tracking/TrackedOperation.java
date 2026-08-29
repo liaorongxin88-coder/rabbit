@@ -81,6 +81,12 @@ public @interface TrackedOperation {
      * 是否接管幂等记账。开启后由外层切面在<b>事务外</b>执行
      * markProcessing / markDone / markFailed，业务方法只需读
      * {@link OperationContext#isDedupReplay()} 决定要不要回放旧结果。
+     *
+     * <p><b>一个操作只能有一个幂等归属方。</b>如果方法内部已经自己调
+     * {@code requestDedupService.markProcessing/begin}，这里就必须保持 false：
+     * 切面的去重键是 {@code (houseId, userId, operationCode, requestId)}，
+     * 与服务内部用的 api 名重合，两边都写会让服务自己撞上自己刚写的
+     * PROCESSING，整个接口退化成 429。
      */
     boolean dedup() default false;
 }
