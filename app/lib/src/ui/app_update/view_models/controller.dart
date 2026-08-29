@@ -132,7 +132,18 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     final cached = await _cachedApk(release);
     if (cached != null) {
       _downloadedApk = cached;
-      await _openInstaller(release, cached);
+      // 走缓存直接装的路径不在下面那个 try 里，自己兜。
+      try {
+        await _openInstaller(release, cached);
+      } catch (error) {
+        if (mounted) {
+          _emit(state.copyWith(
+            phase: AppUpdatePhase.failed,
+            clearProgress: true,
+            message: _message(error),
+          ));
+        }
+      }
       return;
     }
     final cancelToken = CancelToken();
@@ -216,8 +227,21 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       return;
     }
     _downloadedApk = file;
-    if (await _installer.canInstallPackages()) {
-      await _openInstaller(release, file);
+    // 这个方法直接挂在按钮的 onPressed 上，没人接它的异常。
+    // 通道挂掉时 canInstallPackages 会抛，不兜就成了无声失败。
+    try {
+      if (await _installer.canInstallPackages()) {
+        await _openInstaller(release, file);
+        return;
+      }
+    } catch (error) {
+      if (mounted) {
+        _emit(state.copyWith(
+          phase: AppUpdatePhase.failed,
+          clearProgress: true,
+          message: _message(error),
+        ));
+      }
       return;
     }
     await openInstallPermissionSettings();

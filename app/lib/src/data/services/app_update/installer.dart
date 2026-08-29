@@ -66,7 +66,7 @@ class MethodChannelAppUpdateInstaller implements AppUpdateInstaller {
         buildNumber: buildNumber,
       );
     } on MissingPluginException {
-      throw const AppUpdateInstallException('当前设备不支持应用更新');
+      throw const AppUpdateInstallException(_channelUnavailable);
     } on PlatformException {
       throw const AppUpdateInstallException('无法读取当前安装包版本');
     }
@@ -81,18 +81,20 @@ class MethodChannelAppUpdateInstaller implements AppUpdateInstaller {
       }
       return Directory(path);
     } on MissingPluginException {
-      throw const AppUpdateInstallException('当前设备不支持应用更新');
+      throw const AppUpdateInstallException(_channelUnavailable);
     } on PlatformException {
       throw const AppUpdateInstallException('无法创建升级下载目录');
     }
   }
 
+  /// 通道挂了就报错，不能静静返回 false。返回 false 会被上层当成「没授权」，
+  /// 把用户一次次送去系统设置页，可授了权还是装不上。
   @override
   Future<bool> canInstallPackages() async {
     try {
       return await _channel.invokeMethod<bool>('canInstallPackages') ?? false;
     } on MissingPluginException {
-      return false;
+      throw const AppUpdateInstallException(_channelUnavailable);
     } on PlatformException {
       return false;
     }
@@ -103,7 +105,7 @@ class MethodChannelAppUpdateInstaller implements AppUpdateInstaller {
     try {
       await _channel.invokeMethod<void>('openInstallPermissionSettings');
     } on MissingPluginException {
-      throw const AppUpdateInstallException('当前设备不支持安装授权');
+      throw const AppUpdateInstallException(_channelUnavailable);
     } on PlatformException {
       throw const AppUpdateInstallException('无法打开安装授权页面');
     }
@@ -126,12 +128,23 @@ class MethodChannelAppUpdateInstaller implements AppUpdateInstaller {
         _ => AppInstallResult.invalidApk,
       };
     } on MissingPluginException {
-      throw const AppUpdateInstallException('当前设备不支持应用更新');
-    } on PlatformException {
-      throw const AppUpdateInstallException('无法启动系统安装器');
+      throw const AppUpdateInstallException(_channelUnavailable);
+    } on PlatformException catch (error) {
+      // 原生层现在会把失败在哪一步写进 message，能带出来就带出来，
+      // 现场排查靠这句话，比一句统一的「启动失败」有用。
+      final detail = error.message?.trim();
+      throw AppUpdateInstallException(
+        detail == null || detail.isEmpty ? '无法启动系统安装器' : detail,
+      );
     }
   }
 }
+
+/// 原生通道不可用。以前这里写的是「当前设备不支持应用更新」，但设备没有
+/// 任何问题，真正的原因是 release 构建把 FileProvider 的路径声明资源删了，
+/// 异常逃到 DartMessenger 后回了 null，Dart 侧看起来就像插件没注册。
+/// 那句话把一个可恢复的故障说成了设备不兼容，用户只能放弃。
+const _channelUnavailable = '应用更新组件未就绪，请重启应用后重试';
 
 class AppUpdateInstallException implements Exception {
   const AppUpdateInstallException(this.message);

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  res/xml 下的 FileProvider 路径声明只被 AndroidManifest 的 <meta-data
+  android:resource="@xml/..."> 引用，资源压缩器识别不到这条引用，release 构建
+  (shrinkResources=true) 会把它们整个删掉。
+
+  删掉之后 FileProvider.getUriForFile 解析元数据时抛 XmlPullParserException。
+  这是受检异常，Flutter 的 MethodChannel 只 catch RuntimeException，异常逃到
+  DartMessenger，它记一条日志然后回一个 null；Dart 侧把 null 回包当成
+  MissingPluginException，最终在界面上显示成「当前设备不支持应用更新」。
+
+  用通配符而不是逐个列名：插件自带的 paths 文件名会随插件版本变，写死名字
+  下次升级插件还会再踩一次。
+-->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@xml/*" />

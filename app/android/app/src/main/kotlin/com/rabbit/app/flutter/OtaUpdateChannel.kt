@@ -29,17 +29,64 @@ class OtaUpdateChannel(
         channel.setMethodCallHandler(this)
     }
 
+    /**
+     * 所有分支都包一层异常兜底。
+     *
+     * <p>Flutter 的 MethodChannel 只 catch RuntimeException。受检异常
+     * (例如 FileProvider 解析元数据抛的 XmlPullParserException) 会一路逃到
+     * DartMessenger，它记一条日志然后回 null，Dart 侧把 null 回包当成
+     * MissingPluginException，界面上就变成「设备不支持」这种查不下去的提示。
+     * 在这里收口，保证任何失败都带着原因回到 Dart。
+     */
     override fun onMethodCall(
         call: MethodCall,
         result: MethodChannel.Result,
     ) {
-        when (call.method) {
-            "appInfo" -> appInfo(result)
-            "updateDirectory" -> updateDirectory(result)
-            "canInstallPackages" -> result.success(canInstallPackages())
-            "openInstallPermissionSettings" -> openInstallPermissionSettings(result)
-            "installApk" -> installApk(call, result)
-            else -> result.notImplemented()
+        val guarded = ReplyOnce(result)
+        try {
+            when (call.method) {
+                "appInfo" -> appInfo(guarded)
+                "updateDirectory" -> updateDirectory(guarded)
+                "canInstallPackages" -> guarded.success(canInstallPackages())
+                "openInstallPermissionSettings" -> openInstallPermissionSettings(guarded)
+                "installApk" -> installApk(call, guarded)
+                else -> guarded.notImplemented()
+            }
+        } catch (throwable: Throwable) {
+            guarded.error(
+                "CHANNEL_FAILURE",
+                "${call.method} 执行失败：${throwable.javaClass.simpleName}: ${throwable.message}",
+                null,
+            )
+        }
+    }
+
+    /** 保证一次调用只回一次，兜底 catch 才不会撞上「已经回过了」。 */
+    private class ReplyOnce(
+        private val delegate: MethodChannel.Result,
+    ) : MethodChannel.Result {
+        private var replied = false
+
+        override fun success(value: Any?) {
+            if (replied) return
+            replied = true
+            delegate.success(value)
+        }
+
+        override fun error(
+            code: String,
+            message: String?,
+            details: Any?,
+        ) {
+            if (replied) return
+            replied = true
+            delegate.error(code, message, details)
+        }
+
+        override fun notImplemented() {
+            if (replied) return
+            replied = true
+            delegate.notImplemented()
         }
     }
 
@@ -118,12 +165,24 @@ class OtaUpdateChannel(
             result.success("HASH_MISMATCH")
             return
         }
+        // getUriForFile 会去读 @xml/ota_file_paths。那个资源只被清单引用，曾经
+        // 被 shrinkResources 删掉过，导致这里抛受检异常。keep.xml 保住了资源，
+        // 这里再兜一层，装不上至少能说清是哪一步的问题。
         val uri =
-            FileProvider.getUriForFile(
-                activity,
-                "${activity.packageName}.ota.fileprovider",
-                apk,
-            )
+            try {
+                FileProvider.getUriForFile(
+                    activity,
+                    "${activity.packageName}.ota.fileprovider",
+                    apk,
+                )
+            } catch (throwable: Throwable) {
+                result.error(
+                    "FILE_PROVIDER_UNAVAILABLE",
+                    "无法生成安装包访问地址：${throwable.javaClass.simpleName}: ${throwable.message}",
+                    null,
+                )
+                return
+            }
         val intent =
             Intent(Intent.ACTION_VIEW)
                 .setDataAndType(uri, APK_MIME_TYPE)
