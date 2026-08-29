@@ -22,6 +22,7 @@ import type {
   HouseInvitationResult,
   HouseMember,
   HousePermission,
+  OperationEventPage,
   OutboundSelectedItem,
   OutboundSubmitResult,
   OutboundTask,
@@ -668,6 +669,34 @@ export function createWorkspaceAbnormalCondition(
   },
 ) {
   return workspacePostJson<void>("/api/abnormal", data, { houseId });
+}
+
+/**
+ * 通用操作事件流。
+ *
+ * 游标分页而不是页码：事件是追加写，翻页期间不断有新行插入，
+ * offset 会让操作员漏行或看到重复。cursor 原样回传，不要解析。
+ *
+ * 只传 targetId 不传 targetType 会被后端拒掉，调用方要么两个都给，要么都不给。
+ */
+export function listOperationEvents(
+  houseId: number,
+  params: {
+    targetType?: string;
+    targetId?: number;
+    operationCode?: string;
+    cageId?: number;
+    batchId?: number;
+    cursor?: string;
+    limit?: number;
+  } = {},
+) {
+  return workspaceGetJson<OperationEventPage>("/api/operation-events", {
+    houseId,
+    params: Object.fromEntries(
+      Object.entries(params).filter(([, value]) => value !== undefined),
+    ),
+  });
 }
 
 export function listRabbitVaccinations(houseId: number, rabbitId: number) {

@@ -11,7 +11,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "node --test test/*.test.mjs",
-    "e2e:browser": "node scripts/admin_cage_ops_browser_e2e.mjs"
+    "e2e:browser": "node scripts/admin_cage_ops_browser_e2e.mjs",
+    "e2e:browser:batch-statistics": "node scripts/batch-statistics-browser-e2e.mjs",
+    "e2e:browser:operation-events": "node scripts/operation-events-browser-e2e.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.17",

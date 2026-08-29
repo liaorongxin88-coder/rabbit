@@ -298,6 +298,44 @@ export interface BatchStatistics {
  totalWeaned: number;
 }
 
+/**
+ * 通用操作事件流里的一条留痕。
+ *
+ * V51 之后几乎所有写操作都会落一条，所以除了 id 和时间，
+ * 其余坐标都可能为空：投喂没有繁育阶段，开周期没有笼位。
+ * `payload` 与 `requestId` 不对外暴露，沿用 ReproEventView 既有边界。
+ */
+export interface OperationEvent {
+  id: number;
+  occurredAt: string;
+  operationCode: string;
+  eventType: string;
+  eventLabel: string;
+  targetType: string;
+  targetId: number | null;
+  cageId: number | null;
+  batchId: number | null;
+  rabbitId: number | null;
+  cycleId: number | null;
+  litterId: number | null;
+  fromStage: string | null;
+  toStage: string | null;
+  operatorId: number | null;
+  operatorName: string | null;
+}
+
+/**
+ * 事件流分页。
+ *
+ * 没有 total：这是只增不减的追加流，每次请求都去 count 正是要避开的成本；
+ * 翻页靠 nextCursor，它对客户端不透明，不要解析或拼接。
+ */
+export interface OperationEventPage {
+  items: OperationEvent[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export interface PendingWeaningRecord {
  id: number;
  batchId: number;

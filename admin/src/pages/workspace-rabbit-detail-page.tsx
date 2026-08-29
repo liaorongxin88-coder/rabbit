@@ -29,6 +29,7 @@ import {
   RabbitTransferDialog,
 } from "@/components/rabbit-operation-dialogs";
 import { RabbitAbnormalDialog } from "@/components/rabbit-abnormal-dialog";
+import { OperationEventStream } from "@/components/operation-event-stream";
 import { RabbitSaleDialog } from "@/components/rabbit-sale-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,9 @@ export function WorkspaceRabbitDetailPage() {
     workspace.permission,
     "rabbit:batches:query",
   );
+  // 操作留痕是审计面，只开给 MANAGER 及以上；没权限的账号直接不显示这一块，
+  // 而不是显示出来再让用户点出一个 403。
+  const canReadAudit = hasPermission(workspace.permission, "rabbit:audit:list");
 
   const load = useCallback(async () => {
     if (
@@ -447,6 +451,15 @@ export function WorkspaceRabbitDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {canReadAudit ? (
+        <OperationEventStream
+          houseId={workspace.selectedHouse.id}
+          targetType="RABBIT"
+          targetId={rabbit.id}
+          description="这只兔身上发生过的操作，最近的排在前面。"
+        />
+      ) : null}
 
       <RabbitFormDialog
         open={editOpen}
