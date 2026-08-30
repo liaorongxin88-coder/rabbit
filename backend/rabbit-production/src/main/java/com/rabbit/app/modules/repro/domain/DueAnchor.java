@@ -11,8 +11,8 @@ public enum DueAnchor {
     ESTRUS_DURATION,
     /** 配种日 + palpation_wait_days（原 palpation_days）。 */
     PALPATION_WAIT,
-    /** 摸胎确认日 + prepartum_days（待备产时长）。 */
-    PREPARTUM_DURATION,
+    /** 预产期 - prepartum_days（备产提前天数）。 */
+    PREPARTUM_LEAD,
     /** 操作当天产生下一阶段提醒。 */
     SAME_DAY,
     /** 分娩日 + weaning_days。 */

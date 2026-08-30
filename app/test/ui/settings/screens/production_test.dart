@@ -104,7 +104,7 @@ void main() {
     for (final description in const [
       '执行催情后开始计算，到期提醒配种。',
       '完成配种后开始计算，到期提醒摸胎。',
-      '摸胎确认怀孕后开始计算，到期提醒备产。',
+      '按预产期提前设置的天数，到期提醒备产。',
       '完成接产后开始计算，到期提醒断奶分笼。',
       '接产后开始计算休养到期；空怀、流产或分娩失败后也用这一天数安排下一轮催情。',
       '进入后备阶段后开始计算，到期提醒转为种兔。',
@@ -132,7 +132,7 @@ void main() {
     expect(repository.updatedSettingHouseId, 8);
     expect(repository.updatedSetting?.aphrodisiacDays, 2);
     expect(repository.updatedSetting?.palpationDays, 12);
-    expect(repository.updatedSetting?.prepartumDays, 15);
+    expect(repository.updatedSetting?.prepartumDays, 3);
     expect(repository.updatedSetting?.weaningDays, 30);
     expect(repository.updatedSetting?.postpartumDays, 10);
     expect(repository.updatedSetting?.adaptationDays, 3);

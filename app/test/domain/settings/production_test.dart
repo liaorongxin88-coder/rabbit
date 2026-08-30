@@ -8,7 +8,7 @@ void main() {
     expect(body, {
       'aphrodisiacDays': 2,
       'palpationDays': 12,
-      'prepartumDays': 15,
+      'prepartumDays': 3,
       'weaningDays': 30,
       'postpartumDays': 10,
       'adaptationDays': 3,

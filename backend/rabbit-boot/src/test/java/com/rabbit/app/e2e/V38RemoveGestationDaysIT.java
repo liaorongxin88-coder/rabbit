@@ -29,7 +29,7 @@ class V38RemoveGestationDaysIT {
     }
 
     @Test
-    void removesTheRetiredColumnWithoutChangingOtherProductionSettings() throws SQLException {
+    void removesRetiredGestationAndMigratesPrepartumLeadSemantics() throws SQLException {
         Flyway toV36 = flyway(MigrationVersion.fromVersion("36"));
         toV36.clean();
         toV36.migrate();
@@ -49,7 +49,7 @@ class V38RemoveGestationDaysIT {
         flyway(null).migrate();
 
         assertEquals(0, columnCount("gestation_days"));
-        assertEquals(15, integerValue(
+        assertEquals(3, integerValue(
             "select prepartum_days from global_setting where house_id = ?",
             houseId
         ));

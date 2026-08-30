@@ -56,7 +56,7 @@ class ReproSettingResolverTest {
 
         assertEquals(3, settings.estrusDurationDays());
         assertEquals(11, settings.palpationWaitDays());
-        assertEquals(14, settings.prepartumDurationDays());
+        assertEquals(14, settings.prepartumLeadDays());
         assertEquals(28, settings.weaningDays());
         assertEquals(9, settings.postpartumRecoveryDays());
         assertEquals(88, settings.replacementDays());
@@ -79,7 +79,7 @@ class ReproSettingResolverTest {
 
         assertEquals(2, settings.estrusDurationDays());
         assertEquals(12, settings.palpationWaitDays());
-        assertEquals(15, settings.prepartumDurationDays());
+        assertEquals(3, settings.prepartumLeadDays());
         assertEquals(30, settings.weaningDays());
         assertEquals(10, settings.postpartumRecoveryDays());
     }

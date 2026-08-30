@@ -15,7 +15,8 @@ public class UpdateSettingRequest {
     private Integer palpationDays;
 
     @NotNull
-    @Min(0)
+    @Min(1)
+    @Max(29)
     private Integer prepartumDays;
 
     @NotNull

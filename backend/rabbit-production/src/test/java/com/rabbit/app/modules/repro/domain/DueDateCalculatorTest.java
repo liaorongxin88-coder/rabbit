@@ -31,18 +31,36 @@ class DueDateCalculatorTest {
     }
 
     @Test
-    void prepartumWaitStartsAtPalpationAndDeliveryStartsTheSameDay() {
+    void prepartumReminderUsesExpectedBirthDateLeadTime() {
+        Date matingDate = date(2026, 3, 1);
         Date palpationDate = date(2026, 3, 13);
-        DueContext context = DueContext.builder(palpationDate, palpationDate).build();
+        Date expectedBirth = date(2026, 3, 31);
+        DueContext context = DueContext.builder(palpationDate, palpationDate)
+            .matingDate(matingDate)
+            .expectedBirthDate(expectedBirth)
+            .build();
 
         Date prepartumDue = DueDateCalculator.compute(
-            DueAnchor.PREPARTUM_DURATION, context, SETTINGS
+            DueAnchor.PREPARTUM_LEAD, context, SETTINGS
         );
         Date deliveryDue = DueDateCalculator.compute(DueAnchor.SAME_DAY, context, SETTINGS);
 
         assertAll(
-            () -> assertEquals(date(2026, 3, 16), prepartumDue, "待备产 = 摸胎确认日 + 3 天"),
+            () -> assertEquals(date(2026, 3, 28), prepartumDue, "待备产 = 预产期前 3 天"),
             () -> assertEquals(palpationDate, deliveryDue, "备产完成后当天进入待分娩")
+        );
+    }
+
+    @Test
+    void prepartumReminderFallsBackToTheFixedGestationReference() {
+        Date palpationDate = date(2026, 3, 13);
+        DueContext context = DueContext.builder(palpationDate, palpationDate)
+            .matingDate(date(2026, 3, 1))
+            .build();
+
+        assertEquals(
+            date(2026, 3, 28),
+            DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS)
         );
     }
 
@@ -52,6 +70,7 @@ class DueDateCalculatorTest {
         DueContext context = DueContext.builder(date(2026, 3, 1), today)
             .stageEnteredAt(date(2026, 3, 1))
             .matingDate(date(2026, 3, 1))
+            .expectedBirthDate(date(2026, 3, 31))
             .birthDate(date(2026, 3, 1))
             .userSpecified(date(2026, 3, 20))
             .build();
@@ -68,9 +87,9 @@ class DueDateCalculatorTest {
                 "配种 → 摸胎 = 配种日 + 12"
             ),
             () -> assertEquals(
-                date(2026, 3, 4),
-                DueDateCalculator.compute(DueAnchor.PREPARTUM_DURATION, context, SETTINGS),
-                "摸胎 → 备产 = 操作日 + 3"
+                date(2026, 3, 28),
+                DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS),
+                "待备产 = 预产期前 3 天"
             ),
             () -> assertEquals(
                 today,

@@ -13,11 +13,11 @@ public record ReproSettings(
     int estrusDurationDays,
     /** 配种 → 摸胎的等待天数（旧列 palpation_days）。 */
     int palpationWaitDays,
-    /** 摸胎确认 → 待备产的等待天数（旧列 prepartum_days）。 */
-    int prepartumDurationDays,
+    /** 预产期前开始备产的提前天数（旧列 prepartum_days）。 */
+    int prepartumLeadDays,
     /** 分娩 → 分笼的哺乳天数（旧列 weaning_days）。 */
     int weaningDays,
-    /** 分笼 / 流产 → 下一轮待催情的子宫复旧天数（旧列 postpartum_days）。 */
+    /** 接产 / 空怀 / 流产 / 分娩失败后的恢复天数（旧列 postpartum_days）。 */
     int postpartumRecoveryDays,
     /** 商品兔达到出售日龄的天数（旧列 sale_days）。 */
     int saleDays,
@@ -31,7 +31,7 @@ public record ReproSettings(
         return new ReproSettings(
             positive(setting.getAphrodisiacDays(), 2),
             positive(setting.getPalpationDays(), 12),
-            positive(setting.getPrepartumDays(), 15),
+            positive(setting.getPrepartumDays(), 3),
             positive(setting.getWeaningDays(), 30),
             positive(setting.getPostpartumDays(), 10),
             setting.commodityMaturityDays(),

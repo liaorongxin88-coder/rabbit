@@ -88,7 +88,7 @@ class V34BackfillIT {
             "select date_format(growth_stage_entered_at, '%Y-%m-%d') from rabbits where id = ?",
             commodityRabbit
         ));
-        assertEquals(15L, longValue(
+        assertEquals(3L, longValue(
             "select prepartum_days from global_setting where house_id = ?", houseId
         ));
         assertEquals(90L, longValue(

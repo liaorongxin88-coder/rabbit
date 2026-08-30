@@ -27,7 +27,10 @@ DateTime suggestedReminderDate({
     ReproStage.awaitEstrus => setting.postpartumDays,
     ReproStage.awaitMating => setting.aphrodisiacDays,
     ReproStage.awaitPalpation => setting.palpationDays,
-    ReproStage.awaitPrepartum => setting.prepartumDays,
+    ReproStage.awaitPrepartum =>
+      (30 - setting.palpationDays - setting.prepartumDays)
+          .clamp(0, 30)
+          .toInt(),
     ReproStage.awaitDelivery => 0,
     ReproStage.awaitWeaning => setting.weaningDays,
     ReproStage.suspended => 0,

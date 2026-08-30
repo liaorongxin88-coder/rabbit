@@ -63,7 +63,7 @@ void main() {
         setting: setting,
         from: base,
       ),
-      DateTime(2026, 8, 22),
+      DateTime(2026, 9, 3),
     );
     expect(
       suggestedReminderDate(

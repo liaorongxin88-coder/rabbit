@@ -94,11 +94,11 @@ public final class TransitionTable {
             DueAnchor.PALPATION_WAIT, ReproEventType.MATING_DONE
         ));
 
-        // T4a 摸胎-怀孕：→ 待备产，到期 = 摸胎确认日 + prepartum_days
+        // T4a 摸胎-怀孕：→ 待备产，到期 = 预产期 - prepartum_days
         rows.add(new Transition(
             ReproStage.AWAIT_PALPATION, ReproAction.PALPATION, PalpationResult.PREGNANT.name(),
             ReproStage.AWAIT_PREPARTUM, false, null, null,
-            DueAnchor.PREPARTUM_DURATION, ReproEventType.PALPATION_PREGNANT
+            DueAnchor.PREPARTUM_LEAD, ReproEventType.PALPATION_PREGNANT
         ));
 
         // T4b 摸胎-空怀：关闭原批次周期，进入无批次休养期。

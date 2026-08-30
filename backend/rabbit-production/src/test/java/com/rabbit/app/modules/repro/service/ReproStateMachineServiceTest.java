@@ -90,7 +90,7 @@ class ReproStateMachineServiceTest {
     private static final Long TASK_ID = 800L;
     private static final Long VERSION = 7L;
     private static final String OPERATOR = "张三";
-    private static final ReproSettings SETTINGS = new ReproSettings(2, 12, 15, 30, 10, 75, 90);
+    private static final ReproSettings SETTINGS = new ReproSettings(2, 12, 3, 30, 10, 75, 90);
 
     private ReproCycleMapper reproCycleMapper;
     private ReproEventMapper reproEventMapper;

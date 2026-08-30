@@ -28,7 +28,7 @@ public final class DueDateCalculator {
         return notBefore(raw, context.today());
     }
 
-    /** 预产期参考值固定为配种日后 30 天；提醒链不依赖它推进。 */
+    /** 预产期固定为配种日后 30 天，也是待备产提醒的日期锚点。 */
     public static Date expectedBirthDate(Date matingDate) {
         if (matingDate == null) {
             return null;
@@ -46,10 +46,7 @@ public final class DueDateCalculator {
                 require(context.matingDate(), "配种日期"),
                 settings.palpationWaitDays()
             );
-            case PREPARTUM_DURATION -> DateUtil.plusDays(
-                require(context.occurredAt(), "摸胎确认日期"),
-                settings.prepartumDurationDays()
-            );
+            case PREPARTUM_LEAD -> prepartumDue(context, settings);
             case SAME_DAY -> require(context.occurredAt(), "操作日期");
             case WEANING_DUE -> DateUtil.plusDays(
                 require(context.birthDate(), "分娩日期"),
@@ -64,6 +61,16 @@ public final class DueDateCalculator {
             case USER_SPECIFIED -> context.userSpecified() != null ? context.userSpecified() : context.today();
             case NONE -> null;
         };
+    }
+
+    private static Date prepartumDue(DueContext context, ReproSettings settings) {
+        Date expectedBirth = context.expectedBirthDate();
+        if (expectedBirth == null) {
+            expectedBirth = expectedBirthDate(
+                require(context.matingDate(), "配种日期")
+            );
+        }
+        return DateUtil.plusDays(expectedBirth, -settings.prepartumLeadDays());
     }
 
     private static Date require(Date value, String what) {

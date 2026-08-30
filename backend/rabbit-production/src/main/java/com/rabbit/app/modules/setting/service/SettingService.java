@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SettingService {
-    private static final int DEFAULT_PREPARTUM_DAYS = 15;
+    private static final int DEFAULT_PREPARTUM_DAYS = 3;
     private static final int DEFAULT_WEANING_DAYS = 30;
     private static final int DEFAULT_REPLACEMENT_DAYS = 90;
     private static final int DEFAULT_ADAPTATION_DAYS = 3;
