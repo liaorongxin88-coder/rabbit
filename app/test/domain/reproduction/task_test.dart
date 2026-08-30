@@ -23,10 +23,11 @@ void main() {
     );
 
     expect(item.displayStatus, '待摸胎');
-    expect(item.isActivityActive, isTrue);
+    expect(item.isMembershipActive, isTrue);
+    expect(item.hasOpenProductionCycle, isTrue);
   });
 
-  test('batch member marks a closed batch activity as ended', () {
+  test('planned batch member stays active before cycle binding', () {
     final item = BatchRabbitItem.fromJson({
       'id': 1,
       'batchId': 2,
@@ -46,8 +47,9 @@ void main() {
       'batchLastOperationAt': '2026-08-20T10:30:00',
     });
 
-    expect(item.displayStatus, '活动已结束');
-    expect(item.isActivityActive, isFalse);
+    expect(item.displayStatus, '待配种绑定');
+    expect(item.isMembershipActive, isTrue);
+    expect(item.hasOpenProductionCycle, isFalse);
     expect(item.batchCycleCount, 2);
     expect(item.batchOperationCount, 9);
     expect(item.batchLitterCount, 1);
@@ -64,7 +66,7 @@ void main() {
         'batchId': 2,
         'rabbitId': 3,
         'currentStatus': '待催情',
-        'isActive': true,
+        'isActive': false,
         'currentStage': null,
         'currentCycleId': null,
         'batchRole': 'breeding',
@@ -74,7 +76,8 @@ void main() {
       });
 
       expect(item.displayStatus, '活动已结束', reason: '$completion 后的旧批次');
-      expect(item.isActivityActive, isFalse, reason: '$completion 后的旧批次');
+      expect(item.isMembershipActive, isFalse, reason: '$completion 后的旧批次');
+      expect(item.hasOpenProductionCycle, isFalse, reason: '$completion 后的旧批次');
     }
   });
 

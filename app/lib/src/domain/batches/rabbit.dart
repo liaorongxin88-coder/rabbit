@@ -68,26 +68,32 @@ class BatchRabbitItem {
 
   /// 界面上该显示的状态文字。
   ///
-  /// 批次接口的 [currentStage] 只描述该批次内的开放周期。标签仍在、但
-  /// 当前批次已没有开放周期时，母兔可能在别处开始了下一轮待催情；那条
-  /// 全局周期不属于本批次，必须显示为活动已结束。
+  /// [isActive] 描述批次成员关系，[currentStage] 描述正式绑定到该批次的
+  /// 开放生产周期。计划成员的关系有效，但要等配种后才正式绑定周期。
   String get displayStatus {
-    if (batchRole == 'breeding' && !isActivityActive) {
+    if (batchRole == 'breeding' && !isMembershipActive) {
       return '活动已结束';
     }
     final stage = ReproStage.tryParse(currentStage);
     if (stage != null) {
       return stage.label;
     }
+    if (batchRole == 'breeding' && !hasOpenProductionCycle) {
+      return '待配种绑定';
+    }
     return currentStatus.isEmpty ? '未入轨' : currentStatus;
   }
 
   bool get isNursing => currentNursingKits > 0;
 
-  /// 繁殖标签只有在标签有效且该批次存在开放周期时才是活动状态。
-  bool get isActivityActive => batchRole == 'breeding'
-      ? isActive && (currentStage?.trim().isNotEmpty ?? false)
-      : isActive;
+  /// 批次成员关系是否仍有效，与生产周期是否已经正式绑定无关。
+  bool get isMembershipActive => isActive;
+
+  /// 该批次下是否存在当前开放的生产周期。
+  bool get hasOpenProductionCycle =>
+      batchRole == 'breeding' &&
+      isMembershipActive &&
+      (currentCycleId != null || (currentStage?.trim().isNotEmpty ?? false));
 
   static BatchRabbitItem fromJson(Map<String, dynamic> json) {
     return BatchRabbitItem(

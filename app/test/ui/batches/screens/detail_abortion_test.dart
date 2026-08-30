@@ -149,7 +149,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('没有本批次开放周期的母兔显示为活动已结束', (tester) async {
+  testWidgets('有效计划成员在周期绑定前显示待配种绑定', (tester) async {
     await pumpWithMembers(
       tester,
       const [
@@ -168,23 +168,52 @@ void main() {
       ],
     );
 
-    expect(find.byKey(const ValueKey('batch-member-2401')), findsNothing);
-    await tester.tap(
-      find.byKey(const ValueKey('batch-member-activity-filter')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('活动已结束').last);
-    await tester.pumpAndSettle();
-
+    expect(find.text('关系有效'), findsOneWidget);
     final member = find.byKey(const ValueKey('batch-member-2401'));
     expect(member, findsOneWidget);
     expect(
-      find.descendant(of: member, matching: find.text('活动已结束')),
+      find.descendant(of: member, matching: find.text('待配种绑定')),
       findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey('batch-member-action-2401')),
       findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('失效成员关系显示为活动已结束', (tester) async {
+    await pumpWithMembers(
+      tester,
+      const [
+        BatchRabbitItem(
+          id: 2501,
+          batchId: batchId,
+          rabbitId: 2501,
+          currentStatus: '待催情',
+          currentStage: null,
+          currentCycleId: null,
+          nextEventType: '',
+          batchRole: 'breeding',
+          isActive: false,
+          batchCycleCount: 1,
+        ),
+      ],
+    );
+
+    expect(find.byKey(const ValueKey('batch-member-2501')), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('batch-member-activity-filter')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('关系已结束').last);
+    await tester.pumpAndSettle();
+
+    final member = find.byKey(const ValueKey('batch-member-2501'));
+    expect(member, findsOneWidget);
+    expect(
+      find.descendant(of: member, matching: find.text('活动已结束')),
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });

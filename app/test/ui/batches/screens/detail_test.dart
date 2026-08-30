@@ -33,7 +33,9 @@ void main() {
         batchId: 11,
         rabbitId: index + 1000,
         currentStatus: index.isEven ? '待催情' : '已配种',
-        currentStage: index.isEven ? 'AWAIT_ESTRUS' : 'AWAIT_PALPATION',
+        currentStage: index == 1000
+            ? null
+            : (index.isEven ? 'AWAIT_ESTRUS' : 'AWAIT_PALPATION'),
         nextEventType: index.isEven ? '' : '摸胎',
         batchRole: 'breeding',
         rabbitGender: '0',
@@ -100,7 +102,12 @@ void main() {
       tester,
       find.byKey(const ValueKey('batch-member-2000')),
     );
-    expect(find.byKey(const ValueKey('batch-member-2000')), findsOneWidget);
+    final plannedMember = find.byKey(const ValueKey('batch-member-2000'));
+    expect(plannedMember, findsOneWidget);
+    expect(
+      find.descendant(of: plannedMember, matching: find.text('待配种绑定')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('batch-member-remove-2000')),
       findsOneWidget,

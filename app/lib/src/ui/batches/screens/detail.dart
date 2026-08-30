@@ -241,7 +241,7 @@ class _HouseBatchDetailScreenState
               return _BatchHeader(
                 batch: currentBatch,
                 activeCount:
-                    allMembers.where((item) => item.isActivityActive).length,
+                    allMembers.where((item) => item.isMembershipActive).length,
                 canEdit: canEdit,
                 saving: _saving,
                 onComplete: () => _completeBatch(
@@ -424,10 +424,10 @@ class _HouseBatchDetailScreenState
       if (selectedStatus != _all && displayStatus != selectedStatus) {
         return false;
       }
-      if (_activity == _active && !item.isActivityActive) {
+      if (_activity == _active && !item.isMembershipActive) {
         return false;
       }
-      if (_activity == _ended && item.isActivityActive) {
+      if (_activity == _ended && item.isMembershipActive) {
         return false;
       }
       if (query.isEmpty) {
@@ -1193,26 +1193,22 @@ class _BatchMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = members.where((item) => item.isActivityActive).length;
+    final active = members.where((item) => item.isMembershipActive).length;
     final mothers = members
-        .where((item) => item.isActivityActive && item.batchRole == 'breeding')
+        .where(
+            (item) => item.isMembershipActive && item.batchRole == 'breeding')
         .length;
     // 服务端的批次约束保证同一只母兔在同一批次最多一条开放周期。
-    final openCycles = members
-        .where(
-          (item) =>
-              item.batchRole == 'breeding' &&
-              item.isActive &&
-              item.currentCycleId != null,
-        )
-        .length;
+    final openCycles =
+        members.where((item) => item.hasOpenProductionCycle).length;
     final commodity = members
-        .where((item) => item.isActivityActive && item.batchRole == 'fattening')
+        .where(
+            (item) => item.isMembershipActive && item.batchRole == 'fattening')
         .length;
     final nursing = members.fold<int>(
       0,
       (sum, item) =>
-          sum + (item.isActivityActive ? item.currentNursingKits : 0),
+          sum + (item.isMembershipActive ? item.currentNursingKits : 0),
     );
 
     return SectionCard(
@@ -1492,17 +1488,17 @@ class _MemberFilters extends StatelessWidget {
             key: const ValueKey('batch-member-activity-filter'),
             value: activity,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: '批次活动'),
+            decoration: const InputDecoration(labelText: '成员关系'),
             items: const [
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._active,
-                  child: Text('活动进行中')),
+                  child: Text('关系有效')),
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._all,
-                  child: Text('全部标签')),
+                  child: Text('全部关系')),
               DropdownMenuItem(
                   value: _HouseBatchDetailScreenState._ended,
-                  child: Text('活动已结束')),
+                  child: Text('关系已结束')),
             ],
             onChanged: (value) {
               if (value != null) onActivityChanged(value);
