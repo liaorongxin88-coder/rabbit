@@ -205,36 +205,42 @@ class _ProductionSettingsFormState
                 _DayField(
                   fieldKey: const ValueKey('production-aphrodisiac-days'),
                   label: '催情至配种时长',
+                  helperText: '执行催情后开始计算，到期提醒配种。',
                   controller: _aphrodisiacController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-palpation-days'),
                   label: '配种至摸胎时长',
+                  helperText: '完成配种后开始计算，到期提醒摸胎。',
                   controller: _palpationController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-prepartum-days'),
                   label: '摸胎至备产时长',
+                  helperText: '摸胎确认怀孕后开始计算，到期提醒备产。',
                   controller: _prepartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-weaning-days'),
                   label: '分娩至分笼时长',
+                  helperText: '完成接产后开始计算，到期提醒断奶分笼。',
                   controller: _weaningController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-postpartum-days'),
-                  label: '流产或分笼至催情时长',
+                  label: '休养恢复时长',
+                  helperText: '接产后开始计算休养到期；空怀、流产或分娩失败后也用这一天数安排下一轮催情。',
                   controller: _postpartumController,
                 ),
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-replacement-days'),
                   label: '后备成熟天数',
+                  helperText: '进入后备阶段后开始计算，到期提醒转为种兔。',
                   controller: _replacementController,
                 ),
                 const SizedBox(height: 20),
@@ -243,6 +249,7 @@ class _ProductionSettingsFormState
                 _DayField(
                   fieldKey: const ValueKey('production-adaptation-days'),
                   label: '幼兔适应期时长',
+                  helperText: '从进入幼兔适应期起计入成熟日期；适应期内生成对应的日常观察提醒。',
                   controller: _adaptationController,
                   min: 2,
                   max: 3,
@@ -251,6 +258,7 @@ class _ProductionSettingsFormState
                 _DayField(
                   fieldKey: const ValueKey('production-growing-days'),
                   label: '成长期时长',
+                  helperText: '从进入生长期起计入剩余成熟天数；生长期内生成对应的日常观察提醒。',
                   controller: _growingController,
                   min: 15,
                   max: 18,
@@ -259,6 +267,7 @@ class _ProductionSettingsFormState
                 _DayField(
                   fieldKey: const ValueKey('production-fattening-days'),
                   label: '育肥期时长',
+                  helperText: '从进入育肥期起计算成熟日期，到期生成可出售提醒。',
                   controller: _fatteningController,
                   min: 12,
                   max: 15,
@@ -433,6 +442,7 @@ class _DayField extends StatelessWidget {
   const _DayField({
     required this.fieldKey,
     required this.label,
+    required this.helperText,
     required this.controller,
     this.min,
     this.max,
@@ -440,6 +450,7 @@ class _DayField extends StatelessWidget {
 
   final Key fieldKey;
   final String label;
+  final String helperText;
   final TextEditingController controller;
   final int? min;
   final int? max;
@@ -451,6 +462,8 @@ class _DayField extends StatelessWidget {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
+        helperText: helperText,
+        helperMaxLines: 3,
         suffixText: '天',
       ),
       keyboardType: TextInputType.number,
