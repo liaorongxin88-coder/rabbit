@@ -78,6 +78,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   CancelToken? _downloadCancelToken;
   File? _downloadedApk;
   Future<void>? _checkInFlight;
+  Future<void>? _startInFlight;
+  var _resumeDownloadAfterPermission = false;
 
   Future<void> check() {
     if (_checkInFlight != null) {
@@ -93,6 +95,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   }
 
   Future<void> _checkOnce() async {
+    _resumeDownloadAfterPermission = false;
     _emit(state.copyWith(
       phase: AppUpdatePhase.checking,
       clearRelease: true,
@@ -122,17 +125,49 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     }
   }
 
-  Future<void> startDownload() async {
+  Future<void> startDownload() {
+    final current = _startInFlight;
+    if (current != null) return current;
+
+    late final Future<void> operation;
+    operation = _startDownloadOnce().whenComplete(() {
+      if (identical(_startInFlight, operation)) {
+        _startInFlight = null;
+      }
+    });
+    _startInFlight = operation;
+    return operation;
+  }
+
+  Future<void> _startDownloadOnce() async {
     final release = state.release;
     if (release == null || state.isDownloading) return;
-    // 同一个版本已经下过就直接装，不重下。去系统设置授权再返回会重新
-    // check 一次，阶段回到 available，此时再点主按钮走的就是这里；
-    // 进程重启后 _downloadedApk 为空但文件还在，所以按路径而不是按字段找。
-    // 文件真假仍由原生层的 sha256 校验兜底，不通过会删掉并提示重新下载。
+
+    try {
+      if (!await _installer.canInstallPackages()) {
+        await _requestInstallPermission(
+          message: '下载更新包前，需要允许此应用安装未知来源应用',
+        );
+        return;
+      }
+    } catch (error) {
+      if (mounted) {
+        _emit(state.copyWith(
+          phase: AppUpdatePhase.failed,
+          clearProgress: true,
+          message: _message(error),
+        ));
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    // 同一个版本已经下过就直接装，不重下。进程重启后 _downloadedApk
+    // 为空但文件还在，所以按路径而不是按字段找。文件真假仍由原生层的
+    // sha256 校验兜底，不通过会删掉并提示重新下载。
     final cached = await _cachedApk(release);
     if (cached != null) {
       _downloadedApk = cached;
-      // 走缓存直接装的路径不在下面那个 try 里，自己兜。
       try {
         await _openInstaller(release, cached);
       } catch (error) {
@@ -146,6 +181,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       }
       return;
     }
+
     final cancelToken = CancelToken();
     _downloadCancelToken = cancelToken;
     _emit(state.copyWith(
@@ -196,16 +232,23 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     _downloadCancelToken?.cancel('user cancelled OTA download');
   }
 
-  Future<void> openInstallPermissionSettings() async {
+  Future<void> openInstallPermissionSettings() {
+    return _requestInstallPermission(
+      message: '请允许此应用安装未知来源应用，返回后升级会自动继续',
+    );
+  }
+
+  Future<void> _requestInstallPermission({required String message}) async {
+    _resumeDownloadAfterPermission = true;
+    _emit(state.copyWith(
+      phase: AppUpdatePhase.permissionRequired,
+      clearProgress: true,
+      message: message,
+    ));
     try {
       await _installer.openInstallPermissionSettings();
-      if (mounted) {
-        _emit(state.copyWith(
-          phase: AppUpdatePhase.permissionRequired,
-          message: '请在系统页面允许此应用安装未知来源应用，再返回继续安装',
-        ));
-      }
     } catch (error) {
+      _resumeDownloadAfterPermission = false;
       if (mounted) {
         _emit(state.copyWith(
           phase: AppUpdatePhase.permissionRequired,
@@ -215,23 +258,20 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     }
   }
 
-  /// 授权和安装合成一个动作。授没授过权 App 自己查得到，不该让用户先
-  /// 判断「我到底授权了没」再从两个长得差不多的按钮里挑。
-  /// 包已经在本地时这里不会重新下载。
-  Future<void> authorizeAndInstall() async {
-    final release = state.release;
-    if (release == null) return;
-    final file = _downloadedApk ?? await _cachedApk(release);
-    if (file == null) {
-      await startDownload();
-      return;
-    }
-    _downloadedApk = file;
-    // 这个方法直接挂在按钮的 onPressed 上，没人接它的异常。
-    // 通道挂掉时 canInstallPackages 会抛，不兜就成了无声失败。
+  /// 系统授权页关闭后由应用生命周期回调调用。授权成功会续接原来的升级
+  /// 动作；用户取消时只更新提示，不会开始下载。
+  Future<void> resumeAfterInstallPermission() async {
+    if (!_resumeDownloadAfterPermission) return;
+    _resumeDownloadAfterPermission = false;
     try {
-      if (await _installer.canInstallPackages()) {
-        await _openInstaller(release, file);
+      if (!await _installer.canInstallPackages()) {
+        if (mounted) {
+          _emit(state.copyWith(
+            phase: AppUpdatePhase.permissionRequired,
+            clearProgress: true,
+            message: '未授予安装权限，升级不会继续',
+          ));
+        }
         return;
       }
     } catch (error) {
@@ -244,16 +284,20 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       }
       return;
     }
-    await openInstallPermissionSettings();
+    await startDownload();
   }
 
+  /// 授权和安装仍是一个入口。无论安装包是否已缓存，startDownload 都会
+  /// 先检查权限，并复用同一个在途升级动作。
+  Future<void> authorizeAndInstall() => startDownload();
+
   Future<void> _openInstaller(AppRelease release, File file) async {
+    // 下载前的检查不能替代这里。用户可能在下载期间撤销权限，原生层的
+    // installApk 还会再兜一次检查，也覆盖检查和启动安装器之间的竞态。
     if (!await _installer.canInstallPackages()) {
-      _emit(state.copyWith(
-        phase: AppUpdatePhase.permissionRequired,
-        clearProgress: true,
-        message: '需要允许此应用安装未知来源应用',
-      ));
+      await _requestInstallPermission(
+        message: '安装更新包前，需要重新允许此应用安装未知来源应用',
+      );
       return;
     }
     _emit(state.copyWith(
@@ -269,15 +313,15 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       if (!mounted) return;
       switch (result) {
         case AppInstallResult.installerOpened:
+          _resumeDownloadAfterPermission = false;
           _emit(state.copyWith(
             phase: AppUpdatePhase.installing,
             message: '系统安装器已打开',
           ));
         case AppInstallResult.permissionRequired:
-          _emit(state.copyWith(
-            phase: AppUpdatePhase.permissionRequired,
-            message: '需要允许此应用安装未知来源应用',
-          ));
+          await _requestInstallPermission(
+            message: '安装权限已被撤销，请重新授权后继续安装',
+          );
         case AppInstallResult.hashMismatch:
           await _deleteDownloadedApk();
           _emit(state.copyWith(

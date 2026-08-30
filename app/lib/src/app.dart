@@ -62,6 +62,8 @@ class _RabbitManagerAppState extends ConsumerState<RabbitManagerApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_syncPendingBindings());
+      final updateController = ref.read(appUpdateControllerProvider.notifier);
+      unawaited(updateController.resumeAfterInstallPermission());
     }
   }
 

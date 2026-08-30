@@ -86,12 +86,10 @@ class _AppUpdateDialog extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('暂时继续使用'),
             ),
-          // 包已经下好了，就差授权。授没授过 App 自己查，所以只给一个按钮：
-          // 已授权就直接装，没授权就去系统页。当前状态由上方文案交代。
           FilledButton(
             key: const ValueKey('app-update-authorize-install'),
             onPressed: controller.authorizeAndInstall,
-            child: const Text('去授权并安装'),
+            child: const Text('前往授权并继续'),
           ),
         ];
       case AppUpdatePhase.installing:

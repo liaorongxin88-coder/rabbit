@@ -24,6 +24,13 @@ class OtaUpdateChannel(
     }
 
     private val channel = MethodChannel(messenger, CHANNEL)
+    private val installPermissionGate =
+        InstallPermissionGate(
+            permissionRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
+            canRequestPackageInstalls = {
+                activity.packageManager.canRequestPackageInstalls()
+            },
+        )
 
     init {
         channel.setMethodCallHandler(this)
@@ -196,9 +203,7 @@ class OtaUpdateChannel(
         }
     }
 
-    private fun canInstallPackages(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            activity.packageManager.canRequestPackageInstalls()
+    private fun canInstallPackages(): Boolean = installPermissionGate.canInstallPackages()
 
     private fun apkSha256(apk: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -212,4 +217,12 @@ class OtaUpdateChannel(
         }
         return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
     }
+}
+
+/** 每次调用都读取 PackageManager，不能缓存授权结果。用户可能在下载期间撤销权限。 */
+internal class InstallPermissionGate(
+    private val permissionRequired: Boolean,
+    private val canRequestPackageInstalls: () -> Boolean,
+) {
+    fun canInstallPackages(): Boolean = !permissionRequired || canRequestPackageInstalls()
 }

@@ -165,7 +165,7 @@ class _UpdateCard extends ConsumerWidget {
       AppUpdatePhase.available => '发现新版本 ${state.release!.versionName}',
       AppUpdatePhase.failed => state.message ?? '检查更新失败',
       AppUpdatePhase.downloading => '正在下载更新包',
-      AppUpdatePhase.permissionRequired => '安装包已下载完成，等待安装授权',
+      AppUpdatePhase.permissionRequired => state.message ?? '等待系统安装授权',
       AppUpdatePhase.installing => '安装包已下载完成，系统安装器已打开',
       _ => '检查新版本并安装',
     };
@@ -177,7 +177,7 @@ class _UpdateCard extends ConsumerWidget {
     final (String, VoidCallback)? primaryAction = switch (state.phase) {
       AppUpdatePhase.available => ('立即更新', controller.startDownload),
       AppUpdatePhase.permissionRequired => (
-          '去授权并安装',
+          '前往授权并继续',
           controller.authorizeAndInstall
         ),
       AppUpdatePhase.installing => ('重新打开安装', controller.authorizeAndInstall),
