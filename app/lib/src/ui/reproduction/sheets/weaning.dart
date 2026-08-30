@@ -70,7 +70,7 @@ enum _NextReminderMode { houseSetting, custom }
 
 class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   final _writeRequest = BatchWriteRequestController();
-  final _countController = TextEditingController(text: '8');
+  final _countController = TextEditingController();
   final _maleController = TextEditingController();
   final _femaleController = TextEditingController();
   final _weightController = TextEditingController();
@@ -80,6 +80,8 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   DateTime? _postponeDate;
   DateTime? _customNextReminderDate;
   var _nextReminderMode = _NextReminderMode.houseSetting;
+  ReproLitter? _litter;
+  Object? _loadError;
   var _postponed = false;
   var _saving = false;
 
@@ -87,6 +89,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   void initState() {
     super.initState();
     _weaningDate = DateTime.now();
+    _loadLitter();
   }
 
   @override
@@ -113,6 +116,26 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       return null;
     }
     return double.tryParse(text);
+  }
+
+  Future<void> _loadLitter() async {
+    setState(() {
+      _litter = null;
+      _loadError = null;
+    });
+    try {
+      final litter = await ref.read(reproRepositoryProvider).getCycleLitter(
+            houseId: widget.houseId,
+            cycleId: widget.breedingCycleId,
+          );
+      if (!mounted) return;
+      setState(() {
+        _litter = litter;
+        _countController.text = '${litter.currentNursing}';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -269,9 +292,18 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       }
       return;
     }
+    final litter = _litter;
+    if (litter == null) {
+      _showMessage('当前哺乳数尚未加载，请稍后重试');
+      return;
+    }
     final count = int.tryParse(_countController.text.trim()) ?? -1;
     if (count < 0) {
       _showMessage('请输入有效的断奶数量');
+      return;
+    }
+    if (count > litter.currentNursing) {
+      _showMessage('断奶数量不能超过当前哺乳数（${litter.currentNursing} 只）');
       return;
     }
 
@@ -369,6 +401,35 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   @override
   Widget build(BuildContext context) {
     ref.watch(houseSettingProvider(widget.houseId));
+    if (_loadError != null) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('无法读取当前哺乳数，请检查网络后重试'),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _loadLitter,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_litter == null) {
+      return const SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
     final mediaQuery = MediaQuery.of(context);
     final keyboardInset = mediaQuery.viewInsets.bottom;
     final availableHeight = mediaQuery.size.height - keyboardInset;

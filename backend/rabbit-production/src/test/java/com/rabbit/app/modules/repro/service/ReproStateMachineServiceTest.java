@@ -598,6 +598,34 @@ class ReproStateMachineServiceTest {
     }
 
     @Test
+    void aWeanedCountEqualToTheLockedCurrentNursingCountIsAccepted() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+        Litter litter = nursingLitter();
+        litter.setCurrentNursing(8);
+        when(litterMapper.selectByCycleIdForUpdate(HOUSE_ID, CYCLE_ID)).thenReturn(litter);
+
+        service.apply(command(ReproAction.WEANING).weanedCount(8).build());
+
+        verify(litterMapper).update(litter);
+        assertEquals(8, litter.getWeanedCount());
+    }
+
+    @Test
+    void aWeanedCountAboveTheLockedCurrentNursingCountIsRejected() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+        Litter litter = nursingLitter();
+        litter.setCurrentNursing(8);
+        when(litterMapper.selectByCycleIdForUpdate(HOUSE_ID, CYCLE_ID)).thenReturn(litter);
+
+        BizException error = assertThrows(BizException.class,
+            () -> service.apply(command(ReproAction.WEANING).weanedCount(9).build()));
+
+        assertEquals(409, error.getCode());
+        assertEquals("当前哺乳数已变化，最多可断奶 8 只，请刷新后重试", error.getMessage());
+        verify(litterMapper, never()).update(any());
+    }
+
+    @Test
     void anAbortionWithoutAStillbirthCountIsRejected() {
         stubCycle(openCycle(ReproStage.AWAIT_PREPARTUM, BATCH_ID));
 

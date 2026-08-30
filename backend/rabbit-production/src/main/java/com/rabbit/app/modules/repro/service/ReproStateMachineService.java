@@ -859,6 +859,13 @@ public class ReproStateMachineService {
             if (litter == null) {
                 throw new BizException(409, "该周期没有可分笼的窝");
             }
+            int currentNursing = orZero(litter.getCurrentNursing());
+            if (command.getWeanedCount() > currentNursing) {
+                throw new BizException(
+                    409,
+                    "当前哺乳数已变化，最多可断奶 " + currentNursing + " 只，请刷新后重试"
+                );
+            }
             litter.setStatus(LitterStatus.WEANED.name());
             litter.setWeaningDate(occurredAt);
             litter.setWeanedCount(command.getWeanedCount());

@@ -212,7 +212,32 @@ void main() {
     expect(harness.adapter.requests, hasLength(1));
     final body = harness.adapter.requests.single;
     expect(body['action'], 'WEANING');
+    expect(body['weanedCount'], 8);
     expect(body.containsKey('nextRemindAt'), isFalse);
+  });
+
+  testWidgets('weaning defaults to current nursing and rejects a larger count',
+      (tester) async {
+    final harness = _RepositoryHarness(currentNursing: 8);
+    addTearDown(harness.dispose);
+
+    await tester.pumpWidget(
+      _productionApp(repository: harness.repository, task: _weaningTask),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-repro-task')));
+    await tester.pumpAndSettle();
+
+    final countField = find.byKey(const ValueKey('weaning-count'));
+    expect(tester.widget<TextField>(countField).controller!.text, '8');
+
+    await tester.enterText(countField, '9');
+    final submit = find.byKey(const ValueKey('weaning-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(find.text('断奶数量不能超过当前哺乳数（8 只）'), findsOneWidget);
+    expect(harness.adapter.requests, isEmpty);
   });
 
   testWidgets(
@@ -880,8 +905,11 @@ Widget _productionApp({
 }
 
 class _RepositoryHarness {
-  _RepositoryHarness({Map<String, dynamic>? response})
-      : adapter = _ReproActionAdapter(response: response) {
+  _RepositoryHarness({Map<String, dynamic>? response, int currentNursing = 8})
+      : adapter = _ReproActionAdapter(
+          response: response,
+          currentNursing: currentNursing,
+        ) {
     final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
       ..httpClientAdapter = adapter;
     client = ApiClient(SessionStore(), dio: dio);
@@ -951,8 +979,10 @@ class _PendingWeaningAdapter implements HttpClientAdapter {
 }
 
 class _ReproActionAdapter implements HttpClientAdapter {
-  _ReproActionAdapter({Map<String, dynamic>? response})
-      : response = response ??
+  _ReproActionAdapter({
+    Map<String, dynamic>? response,
+    this.currentNursing = 8,
+  }) : response = response ??
             {
               'cycleId': 701,
               'stage': 'AWAIT_MATING',
@@ -965,6 +995,7 @@ class _ReproActionAdapter implements HttpClientAdapter {
             };
 
   final Map<String, dynamic> response;
+  final int currentNursing;
   final requests = <Map<String, dynamic>>[];
 
   @override
@@ -973,6 +1004,17 @@ class _ReproActionAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    if (options.method == 'GET' &&
+        options.path == '/api/repro/cycles/701/litter') {
+      return _json({
+        'id': 81,
+        'cycleId': 701,
+        'motherRabbitId': 31,
+        'keptKits': 8,
+        'currentNursing': currentNursing,
+        'status': 'NURSING',
+      });
+    }
     requests.add(Map<String, dynamic>.from(options.data as Map));
     return _json(response);
   }
