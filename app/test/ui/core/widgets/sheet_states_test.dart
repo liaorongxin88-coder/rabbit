@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
@@ -14,6 +15,8 @@ import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/weaning.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+
+import 'litter_repository_harness.dart';
 
 void main() {
   testWidgets(
@@ -121,10 +124,16 @@ void main() {
     (tester) async {
       await _setSurface(tester, const Size(360, 800));
       final cageRequest = Completer<List<Cage>>();
+      final litterHarness = LitterRepositoryHarness(
+        cycleId: 72,
+        motherRabbitId: 18,
+      );
+      addTearDown(litterHarness.dispose);
 
       await tester.pumpWidget(
         _testApp(
           overrides: [
+            reproRepositoryProvider.overrideWithValue(litterHarness.repository),
             houseCagesProvider(8).overrideWith((_) => cageRequest.future),
           ],
           onOpen: (context) => showWeaningSheet(
@@ -134,6 +143,8 @@ void main() {
         ),
       );
       await _openSheet(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(cageRequest.isCompleted, isFalse);
       expect(find.byKey(const ValueKey('batch-sheet-loading')), findsNothing);

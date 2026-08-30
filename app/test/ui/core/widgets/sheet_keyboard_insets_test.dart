@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
@@ -11,6 +12,8 @@ import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/weaning.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+
+import 'litter_repository_harness.dart';
 
 const _deviceSizes = [
   Size(360, 800),
@@ -128,9 +131,15 @@ void main() {
     'weaning inputs and submit stay reachable above dynamic keyboards',
     (tester) async {
       _configureView(tester);
+      final litterHarness = LitterRepositoryHarness(
+        cycleId: 72,
+        motherRabbitId: 18,
+      );
+      addTearDown(litterHarness.dispose);
       await tester.pumpWidget(
         _testApp(
           overrides: [
+            reproRepositoryProvider.overrideWithValue(litterHarness.repository),
             houseCagesProvider(8).overrideWith((_) async => const <Cage>[]),
           ],
           openKey: const ValueKey('open-weaning-keyboard-test'),
