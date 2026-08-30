@@ -77,6 +77,7 @@ void main() {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
     final arrivalDate = DateTime(2025, 8, 23);
+    final growthStageEnteredAt = DateTime(2025, 7, 14);
 
     final created = await repository.createRabbit(
       houseId: 8,
@@ -89,6 +90,7 @@ void main() {
       arrivalDate: arrivalDate,
       weight: 4.2,
       growthStage: ' MATURE ',
+      growthStageEnteredAt: growthStageEnteredAt,
       reproductiveStage: ' PREGNANT ',
       reproStage: 'AWAIT_ESTRUS',
       batchId: 61,
@@ -122,6 +124,7 @@ void main() {
     expect(create.body['arrivalDate'], '2025-08-23');
     expect(create.body['sourceSeller'], '北方种兔场');
     expect(create.body['growthStage'], 'MATURE');
+    expect(create.body['growthStageEnteredAt'], '2025-07-14');
     expect(create.body['reproductiveStage'], 'PREGNANT');
     expect(create.body['reproStage'], 'AWAIT_ESTRUS');
     expect(create.body['batchId'], 61);

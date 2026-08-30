@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.rabbit.domain;
 
+import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import java.util.Locale;
 
 /** Canonical growth stages for an individual commodity rabbit. */
@@ -17,6 +18,26 @@ public enum CommodityGrowthStage {
 
     public String label() {
         return label;
+    }
+
+    public int daysUntilMature(GlobalSetting setting) {
+        if (this == MATURE) {
+            return 0;
+        }
+        Integer adaptationDays = setting.getAdaptationDays();
+        Integer growingDays = setting.getGrowingDays();
+        Integer fatteningDays = setting.getFatteningDays();
+        if (adaptationDays == null || adaptationDays <= 0
+            || growingDays == null || growingDays <= 0
+            || fatteningDays == null || fatteningDays <= 0) {
+            return setting.commodityMaturityDays();
+        }
+        return switch (this) {
+            case ADAPTATION -> adaptationDays + growingDays + fatteningDays;
+            case GROWING -> growingDays + fatteningDays;
+            case FATTENING -> fatteningDays;
+            case MATURE -> 0;
+        };
     }
 
     public static CommodityGrowthStage fromCode(String value) {

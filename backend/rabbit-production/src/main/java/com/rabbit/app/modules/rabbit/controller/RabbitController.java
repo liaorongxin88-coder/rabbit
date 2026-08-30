@@ -74,6 +74,7 @@ public class RabbitController {
         r.setArrivalDate(req.getArrivalDate());
         r.setWeight(req.getWeight());
         r.setGrowthStage(req.getGrowthStage());
+        r.setGrowthStageEnteredAt(req.getGrowthStageEnteredAt());
         r.setReproductiveStage(req.getReproductiveStage());
         RabbitService.ReproEntry reproEntry = new RabbitService.ReproEntry(
             req.getReproStage(),

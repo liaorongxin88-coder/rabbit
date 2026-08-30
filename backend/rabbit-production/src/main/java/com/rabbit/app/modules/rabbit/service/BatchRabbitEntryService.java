@@ -233,6 +233,7 @@ public class BatchRabbitEntryService {
         rabbit.setArrivalDate(request.getArrivalDate());
         rabbit.setWeight(individualWeight);
         rabbit.setGrowthStage(request.getGrowthStage());
+        rabbit.setGrowthStageEnteredAt(request.getGrowthStageEnteredAt());
         rabbit.setReproductiveStage(request.getReproductiveStage());
         return rabbit;
     }
@@ -261,6 +262,8 @@ public class BatchRabbitEntryService {
             String.valueOf(request.getQuantity()),
             String.valueOf(request.getTotalWeight()),
             String.valueOf(request.getGrowthStage()),
+            String.valueOf(request.getGrowthStageEnteredAt() == null
+                ? null : request.getGrowthStageEnteredAt().getTime()),
             String.valueOf(request.getReproductiveStage())
         );
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8)).toString();

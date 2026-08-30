@@ -45,8 +45,10 @@ public class CommodityDailyCareReminderService {
             Date maturityAnchor = rabbit.getGrowthStageEnteredAt() != null
                 ? rabbit.getGrowthStageEnteredAt()
                 : rabbit.getArrivalDate();
-            Date maturityAt = setting != null && maturityAnchor != null
-                ? DateUtil.plusDays(maturityAnchor, setting.commodityMaturityDays())
+            CommodityGrowthStage growthStage =
+                CommodityGrowthStage.fromCodeOrNull(rabbit.getGrowthStage());
+            Date maturityAt = setting != null && maturityAnchor != null && growthStage != null
+                ? DateUtil.plusDays(maturityAnchor, growthStage.daysUntilMature(setting))
                 : null;
             boolean matureByTime = maturityAt != null && !maturityAt.after(now);
 

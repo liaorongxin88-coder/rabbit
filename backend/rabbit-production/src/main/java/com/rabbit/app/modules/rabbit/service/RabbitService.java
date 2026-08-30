@@ -238,6 +238,7 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
+            normalizeGrowthStageEnteredAt(rabbit);
             validateMotherReference(houseId, rabbit);
             validateDoeEntryProfile(houseId, rabbit, reproEntry);
             lockReproBatchIfRequested(houseId, reproEntry);
@@ -262,11 +263,6 @@ public class RabbitService {
             rabbit.setHouseId(houseId);
             rabbit.setIsActive(Boolean.TRUE);
             rabbit.setRequestId(requestId);
-            if ("2".equals(rabbit.getType()) && rabbit.getGrowthStage() != null) {
-                rabbit.setGrowthStageEnteredAt(
-                    rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now()
-                );
-            }
             if (rabbit.getIsQuarantined() == null) {
                 rabbit.setIsQuarantined(Boolean.FALSE);
             }
@@ -311,20 +307,33 @@ public class RabbitService {
         }
     }
 
+    private void normalizeGrowthStageEnteredAt(Rabbit rabbit) {
+        if (!"1".equals(rabbit.getType()) && !"2".equals(rabbit.getType())) {
+            return;
+        }
+        if (rabbit.getGrowthStageEnteredAt() == null) {
+            rabbit.setGrowthStageEnteredAt(
+                rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now()
+            );
+        }
+        if (rabbit.getGrowthStageEnteredAt().after(DateUtil.now())) {
+            throw new BizException(400, "进入当前阶段日期不能晚于今天");
+        }
+    }
+
     private void scheduleEntryLifecycleTask(Long userId, Long houseId, Rabbit rabbit) {
         String operator = String.valueOf(userId);
         GlobalSetting setting = settingService.getEffectiveSetting(userId, houseId);
         if ("2".equals(rabbit.getType())) {
-            Date startedAt = rabbit.getArrivalDate() != null
-                ? rabbit.getArrivalDate()
-                : DateUtil.now();
+            Date startedAt = rabbit.getGrowthStageEnteredAt();
+            CommodityGrowthStage stage = CommodityGrowthStage.fromCode(rabbit.getGrowthStage());
             workTaskWriter.scheduleForRabbit(new WorkTaskWriter.RabbitTaskScheduleRequest(
                 houseId,
                 TaskType.SALE_READY,
                 rabbit.getId(),
                 null,
                 rabbit.getCageId(),
-                DateUtil.plusDays(startedAt, setting.commodityMaturityDays()),
+                DateUtil.plusDays(startedAt, stage.daysUntilMature(setting)),
                 "商品兔成熟后可进入出售流程",
                 operator
             ));
@@ -333,7 +342,7 @@ public class RabbitService {
         if (!"1".equals(rabbit.getType())) {
             return;
         }
-        Date startedAt = DateUtil.now();
+        Date startedAt = rabbit.getGrowthStageEnteredAt();
         ReplacementRecord replacement = new ReplacementRecord();
         replacement.setHouseId(houseId);
         replacement.setRabbitId(rabbit.getId());

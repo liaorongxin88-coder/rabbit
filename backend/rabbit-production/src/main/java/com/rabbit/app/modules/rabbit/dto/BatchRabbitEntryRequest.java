@@ -52,6 +52,8 @@ public class BatchRabbitEntryRequest {
     @Size(max = 20, message = "生长阶段不合法")
     private String growthStage;
 
+    private Date growthStageEnteredAt;
+
     @Size(max = 20, message = "繁殖阶段不合法")
     private String reproductiveStage;
 
@@ -81,6 +83,8 @@ public class BatchRabbitEntryRequest {
     public void setTotalWeight(Double totalWeight) { this.totalWeight = totalWeight; }
     public String getGrowthStage() { return growthStage; }
     public void setGrowthStage(String growthStage) { this.growthStage = growthStage; }
+    public Date getGrowthStageEnteredAt() { return growthStageEnteredAt; }
+    public void setGrowthStageEnteredAt(Date growthStageEnteredAt) { this.growthStageEnteredAt = growthStageEnteredAt; }
     public String getReproductiveStage() { return reproductiveStage; }
     public void setReproductiveStage(String reproductiveStage) { this.reproductiveStage = reproductiveStage; }
     public String getRequestId() { return requestId; }

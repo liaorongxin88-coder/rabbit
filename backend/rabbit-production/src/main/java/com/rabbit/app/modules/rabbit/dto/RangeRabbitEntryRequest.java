@@ -68,6 +68,8 @@ public class RangeRabbitEntryRequest {
     @Size(max = 20, message = "生长阶段不合法")
     private String growthStage;
 
+    private Date growthStageEnteredAt;
+
     @Size(max = 20, message = "繁殖阶段不合法")
     private String reproductiveStage;
 
@@ -111,6 +113,8 @@ public class RangeRabbitEntryRequest {
     public void setWeight(Double weight) { this.weight = weight; }
     public String getGrowthStage() { return growthStage; }
     public void setGrowthStage(String growthStage) { this.growthStage = growthStage; }
+    public Date getGrowthStageEnteredAt() { return growthStageEnteredAt; }
+    public void setGrowthStageEnteredAt(Date growthStageEnteredAt) { this.growthStageEnteredAt = growthStageEnteredAt; }
     public String getReproductiveStage() { return reproductiveStage; }
     public void setReproductiveStage(String reproductiveStage) { this.reproductiveStage = reproductiveStage; }
     public String getReproStage() { return reproStage; }

@@ -40,6 +40,9 @@ public class CreateRabbitRequest {
     @Size(max = 20, message = "生长阶段不合法")
     private String growthStage;
 
+    /** 进入当前成长阶段的日期；旧客户端缺省时由服务端回退到入场日期。 */
+    private Date growthStageEnteredAt;
+
     @Size(max = 20, message = "繁殖阶段不合法")
     private String reproductiveStage;
 
@@ -153,6 +156,14 @@ public class CreateRabbitRequest {
 
     public void setGrowthStage(String growthStage) {
         this.growthStage = growthStage;
+    }
+
+    public Date getGrowthStageEnteredAt() {
+        return growthStageEnteredAt;
+    }
+
+    public void setGrowthStageEnteredAt(Date growthStageEnteredAt) {
+        this.growthStageEnteredAt = growthStageEnteredAt;
     }
 
     public String getReproductiveStage() {

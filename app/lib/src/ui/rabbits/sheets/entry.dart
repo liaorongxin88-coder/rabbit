@@ -214,7 +214,7 @@ class _RabbitSourceSheetState extends ConsumerState<_RabbitSourceSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('选择兔只来源', style: Theme.of(context).textTheme.titleLarge),
+            Text('选择兔子录入方式', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(
               '$cageName · ${widget.cage.usageLabel} · ${widget.cage.rabbitCount} 只',
@@ -233,7 +233,7 @@ class _RabbitSourceSheetState extends ConsumerState<_RabbitSourceSheet> {
                       )
                   : null,
               icon: const Icon(Icons.add_business_outlined),
-              label: const Text('购入兔只'),
+              label: const Text('自定义兔子录入'),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -252,11 +252,11 @@ class _RabbitSourceSheetState extends ConsumerState<_RabbitSourceSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.call_split_outlined),
-              label: const Text('场内生产'),
+              label: const Text('从批次中录入商品兔'),
             ),
             if (!_canUseProduction) ...[
               const SizedBox(height: 8),
-              const Text('场内生产需要批次查看和编辑权限。'),
+              const Text('从批次中录入商品兔需要批次查看和编辑权限。'),
             ] else if (_productionCage.hasError) ...[
               const SizedBox(height: 8),
               TextButton.icon(
@@ -267,7 +267,7 @@ class _RabbitSourceSheetState extends ConsumerState<_RabbitSourceSheet> {
               ),
             ] else if (!_productionCage.isLoading && !productionEnabled) ...[
               const SizedBox(height: 8),
-              const Text('场内生产仅可进入启用且有容量的通用空笼或商品兔笼。'),
+              const Text('从批次中录入商品兔仅可进入启用且有容量的通用空笼或商品兔笼。'),
             ],
           ],
         ),
@@ -1042,6 +1042,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   var _arrivalMethod = '0';
   DateTime? _arrivalDate;
   String? _growthStage;
+  DateTime? _growthStageEnteredAt;
   String? _reproductiveStage;
 
   /// 录入时直接入轨的生产阶段（飞书 recvsrnEJ8bKrk）。null 表示暂不入轨。
@@ -1078,6 +1079,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     _arrivalDate = rabbit?.arrivalDate == null
         ? _farmToday()
         : _dateOnly(rabbit!.arrivalDate!);
+    _growthStageEnteredAt = rabbit == null ? _arrivalDate : null;
     if (rabbit == null) {
       _type = widget.initialType;
       _growthStage = null;
@@ -1383,7 +1385,12 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           label: '入场日期',
           value: _arrivalDate,
           enabled: !_isEdit,
-          onPicked: (value) => setState(() => _arrivalDate = value),
+          onPicked: (value) => setState(() {
+            if (_growthStageEnteredAt == _arrivalDate) {
+              _growthStageEnteredAt = value;
+            }
+            _arrivalDate = value;
+          }),
         ),
         const SizedBox(height: 12),
         _ResponsiveFieldRow(
@@ -1580,6 +1587,16 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 ? null
                 : (value) => setState(() => _growthStage = value),
           ),
+          if (!_isEdit && (_type == '1' || _type == '2')) ...[
+            const SizedBox(height: 12),
+            _buildDateField(
+              key: const ValueKey('rabbit-growth-stage-entered-at'),
+              label: _growthStageDateLabel,
+              value: _growthStageEnteredAt,
+              onPicked: (value) =>
+                  setState(() => _growthStageEnteredAt = value),
+            ),
+          ],
         ],
         if (hasReproductiveStage) ...[
           const SizedBox(height: 12),
@@ -2115,6 +2132,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   motherId: int.tryParse(_motherIdController.text.trim()),
                   arrivalDate: _arrivalDate!,
                   growthStage: _growthStage,
+                  growthStageEnteredAt: _growthStageEnteredAt,
                   reproductiveStage: _reproductiveStage,
                   requestId: requestId,
                 );
@@ -2143,6 +2161,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
               growthStage: _growthStage,
+              growthStageEnteredAt: _growthStageEnteredAt,
               reproductiveStage: _reproductiveStage,
               reproStage: _canOpenReproEntry ? _reproStage : null,
               batchId: _canOpenReproEntry ? batchId : null,
@@ -2187,6 +2206,16 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       }
       return null;
     }
+  }
+
+  String get _growthStageDateLabel {
+    if (_type == '1') {
+      return '进入后备阶段日期';
+    }
+    final selected = _growthStageOptions
+        .where((option) => option.value == _growthStage)
+        .firstOrNull;
+    return selected == null ? '进入成长阶段日期' : '进入${selected.label}日期';
   }
 
   /// 可手工录入的旧繁殖阶段。

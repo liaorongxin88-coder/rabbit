@@ -155,6 +155,7 @@ public class RangeRabbitEntryService {
         rabbit.setArrivalDate(request.getArrivalDate());
         rabbit.setWeight(request.getWeight());
         rabbit.setGrowthStage(request.getGrowthStage());
+        rabbit.setGrowthStageEnteredAt(request.getGrowthStageEnteredAt());
         rabbit.setReproductiveStage(request.getReproductiveStage());
         return rabbit;
     }

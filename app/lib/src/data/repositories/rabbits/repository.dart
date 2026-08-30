@@ -238,6 +238,7 @@ class RabbitRepository {
     required DateTime arrivalDate,
     required double? weight,
     String? growthStage,
+    DateTime? growthStageEnteredAt,
     String? reproductiveStage,
     String? reproStage,
     int? batchId,
@@ -306,6 +307,10 @@ class RabbitRepository {
     if (trimmedGrowthStage != null && trimmedGrowthStage.isNotEmpty) {
       body['growthStage'] = trimmedGrowthStage;
     }
+    if (growthStageEnteredAt != null) {
+      body['growthStageEnteredAt'] =
+          DateFormat('yyyy-MM-dd').format(growthStageEnteredAt);
+    }
     final trimmedReproductiveStage = reproductiveStage?.trim();
     if (trimmedReproductiveStage != null &&
         trimmedReproductiveStage.isNotEmpty) {
@@ -335,6 +340,7 @@ class RabbitRepository {
     String sourceSeller = '',
     int? motherId,
     String? growthStage,
+    DateTime? growthStageEnteredAt,
     String? reproductiveStage,
     String? requestId,
   }) {
@@ -355,6 +361,9 @@ class RabbitRepository {
         if (motherId != null && motherId > 0) 'motherId': motherId,
         if (growthStage?.trim().isNotEmpty ?? false)
           'growthStage': growthStage!.trim(),
+        if (growthStageEnteredAt != null)
+          'growthStageEnteredAt':
+              DateFormat('yyyy-MM-dd').format(growthStageEnteredAt),
         if (reproductiveStage?.trim().isNotEmpty ?? false)
           'reproductiveStage': reproductiveStage!.trim(),
       },
@@ -401,6 +410,7 @@ class RabbitRepository {
     if (growthStage?.trim().isNotEmpty ?? false) {
       body['growthStage'] = growthStage!.trim();
     }
+    body['growthStageEnteredAt'] = DateFormat('yyyy-MM-dd').format(arrivalDate);
     if (reproductiveStage?.trim().isNotEmpty ?? false) {
       body['reproductiveStage'] = reproductiveStage!.trim();
     }

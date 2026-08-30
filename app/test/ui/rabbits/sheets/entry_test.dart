@@ -48,7 +48,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-rabbit-intake-sheet')));
     await tester.pumpAndSettle();
 
-    expect(find.text('选择兔只来源'), findsOneWidget);
+    expect(find.text('选择兔子录入方式'), findsOneWidget);
+    expect(find.text('自定义兔子录入'), findsOneWidget);
+    expect(find.text('从批次中录入商品兔'), findsOneWidget);
     expect(
         find.byKey(const ValueKey('rabbit-intake-purchase')), findsOneWidget);
     final production = tester.widget<OutlinedButton>(
@@ -98,7 +100,7 @@ void main() {
     await tester.tap(find.text('确定'));
     await tester.pumpAndSettle();
 
-    expect(find.text('场内生产'), findsNothing);
+    expect(find.text('从批次中录入商品兔'), findsNothing);
     final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -140,6 +142,7 @@ void main() {
     expect(request.body['quantity'], 3);
     expect(request.body['totalWeight'], 7.5);
     expect(request.body['sourceSeller'], '测试供应方');
+    expect(request.body['growthStageEnteredAt'], isNotNull);
   });
 
   testWidgets('commodity batch entry shows partial result in the form',
@@ -352,6 +355,74 @@ void main() {
         '${targetDate.day.toString().padLeft(2, '0')}';
     expect(
       find.descendant(of: dateField, matching: find.text(expected)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('commodity stage label and historical stage date are submitted',
+      (tester) async {
+    final adapter = _CapturingAdapter();
+    await tester.pumpWidget(
+      _commodityEntryTestApp(repository: _repository(adapter)),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('进入成长阶段日期'), findsOneWidget);
+    final growthStage = find.byKey(const ValueKey('rabbit-growth-stage'));
+    await tester.ensureVisible(growthStage);
+    await tester.tap(growthStage);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('育肥期').last);
+    await tester.pumpAndSettle();
+    expect(find.text('进入育肥期日期'), findsOneWidget);
+
+    final stageDate =
+        find.byKey(const ValueKey('rabbit-growth-stage-entered-at'));
+    await tester.ensureVisible(stageDate);
+    await tester.tap(stageDate);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.chevron_left).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15').last);
+    await tester.tap(find.text('确定').last);
+    await tester.pumpAndSettle();
+
+    final now = DateTime.now();
+    final historicalDate = DateTime(now.year, now.month - 1, 15);
+    final expectedDate = '${historicalDate.year.toString().padLeft(4, '0')}-'
+        '${historicalDate.month.toString().padLeft(2, '0')}-15';
+    expect(
+      find.descendant(of: stageDate, matching: find.text(expectedDate)),
+      findsOneWidget,
+    );
+
+    final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await _waitForCapturedRequest(tester, adapter);
+
+    expect(adapter.requests.single.body['growthStage'], 'FATTENING');
+    expect(
+      adapter.requests.single.body['growthStageEnteredAt'],
+      expectedDate,
+    );
+  });
+
+  testWidgets('new replacement uses a separate reserve-stage date',
+      (tester) async {
+    await tester.pumpWidget(_replacementEntryTestApp());
+    await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('入场日期'), findsOneWidget);
+    expect(find.text('进入后备阶段日期'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-growth-stage-entered-at')),
       findsOneWidget,
     );
   });
@@ -646,6 +717,23 @@ Widget _entryTestAppWithOverrides({
   );
 }
 
+Widget _replacementEntryTestApp() {
+  return _testApp(
+    refreshedCages: const [_emptyReplacementCage],
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-entry-sheet'),
+        onPressed: () => showRabbitPurchaseEntrySheet(
+          context: context,
+          houseId: 8,
+          cage: _emptyReplacementCage,
+        ),
+        child: const Text('录入'),
+      ),
+    ),
+  );
+}
+
 Widget _replacementEditTestApp() {
   return _testApp(
     child: Builder(
@@ -807,6 +895,15 @@ const _replacementCage = Cage(
   cageNumber: 'B-01',
   status: '2',
   rabbitCount: 1,
+  isEnabled: true,
+);
+
+const _emptyReplacementCage = Cage(
+  id: 14,
+  houseId: 8,
+  cageNumber: 'B-02',
+  status: '2',
+  rabbitCount: 0,
   isEnabled: true,
 );
 

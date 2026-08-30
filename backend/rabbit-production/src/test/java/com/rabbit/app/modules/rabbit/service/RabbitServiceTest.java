@@ -2,6 +2,13 @@ package com.rabbit.app.modules.rabbit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BatchRabbitItem;
@@ -10,19 +17,101 @@ import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.mapper.BreedingCycleMapper;
+import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
+import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
 import com.rabbit.app.modules.repro.service.WorkTaskWriter;
+import com.rabbit.app.modules.setting.entity.GlobalSetting;
+import com.rabbit.app.modules.setting.service.SettingService;
+import com.rabbit.app.util.DateUtil;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 
 class RabbitServiceTest {
+    @ParameterizedTest
+    @CsvSource({
+        "ADAPTATION, 36",
+        "GROWING, 31",
+        "FATTENING, 10",
+        "MATURE, 0"
+    })
+    void commodityMaturityUsesTheEnteredStageDateAndRemainingStages(
+            String growthStage, int remainingDays) {
+        CreationFixture fixture = creationFixture();
+        Date arrivalDate = new Date(1_704_067_200_000L);
+        Date stageEnteredAt = new Date(1_706_745_600_000L);
+        Rabbit rabbit = rabbit("2", arrivalDate, stageEnteredAt);
+        rabbit.setGrowthStage(growthStage);
+
+        fixture.service().createRabbit(7L, 8L, rabbit, null, "commodity-" + growthStage);
+
+        ArgumentCaptor<WorkTaskWriter.RabbitTaskScheduleRequest> task =
+            ArgumentCaptor.forClass(WorkTaskWriter.RabbitTaskScheduleRequest.class);
+        verify(fixture.workTaskWriter()).scheduleForRabbit(task.capture());
+        assertEquals(stageEnteredAt, rabbit.getGrowthStageEnteredAt());
+        assertEquals(
+            DateUtil.plusDays(stageEnteredAt, remainingDays),
+            task.getValue().dueTime()
+        );
+    }
+
+    @Test
+    void replacementRecordAndMaturityUseHistoricalStageDate() {
+        CreationFixture fixture = creationFixture();
+        Date arrivalDate = new Date(1_688_169_600_000L);
+        Date stageEnteredAt = new Date(1_706_745_600_000L);
+        Rabbit rabbit = rabbit("1", arrivalDate, stageEnteredAt);
+        rabbit.setReproductiveStage("RESERVE");
+
+        fixture.service().createRabbit(7L, 8L, rabbit, null, "replacement-history");
+
+        ArgumentCaptor<ReplacementRecord> replacement =
+            ArgumentCaptor.forClass(ReplacementRecord.class);
+        verify(fixture.replacementRecordMapper()).insert(replacement.capture());
+        assertEquals(stageEnteredAt, replacement.getValue().getReplacementDate());
+        assertEquals(
+            DateUtil.plusDays(stageEnteredAt, 90),
+            replacement.getValue().getExpectedMatureDate()
+        );
+    }
+
+    @Test
+    void oldClientFallsBackToArrivalDateForGrowthStageEntry() {
+        CreationFixture fixture = creationFixture();
+        Date arrivalDate = new Date(1_706_745_600_000L);
+        Rabbit rabbit = rabbit("2", arrivalDate, null);
+        rabbit.setGrowthStage("ADAPTATION");
+
+        fixture.service().createRabbit(7L, 8L, rabbit, null, "legacy-client");
+
+        assertEquals(arrivalDate, rabbit.getGrowthStageEnteredAt());
+    }
+
+    @Test
+    void futureGrowthStageEntryDateIsRejected() {
+        CreationFixture fixture = creationFixture();
+        Date tomorrow = DateUtil.plusDays(DateUtil.now(), 1);
+        Rabbit rabbit = rabbit("2", DateUtil.now(), tomorrow);
+        rabbit.setGrowthStage("ADAPTATION");
+
+        BizException error = assertThrows(BizException.class,
+            () -> fixture.service().createRabbit(7L, 8L, rabbit, null, "future-stage"));
+
+        assertEquals(400, error.getCode());
+        assertEquals("进入当前阶段日期不能晚于今天", error.getMessage());
+    }
+
     @Test
     void convertToReplacementRequiresControlAtServiceBoundary() {
         HouseService houseService = new HouseService(null, null, null, null, null, null) {
@@ -180,5 +269,75 @@ class RabbitServiceTest {
             "7"
         );
         org.mockito.Mockito.verify(workTaskWriter).cancelAllForRabbit(1L, 3L, "7");
+    }
+
+    private static CreationFixture creationFixture() {
+        RabbitMapper rabbitMapper = mock(RabbitMapper.class);
+        CageMapper cageMapper = mock(CageMapper.class);
+        SettingService settingService = mock(SettingService.class);
+        ReplacementRecordMapper replacementRecordMapper = mock(ReplacementRecordMapper.class);
+        RabbitStatusHistoryMapper historyMapper = mock(RabbitStatusHistoryMapper.class);
+        RequestDedupService dedup = mock(RequestDedupService.class);
+        WorkTaskWriter workTaskWriter = mock(WorkTaskWriter.class);
+
+        Cage cage = new Cage();
+        cage.setId(11L);
+        cage.setHouseId(8L);
+        cage.setStatus("0");
+        cage.setRabbitCount(0);
+        cage.setIsEnabled(Boolean.TRUE);
+        when(cageMapper.selectByIdForUpdate(8L, 11L)).thenReturn(cage);
+        when(cageMapper.updateRabbitCountAndStatus(
+            anyLong(), anyLong(), anyInt(), anyString(), anyString()
+        )).thenReturn(1);
+        doAnswer(invocation -> {
+            Rabbit rabbit = invocation.getArgument(0);
+            rabbit.setId(81L);
+            return 1;
+        }).when(rabbitMapper).insert(org.mockito.ArgumentMatchers.any(Rabbit.class));
+
+        GlobalSetting setting = new GlobalSetting();
+        setting.setAdaptationDays(5);
+        setting.setGrowingDays(21);
+        setting.setFatteningDays(10);
+        setting.setReplacementDays(90);
+        when(settingService.getEffectiveSetting(7L, 8L)).thenReturn(setting);
+
+        RabbitService service = new RabbitService(
+            rabbitMapper,
+            cageMapper,
+            settingService,
+            replacementRecordMapper,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            historyMapper,
+            null,
+            dedup,
+            workTaskWriter,
+            null,
+            10
+        );
+        return new CreationFixture(service, replacementRecordMapper, workTaskWriter);
+    }
+
+    private static Rabbit rabbit(String type, Date arrivalDate, Date growthStageEnteredAt) {
+        Rabbit rabbit = new Rabbit();
+        rabbit.setCageId(11L);
+        rabbit.setType(type);
+        rabbit.setGender("0");
+        rabbit.setArrivalDate(arrivalDate);
+        rabbit.setGrowthStageEnteredAt(growthStageEnteredAt);
+        return rabbit;
+    }
+
+    private record CreationFixture(
+        RabbitService service,
+        ReplacementRecordMapper replacementRecordMapper,
+        WorkTaskWriter workTaskWriter
+    ) {
     }
 }
