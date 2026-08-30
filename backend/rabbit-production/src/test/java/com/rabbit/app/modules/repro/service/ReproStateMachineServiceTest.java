@@ -41,6 +41,7 @@ import com.rabbit.app.modules.repro.domain.ReproAction;
 import com.rabbit.app.modules.repro.domain.ReproSettings;
 import com.rabbit.app.modules.repro.domain.ReproStage;
 import com.rabbit.app.modules.repro.domain.TaskSubjectType;
+import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.entity.BizAttachment;
 import com.rabbit.app.modules.repro.entity.Litter;
 import com.rabbit.app.modules.repro.entity.ReproCycle;
@@ -187,6 +188,7 @@ class ReproStateMachineServiceTest {
         assertEquals(EVENT_ID, result.eventId());
         verify(reproCycleMapper, never()).selectByIdForUpdate(anyLong(), anyLong());
         verify(reproCycleMapper, never()).applyTransition(any(), any());
+        verify(reproCycleMapper, never()).insert(any());
         verify(reproEventMapper, never()).insert(any());
         verify(workTaskWriter, never()).schedule(any());
     }
@@ -918,18 +920,53 @@ class ReproStateMachineServiceTest {
     }
 
     /**
-     * 分娩后母兔即可开始下一轮，哺乳状态留在窝和窝待办上。若把她投影成待分笼，
-     * 她会被下一轮的配种筛选整条排除，血配这条业务路径直接消失。
+     * 正常接产后，原批次周期继续承载哺乳和分笼；母兔同时进入无批次休养周期。
+     * 两条待办的日期锚点不同：分笼按分娩日加断奶天数，休养按分娩日加恢复天数。
      */
     @Test
-    void aNursingCycleWithoutAPipelineProjectsTheMotherAsReadyForTheNextRound() {
+    void normalDeliveryCreatesAParallelRecoveryCycleAndTask() {
         stubCycle(openCycle(ReproStage.AWAIT_DELIVERY, BATCH_ID));
+        Date occurredAt = daysFromNow(-1);
+        Date customWeaningDue = daysFromNow(20);
+        ReproCycle[] insertedRecovery = new ReproCycle[1];
+        when(reproCycleMapper.insert(any())).thenAnswer(invocation -> {
+            ReproCycle recovery = invocation.getArgument(0);
+            recovery.setId(101L);
+            insertedRecovery[0] = recovery;
+            return 1;
+        });
+        when(reproCycleMapper.selectOpenPipelineForUpdate(HOUSE_ID, MOTHER_ID))
+            .thenAnswer(invocation -> insertedRecovery[0]);
 
-        service.apply(deliveryCommand(DeliveryOutcome.BORN, 8, 8, 8).build());
+        service.apply(deliveryCommand(DeliveryOutcome.BORN, 8, 8, 8)
+            .occurredAt(occurredAt)
+            .nextRemindAt(customWeaningDue)
+            .build());
 
+        assertNotNull(insertedRecovery[0]);
+        assertEquals(ReproStage.READY.name(), insertedRecovery[0].getStage());
+        assertNull(insertedRecovery[0].getBatchId());
+        assertEquals(occurredAt, insertedRecovery[0].getStageEnteredAt());
+
+        ArgumentCaptor<WorkTaskWriter.TaskScheduleRequest> tasks =
+            ArgumentCaptor.forClass(WorkTaskWriter.TaskScheduleRequest.class);
+        verify(workTaskWriter, times(2)).schedule(tasks.capture());
+        WorkTaskWriter.TaskScheduleRequest weaning = tasks.getAllValues().get(0);
+        WorkTaskWriter.TaskScheduleRequest recovery = tasks.getAllValues().get(1);
+        assertEquals(TaskType.WEANING, weaning.taskType());
+        assertEquals(CYCLE_ID, weaning.cycleId());
+        assertEquals(LITTER_ID, weaning.litterId());
+        assertEquals(customWeaningDue, weaning.dueTime());
+        assertEquals(TaskType.RECOVERY, recovery.taskType());
+        assertEquals(101L, recovery.cycleId());
+        assertNull(recovery.batchId());
+        assertEquals(
+            DateUtil.plusDays(occurredAt, SETTINGS.postpartumRecoveryDays()),
+            recovery.dueTime()
+        );
         verify(rabbitStageProjectionMapper).projectStage(
             eq(HOUSE_ID), eq(MOTHER_ID), eq(ReproStage.READY.name()),
-            isNull(), any(), eq(OPERATOR));
+            eq(101L), any(), eq(OPERATOR));
     }
 
     // -------------------------------------------------------------- 配种时绑批次

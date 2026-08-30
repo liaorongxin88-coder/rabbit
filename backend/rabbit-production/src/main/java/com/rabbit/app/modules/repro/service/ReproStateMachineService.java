@@ -16,6 +16,7 @@ import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
 import com.rabbit.app.modules.repro.domain.CycleLifecycle;
 import com.rabbit.app.modules.repro.domain.CycleResult;
 import com.rabbit.app.modules.repro.domain.DeliveryOutcome;
+import com.rabbit.app.modules.repro.domain.DueAnchor;
 import com.rabbit.app.modules.repro.domain.DueContext;
 import com.rabbit.app.modules.repro.domain.DueDateCalculator;
 import com.rabbit.app.modules.repro.domain.EntryPoint;
@@ -168,6 +169,13 @@ public class ReproStateMachineService {
         Date dueTime = command.getNextRemindAt() != null
             ? command.getNextRemindAt()
             : calculatedDueTime;
+        Date postpartumRecoveryDueTime = transition.createsLitter()
+            ? DueDateCalculator.compute(
+                DueAnchor.POSTPARTUM_RECOVERY,
+                DueContext.builder(occurredAt, today).build(),
+                settings
+            )
+            : null;
 
         // 步骤 4：写事件。uk_re_request 是幂等的最终防线。
         ReproEvent event = writeEvent(
@@ -188,7 +196,15 @@ public class ReproStateMachineService {
 
         // 步骤 7：任务流转 —— 完成当前待办，建立下一条。
         TaskOutcome taskOutcome = rotateTasks(
-            command, cycle, transition, litterId, dueTime, operator, event.getId(), occurredAt
+            command,
+            cycle,
+            transition,
+            litterId,
+            dueTime,
+            postpartumRecoveryDueTime,
+            operator,
+            event.getId(),
+            occurredAt
         );
         if (taskOutcome.hasNextTask() != hasNextTask) {
             throw new IllegalStateException("下一待办结果与事务内预判不一致");
@@ -898,6 +914,7 @@ public class ReproStateMachineService {
         Transition transition,
         Long litterId,
         Date dueTime,
+        Date postpartumRecoveryDueTime,
         String operator,
         Long eventId,
         Date occurredAt
@@ -937,6 +954,18 @@ public class ReproStateMachineService {
             WorkTask next = scheduleFor(
                 cycle, litterId, TaskType.forStage(transition.toStage()), dueTime, operator
             );
+            if (transition.createsLitter()) {
+                ReproCycle recovery = openUnboundCycle(
+                    cycle, ReproStage.READY, occurredAt
+                );
+                scheduleFor(
+                    recovery,
+                    null,
+                    TaskType.RECOVERY,
+                    postpartumRecoveryDueTime,
+                    operator
+                );
+            }
             return new TaskOutcome(next.getId(), next.getDueTime(), null);
         }
 
@@ -954,7 +983,7 @@ public class ReproStateMachineService {
             return new TaskOutcome(null, null, null);
         }
 
-        ReproCycle followUp = openFollowUpCycle(cycle, transition, occurredAt, operator);
+        ReproCycle followUp = openFollowUpCycle(cycle, transition, occurredAt);
         WorkTask next = scheduleFor(
             followUp, null, TaskType.forStage(transition.followUpStage()), dueTime, operator
         );
@@ -964,22 +993,29 @@ public class ReproStateMachineService {
     private ReproCycle openFollowUpCycle(
         ReproCycle closed,
         Transition transition,
-        Date occurredAt,
-        String operator
+        Date occurredAt
     ) {
-        ReproCycle followUp = new ReproCycle();
-        followUp.setHouseId(closed.getHouseId());
-        followUp.setTenantId(closed.getTenantId());
-        followUp.setBatchId(null);
-        followUp.setMotherRabbitId(closed.getMotherRabbitId());
-        followUp.setCycleNo(nextCycleNo(
-            closed.getHouseId(), null, closed.getMotherRabbitId()
+        return openUnboundCycle(closed, transition.followUpStage(), occurredAt);
+    }
+
+    private ReproCycle openUnboundCycle(
+        ReproCycle source,
+        ReproStage stage,
+        Date occurredAt
+    ) {
+        ReproCycle cycle = new ReproCycle();
+        cycle.setHouseId(source.getHouseId());
+        cycle.setTenantId(source.getTenantId());
+        cycle.setBatchId(null);
+        cycle.setMotherRabbitId(source.getMotherRabbitId());
+        cycle.setCycleNo(nextCycleNo(
+            source.getHouseId(), null, source.getMotherRabbitId()
         ));
-        followUp.setStage(transition.followUpStage().name());
-        followUp.setStageEnteredAt(occurredAt);
-        followUp.setLifecycle(CycleLifecycle.OPEN.name());
-        reproCycleMapper.insert(followUp);
-        return followUp;
+        cycle.setStage(stage.name());
+        cycle.setStageEnteredAt(occurredAt);
+        cycle.setLifecycle(CycleLifecycle.OPEN.name());
+        reproCycleMapper.insert(cycle);
+        return cycle;
     }
 
     private ReproCycle newCycle(

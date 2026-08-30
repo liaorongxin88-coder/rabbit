@@ -63,12 +63,17 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         ReproResult nursing = openAtEstrus(f, "coexist_open");
         advanceToDelivery(f, nursing.cycleId(), "coexist");
         Long litterId = litterIdOf(nursing.cycleId());
-        assertProjection(f, ReproStage.READY, null);
+        Long postpartumRecovery = openPipelineCycleId(f);
+        assertStage(postpartumRecovery, ReproStage.READY, "OPEN");
+        Assertions.assertEquals("RECOVERY", pendingTaskTypeOnCycle(postpartumRecovery));
+        assertProjection(f, ReproStage.READY, postpartumRecovery);
 
-        // 分笼前开启下一轮（落到血配批次），再摸出空怀 —— 由此产生「待分笼 + 待催情」
+        // 分笼前推进产后恢复周期并完成血配，再摸出空怀，由此产生「待分笼 + 待催情」。
         ReproResult bloodMating = openBloodMatingAt(f, ReproStage.AWAIT_MATING, "coexist_blood");
         apply(f, bloodMating.cycleId(), ReproAction.MATING, "coexist_mate",
-            b -> b.maleRabbitId(f.sireId).matingMethod(MatingMethod.NATURAL));
+            b -> b.batchId(f.bloodBatchId)
+                .maleRabbitId(f.sireId)
+                .matingMethod(MatingMethod.NATURAL));
         ReproResult empty = apply(f, bloodMating.cycleId(), ReproAction.PALPATION, "coexist_empty",
             b -> b.outcome(PalpationResult.EMPTY.name()).palpationResult(PalpationResult.EMPTY));
 
@@ -374,6 +379,7 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         Fixture weaningFixture = batchFixture("batch_weaning_close");
         Long weaningCycle = openCycleIdInBatch(weaningFixture);
         advanceToDelivery(weaningFixture, weaningCycle, "batch_weaning");
+        Long postpartumRecovery = openPipelineCycleId(weaningFixture);
         ReproResult weaned = apply(
             weaningFixture,
             weaningCycle,
@@ -381,7 +387,9 @@ public class ReproParallelCycleIT extends E2eTestSupport {
             "batch_weaning_do",
             b -> b.weanedCount(7)
         );
-        assertFollowUpReleasedBatch(weaningFixture, weaned.followUpCycleId());
+        Assertions.assertNull(weaned.followUpCycleId(),
+            "接产已创建休养周期，分笼不得再创建第二条管线");
+        assertFollowUpReleasedBatch(weaningFixture, postpartumRecovery);
     }
 
     private void assertFollowUpReleasedBatch(Fixture fixture, Long followUpCycleId) {
@@ -657,15 +665,22 @@ public class ReproParallelCycleIT extends E2eTestSupport {
         return openAt(f, f.batchId, stage, prefix);
     }
 
-    /**
-     * 开一条并行（血配）周期。
-     *
-     * <p>它不能再用 {@code f.batchId}：V44 起同一 (母兔, 批次) 至多一条未结束周期，
-     * 同批次里再开一条会被 409 拒掉。现实里的操作也是这样：先拉一个新批次（或选一个
-     * 现有的），再把带崽的母兔配进去。
-     */
+    /** 推进接产时自动创建的休养周期，配种动作再绑定血配批次。 */
     private ReproResult openBloodMatingAt(Fixture f, ReproStage stage, String prefix) {
-        return openAt(f, f.bloodBatchId, stage, prefix);
+        if (stage != ReproStage.AWAIT_MATING) {
+            throw new IllegalArgumentException("血配夹具只支持推进到待配种");
+        }
+        Long recoveryCycle = openPipelineCycleId(f);
+        apply(f, recoveryCycle, ReproAction.START_CYCLE, prefix + "_recovery", b -> b);
+        return apply(f, recoveryCycle, ReproAction.ESTRUS, prefix + "_estrus", b -> b);
+    }
+
+    private Long openPipelineCycleId(Fixture f) {
+        return jdbc.queryForObject(
+            "select id from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
+                + " and lifecycle = 'OPEN' and stage <> 'AWAIT_WEANING' order by id desc limit 1",
+            Long.class, f.houseId, f.doeId
+        );
     }
 
     private ReproResult openAt(Fixture f, Long batchId, ReproStage stage, String prefix) {

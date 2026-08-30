@@ -560,9 +560,12 @@ void main() {
     );
   });
 
-  testWidgets(
-      'postpartum ready doe starts the next estrus cycle before weaning',
+  testWidgets('postpartum doe shows recovery and weaning tasks together',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final harness = _RepositoryHarness();
     addTearDown(harness.dispose);
     const membershipRequest = RabbitBatchMembershipRequest(
@@ -582,24 +585,7 @@ void main() {
             (_) async => const <RabbitBatchMembership>[],
           ),
           rabbitReproTasksProvider(taskRequest).overrideWith(
-            (_) async => [_weaningTask],
-          ),
-          houseBatchesProvider(8).overrideWith(
-            (_) async => const [_activeBatch],
-          ),
-          reproEntryPointsProvider.overrideWith(
-            (ref, houseId) async => const [
-              ReproEntryPoint(
-                stage: 'AWAIT_ESTRUS',
-                stageLabel: '待催情',
-                requiredFacts: [
-                  ReproRequiredFact(
-                    fact: 'STAGE_ENTERED_AT',
-                    label: '进入该阶段的日期',
-                  ),
-                ],
-              ),
-            ],
+            (_) async => [_postpartumRecoveryTask, _weaningTask],
           ),
         ],
         child: MaterialApp(
@@ -607,7 +593,7 @@ void main() {
           home: const Scaffold(
             body: RabbitDetailSheet(
               houseId: 8,
-              rabbit: _readyDoe,
+              rabbit: _postpartumRecoveryDoe,
               cageDisplay: 'D-01',
               canEdit: true,
               pageMode: true,
@@ -618,33 +604,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final entry = find.byKey(const ValueKey('rabbit-repro-entry-31'));
-    await tester.ensureVisible(entry);
-    expect(find.text('开始下一轮待催情'), findsOneWidget);
+    expect(find.text('休养到期'), findsOneWidget);
+    expect(find.text('动作：入轨'), findsOneWidget);
+    expect(find.text('结束休养'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-repro-task-action-805')),
+      findsOneWidget,
+    );
     expect(find.text('待断奶'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('rabbit-repro-kept-kits-31')),
       findsOneWidget,
     );
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-    final batch = find.byKey(
-      const ValueKey('existing-rabbit-repro-batch'),
+    expect(
+      find.byKey(const ValueKey('rabbit-repro-entry-31')),
+      findsNothing,
     );
-    await tester.ensureVisible(batch);
-    await tester.tap(batch);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(_activeBatch.batchCode).last);
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('existing-rabbit-repro-submit')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(harness.adapter.requests, hasLength(1));
-    expect(harness.adapter.requests.single['stage'], 'AWAIT_ESTRUS');
-    expect(harness.adapter.requests.single['motherRabbitId'], 31);
-    expect(harness.adapter.requests.single['batchId'], _activeBatch.id);
     expect(tester.takeException(), isNull);
   });
 
@@ -1077,6 +1052,17 @@ final _recoveryTask = ReproTask(
   status: 'PENDING',
 );
 
+final _postpartumRecoveryTask = ReproTask(
+  id: 805,
+  taskType: 'RECOVERY',
+  taskLabel: '休养到期',
+  action: ReproAction.startCycle,
+  cycleId: 702,
+  rabbitId: 31,
+  dueTime: DateTime(2026, 2, 5),
+  status: 'PENDING',
+);
+
 final _estrusTask = ReproTask(
   id: 801,
   taskType: 'ESTRUS',
@@ -1180,7 +1166,7 @@ const _weaningDoe = Rabbit(
   currentCycleId: 701,
 );
 
-const _readyDoe = Rabbit(
+const _postpartumRecoveryDoe = Rabbit(
   id: 31,
   houseId: 8,
   cageId: 2,
@@ -1193,6 +1179,7 @@ const _readyDoe = Rabbit(
   weight: 4.2,
   isActive: true,
   currentStage: 'READY',
+  currentCycleId: 702,
 );
 
 const _idleDoe = Rabbit(

@@ -121,7 +121,7 @@ public final class TransitionTable {
             DueAnchor.SAME_DAY, ReproEventType.PREPARTUM_DONE
         ));
 
-        // T6 接产-产仔：→ 待分笼并建窝，到期 = 分娩日 + weaning_days
+        // T6 接产-产仔：原周期进入待分笼并建窝；服务层同时建立无批次产后恢复周期。
         rows.add(new Transition(
             ReproStage.AWAIT_DELIVERY, ReproAction.DELIVERY, DeliveryOutcome.BORN.name(),
             ReproStage.AWAIT_WEANING, false, null, null,
