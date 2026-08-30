@@ -976,22 +976,22 @@ T1 交付时必须同时给出：
 - [x] 幂等竞态、兜底泄漏、flaky 用例均已合并并过门禁
 - [x] 修复在真实克隆库上回放确认（一个 `code=0` 一个 `code=409`，1 行数据）
 - [x] 权限拒绝设备验证完成，审计表有佐证
-- [ ] **NFC 读取路径仍未验证**：注入方案已证伪，需真机
-  `00152155M000372` 加实体标签，或 debug 构建加合成 `NdefMessage` 的钩子；
-  可先用系统自带的写标签功能写一张再读回，形成闭环
+- [x] NFC 读取闭环已在真机 `00152155M000372` 完成：实体标签写入后，debug-only
+  原始 payload/tag UID 注入覆盖有效标签、签名篡改和跨兔舍三条分支，服务端 HMAC、
+  兔舍归属和 UID 绑定校验均未绕过
 - [x] `flow.dart` 与 `move.dart` 已补上 `NfcHardwareService.isAvailable()` 检查，
-  由 `bd077d3` 随 v1.0.8 上线；无 NFC 设备会提示改用手动选笼、地图或列表
-- [ ] 非法 JSON 返回 500 而非 400，旧问题，本轮未动
+  由 `bd077d3` 随 v1.0.8 上线；真机关闭 NFC 时已验证会提示改用手动选笼、地图或列表
+- [x] 非法 JSON 已由 D5 改为 400；截断、类型错误、空 body 和非 JSON 文本均通过真实 HTTP 验证
 
 下一阶段 D1–D6 开工前：
 
 - [x] 飞书已交付记录全部进入验收，F13 是唯一仍在方案设计中的需求
 - [x] 迁移从 V51 开始；V52 不预分配
 - [x] 五条初始泳道和 D1 → D6 串行链已写入 5.13
-- [ ] 评审 T4 的 `repro_events` 扩列、批量 Sink 和唯一键方案
+- [x] T4 的 `repro_events` 扩列、批量 Sink 和唯一键方案已评审、合并并通过 V50 → V51 填充库升级
 - [x] F13 API 已冻结为 `GET /api/batches/{batchId}/statistics`，字段为
   `totalLitters/totalKits/totalLiveKits/totalWeaned`，无记录返回 0
-- [ ] 准备真机 `00152155M000372` 和至少一张可反复写入的实体 NFC 标签
+- [x] 真机 `00152155M000372` 与可反复写入的 NTAG21x 标签已完成 NFC 验收
 - [x] D5 只提供人工部署脚本，不启用 CI 自动部署（用户已明确当前 CI 不负责直接部署）
 
 下一阶段启动记录（2026-08-29）：
@@ -1041,7 +1041,7 @@ F13 字段契约在开工前就冻结为 `totalLitters`、`totalKits`、`totalLi
 - `LargeHouseOutboundSubmitScaleIT` 对机器负载敏感（同代码下 137s、146s 通过，并行占用时 357s 超时），它不应与其他重任务同时跑。
 - 历史上有两条 `batch_id` 为空的旧繁育周期产崽记录，不计入任何批次统计，属归属缺口而非统计实现问题。
 - D1 终止时注解铺到 40 处，与计划的约 45 处仍有差距，剩余入口待 D6 阶段补齐。
-- 真机 NFC 闭环仍未安排；本轮无在线设备，D3/D4 均未做设备验收。
+- D1–D5 合并当时无在线设备，真机 NFC 和 D4 App 验收尚未安排；后续结果见 5.13.4。
 
 #### 5.13.2 D6 读接口契约冻结（2026-08-29）
 
@@ -1099,24 +1099,48 @@ D1 已合并，事件持久化契约稳定，T6 拆成三条并行泳道。契�
 D6A 与 D6B 由主会话直接完成：两个子代理连续以 `terminated` 收场（D6B 两次、D6A 一次），
 其中两次工具调用数为 0，属传输层故障而非任务失败，同一份任务书连挂两次后不再原样重试。
 
-**发现：注解不等于发事件。** `rabbit-production` 有 32 处 `@TrackedOperation`，
-但真正调用 `context.recordEvent` 的只有 FeedService 和 VaccinationService。
-注解只绑定 OperationContext（补 `audit_logs` 坐标、可选接管幂等），本身不写事件行。
-所以事件流当前只装三类东西：繁育状态机事件、投喂、接种；建兔只、转笼、批次操作、
-销售、NFC 绑定都不在里面。
-
-这是写 IT 时撞出来的：断言「建兔只应留一条 `rabbit.create`」实际得到 0 条。
-D1 自报的遗留是「注解 40 处 vs 计划 45 处」，听起来是数量差距，真实差距是性质上的。
-`OperationEventReadIT.mostWriteOperationsDoNotEmitEventsYet` 钉住现状，
-等发射补齐后它会失败，提醒人改成正向断言，而不是默默缺数据。
+**后续校正：注解会自动发默认事件。** `OperationEventAspect` 会在业务方法没有手工
+`recordEvent` 时，根据 `@TrackedOperation` 和 SpEL 结果补一条默认事件；手工事件仍由同一切面
+在业务成功后批量落库，幂等重放则不重复发射。最初 `rabbit.create` 得到 0 行的真实原因是注解
+放在四参数委托重载上，而 HTTP 调用的是五参数实现，Spring 代理从未经过带注解的方法。
+`1479668` 删除委托重载并把注解移到真实入口，`0545d98` 新增
+`OperationEventCoverageIT` 和跨模块的 `TrackedOperationPlacementTest`，后者专门阻止注解再次落到
+只做同名转发的方法上。旧的 `mostWriteOperationsDoNotEmitEventsYet` 基准测试随之删除。
 
 设计取舍：游标编码 `(occurred_at, id)` 而非单纯 id，因为 `occurred_at` 允许补录、
 与自增 id 不同序，只按 id 翻页会漏掉补录进来的历史事件；`payload` 与 `request_id`
 不进查询列，从 SQL 层杜绝外泄；读口单独建 mapper，不动 append-only 的写口。
 
-门禁：后端单测 948（platform 99、access 239、production 461、reporting 130、boot 19），
-完整 e2e `_main_d6` 241 通过 / 3 跳过 / 0 失败，App analyzer 干净、428 测试通过，
-Admin lint/build 干净、65 单测通过、浏览器脚本 7 张截图逐张核对。
+修正后的门禁：后端单测 949（platform 99、access 239、production 461、reporting 130、boot 20），
+完整 e2e 252 通过 / 3 跳过 / 0 失败；`OperationEventCoverageIT` 以真实 HTTP 覆盖建兔、基础信息、
+称重、接种、换笼、批次、治疗、库存、销售和笼位写入，并验证单次操作不重复发事件。
+App analyzer 干净、428 测试通过；Admin lint/build 干净、65 单测通过。
 
-遗留：事件发射覆盖面待补（约 30 个写入口）；本轮无在线设备，Admin 与 App 均未做设备验收；
-真机 NFC 闭环仍未安排。
+#### 5.13.4 真机验收记录（2026-08-30）
+
+设备 `00152155M000372`（Nothing A059，Android 15）连接主线 debug 包和填充数据克隆库
+`rabbit_app_wave2`。验收数据集中在兔舍 215、批次 300、兔只 1156–1162；测试后端、端口反向、
+临时 APK 服务和 HTTPS tunnel 已在结束时清理，设备恢复为 `1.0.10-dev+4013`，未知来源安装权限
+恢复为 deny。
+
+已通过：
+
+- F13 批次统计先显示四项 0；造两窝真实繁育数据后精确显示 2 窝、16 只、14 活、12 断奶。
+  单独注入统计接口失败时，只有统计区显示错误与「重试统计」，批次概览、成员、待入笼和操作区均可用；
+  恢复后区块内重试成功，不刷新整页。
+- F1 接种、F2 手工异常记录（含图片）、B3 批量入栏 3 只与 6.6 kg 总重、F6 投喂 4 只、
+  F10 待分配 12 只、F11 批次待完成、F14 休养延期及实际结束均在真机完成，并核对业务表和
+  `repro_events`。投喂双击只产生一次 POST；定向 503 时草稿、选兔和重量保留，恢复后可重试。
+- F3 图片验证码的布局、刷新、过期拒绝和启用验证码后的密码登录全部通过；未勾协议时显示行内错误，
+  不再被键盘遮挡。
+- NFC 写入、读取、NFC 关闭降级、签名篡改 4602、跨兔舍拒绝和 UID 绑定均通过。debug 注入只在
+  `FLAG_DEBUGGABLE` 下接收原始 payload/tag UID，正常的服务端签名和归属校验仍完整执行。
+- D6 App 操作记录入口已在真机展示；建兔、接种、换笼、批次完成、投喂和 NFC 绑定都留下了带操作人
+  快照的事件。换笼同时写入 V50 的 `rabbit_cage_transfer_records`。
+- F12 OTA 走完检查、HTTPS 下载、大小/SHA-256 校验、未知来源授权、系统安装器、Play Protect 扫描、
+  取消后「重新打开安装」和实际安装。验收用 arm64 split 包被 Android 加了 ABI versionCode 偏移，
+  安装后设备读到 `1.0.10-dev+6013`；这是测试制品特性，恢复原包后回到 4013。
+
+本轮新发现但未处理：`rabbits` 与 `feed_logs` 的 `operator_name` 仍为 NULL，尽管 `create_by`
+和操作事件中的 `operator_name` 快照正确；App 操作记录标题仍会显示 `RABBIT_CREATED` 一类原始枚举名。
+两项都不影响本轮业务闭环，但应作为下一轮数据一致性和展示修复单独处理。
