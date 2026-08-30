@@ -156,6 +156,30 @@ public class WorkTaskWriter {
         );
     }
 
+    /**
+     * 完成兔只在指定业务自然日的商品兔日常任务。
+     *
+     * <p>只读取该兔只名下仍为 PENDING 的任务，并同时约束任务类型和到期日。
+     * 重复投喂时已完成任务不会再次出现在查询结果中。
+     */
+    public void completeCommodityDailyCareForRabbitOnDate(
+        Long houseId,
+        Long rabbitId,
+        Date businessTime,
+        String operator
+    ) {
+        LocalDate businessDate = DateUtil.localDate(businessTime);
+        if (businessDate == null) {
+            return;
+        }
+        for (WorkTask task : pendingBySubject(houseId, TaskSubjectType.RABBIT, rabbitId)) {
+            if (TaskType.isCommodityDailyCare(task.getTaskType())
+                && businessDate.equals(DateUtil.localDate(task.getDueDate()))) {
+                workTaskMapper.complete(houseId, task.getId(), null, operator);
+            }
+        }
+    }
+
     /** 完成兔只名下指定类型的待办；幂等重放时已完成任务不会再次更新。 */
     public void completeForRabbit(
         Long houseId,

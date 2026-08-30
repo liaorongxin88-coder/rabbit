@@ -4,6 +4,7 @@ import com.rabbit.app.modules.repro.domain.TaskSubjectType;
 import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.entity.WorkTask;
 import com.rabbit.app.modules.repro.mapper.WorkTaskMapper;
+import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -33,6 +34,54 @@ class WorkTaskWriterTest {
     }
 
     @Test
+    void commodityCareCompletionMatchesBusinessDateAndTaskType() {
+        WorkTaskMapper mapper = Mockito.mock(WorkTaskMapper.class);
+        WorkTask sameDayCare = task(1L, TaskType.COMMODITY_GROWING_CARE);
+        sameDayCare.setDueDate(date("2026-03-10T01:00:00Z"));
+        WorkTask previousDayCare = task(2L, TaskType.COMMODITY_FATTENING_CARE);
+        previousDayCare.setDueDate(date("2026-03-09T01:00:00Z"));
+        WorkTask futureCare = task(3L, TaskType.COMMODITY_ADAPTATION_CARE);
+        futureCare.setDueDate(date("2026-03-11T01:00:00Z"));
+        WorkTask otherType = task(4L, TaskType.SALE_READY);
+        otherType.setDueDate(date("2026-03-10T08:00:00Z"));
+        Mockito.when(mapper.selectPendingBySubject(8L, "RABBIT", 81L))
+            .thenReturn(List.of(sameDayCare, previousDayCare, futureCare, otherType));
+        WorkTaskWriter writer = new WorkTaskWriter(mapper);
+
+        writer.completeCommodityDailyCareForRabbitOnDate(
+            8L, 81L, date("2026-03-10T15:30:00Z"), "7"
+        );
+
+        Mockito.verify(mapper).complete(8L, 1L, null, "7");
+        Mockito.verify(mapper, Mockito.never()).complete(8L, 2L, null, "7");
+        Mockito.verify(mapper, Mockito.never()).complete(8L, 3L, null, "7");
+        Mockito.verify(mapper, Mockito.never()).complete(8L, 4L, null, "7");
+    }
+
+    @Test
+    void commodityCareCompletionKeepsRabbitHouseBoundaryAndIsIdempotent() {
+        WorkTaskMapper mapper = Mockito.mock(WorkTaskMapper.class);
+        WorkTask care = task(5L, TaskType.COMMODITY_ADAPTATION_CARE);
+        care.setDueDate(date("2026-03-10T01:00:00Z"));
+        Mockito.when(mapper.selectPendingBySubject(8L, "RABBIT", 81L))
+            .thenReturn(List.of(care), List.of());
+        WorkTaskWriter writer = new WorkTaskWriter(mapper);
+
+        writer.completeCommodityDailyCareForRabbitOnDate(
+            8L, 81L, date("2026-03-10T02:00:00Z"), "7"
+        );
+        writer.completeCommodityDailyCareForRabbitOnDate(
+            8L, 81L, date("2026-03-10T02:00:00Z"), "7"
+        );
+
+        Mockito.verify(mapper, Mockito.times(2))
+            .selectPendingBySubject(8L, "RABBIT", 81L);
+        Mockito.verify(mapper, Mockito.times(1)).complete(8L, 5L, null, "7");
+        Mockito.verify(mapper, Mockito.never())
+            .selectPendingBySubject(Mockito.eq(8L), Mockito.eq("RABBIT"), Mockito.eq(82L));
+    }
+
+    @Test
     void completingRabbitTaskOnlyCompletesTheRequestedType() {
         WorkTaskMapper mapper = Mockito.mock(WorkTaskMapper.class);
         WorkTask sale = task(1L, TaskType.SALE_READY);
@@ -45,6 +94,10 @@ class WorkTaskWriterTest {
 
         Mockito.verify(mapper).complete(8L, 2L, null, "7");
         Mockito.verify(mapper, Mockito.never()).complete(8L, 1L, null, "7");
+    }
+
+    private static Date date(String instant) {
+        return Date.from(Instant.parse(instant));
     }
 
     private WorkTask task(Long id, TaskType type) {

@@ -18,6 +18,7 @@ import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
+import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
@@ -244,6 +245,7 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
         _successMessage = '已录入 ${rabbitIds.length} 只兔的投喂记录';
       });
       ref.invalidate(houseCagesProvider(widget.houseId));
+      ref.invalidate(homeEventsProvider);
     } on ApiException catch (error) {
       if (mounted) {
         setState(

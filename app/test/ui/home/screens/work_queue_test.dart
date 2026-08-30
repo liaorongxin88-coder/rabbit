@@ -417,6 +417,209 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('house filter includes accessible houses without reminders',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final event = EventItem(
+      recordId: 51,
+      category: '生产周期',
+      eventType: '配种',
+      eventDate: farmNow(),
+      batchId: 7,
+      batchCode: 'A-07',
+      rabbitId: 601,
+      status: 'due',
+      sourceHouseId: 1,
+      sourceHouseName: '一号兔舍',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '一号兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+              RabbitHouse(
+                id: 2,
+                name: '无提醒兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => [event]),
+        ],
+        child: MaterialApp(theme: buildAppTheme(), home: const HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final houseFilter = find.byKey(
+      const ValueKey('production-house-filter'),
+    );
+    await tester.ensureVisible(houseFilter);
+    await tester.tap(houseFilter);
+    await tester.pumpAndSettle();
+    expect(find.text('无提醒兔舍'), findsOneWidget);
+    await tester.tap(find.text('无提醒兔舍'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 / 1'), findsOneWidget);
+    expect(find.textContaining('无提醒兔舍'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'batch filter supports unbatched tasks and resets on house change',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = farmNow();
+    final events = [
+      EventItem(
+        recordId: 71,
+        category: '生产周期',
+        eventType: '配种',
+        eventDate: now,
+        batchId: 7,
+        batchCode: 'A-07',
+        rabbitId: 711,
+        status: 'due',
+        sourceHouseId: 1,
+        sourceHouseName: '一号兔舍',
+      ),
+      EventItem(
+        recordId: 72,
+        category: '生产',
+        eventType: '生长饲喂观察',
+        eventDate: now,
+        batchId: null,
+        rabbitId: 712,
+        status: 'due',
+        sourceHouseId: 1,
+        sourceHouseName: '一号兔舍',
+      ),
+      EventItem(
+        recordId: 73,
+        category: '生产周期',
+        eventType: '摸胎',
+        eventDate: now,
+        batchId: 8,
+        batchCode: 'B-08',
+        rabbitId: 721,
+        status: 'due',
+        sourceHouseId: 2,
+        sourceHouseName: '二号兔舍',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '一号兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+              RabbitHouse(
+                id: 2,
+                name: '二号兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => events),
+        ],
+        child: MaterialApp(theme: buildAppTheme(), home: const HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final batchFilter = find.byKey(
+      const ValueKey('production-batch-filter'),
+    );
+    await tester.ensureVisible(batchFilter);
+    await tester.tap(batchFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('批次 A-07').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    final clear = find.byKey(const ValueKey('production-filter-clear'));
+    await tester.ensureVisible(clear);
+    tester.widget<IconButton>(clear).onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
+
+    await tester.ensureVisible(batchFilter);
+    await tester.tap(batchFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('无批次任务').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    final houseFilter = find.byKey(
+      const ValueKey('production-house-filter'),
+    );
+    await tester.ensureVisible(houseFilter);
+    await tester.tap(houseFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('二号兔舍').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 3'), findsOneWidget);
+    expect(find.text('全部批次'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('single accessible house does not add a redundant house filter',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          housesProvider.overrideWith(
+            (_) async => const [
+              RabbitHouse(
+                id: 1,
+                name: '唯一兔舍',
+                remark: '',
+                layoutRows: 1,
+                layoutCols: 1,
+                layoutLayers: 1,
+              ),
+            ],
+          ),
+          homeEventsProvider.overrideWith((_) async => const []),
+        ],
+        child: MaterialApp(theme: buildAppTheme(), home: const HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-house-filter')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('home shows daily commodity care titles and instructions',
       (tester) async {
     final event = EventItem(

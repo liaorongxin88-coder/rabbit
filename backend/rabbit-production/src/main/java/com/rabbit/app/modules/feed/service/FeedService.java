@@ -13,6 +13,7 @@ import com.rabbit.app.modules.inventory.mapper.InventoryItemMapper;
 import com.rabbit.app.modules.inventory.mapper.InventoryTxMapper;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
+import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.tracking.OperationContext;
 import com.rabbit.app.tracking.OperationEvent;
 import com.rabbit.app.tracking.TrackedOperation;
@@ -37,6 +38,7 @@ public class FeedService {
     private final InventoryItemMapper inventoryItemMapper;
     private final InventoryTxMapper inventoryTxMapper;
     private final RequestDedupService requestDedupService;
+    private final WorkTaskWriter workTaskWriter;
     private final boolean forbidNegative;
     private final int casRetryTimes;
 
@@ -48,6 +50,7 @@ public class FeedService {
             InventoryItemMapper inventoryItemMapper,
             InventoryTxMapper inventoryTxMapper,
             RequestDedupService requestDedupService,
+            WorkTaskWriter workTaskWriter,
             @Value("${app.inventory.forbid-negative:false}") boolean forbidNegative,
             @Value("${app.inventory.cas-retry-times:5}") int casRetryTimes
     ) {
@@ -58,6 +61,7 @@ public class FeedService {
         this.inventoryItemMapper = inventoryItemMapper;
         this.inventoryTxMapper = inventoryTxMapper;
         this.requestDedupService = requestDedupService;
+        this.workTaskWriter = workTaskWriter;
         this.forbidNegative = forbidNegative;
         this.casRetryTimes = casRetryTimes <= 0 ? 5 : casRetryTimes;
     }
@@ -149,8 +153,14 @@ public class FeedService {
             applyQtyDeltaWithPolicy(houseId, item.getId(), tx.getQtyDelta(), String.valueOf(userId));
         }
 
+        String operator = String.valueOf(userId);
         for (Long cageId : cageIds) {
-            cageMapper.updateIsFed(houseId, cageId, true, String.valueOf(userId));
+            cageMapper.updateIsFed(houseId, cageId, true, operator);
+        }
+        for (Long rabbitId : uniqueRabbitIds) {
+            workTaskWriter.completeCommodityDailyCareForRabbitOnDate(
+                houseId, rabbitId, log.getFeedTime(), operator
+            );
         }
             requestDedupService.markDone(houseId, userId, api, log.getRequestId());
         } catch (RuntimeException e) {

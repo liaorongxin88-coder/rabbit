@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:rabbit_flutter/src/domain/houses/house.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
@@ -28,8 +29,8 @@ class HomeScreen extends ConsumerWidget {
         ),
       ],
       child: houses.when(
-        data: (items) {
-          if (items.isEmpty) {
+        data: (houseItems) {
+          if (houseItems.isEmpty) {
             return EmptyState(
               icon: Icons.storefront_outlined,
               title: '尚未加入兔舍',
@@ -45,7 +46,8 @@ class HomeScreen extends ConsumerWidget {
               padding: AppSpacing.pagePadding,
               children: [
                 events.when(
-                  data: (items) => _HomeContent(events: items),
+                  data: (items) =>
+                      _HomeContent(houses: houseItems, events: items),
                   loading: () => const Padding(
                     padding: EdgeInsets.only(top: 120),
                     child: Center(child: CircularProgressIndicator()),
@@ -79,8 +81,9 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class _HomeContent extends ConsumerStatefulWidget {
-  const _HomeContent({required this.events});
+  const _HomeContent({required this.houses, required this.events});
 
+  final List<RabbitHouse> houses;
   final List<EventItem> events;
 
   @override
@@ -93,6 +96,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   final _searchController = TextEditingController();
   var _query = '';
   int? _houseFilterId;
+  int? _batchFilterId;
   var _dueFilter = _DueFilter.all;
 
   static const _tabs = [
@@ -130,18 +134,22 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   @override
   void didUpdateWidget(covariant _HomeContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final selectedHouseStillExists = widget.events.any(
-      (event) => event.sourceHouseId == _houseFilterId,
+    final selectedHouseStillExists = widget.houses.any(
+      (house) => house.id == _houseFilterId,
     );
     if (_houseFilterId != null && !selectedHouseStillExists) {
       _houseFilterId = null;
+      _batchFilterId = null;
+    }
+    if (_batchFilterId != null && !_batchFilterIsValid(widget.events)) {
+      _batchFilterId = null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final events = widget.events;
-    final scopedEvents = _eventsMatchingQueryAndHouse(events);
+    final scopedEvents = _eventsMatchingFilters(events);
     final visibleEvents = _visibleEvents(scopedEvents);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final panelHeight =
@@ -153,7 +161,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       children: [
         _AlertHeader(
           events: scopedEvents,
-          scopeLabel: _selectedHouseLabel(events),
+          scopeLabel: _selectedHouseLabel(),
           selectedFilter: _dueFilter,
           onFilterChanged: (filter) => setState(
             () => _dueFilter = _dueFilter == filter ? _DueFilter.all : filter,
@@ -162,15 +170,21 @@ class _HomeContentState extends ConsumerState<_HomeContent>
         ),
         const SizedBox(height: 14),
         _WorkQueueFilters(
+          houses: widget.houses,
           events: events,
           searchController: _searchController,
           query: _query,
           selectedHouseId: _houseFilterId,
+          selectedBatchId: _batchFilterId,
           dueFilter: _dueFilter,
           resultCount: visibleEvents.length,
           onQueryChanged: (value) => setState(() => _query = value),
-          onHouseChanged: (value) => setState(
-            () => _houseFilterId = value == 0 ? null : value,
+          onHouseChanged: (value) => setState(() {
+            _houseFilterId = value == 0 ? null : value;
+            _batchFilterId = null;
+          }),
+          onBatchChanged: (value) => setState(
+            () => _batchFilterId = value == 0 ? null : value,
           ),
           onClear: _clearFilters,
         ),
@@ -205,12 +219,21 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   bool get _hasActiveFilters =>
       _query.trim().isNotEmpty ||
       _houseFilterId != null ||
+      _batchFilterId != null ||
       _dueFilter != _DueFilter.all;
 
-  List<EventItem> _eventsMatchingQueryAndHouse(List<EventItem> events) {
+  List<EventItem> _eventsMatchingFilters(List<EventItem> events) {
     final query = _query.trim().toLowerCase();
     return events.where((event) {
       if (_houseFilterId != null && event.sourceHouseId != _houseFilterId) {
+        return false;
+      }
+      if (_batchFilterId == -1 && event.batchId != null) {
+        return false;
+      }
+      if (_batchFilterId != null &&
+          _batchFilterId != -1 &&
+          event.batchId != _batchFilterId) {
         return false;
       }
       if (query.isEmpty) {
@@ -261,17 +284,32 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     return 2;
   }
 
-  String _selectedHouseLabel(List<EventItem> events) {
+  String _selectedHouseLabel() {
     final selectedId = _houseFilterId;
     if (selectedId == null) {
       return '全部兔舍';
     }
-    for (final event in events) {
-      if (event.sourceHouseId == selectedId) {
-        return event.houseLabel;
+    for (final house in widget.houses) {
+      if (house.id == selectedId) {
+        return house.name;
       }
     }
     return '当前兔舍';
+  }
+
+  bool _batchFilterIsValid(List<EventItem> events) {
+    final selectedBatchId = _batchFilterId;
+    if (selectedBatchId == null) {
+      return true;
+    }
+    return events.any((event) {
+      if (_houseFilterId != null && event.sourceHouseId != _houseFilterId) {
+        return false;
+      }
+      return selectedBatchId == -1
+          ? event.batchId == null
+          : event.batchId == selectedBatchId;
+    });
   }
 
   void _clearFilters() {
@@ -279,6 +317,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
     setState(() {
       _query = '';
       _houseFilterId = null;
+      _batchFilterId = null;
       _dueFilter = _DueFilter.all;
     });
   }
@@ -472,46 +511,65 @@ enum _DueFilter {
 
 class _WorkQueueFilters extends StatelessWidget {
   const _WorkQueueFilters({
+    required this.houses,
     required this.events,
     required this.searchController,
     required this.query,
     required this.selectedHouseId,
+    required this.selectedBatchId,
     required this.dueFilter,
     required this.resultCount,
     required this.onQueryChanged,
     required this.onHouseChanged,
+    required this.onBatchChanged,
     required this.onClear,
   });
 
+  final List<RabbitHouse> houses;
   final List<EventItem> events;
   final TextEditingController searchController;
   final String query;
   final int? selectedHouseId;
+  final int? selectedBatchId;
   final _DueFilter dueFilter;
   final int resultCount;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<int> onHouseChanged;
+  final ValueChanged<int> onBatchChanged;
   final VoidCallback onClear;
 
   bool get _hasActiveFilters =>
       query.trim().isNotEmpty ||
       selectedHouseId != null ||
+      selectedBatchId != null ||
       dueFilter != _DueFilter.all;
 
-  Map<int, String> get _houses {
+  Map<int, String> get _batches {
     final result = <int, String>{};
     for (final event in events) {
-      final id = event.sourceHouseId;
+      if (selectedHouseId != null && event.sourceHouseId != selectedHouseId) {
+        continue;
+      }
+      final id = event.batchId;
       if (id != null && id > 0) {
-        result.putIfAbsent(id, () => event.houseLabel);
+        result.putIfAbsent(id, () => event.batchLabel ?? '未命名批次');
       }
     }
     return result;
   }
 
+  bool get _hasUnbatchedTasks => events.any(
+        (event) =>
+            (selectedHouseId == null ||
+                event.sourceHouseId == selectedHouseId) &&
+            event.batchId == null,
+      );
+
   @override
   Widget build(BuildContext context) {
-    final houses = _houses.entries.toList()
+    final houseItems = houses.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final batches = _batches.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
     return SectionCard(
       key: const ValueKey('home-work-queue-filter-section'),
@@ -567,7 +625,7 @@ class _WorkQueueFilters extends StatelessWidget {
             ),
             onChanged: onQueryChanged,
           ),
-          if (houses.length > 1) ...[
+          if (houseItems.length > 1) ...[
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
               key: const ValueKey('production-house-filter'),
@@ -579,17 +637,44 @@ class _WorkQueueFilters extends StatelessWidget {
               ),
               items: [
                 const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
-                for (final house in houses)
+                for (final house in houseItems)
                   DropdownMenuItem(
-                    value: house.key,
+                    value: house.id,
                     child: Text(
-                      house.value,
+                      house.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],
               onChanged: (value) => onHouseChanged(value ?? 0),
+            ),
+          ],
+          if (batches.isNotEmpty || _hasUnbatchedTasks) ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<int>(
+              key: const ValueKey('production-batch-filter'),
+              value: selectedBatchId ?? 0,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '批次范围',
+                prefixIcon: Icon(Icons.inventory_2_outlined),
+              ),
+              items: [
+                const DropdownMenuItem(value: 0, child: Text('全部批次')),
+                if (_hasUnbatchedTasks)
+                  const DropdownMenuItem(value: -1, child: Text('无批次任务')),
+                for (final batch in batches)
+                  DropdownMenuItem(
+                    value: batch.key,
+                    child: Text(
+                      batch.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => onBatchChanged(value ?? 0),
             ),
           ],
         ],
