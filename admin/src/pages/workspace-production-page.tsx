@@ -292,6 +292,7 @@ export function WorkspaceProductionPage() {
               open={createOpen}
               onOpenChange={setCreateOpen}
               houseId={workspace.selectedHouse?.id ?? null}
+              houseName={workspace.selectedHouse?.name ?? ""}
               rabbits={rabbits}
               disabled={!canEdit}
               onSaved={load}
@@ -622,6 +623,7 @@ function CreateBatchDialog({
   open,
   onOpenChange,
   houseId,
+  houseName,
   rabbits,
   disabled,
   onSaved,
@@ -629,6 +631,7 @@ function CreateBatchDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   houseId: number | null;
+  houseName: string;
   rabbits: Rabbit[];
   disabled: boolean;
   onSaved: () => Promise<void>;
@@ -670,7 +673,9 @@ function CreateBatchDialog({
 
   useEffect(() => {
     const isOpening = open && !wasOpenRef.current;
-    setCode((current) => batchCodeDraftForDialog(current, isOpening));
+    setCode((current) =>
+      batchCodeDraftForDialog(current, isOpening, houseName),
+    );
     if (isOpening) {
       setSelectedIds([]);
       setRabbitSearch("");
@@ -678,7 +683,7 @@ function CreateBatchDialog({
       setRemark("");
     }
     wasOpenRef.current = open;
-  }, [open]);
+  }, [houseName, open]);
 
   function toggleRabbit(id: number) {
     setSelectedIds((current) => {

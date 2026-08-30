@@ -48,6 +48,19 @@ public class HouseService {
         return rabbitHouseMapper.selectByUserId(userId);
     }
 
+    public RabbitHouse getHouse(Long userId, Long houseId) {
+        accessControlService.requireHousePermission(
+                userId,
+                houseId,
+                PermissionCode.RABBIT_HOUSES_QUERY
+        );
+        RabbitHouse house = rabbitHouseMapper.selectById(houseId);
+        if (house == null) {
+            throw new BizException(410, "兔场不存在或已删除");
+        }
+        return house;
+    }
+
     public RabbitHouse updateHouse(Long userId, Long houseId, String name, String remark) {
         if (houseId == null || houseId <= 0) {
             throw new BizException(400, "houseId不能为空");

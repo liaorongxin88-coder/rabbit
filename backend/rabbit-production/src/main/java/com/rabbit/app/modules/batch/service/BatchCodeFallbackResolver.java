@@ -4,25 +4,23 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-/**
- * 客户端没传批次编号时补一个默认值。
- *
- * <p>格式是 {@code 批次-20260220-1530}，固定 16 个字符。这个编号会出现在提醒卡片上，
- * 和周期号、日期挤在同一行，所以必须短到不被截断。提醒卡片自己已经单独显示了兔舍名，
- * 编号里不必再带一遍。
- *
- * <p>只精确到分钟。同一兔舍在同一分钟内建两个批次才会撞名，而这只是个预填草稿，
- * 输入框里可以直接改掉；批次编号也没有唯一约束，撞名不会导致写入失败。
- */
+/** 客户端没传批次编号时，按兔舍名称和农场时间补一个默认值。 */
 @Service
 public class BatchCodeFallbackResolver {
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern(
             "yyyyMMdd-HHmm"
     ).withZone(SHANGHAI_ZONE);
+    private static final Pattern HOUSE_NAME_SEPARATORS = Pattern.compile(
+            "[\\s\\-_/\\u2013\\u2014]+"
+    );
+    private static final int MAX_BATCH_CODE_LENGTH = 100;
+    private static final int BATCH_TIMESTAMP_LENGTH = 13;
+    private static final String DEFAULT_HOUSE_NAME = "兔舍";
 
     private final Clock clock;
 
@@ -35,14 +33,33 @@ public class BatchCodeFallbackResolver {
         this.clock = clock;
     }
 
-    public String resolve(String batchCode) {
+    public String resolve(String batchCode, String houseName) {
         if (batchCode != null && !batchCode.trim().isEmpty()) {
             return batchCode;
         }
-        return defaultBatchCode(clock.instant());
+        return defaultBatchCode(houseName, clock.instant());
     }
 
-    static String defaultBatchCode(Instant instant) {
-        return "批次-" + TIMESTAMP_FORMAT.format(instant);
+    static String defaultBatchCode(String houseName, Instant instant) {
+        String normalizedHouseName = normalizeHouseName(houseName);
+        int maxHouseNameLength = MAX_BATCH_CODE_LENGTH - BATCH_TIMESTAMP_LENGTH - 1;
+        String safeHouseName = truncateCodePoints(normalizedHouseName, maxHouseNameLength);
+        return safeHouseName + "-" + TIMESTAMP_FORMAT.format(instant);
+    }
+
+    private static String normalizeHouseName(String value) {
+        String normalized = value == null
+                ? ""
+                : HOUSE_NAME_SEPARATORS.matcher(value.trim()).replaceAll("-");
+        normalized = normalized.replaceAll("^-+|-+$", "");
+        return normalized.isEmpty() ? DEFAULT_HOUSE_NAME : normalized;
+    }
+
+    private static String truncateCodePoints(String value, int maxLength) {
+        int codePointCount = value.codePointCount(0, value.length());
+        if (codePointCount <= maxLength) {
+            return value;
+        }
+        return value.substring(0, value.offsetByCodePoints(0, maxLength));
     }
 }

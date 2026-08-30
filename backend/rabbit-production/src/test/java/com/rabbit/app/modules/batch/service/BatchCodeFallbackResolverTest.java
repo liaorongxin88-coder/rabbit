@@ -15,29 +15,40 @@ class BatchCodeFallbackResolverTest {
     );
 
     @Test
-    void generatesAShanghaiDateAndMinuteCodeForMissingOrBlankCodes() {
+    void generatesAHouseScopedShanghaiDateAndMinuteCodeForMissingCodes() {
         BatchCodeFallbackResolver resolver = new BatchCodeFallbackResolver(CLOCK);
 
-        assertEquals("批次-20260203-1205", resolver.resolve(null));
-        assertEquals("批次-20260203-1205", resolver.resolve("  "));
+        assertEquals("东一舍-20260203-1205", resolver.resolve(null, "东一舍"));
+        assertEquals("东一舍-20260203-1205", resolver.resolve("  ", "东一舍"));
     }
 
     @Test
     void keepsExplicitCodes() {
         BatchCodeFallbackResolver resolver = new BatchCodeFallbackResolver(CLOCK);
 
-        assertEquals("人工批次-复配", resolver.resolve("人工批次-复配"));
+        assertEquals("人工批次-复配", resolver.resolve("人工批次-复配", "东一舍"));
     }
 
-    /**
-     * 编号要显示在提醒卡片上，和周期号、日期挤一行，所以生成值必须短。
-     * 旧格式带兔舍名加 17 位毫秒戳，兔舍名一长就被省略号截掉。
-     */
     @Test
-    void staysShortEnoughForTheReminderChip() {
-        String generated = BatchCodeFallbackResolver.defaultBatchCode(CLOCK.instant());
+    void normalizesSeparatorsAndFallsBackForBlankHouseNames() {
+        assertEquals(
+                "东一-舍-A-20260203-1205",
+                BatchCodeFallbackResolver.defaultBatchCode("  东一 / 舍--A  ", CLOCK.instant())
+        );
+        assertEquals(
+                "兔舍-20260203-1205",
+                BatchCodeFallbackResolver.defaultBatchCode(" /_- ", CLOCK.instant())
+        );
+    }
 
-        assertEquals(16, generated.length());
-        assertTrue(generated.startsWith("批次-"));
+    @Test
+    void truncatesLongHouseNamesToTheDatabaseLimit() {
+        String generated = BatchCodeFallbackResolver.defaultBatchCode(
+                "超长兔舍".repeat(30),
+                CLOCK.instant()
+        );
+
+        assertEquals(100, generated.codePointCount(0, generated.length()));
+        assertTrue(generated.endsWith("-20260203-1205"));
     }
 }

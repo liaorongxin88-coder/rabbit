@@ -57,7 +57,7 @@ class _CreateBatchSheetState extends ConsumerState<_CreateBatchSheet> {
   @override
   void initState() {
     super.initState();
-    _codeController.text = defaultBatchCode(widget.now());
+    _codeController.text = defaultBatchCode(widget.houseName, widget.now());
   }
 
   @override

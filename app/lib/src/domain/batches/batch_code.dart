@@ -3,15 +3,25 @@ import 'package:intl/intl.dart';
 const maxBatchCodeLength = 100;
 
 final _defaultCodeFormat = DateFormat('yyyyMMdd-HHmm');
+const _farmUtcOffset = Duration(hours: 8);
+const _defaultHouseName = '兔舍';
+const _batchTimestampLength = 13;
 
-/// 新建批次时预填的编号，格式 `批次-20260220-1530`，固定 16 个字符。
-///
-/// 这个编号会出现在提醒卡片上，和周期号、日期挤在同一行，所以必须短到不被截断。
-/// 提醒卡片自己已经单独显示了兔舍名，编号里不必再带一遍。
-///
-/// 只精确到分钟。同一兔舍在同一分钟内建两个批次才会撞名，而这只是个预填草稿，
-/// 输入框里可以直接改掉。
-String defaultBatchCode(DateTime date) {
-  final local = date.isUtc ? date.toLocal() : date;
-  return '批次-${_defaultCodeFormat.format(local)}';
+/// 新建批次时预填的编号，格式 `东一舍-20260220-1530`。
+String defaultBatchCode(String houseName, DateTime date) {
+  final timestamp = _defaultCodeFormat.format(
+    date.toUtc().add(_farmUtcOffset),
+  );
+  const maxHouseRunes = maxBatchCodeLength - _batchTimestampLength - 1;
+  final normalized = _normalizeHouseName(houseName);
+  final runes = normalized.runes.toList(growable: false);
+  final safeHouseName = String.fromCharCodes(runes.take(maxHouseRunes));
+  return '$safeHouseName-$timestamp';
+}
+
+String _normalizeHouseName(String value) {
+  final normalized =
+      value.trim().replaceAll(RegExp(r'[\s\-_/\u2013\u2014]+'), '-');
+  final withoutEdges = normalized.replaceAll(RegExp(r'^-+|-+$'), '');
+  return withoutEdges.isEmpty ? _defaultHouseName : withoutEdges;
 }

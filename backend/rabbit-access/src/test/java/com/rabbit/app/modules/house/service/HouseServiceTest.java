@@ -603,6 +603,30 @@ class HouseServiceTest {
     }
 
     @Test
+    void getHouseReturnsTheRequestedHouse() {
+        givenEnabledUser();
+        RabbitHouse house = givenEnabledHouse();
+        givenMembership(HouseRole.VIEWER);
+        house.setName("东一舍");
+
+        assertSame(house, service.getHouse(USER_ID, HOUSE_ID));
+    }
+
+    @Test
+    void getHouseRejectsAMissingHouse() {
+        givenEnabledUser();
+        when(rabbitHouseMapper.selectById(HOUSE_ID)).thenReturn(null);
+
+        BizException error = assertThrows(
+                BizException.class,
+                () -> service.getHouse(USER_ID, HOUSE_ID)
+        );
+
+        assertEquals(410, error.getCode());
+        assertEquals("兔场不存在或已删除", error.getMessage());
+    }
+
+    @Test
     void listMyHousesOnlyReturnsRowsScopedToTheCaller() {
         RabbitHouse mine = new RabbitHouse();
         when(rabbitHouseMapper.selectByUserId(USER_ID)).thenReturn(List.of(mine));

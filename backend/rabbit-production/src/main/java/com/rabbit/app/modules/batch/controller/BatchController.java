@@ -107,7 +107,10 @@ public class BatchController {
     public ApiResponse<Batch> createBatch(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateBatchRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        String batchCode = batchCodeFallbackResolver.resolve(req.getBatchCode());
+        String houseName = req.getBatchCode() == null || req.getBatchCode().trim().isEmpty()
+                ? houseService.getHouse(userId, houseId).getName()
+                : null;
+        String batchCode = batchCodeFallbackResolver.resolve(req.getBatchCode(), houseName);
         return ApiResponse.ok(batchService.createBatch(userId, houseId, batchCode, req.getFemaleRabbitIds(), req.getRemark(), req.getRequestId()));
     }
 

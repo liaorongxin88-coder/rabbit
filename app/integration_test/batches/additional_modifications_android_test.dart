@@ -104,7 +104,7 @@ Future<void> _verifyHousePrefixedBatchCode(
   final code = tester.widget<EditableText>(editable).controller.text;
   expect(
     code,
-    matches(RegExp('^${RegExp.escape(_houseName)}-批次-\\d{17}\$')),
+    matches(RegExp('^${RegExp.escape(_houseName)}-\\d{8}-\\d{4}\$')),
   );
   expect(code.length, lessThanOrEqualTo(100));
   await _takeScreenshot(binding, tester, '02-house-prefixed-batch-code');

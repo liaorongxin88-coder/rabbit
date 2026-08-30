@@ -2,25 +2,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch_code.dart';
 
 void main() {
-  final fixedTime = DateTime(2026, 2, 3, 4, 5, 6, 7);
+  final fixedTime = DateTime.utc(2026, 2, 3, 4, 5, 6, 7);
 
-  test('uses the local date and minute in a new batch code', () {
-    expect(defaultBatchCode(fixedTime), '批次-20260203-0405');
+  test('uses the house name and farm-local minute in a new batch code', () {
+    expect(defaultBatchCode('东一舍', fixedTime), '东一舍-20260203-1205');
   });
 
-  test('converts a UTC instant to farm-local time before formatting', () {
+  test('the same instant produces the same farm timestamp', () {
     expect(
-      defaultBatchCode(DateTime.utc(2026, 2, 3, 4, 5)),
-      defaultBatchCode(DateTime.utc(2026, 2, 3, 4, 5).toLocal()),
+      defaultBatchCode('东一舍', fixedTime),
+      defaultBatchCode('东一舍', fixedTime.toLocal()),
     );
   });
 
-  /// 编号要显示在提醒卡片上，和周期号、日期挤一行，所以生成值必须短。
-  /// 旧格式带兔舍名加 17 位毫秒戳，兔舍名一长就被省略号截掉。
-  test('stays short enough for the reminder chip', () {
-    final code = defaultBatchCode(fixedTime);
+  test('normalizes separators and falls back for a blank house name', () {
+    expect(
+      defaultBatchCode('  东一 / 舍--A  ', fixedTime),
+      '东一-舍-A-20260203-1205',
+    );
+    expect(defaultBatchCode(' /_- ', fixedTime), '兔舍-20260203-1205');
+  });
 
-    expect(code.length, 16);
-    expect(code, startsWith('批次-'));
+  test('truncates long names to the backend batch-code limit', () {
+    final code = defaultBatchCode('超长兔舍' * 30, fixedTime);
+
+    expect(code.runes.length, maxBatchCodeLength);
+    expect(code, endsWith('-20260203-1205'));
   });
 }

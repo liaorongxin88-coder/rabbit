@@ -183,15 +183,9 @@ public class ReproLifecycleIT extends E2eTestSupport {
             other.houseId));
     }
 
-    /**
-     * 客户端没传编号时服务端补一个短编号。
-     *
-     * <p>旧格式是「兔舍名-批次-17 位毫秒戳」，兔舍名一长就把提醒卡片的 chip 撑到被省略号
-     * 截掉。提醒卡片自己已经单独显示了兔舍名，所以现在不再带；两个兔舍同一分钟建的批次
-     * 拿到同一个默认值是预期行为，这只是个预填草稿，输入框里可以直接改掉。
-     */
+    /** 客户端没传编号时，服务端按兔舍名称和农场时间补默认编号。 */
     @Test
-    void batchCodeFallbackFillsAShortCodeAndKeepsReplaysStable() {
+    void batchCodeFallbackIncludesHouseAndKeepsReplaysStable() {
         UserSession owner = register("batch_code_fallback");
         long eastHouseId = createHouse(owner, "东一舍", 1, 1, 1);
         long westHouseId = createHouse(owner, "西二舍", 1, 1, 1);
@@ -212,9 +206,9 @@ public class ReproLifecycleIT extends E2eTestSupport {
                 "requestId", requestId("batch_code_manual")
         ));
 
-        Assertions.assertTrue(east.get("batchCode").asText().matches("批次-\\d{8}-\\d{4}"),
-            "默认编号要短到能放进提醒卡片，实际是 " + east.get("batchCode").asText());
-        Assertions.assertTrue(west.get("batchCode").asText().matches("批次-\\d{8}-\\d{4}"),
+        Assertions.assertTrue(east.get("batchCode").asText().matches("东一舍-\\d{8}-\\d{4}"),
+            "默认编号应包含兔舍名，实际是 " + east.get("batchCode").asText());
+        Assertions.assertTrue(west.get("batchCode").asText().matches("西二舍-\\d{8}-\\d{4}"),
             "只有空白字符的编号也算没传");
         Assertions.assertEquals(east.get("id").asLong(), replay.get("id").asLong());
         Assertions.assertEquals(east.get("batchCode").asText(), replay.get("batchCode").asText());
