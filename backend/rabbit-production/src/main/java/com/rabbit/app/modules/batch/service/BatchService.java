@@ -1,6 +1,7 @@
 package com.rabbit.app.modules.batch.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.dto.PendingWeaningSummary;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
@@ -748,6 +749,17 @@ public class BatchService {
         requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
             Batch b = requireBatchForUpdate(houseId, batchId);
+            PendingWeaningSummary pending =
+                weaningRecordMapper.selectPendingSummaryByBatch(houseId, batchId);
+            if (
+                pending != null && pending.getWaitingCount() != null &&
+                pending.getWaitingCount() > 0
+            ) {
+                throw new BizException(
+                    409,
+                    "批次仍有 " + pending.getWaitingCount() + " 只商品兔待分笼，请先完成分笼"
+                );
+            }
             Date x = endDate == null ? DateUtil.now() : endDate;
             int active = batchRabbitMapper.countActiveByBatch(batchId);
             if (active != 0) {

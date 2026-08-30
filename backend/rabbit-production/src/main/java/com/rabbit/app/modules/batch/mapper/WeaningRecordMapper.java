@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.batch.mapper;
 
+import com.rabbit.app.modules.batch.dto.PendingWeaningSummary;
 import com.rabbit.app.modules.batch.entity.WeaningRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -12,6 +13,8 @@ public interface WeaningRecordMapper {
     List<WeaningRecord> selectByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("limit") int limit);
 
     List<WeaningRecord> selectPendingByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("limit") int limit);
+
+    PendingWeaningSummary selectPendingSummaryByBatch(@Param("houseId") Long houseId, @Param("batchId") Long batchId);
 
     WeaningRecord selectById(@Param("houseId") Long houseId, @Param("batchId") Long batchId, @Param("id") Long id);
 

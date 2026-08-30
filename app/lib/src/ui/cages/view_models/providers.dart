@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/cages/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/cages/summary.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
@@ -40,8 +41,9 @@ final pendingCommodityAllocationCountProvider =
     houseId,
     cancelToken: cancelToken,
   );
+  final intakeBatches = productionIntakeBatches(batches, houseId: houseId);
   final records = await Future.wait(
-    batches.map(
+    intakeBatches.map(
       (batch) => repository.listPendingWeaningRecords(
         houseId: houseId,
         batchId: batch.id,

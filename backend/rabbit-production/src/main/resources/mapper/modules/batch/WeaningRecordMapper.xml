@@ -102,10 +102,16 @@
         left join weaning_record_allocations a on a.weaning_record_id = w.id
         left join cages ca on ca.id = a.cage_id and ca.house_id = b.house_id
         where w.house_id = #{houseId} and b.house_id = #{houseId} and w.batch_id = #{batchId}
-          and w.waiting_count &gt; 0
+          and b.status = '进行中' and w.waiting_count &gt; 0
         group by w.id
         order by w.id desc
         limit #{limit}
+    </select>
+
+    <select id="selectPendingSummaryByBatch" resultType="com.rabbit.app.modules.batch.dto.PendingWeaningSummary">
+        select count(*) as recordCount, coalesce(sum(waiting_count), 0) as waitingCount
+        from weaning_records
+        where house_id = #{houseId} and batch_id = #{batchId} and waiting_count &gt; 0
     </select>
 
     <select id="selectById" resultMap="Map">

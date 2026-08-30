@@ -13,11 +13,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.dto.PendingWeaningSummary;
 import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.mapper.BreedingCycleMapper;
+import com.rabbit.app.modules.batch.mapper.WeaningRecordMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
@@ -348,6 +350,7 @@ class BatchServiceTest {
         RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
         RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
         BreedingCycleMapper cycleMapper = org.mockito.Mockito.mock(BreedingCycleMapper.class);
+        WeaningRecordMapper weaningRecordMapper = org.mockito.Mockito.mock(WeaningRecordMapper.class);
         RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
         Batch batch = new Batch();
         batch.setId(9L);
@@ -359,6 +362,11 @@ class BatchServiceTest {
             eq(1L), eq(9L), any(Date.class), any(), eq("7"), anyInt()
         )).thenReturn(1, 0);
         when(cycleMapper.countOpenLifecycleByBatch(1L, 9L)).thenReturn(0);
+        PendingWeaningSummary pending = new PendingWeaningSummary();
+        pending.setRecordCount(0);
+        pending.setWaitingCount(0);
+        when(weaningRecordMapper.selectPendingSummaryByBatch(1L, 9L))
+            .thenReturn(pending);
 
         Date endDate = new Date();
         service(
@@ -367,10 +375,12 @@ class BatchServiceTest {
             rabbitMapper,
             historyMapper,
             dedup,
-            cycleMapper
+            cycleMapper,
+            weaningRecordMapper
         ).completeBatch(7L, 1L, 9L, endDate, true, "done", "complete-1");
 
         verify(batchMapper).selectByIdForUpdate(1L, 9L);
+        verify(weaningRecordMapper).selectPendingSummaryByBatch(1L, 9L);
         // 旧的 closeOpenByBatch 已随 V28 一并删除（它绕过 lifecycle/stage/待办/投影），
         // 现在只剩下面这道守门：还有未结束的周期就拒绝结束批次。
         // 去活前后各守一次。
@@ -382,6 +392,44 @@ class BatchServiceTest {
             null,
             endDate,
             "7"
+        );
+    }
+
+    @Test
+    void completionRejectsPendingCommodityAllocation() {
+        BatchMapper batchMapper = org.mockito.Mockito.mock(BatchMapper.class);
+        BatchRabbitMapper batchRabbitMapper = org.mockito.Mockito.mock(BatchRabbitMapper.class);
+        RabbitMapper rabbitMapper = org.mockito.Mockito.mock(RabbitMapper.class);
+        RabbitStatusHistoryMapper historyMapper = org.mockito.Mockito.mock(RabbitStatusHistoryMapper.class);
+        BreedingCycleMapper cycleMapper = org.mockito.Mockito.mock(BreedingCycleMapper.class);
+        WeaningRecordMapper weaningRecordMapper = org.mockito.Mockito.mock(WeaningRecordMapper.class);
+        RequestDedupService dedup = org.mockito.Mockito.mock(RequestDedupService.class);
+        Batch batch = new Batch();
+        batch.setId(9L);
+        batch.setHouseId(1L);
+        batch.setStatus("进行中");
+        PendingWeaningSummary pending = new PendingWeaningSummary();
+        pending.setRecordCount(1);
+        pending.setWaitingCount(8);
+        when(batchMapper.selectByIdForUpdate(1L, 9L)).thenReturn(batch);
+        when(weaningRecordMapper.selectPendingSummaryByBatch(1L, 9L))
+            .thenReturn(pending);
+
+        BizException error = assertThrows(BizException.class, () -> service(
+            batchMapper,
+            batchRabbitMapper,
+            rabbitMapper,
+            historyMapper,
+            dedup,
+            cycleMapper,
+            weaningRecordMapper
+        ).completeBatch(7L, 1L, 9L, new Date(), true, "done", "complete-1"));
+
+        assertEquals(409, error.getCode());
+        assertEquals("批次仍有 8 只商品兔待分笼，请先完成分笼", error.getMessage());
+        verify(batchRabbitMapper, never()).countActiveByBatch(9L);
+        verify(batchMapper, never()).updateStatusAndDates(
+            any(), any(), any(), any(), any(), any()
         );
     }
 
@@ -420,6 +468,39 @@ class BatchServiceTest {
             org.mockito.Mockito.mock(ReproCycleMapper.class),
             org.mockito.Mockito.mock(ReproStateMachineService.class),
             org.mockito.Mockito.mock(WorkTaskWriter.class)
+        );
+    }
+
+    private BatchService service(
+        BatchMapper batchMapper,
+        BatchRabbitMapper batchRabbitMapper,
+        RabbitMapper rabbitMapper,
+        RabbitStatusHistoryMapper historyMapper,
+        RequestDedupService dedup,
+        BreedingCycleMapper cycleMapper,
+        WeaningRecordMapper weaningRecordMapper
+    ) {
+        return new BatchService(
+            batchMapper,
+            batchRabbitMapper,
+            cycleMapper,
+            rabbitMapper,
+            null,
+            null,
+            null,
+            null,
+            weaningRecordMapper,
+            null,
+            historyMapper,
+            null,
+            null,
+            null,
+            null,
+            null,
+            dedup,
+            null,
+            org.mockito.Mockito.mock(WorkTaskWriter.class),
+            10
         );
     }
 
