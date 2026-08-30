@@ -77,11 +77,17 @@ public class ReproStateMachineIT extends E2eTestSupport {
         ReproResult prepartum = apply(fixture, opened.cycleId(), ReproAction.PREPARTUM, "full_prepartum", b -> b);
         Assertions.assertEquals(ReproStage.AWAIT_DELIVERY, prepartum.stage());
 
+        jdbc.update(
+            "update global_setting set postpartum_days = 6 where house_id = ?",
+            fixture.houseId
+        );
+        Date deliveryAt = new Date();
         ReproResult delivery = apply(fixture, opened.cycleId(), ReproAction.DELIVERY, "full_delivery",
-            b -> b.outcome(DeliveryOutcome.BORN.name()).totalKits(9).liveKits(8).keptKits(8));
+            b -> b.occurredAt(deliveryAt)
+                .outcome(DeliveryOutcome.BORN.name()).totalKits(9).liveKits(8).keptKits(8));
         Assertions.assertEquals(ReproStage.READY, delivery.stage());
-        Assertions.assertNull(delivery.currentCycleId(), "分娩后母兔应退出繁育管线并回到准备态");
-        Assertions.assertEquals(CycleLifecycle.CLOSED.name(), delivery.lifecycle());
+        Assertions.assertNotNull(delivery.currentCycleId(), "接产后应立即创建休养周期");
+        Assertions.assertEquals(CycleLifecycle.OPEN.name(), delivery.lifecycle());
         Assertions.assertEquals(
             ReproStage.AWAIT_WEANING.name(),
             jdbc.queryForObject(
@@ -91,7 +97,20 @@ public class ReproStateMachineIT extends E2eTestSupport {
             ),
             "旧窝周期仍须保持待分笼"
         );
-        assertProjection(fixture, "READY", null);
+        assertProjection(fixture, "READY", delivery.currentCycleId());
+        assertSinglePendingTask(fixture.houseId, delivery.currentCycleId(), "RECOVERY");
+        Date recoveryDueTime = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and cycle_id = ?"
+                + " and task_type = 'RECOVERY' and status = 'PENDING'",
+            Date.class,
+            fixture.houseId,
+            delivery.currentCycleId()
+        );
+        Assertions.assertEquals(
+            6,
+            daysBetween(deliveryAt, recoveryDueTime),
+            "休养到期日应从接产日期按兔舍配置计算"
+        );
         Assertions.assertNotNull(delivery.litterId(), "接产必须建窝");
         // 分笼任务挂在窝上而不是周期上——血配时母兔要能同时持有两条互不干扰的待办。
         Assertions.assertEquals(
@@ -102,10 +121,6 @@ public class ReproStateMachineIT extends E2eTestSupport {
             )
         );
 
-        jdbc.update(
-            "update global_setting set postpartum_days = 6 where house_id = ?",
-            fixture.houseId
-        );
         Date weaningAt = new Date();
         ReproResult weaning = apply(fixture, opened.cycleId(), ReproAction.WEANING, "full_weaning",
             b -> b.occurredAt(weaningAt).weanedCount(8).avgWeaningWeight(0.6));
@@ -113,21 +128,16 @@ public class ReproStateMachineIT extends E2eTestSupport {
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
         Assertions.assertEquals(ReproStage.READY, weaning.stage());
         Assertions.assertEquals(
-            6,
-            daysBetween(weaningAt, weaning.nextDueTime()),
-            "断奶后再催情时间应使用兔舍恢复期配置"
-        );
-        Assertions.assertEquals(
             CycleResult.WEANED.name(),
             jdbc.queryForObject(
                 "select result from breeding_cycles where id = ?", String.class, opened.cycleId()
             )
         );
-        // 断奶后进入真实休养期，到期任务再自动推进待催情。
-        Assertions.assertNotNull(weaning.followUpCycleId(), "断奶应开启休养周期");
-        Assertions.assertEquals(weaning.followUpCycleId(), weaning.currentCycleId());
-        assertProjection(fixture, "READY", weaning.followUpCycleId());
-        assertSinglePendingTask(fixture.houseId, weaning.followUpCycleId(), "RECOVERY");
+        // 接产时已开始休养，断奶只结束原哺乳周期，不得重复创建休养周期。
+        Assertions.assertNull(weaning.followUpCycleId());
+        Assertions.assertEquals(delivery.currentCycleId(), weaning.currentCycleId());
+        assertProjection(fixture, "READY", delivery.currentCycleId());
+        assertSinglePendingTask(fixture.houseId, delivery.currentCycleId(), "RECOVERY");
         Assertions.assertEquals(0, jdbc.queryForObject(
             "select count(*) from batch_rabbits where batch_id = ? and rabbit_id = ?"
                 + " and is_active = true",
@@ -138,7 +148,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
 
         ReproResult recovered = apply(
             fixture,
-            weaning.followUpCycleId(),
+            delivery.currentCycleId(),
             ReproAction.START_CYCLE,
             "full_recovery_done",
             b -> b
@@ -217,7 +227,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
                 .outcome(PalpationResult.PREGNANT.name())
                 .palpationResult(PalpationResult.PREGNANT)
         );
-        assertTransitionTiming(opened.cycleId(), palpationAt, palpation, 15);
+        assertTransitionTiming(opened.cycleId(), palpationAt, palpation, 27);
 
         Date prepartumAt = new Date();
         ReproResult prepartum = apply(
@@ -242,8 +252,9 @@ public class ReproStateMachineIT extends E2eTestSupport {
             fixture, opened.cycleId(), ReproAction.WEANING, "time_sync_weaning",
             b -> b.occurredAt(weaningAt).weanedCount(7)
         );
-        Assertions.assertNotNull(weaning.followUpCycleId());
-        assertTransitionTiming(weaning.followUpCycleId(), weaningAt, weaning, 10);
+        Assertions.assertNull(weaning.followUpCycleId());
+        Assertions.assertEquals(delivery.currentCycleId(), weaning.currentCycleId());
+        assertSinglePendingTask(fixture.houseId, delivery.currentCycleId(), "RECOVERY");
     }
 
     @Test
@@ -473,52 +484,46 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
-    void bloodMatingRunsLactationAndNextPregnancyInParallel() {
-        Fixture fixture = fixture("repro_blood");
-        ReproResult opened = openAtEstrus(fixture, "blood_open");
-        advanceToDelivery(fixture, opened.cycleId(), "blood");
+    void deliveryRunsLactationAndRecoveryInParallel() {
+        Fixture fixture = fixture("repro_recovery_parallel");
+        ReproResult opened = openAtEstrus(fixture, "recovery_parallel_open");
+        advanceToDelivery(fixture, opened.cycleId(), "recovery_parallel");
 
-        // 哺乳段不占管线，因此可以在带崽期间重新开启一轮配种周期。
-        // V44 起它必须落在另一个批次：同一 (母兔, 批次) 至多一条未结束周期。
-        // 拿 fixture.batchId 再开一条的旧写法现在会被 409 拒掉，下面单独验。
-        long bloodBatchId = emptyBatch(fixture, "blood_batch");
-        ReproResult second = stateMachine.openCycleAt(new OpenCycleCommand(
-            fixture.houseId, fixture.userId, "tester", fixture.doeId, bloodBatchId,
-            ReproStage.AWAIT_MATING, new Date(), new Date(), null, null, null,
-            null, null, null, null, null, null, requestId("blood_second")
-        ));
-        Assertions.assertEquals(ReproStage.AWAIT_MATING, second.stage());
-        Assertions.assertNull(jdbc.queryForObject(
-            "select batch_id from breeding_cycles where id = ?", Long.class, second.cycleId()
-        ));
-        Assertions.assertEquals(bloodBatchId, (long) jdbc.queryForObject(
-            "select planned_batch_id from breeding_cycles where id = ?", Long.class, second.cycleId()
-        ), "待配种周期只保存计划批次，配种后才建立正式绑定");
-
-        // 同批次内不得再开第二条（V44 uk_bc_batch_member）。
-        BizException sameBatch = Assertions.assertThrows(
-            BizException.class,
-            () -> stateMachine.openCycleAt(new OpenCycleCommand(
-                fixture.houseId, fixture.userId, "tester", fixture.doeId, fixture.batchId,
-                ReproStage.AWAIT_WEANING, new Date(), new Date(), null, null, new Date(),
-                6, 5, null, null, null, null, requestId("blood_same_batch")
-            ))
+        Long recoveryCycleId = jdbc.queryForObject(
+            "select id from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
+                + " and lifecycle = 'OPEN' and stage = 'READY'",
+            Long.class,
+            fixture.houseId,
+            fixture.doeId
         );
-        Assertions.assertEquals(409, sameBatch.getCode());
-        Assertions.assertTrue(sameBatch.getMessage().contains("其他批次"), sameBatch.getMessage());
-
+        Assertions.assertNotNull(recoveryCycleId);
         Assertions.assertEquals(
             2,
             (int) jdbc.queryForObject(
                 "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ? and lifecycle = 'OPEN'",
-                Integer.class, fixture.houseId, fixture.doeId
+                Integer.class,
+                fixture.houseId,
+                fixture.doeId
             ),
-            "血配期间应有哺乳周期与管线周期各一条"
+            "接产后应并行保留哺乳和休养两个周期"
         );
+        assertSinglePendingTask(fixture.houseId, recoveryCycleId, "RECOVERY");
+
+        long bloodBatchId = emptyBatch(fixture, "recovery_parallel_batch");
+        BizException blockedMating = Assertions.assertThrows(
+            BizException.class,
+            () -> stateMachine.openCycleAt(new OpenCycleCommand(
+                fixture.houseId, fixture.userId, "tester", fixture.doeId, bloodBatchId,
+                ReproStage.AWAIT_MATING, new Date(), new Date(), null, null, null,
+                null, null, null, null, null, null, requestId("recovery_parallel_mating")
+            ))
+        );
+        Assertions.assertEquals(409, blockedMating.getCode());
+        Assertions.assertTrue(blockedMating.getMessage().contains("进行中"), blockedMating.getMessage());
 
         Date ignoredOverride = new Date(System.currentTimeMillis() + 4L * 24 * 3600 * 1000);
         BizException ignored = Assertions.assertThrows(BizException.class, () -> apply(
-            fixture, opened.cycleId(), ReproAction.WEANING, "blood_weaning_override",
+            fixture, opened.cycleId(), ReproAction.WEANING, "recovery_parallel_weaning_override",
             b -> b.weanedCount(7).nextRemindAt(ignoredOverride)
         ));
         Assertions.assertEquals(400, ignored.getCode());
@@ -529,24 +534,28 @@ public class ReproStateMachineIT extends E2eTestSupport {
             "被拒绝的自定义日期不得顺带完成分笼"
         );
 
-        ReproResult weaning = apply(fixture, opened.cycleId(), ReproAction.WEANING, "blood_weaning",
-            b -> b.weanedCount(7));
-
-        // 关键：已有管线周期在跑时不再自动接续，否则同一母兔会出现两条管线周期，
-        // V27 的 uk_bc_pipeline 会直接拒绝写入。
+        ReproResult weaning = apply(
+            fixture,
+            opened.cycleId(),
+            ReproAction.WEANING,
+            "recovery_parallel_weaning",
+            b -> b.weanedCount(7)
+        );
         Assertions.assertEquals(opened.cycleId(), weaning.cycleId());
-        Assertions.assertNull(weaning.followUpCycleId(), "已在管线上时不应再自动开新周期");
-        Assertions.assertEquals(second.cycleId(), weaning.currentCycleId(), "应返回既有血配管线周期");
-        Assertions.assertEquals(ReproStage.AWAIT_MATING, weaning.stage());
+        Assertions.assertNull(weaning.followUpCycleId(), "接产时已有休养周期，不得在断奶时重复创建");
+        Assertions.assertEquals(recoveryCycleId, weaning.currentCycleId());
+        Assertions.assertEquals(ReproStage.READY, weaning.stage());
         Assertions.assertEquals(CycleLifecycle.OPEN.name(), weaning.lifecycle());
         Assertions.assertEquals(
             1,
             (int) jdbc.queryForObject(
                 "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ? and lifecycle = 'OPEN'",
-                Integer.class, fixture.houseId, fixture.doeId
+                Integer.class,
+                fixture.houseId,
+                fixture.doeId
             )
         );
-        assertProjection(fixture, "AWAIT_MATING", second.cycleId());
+        assertProjection(fixture, "READY", recoveryCycleId);
     }
 
     @Test

@@ -264,19 +264,68 @@
         update rabbits r
         inner join global_setting gs on gs.house_id = r.house_id
         set r.growth_stage = case
-              when date_add(
-                r.growth_stage_entered_at,
-                interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
-              ) &lt;= #{now} then 'MATURE'
-              when date_add(
-                r.growth_stage_entered_at,
-                interval (gs.adaptation_days + gs.growing_days) day
-              ) &lt;= #{now} then 'FATTENING'
-              when date_add(
-                r.growth_stage_entered_at,
-                interval gs.adaptation_days day
-              ) &lt;= #{now} then 'GROWING'
-              else 'ADAPTATION'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then 'MATURE'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days) day
+                ) &lt;= #{now} then 'FATTENING'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
+                then 'GROWING'
+              when r.growth_stage = 'GROWING'
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then 'MATURE'
+              when r.growth_stage = 'GROWING'
+                and date_add(r.growth_stage_entered_at, interval gs.growing_days day) &lt;= #{now}
+                then 'FATTENING'
+              when r.growth_stage = 'FATTENING'
+                and date_add(r.growth_stage_entered_at, interval gs.fattening_days day) &lt;= #{now}
+                then 'MATURE'
+              when r.growth_stage = 'JUVENILE' then 'ADAPTATION'
+              else r.growth_stage
+            end,
+            r.growth_stage_entered_at = case
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                )
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days) day
+                ) &lt;= #{now} then date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days) day
+                )
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
+                then date_add(r.growth_stage_entered_at, interval gs.adaptation_days day)
+              when r.growth_stage = 'GROWING'
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.growing_days + gs.fattening_days) day
+                )
+              when r.growth_stage = 'GROWING'
+                and date_add(r.growth_stage_entered_at, interval gs.growing_days day) &lt;= #{now}
+                then date_add(r.growth_stage_entered_at, interval gs.growing_days day)
+              when r.growth_stage = 'FATTENING'
+                and date_add(r.growth_stage_entered_at, interval gs.fattening_days day) &lt;= #{now}
+                then date_add(r.growth_stage_entered_at, interval gs.fattening_days day)
+              else r.growth_stage_entered_at
             end,
             r.state_version = r.state_version + 1,
             r.update_by = #{updateBy},
@@ -286,19 +335,32 @@
           and r.type = '2'
           and r.growth_stage_entered_at is not null
           and r.growth_stage &lt;&gt; case
-              when date_add(
-                r.growth_stage_entered_at,
-                interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
-              ) &lt;= #{now} then 'MATURE'
-              when date_add(
-                r.growth_stage_entered_at,
-                interval (gs.adaptation_days + gs.growing_days) day
-              ) &lt;= #{now} then 'FATTENING'
-              when date_add(
-                r.growth_stage_entered_at,
-                interval gs.adaptation_days day
-              ) &lt;= #{now} then 'GROWING'
-              else 'ADAPTATION'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then 'MATURE'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.adaptation_days + gs.growing_days) day
+                ) &lt;= #{now} then 'FATTENING'
+              when r.growth_stage in ('JUVENILE', 'ADAPTATION')
+                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
+                then 'GROWING'
+              when r.growth_stage = 'GROWING'
+                and date_add(
+                  r.growth_stage_entered_at,
+                  interval (gs.growing_days + gs.fattening_days) day
+                ) &lt;= #{now} then 'MATURE'
+              when r.growth_stage = 'GROWING'
+                and date_add(r.growth_stage_entered_at, interval gs.growing_days day) &lt;= #{now}
+                then 'FATTENING'
+              when r.growth_stage = 'FATTENING'
+                and date_add(r.growth_stage_entered_at, interval gs.fattening_days day) &lt;= #{now}
+                then 'MATURE'
+              when r.growth_stage = 'JUVENILE' then 'ADAPTATION'
+              else r.growth_stage
             end
     </update>
 

@@ -80,8 +80,13 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         ));
 
         Date growingNow = new Date();
-        updateGrowthEntry(houseId, rabbitId, growingNow, 2);
+        updateGrowthEntry(houseId, rabbitId, "ADAPTATION", growingNow, 2);
         assertEquals(1, commodityGrowthService.advanceHouse(houseId, growingNow));
+        assertGrowthStageEnteredAt(
+            houseId,
+            rabbitId,
+            DateUtil.plusDays(growingNow, -1)
+        );
         commodityDailyCareReminderService.scheduleHouse(houseId, growingNow);
         assertCareTask(
             owner,
@@ -94,8 +99,13 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(1, pendingCareCount(houseId, rabbitId));
 
         Date fatteningNow = new Date();
-        updateGrowthEntry(houseId, rabbitId, fatteningNow, 4);
+        updateGrowthEntry(houseId, rabbitId, "GROWING", fatteningNow, 2);
         assertEquals(1, commodityGrowthService.advanceHouse(houseId, fatteningNow));
+        assertGrowthStageEnteredAt(
+            houseId,
+            rabbitId,
+            DateUtil.plusDays(fatteningNow, -1)
+        );
         commodityDailyCareReminderService.scheduleHouse(houseId, fatteningNow);
         assertCareTask(
             owner,
@@ -108,8 +118,13 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(1, pendingCareCount(houseId, rabbitId));
 
         Date maturityNow = new Date();
-        updateGrowthEntry(houseId, rabbitId, maturityNow, 6);
+        updateGrowthEntry(houseId, rabbitId, "FATTENING", maturityNow, 2);
         assertEquals(1, commodityGrowthService.advanceHouse(houseId, maturityNow));
+        assertGrowthStageEnteredAt(
+            houseId,
+            rabbitId,
+            DateUtil.plusDays(maturityNow, -1)
+        );
         jdbc.update(
             "delete from work_tasks where house_id = ? and rabbit_id = ?"
                 + " and task_type = 'SALE_READY'",
@@ -155,7 +170,8 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             owner, houseId, cages.get(2), "2", "0", "缺少成熟时间锚点"
         );
         Date schedulerNow = new Date();
-        Date elapsedAnchor = DateUtil.plusDays(schedulerNow, -7);
+        Date fatteningEnteredAt = DateUtil.plusDays(schedulerNow, -3);
+        Date arrivalAnchor = DateUtil.plusDays(schedulerNow, -7);
         jdbc.update(
             "update rabbits set growth_stage = 'MATURE', growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
@@ -166,7 +182,7 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         jdbc.update(
             "update rabbits set growth_stage = 'FATTENING', growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
-            elapsedAnchor,
+            fatteningEnteredAt,
             houseId,
             matureByTime
         );
@@ -178,9 +194,9 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             notMature
         );
         jdbc.update(
-            "update rabbits set growth_stage = 'GROWING', growth_stage_entered_at = null,"
+            "update rabbits set growth_stage = 'ADAPTATION', growth_stage_entered_at = null,"
                 + " arrival_date = ? where house_id = ? and id = ?",
-            elapsedAnchor,
+            arrivalAnchor,
             houseId,
             matureByArrival
         );
@@ -241,10 +257,10 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertTrue(Math.abs(stateDueTime.getTime() - schedulerNow.getTime()) < 1_000L,
             "MATURE 状态必须把待出售时间拉到本次调度时间");
         assertTrue(Math.abs(
-            elapsedDueTime.getTime() - DateUtil.plusDays(elapsedAnchor, 6).getTime()
-        ) < 1_000L, "时间兜底必须保留生长锚点加三个阶段时长的成熟时间");
+            elapsedDueTime.getTime() - DateUtil.plusDays(fatteningEnteredAt, 2).getTime()
+        ) < 1_000L, "育肥期应按进入当前阶段日期加剩余时长计算成熟时间");
         assertTrue(Math.abs(
-            arrivalDueTime.getTime() - DateUtil.plusDays(elapsedAnchor, 6).getTime()
+            arrivalDueTime.getTime() - DateUtil.plusDays(arrivalAnchor, 6).getTime()
         ) < 1_000L, "缺少阶段时间时必须回退到入场日期计算成熟时间");
     }
 
@@ -319,13 +335,34 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(content, event.get("content").asText());
     }
 
-    private void updateGrowthEntry(long houseId, long rabbitId, Date now, int daysAgo) {
-        // This scenario needs an overdue stage, not an exact DATETIME threshold.
+    private void updateGrowthEntry(
+        long houseId,
+        long rabbitId,
+        String growthStage,
+        Date now,
+        int daysAgo
+    ) {
+        // This scenario needs an overdue current stage, not an exact DATETIME threshold.
         jdbc.update(
-            "update rabbits set growth_stage_entered_at = ? where house_id = ? and id = ?",
+            "update rabbits set growth_stage = ?, growth_stage_entered_at = ?"
+                + " where house_id = ? and id = ?",
+            growthStage,
             DateUtil.plusDays(now, -daysAgo - 1),
             houseId,
             rabbitId
+        );
+    }
+
+    private void assertGrowthStageEnteredAt(long houseId, long rabbitId, Date expected) {
+        Date actual = jdbc.queryForObject(
+            "select growth_stage_entered_at from rabbits where house_id = ? and id = ?",
+            Date.class,
+            houseId,
+            rabbitId
+        );
+        assertTrue(
+            Math.abs(actual.getTime() - expected.getTime()) < 1_000L,
+            "自动推进应把阶段进入日期设为实际跨阶段阈值"
         );
     }
 

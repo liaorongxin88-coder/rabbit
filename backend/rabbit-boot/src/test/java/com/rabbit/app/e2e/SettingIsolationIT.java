@@ -27,11 +27,11 @@ public class SettingIsolationIT extends E2eTestSupport {
         assertSetting(secondInitial.get("setting"), 12, 23, 5, 27, 10, 34, 45);
 
         api.putOk("/api/house-settings", owner.token, firstHouse, settingBody(
-            61, 62, 64, 65, 66, 67, 68, "第一兔场独立配置"
+            61, 62, 14, 65, 66, 67, 68, "第一兔场独立配置"
         ));
 
         JsonNode firstAfterHouseUpdate = api.getOk("/api/house-settings", owner.token, firstHouse);
-        assertSetting(firstAfterHouseUpdate.get("setting"), 61, 62, 64, 65, 66, 67, 68);
+        assertSetting(firstAfterHouseUpdate.get("setting"), 61, 62, 14, 65, 66, 67, 68);
         JsonNode secondAfterHouseUpdate = api.getOk("/api/house-settings", owner.token, secondHouse);
         assertSetting(secondAfterHouseUpdate.get("setting"), 12, 23, 5, 27, 10, 34, 45);
 

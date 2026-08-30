@@ -63,7 +63,7 @@ public class DashboardReportIT extends E2eTestSupport {
         api.putOk("/api/settings", owner.token, null, obj(
                 "aphrodisiacDays", 0,
                 "palpationDays", 0,
-                "prepartumDays", 0,
+                "prepartumDays", 1,
                 "weaningDays", 30,
                 "postpartumDays", 0,
                 "saleDays", 30,
@@ -93,31 +93,14 @@ public class DashboardReportIT extends E2eTestSupport {
                 "action", "DELIVERY", "outcome", "BORN", "occurredAt", oneMinuteAgo(),
                 "totalKits", 6, "liveKits", 6, "keptKits", 6));
 
-        // 第二轮：血配 —— 哺乳未结束就另开一个管线周期，于是同时有两个 OPEN。
-        // V44 起这第二条必须落到另一个批次（同一 (母兔, 批次) 至多一条未结束周期）。
-        // 本用例要验的是「一头母兔两条 OPEN 周期时仪表盘只算一次」，
-        // 这与周期分属哪个批次无关，只需把血配那条换个批次装。
-        long bloodBatchId = api.postOk("/api/batches", owner.token, houseId, obj(
-                "batchCode", "DASH-BLOOD-" + requestId("dashboard_blood_batch").substring(0, 8),
-                "femaleRabbitIds", List.of(),
-                "requestId", requestId("dashboard_blood_create")
-        )).get("id").asLong();
-        long secondCycle = openCycleAtMating(owner, houseId, bloodBatchId, activeMother, "dash_c2");
-        act(owner, houseId, secondCycle, "dash_c2_mate", obj(
-                "action", "MATING", "occurredAt", oneMinuteAgo(),
-                "maleRabbitId", father, "matingMethod", "NATURAL"));
-        act(owner, houseId, secondCycle, "dash_c2_preg", obj(
-                "action", "PALPATION", "occurredAt", oneMinuteAgo(), "palpationResult", "PREGNANT"));
-
-        // 两条并行周期现在分属两个批次，所以按批次查各得一条，合起来才是两条。
-        // 前置条件还是那个前置条件：这头母兔确实同时挂着两条未结束周期。
+        // 接产后，哺乳和休养是两项并行事实：原周期保留待分笼，新周期承担休养待办。
+        // 仪表盘必须把同一头母兔的两条 OPEN 周期去重，只计为一个在繁育母兔。
         Assertions.assertEquals(1, activeCyclesOf(owner, houseId, batchId, activeMother).size());
-        Assertions.assertEquals(1, activeCyclesOf(owner, houseId, bloodBatchId, activeMother).size());
         Assertions.assertEquals(2, jdbc.queryForObject(
                 "select count(*) from breeding_cycles where house_id = ? and mother_rabbit_id = ?"
                         + " and lifecycle = 'OPEN'",
                 Integer.class, houseId, activeMother).intValue(),
-                "血配下这头母兔应有两条未结束周期");
+                "接产后这头母兔应同时保留哺乳和休养两个未结束周期");
 
         JsonNode summary = api.getOk(
                 "/api/reports/dashboard?houseId=" + houseId + "&year=" + LocalDate.now().getYear(),

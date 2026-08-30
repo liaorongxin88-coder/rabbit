@@ -50,7 +50,10 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "requestId", requestId("stage_create")
         ));
 
-        Assertions.assertEquals("MATURE", rabbit.get("growthStage").asText());
+        Assertions.assertTrue(
+                rabbit.get("growthStage") == null || rabbit.get("growthStage").isNull(),
+                "种母兔不应持有商品兔生长阶段"
+        );
         // 旧的繁殖阶段字段不再被写入：这只母兔的阶段以生产流程为准。
         Assertions.assertTrue(
                 rabbit.get("reproductiveStage") == null || rabbit.get("reproductiveStage").isNull(),
@@ -110,7 +113,7 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "growthStage", "MATURE",
                 "reproductiveStage", "EMPTY",
                 "requestId", requestId("stage_update")
-        ), 400, "种母兔的繁育阶段由生产流程维护");
+        ), 400, "只有商品兔可以维护生长阶段");
 
         api.expectError("/api/rabbits", org.springframework.http.HttpMethod.POST, owner.token, houseId, obj(
                 "cageId", rabbitCages.get(2),
@@ -245,8 +248,7 @@ class RabbitStagesAndCageConcurrencyIT extends E2eTestSupport {
                 "cageId", cageId,
                 "type", "0",
                 "gender", gender,
-                "growthStage", "MATURE",
-                // 本用例只关心笼位并发，不再携带旧的繁殖阶段字段。
+                // 本用例只关心笼位并发，不携带商品兔专属的生长阶段字段。
                 "arrivalMethod", "1",
                 "arrivalDate", now(),
                 "breed", suffix,
