@@ -9,6 +9,7 @@ import com.rabbit.app.modules.repro.entity.ReproEvent;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +23,40 @@ public class OperationEventService {
 
     static final int DEFAULT_LIMIT = 50;
     static final int MAX_LIMIT = 200;
+
+    private static final Map<String, String> COMMON_EVENT_LABELS = Map.ofEntries(
+        Map.entry("BATCH_COMPLETED", "批次完成"),
+        Map.entry("BATCH_CREATED", "新建批次"),
+        Map.entry("BATCH_MEMBERS_ADDED", "加入批次"),
+        Map.entry("BATCH_MEMBER_REMOVED", "移出批次"),
+        Map.entry("BATCH_RENAMED", "批次改名"),
+        Map.entry("BATCH_SOLD", "批次出售"),
+        Map.entry("CAGE_COUNTS_RECOUNTED", "重算笼位兔数"),
+        Map.entry("CAGE_COUNT_RECORDED", "记录笼位兔数"),
+        Map.entry("CAGE_CREATED", "新建笼位"),
+        Map.entry("CAGE_DELETED", "删除笼位"),
+        Map.entry("CAGE_NFC_BOUND", "绑定笼位标签"),
+        Map.entry("CAGE_UPDATED", "修改笼位"),
+        Map.entry("FEED_RECORDED", "投喂记录"),
+        Map.entry("INVENTORY_ITEM_CREATED", "新建物料"),
+        Map.entry("INVENTORY_TRANSACTION_RECORDED", "库存出入记录"),
+        Map.entry("NFC_BOUND", "绑定标签"),
+        Map.entry("NFC_UNBOUND", "解绑标签"),
+        Map.entry("RABBITS_CONVERTED_TO_REPLACEMENT", "转为后备兔"),
+        Map.entry("RABBIT_ABNORMAL_RECORDED", "异常记录"),
+        Map.entry("RABBIT_BATCH_ENTERED", "批量入栏"),
+        Map.entry("RABBIT_CAGE_TRANSFERRED", "转笼"),
+        Map.entry("RABBIT_CREATED", "兔只入栏"),
+        Map.entry("RABBIT_EVENT", "兔只事件"),
+        Map.entry("RABBIT_PROMOTED", "后备转种"),
+        Map.entry("RABBIT_UPDATED", "修改兔只资料"),
+        Map.entry("SALE_CREATED", "创建销售单"),
+        Map.entry("TREATMENT_COMPLETED", "结束治疗"),
+        Map.entry("TREATMENT_STARTED", "开始治疗"),
+        Map.entry("VACCINATION_RECORDED", "接种记录"),
+        Map.entry("WEANING_SEPARATED", "断奶分笼"),
+        Map.entry("WEIGHT_RECORDED", "称重记录")
+    );
 
     private final OperationEventMapper operationEventMapper;
 
@@ -110,18 +145,23 @@ public class OperationEventService {
     /**
      * 事件名翻成人话。
      *
-     * <p>认不出来的原样返回而不是显示「未知」：通用化之后会不断有新事件类型进来，
-     * 显示原始类型至少还能被搜到，显示「未知」就断了线索。
+     * <p>通用写操作使用独立映射，繁育状态机沿用 {@link ReproEventType}。未知类型的机器值
+     * 仍保留在响应的 eventType 字段里，展示名回退为「操作」，避免把英文枚举放到客户端标题。
      */
     static String eventLabel(String eventType) {
         String value = trimToNull(eventType);
         if (value == null) {
             return "操作";
         }
+        String normalized = value.toUpperCase();
+        String commonLabel = COMMON_EVENT_LABELS.get(normalized);
+        if (commonLabel != null) {
+            return commonLabel;
+        }
         try {
-            return ReproEventType.valueOf(value.toUpperCase()).label();
+            return ReproEventType.valueOf(normalized).label();
         } catch (IllegalArgumentException ignored) {
-            return value;
+            return "操作";
         }
     }
 

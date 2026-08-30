@@ -57,6 +57,8 @@ class OperationEventReadIT extends E2eTestSupport {
         JsonNode event = shots.get(0);
         Assertions.assertEquals("RABBIT", event.path("targetType").asText());
         Assertions.assertEquals(rabbitId, event.path("targetId").asLong());
+        Assertions.assertEquals("接种记录", event.path("eventLabel").asText(),
+            "客户端标题必须拿到中文展示名，而不是 VACCINATION_RECORDED");
         Assertions.assertEquals(owner.userName, event.path("operatorName").asText(),
             "operatorName 是当时的展示名快照");
         Assertions.assertFalse(event.has("payload"), "payload 属于内部结构，不该外泄");

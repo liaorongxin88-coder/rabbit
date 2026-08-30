@@ -17,6 +17,7 @@
         <result column="create_by" property="createBy"/>
         <result column="create_time" property="createTime"/>
         <result column="update_by" property="updateBy"/>
+        <result column="operator_name" property="operatorName"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
@@ -26,8 +27,8 @@
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into feed_logs (house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, update_by)
-        values (#{houseId}, #{itemId}, #{feedingRabbits}, #{feedTime}, #{feedType}, #{unit}, #{requestId}, #{amount}, #{remark}, #{createBy}, #{updateBy})
+        insert into feed_logs (house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, update_by, operator_name)
+        values (#{houseId}, #{itemId}, #{feedingRabbits}, #{feedTime}, #{feedType}, #{unit}, #{requestId}, #{amount}, #{remark}, #{createBy}, #{updateBy}, #{operatorName})
     </insert>
 
     <select id="selectByHouse" resultMap="FeedLogMap">
@@ -93,7 +94,7 @@
     </select>
 
     <select id="selectWithoutRabbits" resultMap="FeedLogMap">
-        select id, house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, create_time, update_by, update_time
+        select id, house_id, item_id, feeding_rabbits, feed_time, feed_type, unit, request_id, amount, remark, create_by, create_time, update_by, operator_name, update_time
         from feed_logs fl
         where fl.house_id = #{houseId}
           and fl.feeding_rabbits is not null

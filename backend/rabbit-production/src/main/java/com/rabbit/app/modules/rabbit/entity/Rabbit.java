@@ -1,9 +1,10 @@
 package com.rabbit.app.modules.rabbit.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.rabbit.app.common.Stamped;
 import java.util.Date;
 
-public class Rabbit {
+public class Rabbit implements Stamped {
     private Long id;
     private Long houseId;
     private Long cageId;
@@ -45,6 +46,7 @@ public class Rabbit {
     private String createBy;
     private Date createTime;
     private String updateBy;
+    private String operatorName;
     private Date updateTime;
 
     public Long getId() {
@@ -303,6 +305,14 @@ public class Rabbit {
 
     public void setUpdateBy(String updateBy) {
         this.updateBy = updateBy;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 
     public Date getUpdateTime() {

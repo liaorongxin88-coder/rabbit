@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class OperationEventServiceTest {
 
@@ -97,11 +99,48 @@ class OperationEventServiceTest {
         assertEquals(400, error.getCode());
     }
 
+    @ParameterizedTest
+    @CsvSource({
+        "BATCH_COMPLETED, 批次完成",
+        "BATCH_CREATED, 新建批次",
+        "BATCH_MEMBERS_ADDED, 加入批次",
+        "BATCH_MEMBER_REMOVED, 移出批次",
+        "BATCH_RENAMED, 批次改名",
+        "BATCH_SOLD, 批次出售",
+        "CAGE_COUNTS_RECOUNTED, 重算笼位兔数",
+        "CAGE_COUNT_RECORDED, 记录笼位兔数",
+        "CAGE_CREATED, 新建笼位",
+        "CAGE_DELETED, 删除笼位",
+        "CAGE_NFC_BOUND, 绑定笼位标签",
+        "CAGE_UPDATED, 修改笼位",
+        "FEED_RECORDED, 投喂记录",
+        "INVENTORY_ITEM_CREATED, 新建物料",
+        "INVENTORY_TRANSACTION_RECORDED, 库存出入记录",
+        "NFC_BOUND, 绑定标签",
+        "NFC_UNBOUND, 解绑标签",
+        "RABBITS_CONVERTED_TO_REPLACEMENT, 转为后备兔",
+        "RABBIT_ABNORMAL_RECORDED, 异常记录",
+        "RABBIT_BATCH_ENTERED, 批量入栏",
+        "RABBIT_CAGE_TRANSFERRED, 转笼",
+        "RABBIT_CREATED, 兔只入栏",
+        "RABBIT_EVENT, 兔只事件",
+        "RABBIT_PROMOTED, 后备转种",
+        "RABBIT_UPDATED, 修改兔只资料",
+        "SALE_CREATED, 创建销售单",
+        "TREATMENT_COMPLETED, 结束治疗",
+        "TREATMENT_STARTED, 开始治疗",
+        "VACCINATION_RECORDED, 接种记录",
+        "WEANING_SEPARATED, 断奶分笼",
+        "WEIGHT_RECORDED, 称重记录"
+    })
+    void commonEventTypesHaveChineseLabels(String eventType, String label) {
+        assertEquals(label, OperationEventService.eventLabel(eventType));
+    }
+
     @Test
-    void unknownEventTypesKeepTheirRawName() {
-        // 通用化之后新事件类型会不断出现，显示「未知」等于断掉线索。
+    void reproductionAndUnknownEventTypesHaveStableLabels() {
         assertEquals("开始周期", OperationEventService.eventLabel("CYCLE_START"));
-        assertEquals("FEED_RECORDED", OperationEventService.eventLabel("FEED_RECORDED"));
+        assertEquals("操作", OperationEventService.eventLabel("FUTURE_EVENT"));
         assertEquals("操作", OperationEventService.eventLabel("  "));
         assertEquals("操作", OperationEventService.eventLabel(null));
     }

@@ -41,6 +41,39 @@ class OperationEventCoverageIT extends E2eTestSupport {
         long rabbitId = createRabbit(user, houseId, cages.get(0), "0", "0", "cov");
 
         assertEventRecorded("rabbit.create", "RABBIT", rabbitId);
+        Assertions.assertEquals(
+            user.userName,
+            jdbc.queryForObject(
+                "select operator_name from rabbits where house_id = ? and id = ?",
+                String.class, houseId, rabbitId
+            ),
+            "建兔只时应把操作人展示名快照写进 rabbits"
+        );
+    }
+
+    @Test
+    void feedingRabbitsPersistsTheOperatorSnapshot() {
+        long rabbitId = createRabbit(user, houseId, cages.get(0), "0", "0", "cov_feed");
+        String feedRequestId = requestId("cov_feed");
+
+        api.postOk("/api/feed-logs", user.token, houseId, obj(
+            "rabbitIds", List.of(rabbitId),
+            "feedTime", System.currentTimeMillis(),
+            "feedType", "日常投喂",
+            "unit", "kg",
+            "amount", 0.8,
+            "requestId", feedRequestId
+        ));
+
+        Assertions.assertEquals(
+            user.userName,
+            jdbc.queryForObject(
+                "select operator_name from feed_logs where house_id = ? and request_id = ?",
+                String.class, houseId, feedRequestId
+            ),
+            "投喂时应把操作人展示名快照写进 feed_logs"
+        );
+        assertEventRecorded("feed:add", "RABBIT", rabbitId);
     }
 
     @Test

@@ -1,9 +1,10 @@
 package com.rabbit.app.modules.feed.entity;
 
+import com.rabbit.app.common.Stamped;
 import java.math.BigDecimal;
 import java.util.Date;
 
-public class FeedLog {
+public class FeedLog implements Stamped {
     private Long id;
     private Long houseId;
     private Long itemId;
@@ -17,6 +18,7 @@ public class FeedLog {
     private String createBy;
     private Date createTime;
     private String updateBy;
+    private String operatorName;
     private Date updateTime;
 
     public Long getId() {
@@ -121,6 +123,14 @@ public class FeedLog {
 
     public void setUpdateBy(String updateBy) {
         this.updateBy = updateBy;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 
     public Date getUpdateTime() {

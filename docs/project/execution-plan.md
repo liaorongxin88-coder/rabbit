@@ -1141,6 +1141,13 @@ App analyzer 干净、428 测试通过；Admin lint/build 干净、65 单测通�
   取消后「重新打开安装」和实际安装。验收用 arm64 split 包被 Android 加了 ABI versionCode 偏移，
   安装后设备读到 `1.0.10-dev+6013`；这是测试制品特性，恢复原包后回到 4013。
 
-本轮新发现但未处理：`rabbits` 与 `feed_logs` 的 `operator_name` 仍为 NULL，尽管 `create_by`
-和操作事件中的 `operator_name` 快照正确；App 操作记录标题仍会显示 `RABBIT_CREATED` 一类原始枚举名。
-两项都不影响本轮业务闭环，但应作为下一轮数据一致性和展示修复单独处理。
+验收后两项遗留均已修复：
+
+- `Rabbit` 与 `FeedLog` 接入统一 `Stamped` 契约，Mapper 持久化 `operator_name`。V52 只回填 NULL，
+  优先使用不可变的操作事件快照，没有对应事件时才用 `create_by` 关联用户表。V51 填充库副本升级到
+  V52 用时 18 ms；7 条本轮新建兔只和 5 条空投喂记录全部补齐，已有非空值保持不变。另有 52 条
+  历史兔只没有可靠事件或用户来源，继续保持 NULL，避免伪造操作人。
+- 统一事件读服务为当前 31 个通用 `eventType` 提供中文标题，繁育事件继续使用
+  `ReproEventType`；未知类型标题回退为「操作」，机器值仍保留在 `eventType` 字段供排查。
+
+门禁：后端 clean 单测 980 通过；完整 e2e `_main52` 253 通过、3 跳过、0 失败。
