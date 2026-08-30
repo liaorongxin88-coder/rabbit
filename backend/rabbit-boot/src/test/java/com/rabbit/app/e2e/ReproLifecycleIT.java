@@ -510,7 +510,7 @@ public class ReproLifecycleIT extends E2eTestSupport {
         Assertions.assertEquals("北方种兔场", strOf(
             "select source_seller from rabbits where id = ?", doeId
         ));
-        Assertions.assertEquals("MATURE", strOf(
+        Assertions.assertNull(strOf(
             "select growth_stage from rabbits where id = ?", doeId
         ));
         Assertions.assertEquals("READY", strOf(

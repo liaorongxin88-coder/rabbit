@@ -21,11 +21,11 @@ public class ReplacementPromotionIT extends E2eTestSupport {
     private CommodityGrowthService commodityGrowthService;
 
     @Test
-    void directReplacementReminderStartsWhenTheReplacementIsCreated() {
+    void directReplacementReminderFallsBackToArrivalDateForOldClients() {
         UserSession owner = register("replacement_direct");
         long houseId = createHouse(owner, "直接新增后备兔舍", 1, 1, 1);
         long cageId = cageIds(owner, houseId).get(0);
-        long beforeCreate = System.currentTimeMillis();
+        long arrivalDate = System.currentTimeMillis() - 180L * 24 * 3600 * 1000;
 
         JsonNode rabbit = api.postOk("/api/rabbits", owner.token, houseId, obj(
             "cageId", cageId,
@@ -33,11 +33,10 @@ public class ReplacementPromotionIT extends E2eTestSupport {
             "gender", "0",
             "breed", "新西兰白兔",
             "arrivalMethod", "1",
-            "arrivalDate", beforeCreate - 180L * 24 * 3600 * 1000,
+            "arrivalDate", arrivalDate,
             "weight", 3.2,
             "requestId", requestId("replacement_direct_rabbit")
         ));
-        long afterCreate = System.currentTimeMillis();
         long rabbitId = rabbit.get("id").asLong();
 
         Date replacementDate = jdbc.queryForObject(
@@ -57,8 +56,7 @@ public class ReplacementPromotionIT extends E2eTestSupport {
         );
 
         Assertions.assertNotNull(replacementDate);
-        Assertions.assertTrue(replacementDate.getTime() >= beforeCreate - 1000);
-        Assertions.assertTrue(replacementDate.getTime() <= afterCreate + 1000);
+        Assertions.assertTrue(Math.abs(replacementDate.getTime() - arrivalDate) < 1000);
         Assertions.assertEquals(90, com.rabbit.app.util.DateUtil.daysBetween(replacementDate, matureDate));
         Assertions.assertTrue(Math.abs(matureDate.getTime() - taskDue.getTime()) < 1000);
     }
