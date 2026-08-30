@@ -21,6 +21,7 @@ import 'package:rabbit_flutter/src/ui/rabbits/sheets/abnormal.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/bind_batch.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/move.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/promotion.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/replacement.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/sale.dart';
 
@@ -168,6 +169,8 @@ class _RabbitDetailContent extends ConsumerWidget {
     final canOperate = canEdit && rabbit.isActive;
     final canConvertToReplacement =
         currentPermission.canControl && rabbit.isActive && rabbit.type == '2';
+    final canPromoteReplacement =
+        currentPermission.canControl && rabbit.isActive && rabbit.type == '1';
     final canSell = rabbit.isActive &&
         (rabbit.type == '0' || rabbit.type == '1') &&
         currentPermission.canAddSales;
@@ -238,6 +241,18 @@ class _RabbitDetailContent extends ConsumerWidget {
                 rabbit: rabbit,
               );
               if (converted && context.mounted) {
+                onRefresh();
+              }
+            }
+          : null,
+      onPromoteReplacement: canPromoteReplacement
+          ? () async {
+              final promoted = await showRabbitPromotionSheet(
+                context: context,
+                houseId: request.houseId,
+                rabbit: rabbit,
+              );
+              if (promoted && context.mounted) {
                 onRefresh();
               }
             }

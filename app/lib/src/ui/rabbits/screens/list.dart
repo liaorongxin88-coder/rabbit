@@ -284,6 +284,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
     this.onSale,
     this.onOutbound,
     this.onConvertToReplacement,
+    this.onPromoteReplacement,
     this.onChanged,
     this.onOpenBatch,
     this.onBindBatch,
@@ -300,6 +301,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
   final VoidCallback? onSale;
   final VoidCallback? onOutbound;
   final VoidCallback? onConvertToReplacement;
+  final VoidCallback? onPromoteReplacement;
   final VoidCallback? onChanged;
   final ValueChanged<int>? onOpenBatch;
   final VoidCallback? onBindBatch;
@@ -744,6 +746,13 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           onPressed: widget.onConvertToReplacement,
           icon: const Icon(Icons.change_circle_outlined),
           label: const Text('留种转后备'),
+        ),
+      if (widget.onPromoteReplacement != null)
+        OutlinedButton.icon(
+          key: ValueKey('rabbit-detail-promotion-${widget.rabbit.id}'),
+          onPressed: widget.onPromoteReplacement,
+          icon: const Icon(Icons.arrow_upward_outlined),
+          label: const Text('后备转种'),
         ),
       if (widget.onMove != null)
         OutlinedButton.icon(

@@ -1,12 +1,15 @@
 package com.rabbit.app.modules.rabbit.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,11 +25,16 @@ import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
+import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
 import com.rabbit.app.modules.rabbit.entity.ReplacementRecord;
 import com.rabbit.app.modules.rabbit.mapper.RabbitDepartureRecordMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
 import com.rabbit.app.modules.rabbit.mapper.RabbitStatusHistoryMapper;
 import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
+import com.rabbit.app.modules.repro.domain.ReproStage;
+import com.rabbit.app.modules.repro.service.OpenCycleCommand;
+import com.rabbit.app.modules.repro.service.OperatorNameResolver;
+import com.rabbit.app.modules.repro.service.ReproStateMachineService;
 import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
@@ -80,10 +88,25 @@ class RabbitServiceTest {
             ArgumentCaptor.forClass(ReplacementRecord.class);
         verify(fixture.replacementRecordMapper()).insert(replacement.capture());
         assertEquals(stageEnteredAt, replacement.getValue().getReplacementDate());
+        assertNull(rabbit.getGrowthStage());
+        assertNull(rabbit.getGrowthStageEnteredAt());
         assertEquals(
             DateUtil.plusDays(stageEnteredAt, 90),
             replacement.getValue().getExpectedMatureDate()
         );
+    }
+
+    @Test
+    void nonCommodityRabbitRejectsGrowthStage() {
+        CreationFixture fixture = creationFixture();
+        Rabbit rabbit = rabbit("0", DateUtil.now(), null);
+        rabbit.setGrowthStage("MATURE");
+
+        BizException error = assertThrows(BizException.class,
+            () -> fixture.service().createRabbit(7L, 8L, rabbit, null, "breeder-growth"));
+
+        assertEquals(400, error.getCode());
+        assertEquals("只有商品兔可以维护生长阶段", error.getMessage());
     }
 
     @Test
@@ -110,6 +133,41 @@ class RabbitServiceTest {
 
         assertEquals(400, error.getCode());
         assertEquals("进入当前阶段日期不能晚于今天", error.getMessage());
+    }
+
+    @Test
+    void earlyPromotionRequiresReasonBeforeChangingRabbit() {
+        PromotionFixture fixture = promotionFixture(DateUtil.plusDays(DateUtil.now(), 1));
+
+        BizException error = assertThrows(BizException.class,
+            () -> fixture.service().promoteReplacement(7L, 8L, 81L, null, "promote-early"));
+
+        assertEquals(400, error.getCode());
+        assertEquals("提前转种必须填写原因", error.getMessage());
+        verify(fixture.rabbitMapper(), never()).promoteReplacement(
+            anyLong(), anyLong(), anyString(), anyString()
+        );
+    }
+
+    @Test
+    void earlyDoePromotionKeepsIdentityAndOpensReadyCycle() {
+        PromotionFixture fixture = promotionFixture(DateUtil.plusDays(DateUtil.now(), 1));
+
+        fixture.service().promoteReplacement(
+            7L, 8L, 81L, "育种计划提前", "promote-ready"
+        );
+
+        verify(fixture.rabbitMapper()).promoteReplacement(8L, 81L, null, "7");
+        ArgumentCaptor<RabbitStatusHistory> history =
+            ArgumentCaptor.forClass(RabbitStatusHistory.class);
+        verify(fixture.historyMapper()).insert(history.capture());
+        assertEquals("提前转种：育种计划提前", history.getValue().getReason());
+        ArgumentCaptor<OpenCycleCommand> command =
+            ArgumentCaptor.forClass(OpenCycleCommand.class);
+        verify(fixture.stateMachine()).openCycleAt(command.capture());
+        assertEquals(81L, command.getValue().motherRabbitId());
+        assertNull(command.getValue().batchId());
+        assertEquals(ReproStage.READY, command.getValue().targetStage());
     }
 
     @Test
@@ -324,6 +382,68 @@ class RabbitServiceTest {
         return new CreationFixture(service, replacementRecordMapper, workTaskWriter);
     }
 
+    private static PromotionFixture promotionFixture(Date matureAt) {
+        RabbitMapper rabbitMapper = mock(RabbitMapper.class);
+        CageMapper cageMapper = mock(CageMapper.class);
+        ReplacementRecordMapper replacementRecordMapper = mock(ReplacementRecordMapper.class);
+        RabbitStatusHistoryMapper historyMapper = mock(RabbitStatusHistoryMapper.class);
+        RequestDedupService dedup = mock(RequestDedupService.class);
+        WorkTaskWriter workTaskWriter = mock(WorkTaskWriter.class);
+        HouseService houseService = mock(HouseService.class);
+        ReproStateMachineService stateMachine = mock(ReproStateMachineService.class);
+        OperatorNameResolver operatorNameResolver = mock(OperatorNameResolver.class);
+
+        Rabbit rabbit = rabbit("1", DateUtil.now(), null);
+        rabbit.setId(81L);
+        rabbit.setHouseId(8L);
+        rabbit.setGender("0");
+        rabbit.setIsActive(Boolean.TRUE);
+        ReplacementRecord replacement = new ReplacementRecord();
+        replacement.setId(91L);
+        replacement.setExpectedMatureDate(matureAt);
+        Cage cage = new Cage();
+        cage.setId(11L);
+        cage.setHouseId(8L);
+        cage.setIsEnabled(Boolean.TRUE);
+        when(rabbitMapper.selectByIdsForUpdate(8L, List.of(81L)))
+            .thenReturn(List.of(rabbit));
+        when(replacementRecordMapper.selectPendingByRabbitForUpdate(8L, 81L))
+            .thenReturn(replacement);
+        when(cageMapper.selectByIdForUpdate(8L, 11L)).thenReturn(cage);
+        when(rabbitMapper.selectActiveByCageForUpdate(8L, 11L))
+            .thenReturn(List.of(rabbit));
+        when(rabbitMapper.promoteReplacement(8L, 81L, null, "7")).thenReturn(1);
+        when(cageMapper.updateRabbitCountAndStatus(8L, 11L, 1, "1", "7"))
+            .thenReturn(1);
+        when(replacementRecordMapper.markPromoted(
+            org.mockito.ArgumentMatchers.eq(8L),
+            org.mockito.ArgumentMatchers.eq(91L),
+            any(Date.class),
+            org.mockito.ArgumentMatchers.eq("7")
+        )).thenReturn(1);
+        when(operatorNameResolver.resolve(7L)).thenReturn("operator");
+
+        RabbitService service = new RabbitService(
+            rabbitMapper,
+            cageMapper,
+            mock(SettingService.class),
+            replacementRecordMapper,
+            mock(BatchRabbitMapper.class),
+            mock(BatchMapper.class),
+            mock(BreedingCycleMapper.class),
+            null,
+            stateMachine,
+            operatorNameResolver,
+            historyMapper,
+            null,
+            dedup,
+            workTaskWriter,
+            houseService,
+            10
+        );
+        return new PromotionFixture(service, rabbitMapper, historyMapper, stateMachine);
+    }
+
     private static Rabbit rabbit(String type, Date arrivalDate, Date growthStageEnteredAt) {
         Rabbit rabbit = new Rabbit();
         rabbit.setCageId(11L);
@@ -338,6 +458,14 @@ class RabbitServiceTest {
         RabbitService service,
         ReplacementRecordMapper replacementRecordMapper,
         WorkTaskWriter workTaskWriter
+    ) {
+    }
+
+    private record PromotionFixture(
+        RabbitService service,
+        RabbitMapper rabbitMapper,
+        RabbitStatusHistoryMapper historyMapper,
+        ReproStateMachineService stateMachine
     ) {
     }
 }

@@ -11,8 +11,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/departure.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/promotion.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,13 +81,15 @@ void main() {
     expect(result.single.replacementRecordId, 901);
   });
 
-  test('mature replacement promotion uses its dedicated endpoint', () async {
+  test('replacement promotion sends its reason to the dedicated endpoint',
+      () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
 
     await repository.promoteReplacement(
       houseId: 8,
       rabbitId: 801,
+      reason: '育种计划调整',
       requestId: 'promote-request-1',
     );
 
@@ -93,7 +97,79 @@ void main() {
       adapter.requests.single.path,
       '/api/rabbits/801/promote-breeder',
     );
-    expect(adapter.requests.single.body, {'requestId': 'promote-request-1'});
+    expect(adapter.requests.single.body, {
+      'requestId': 'promote-request-1',
+      'reason': '育种计划调整',
+    });
+  });
+
+  testWidgets('promotion sheet requires reason and confirmation',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(
+      tester.platformDispatcher.clearTextScaleFactorTestValue,
+    );
+    final adapter = _CapturingAdapter();
+    final repository = _repository(adapter);
+    const rabbit = Rabbit(
+      id: 801,
+      houseId: 8,
+      cageId: 19,
+      motherId: null,
+      type: '1',
+      gender: '0',
+      breed: '新西兰白兔',
+      arrivalMethod: '0',
+      arrivalDate: null,
+      weight: 3.2,
+      isActive: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [rabbitRepositoryProvider.overrideWithValue(repository)],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                key: const ValueKey('open-promotion-sheet'),
+                onPressed: () => showRabbitPromotionSheet(
+                  context: context,
+                  houseId: 8,
+                  rabbit: rabbit,
+                ),
+                child: const Text('打开'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-promotion-sheet')));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('rabbit-promotion-submit'));
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-promotion-reason')),
+      '育种计划提前',
+    );
+    await tester.tap(find.byKey(const ValueKey('rabbit-promotion-confirm')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(adapter.requests, hasLength(1));
+    expect(adapter.requests.single.path, '/api/rabbits/801/promote-breeder');
+    expect(adapter.requests.single.body['reason'], '育种计划提前');
+    expect(adapter.requests.single.body['requestId'], isNotEmpty);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

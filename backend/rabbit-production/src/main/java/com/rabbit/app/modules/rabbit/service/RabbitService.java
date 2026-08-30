@@ -238,7 +238,7 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
-            normalizeGrowthStageEnteredAt(rabbit);
+            Date replacementStageEnteredAt = normalizeEntryStageDates(rabbit);
             validateMotherReference(houseId, rabbit);
             validateDoeEntryProfile(houseId, rabbit, reproEntry);
             lockReproBatchIfRequested(houseId, reproEntry);
@@ -293,7 +293,9 @@ public class RabbitService {
             h.setReason("录入兔子" + stageAuditSuffix(rabbit.getGrowthStage(), rabbit.getReproductiveStage()));
             rabbitStatusHistoryMapper.insert(h);
 
-            scheduleEntryLifecycleTask(userId, houseId, rabbit);
+            scheduleEntryLifecycleTask(
+                userId, houseId, rabbit, replacementStageEnteredAt
+            );
 
             // 入轨与录入同事务：要么兔子和它的生产周期一起存在，要么都不存在。
             // 分两步会留下“已入栏但永远进不了生产流程”的兔，那正是建批次曾经的缺陷。
@@ -307,21 +309,31 @@ public class RabbitService {
         }
     }
 
-    private void normalizeGrowthStageEnteredAt(Rabbit rabbit) {
+    private Date normalizeEntryStageDates(Rabbit rabbit) {
         if (!"1".equals(rabbit.getType()) && !"2".equals(rabbit.getType())) {
-            return;
+            rabbit.setGrowthStageEnteredAt(null);
+            return null;
         }
-        if (rabbit.getGrowthStageEnteredAt() == null) {
-            rabbit.setGrowthStageEnteredAt(
-                rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now()
-            );
-        }
-        if (rabbit.getGrowthStageEnteredAt().after(DateUtil.now())) {
+        Date enteredAt = rabbit.getGrowthStageEnteredAt() != null
+            ? rabbit.getGrowthStageEnteredAt()
+            : rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now();
+        if (enteredAt.after(DateUtil.now())) {
             throw new BizException(400, "进入当前阶段日期不能晚于今天");
         }
+        if ("2".equals(rabbit.getType())) {
+            rabbit.setGrowthStageEnteredAt(enteredAt);
+            return null;
+        }
+        rabbit.setGrowthStageEnteredAt(null);
+        return "1".equals(rabbit.getType()) ? enteredAt : null;
     }
 
-    private void scheduleEntryLifecycleTask(Long userId, Long houseId, Rabbit rabbit) {
+    private void scheduleEntryLifecycleTask(
+        Long userId,
+        Long houseId,
+        Rabbit rabbit,
+        Date replacementStageEnteredAt
+    ) {
         String operator = String.valueOf(userId);
         GlobalSetting setting = settingService.getEffectiveSetting(userId, houseId);
         if ("2".equals(rabbit.getType())) {
@@ -342,7 +354,7 @@ public class RabbitService {
         if (!"1".equals(rabbit.getType())) {
             return;
         }
-        Date startedAt = rabbit.getGrowthStageEnteredAt();
+        Date startedAt = replacementStageEnteredAt;
         ReplacementRecord replacement = new ReplacementRecord();
         replacement.setHouseId(houseId);
         replacement.setRabbitId(rabbit.getId());
@@ -475,11 +487,19 @@ public class RabbitService {
                 }
             }
 
-            String nextGrowthStage = normalizeStage(growthStage);
-            String nextReproductiveStage = normalizeStage(reproductiveStage);
-            if (nextGrowthStage == null) {
-                nextGrowthStage = r.getGrowthStage();
+            String requestedGrowthStage = normalizeStage(growthStage);
+            String nextGrowthStage;
+            if ("2".equals(r.getType())) {
+                nextGrowthStage = requestedGrowthStage == null
+                    ? r.getGrowthStage()
+                    : requestedGrowthStage;
+            } else {
+                if (requestedGrowthStage != null) {
+                    throw new BizException(400, "只有商品兔可以维护生长阶段");
+                }
+                nextGrowthStage = null;
             }
+            String nextReproductiveStage = normalizeStage(reproductiveStage);
             if (nextReproductiveStage == null) {
                 nextReproductiveStage = r.getReproductiveStage();
             }
@@ -982,7 +1002,7 @@ public class RabbitService {
         return new ReplacementConversionResponse(List.copyOf(items));
     }
 
-    /** 后备兔成熟后原笼转种兔笼；母兔同时进入无批次的待催情周期。 */
+    /** 后备兔原笼转种；成熟日前必须记录原因，母兔同时进入无批次 READY 周期。 */
     @TrackedOperation(
         code = "rabbit.promoteReplacement", eventType = "RABBIT_PROMOTED", targetType = "RABBIT",
         targetId = "#rabbitId"
@@ -992,6 +1012,7 @@ public class RabbitService {
         Long userId,
         Long houseId,
         Long rabbitId,
+        String reason,
         String requestId
     ) {
         houseService.assertHousePermission(userId, houseId, "control");
@@ -1015,9 +1036,13 @@ public class RabbitService {
                 throw new BizException(409, "该后备兔没有待处理的成熟记录");
             }
             Date now = DateUtil.now();
-            if (replacement.getExpectedMatureDate() == null
-                || replacement.getExpectedMatureDate().after(now)) {
-                throw new BizException(409, "该后备兔尚未达到成熟日期");
+            if (replacement.getExpectedMatureDate() == null) {
+                throw new BizException(409, "该后备兔缺少成熟日期，无法转种");
+            }
+            String normalizedReason = reason == null ? "" : reason.trim();
+            boolean earlyPromotion = replacement.getExpectedMatureDate().after(now);
+            if (earlyPromotion && normalizedReason.isEmpty()) {
+                throw new BizException(400, "提前转种必须填写原因");
             }
 
             Cage cage = cageMapper.selectByIdForUpdate(houseId, rabbit.getCageId());
@@ -1036,6 +1061,10 @@ public class RabbitService {
             ) != 1) {
                 throw new BizException(409, "后备兔状态已变化，请刷新后重试");
             }
+            rabbit.setType("0");
+            rabbit.setGrowthStage(null);
+            rabbit.setGrowthStageEnteredAt(null);
+            rabbit.setReproductiveStage(reproductiveStage);
             if (cageMapper.updateRabbitCountAndStatus(
                 houseId, cage.getId(), 1, "1", operator
             ) != 1) {
@@ -1056,10 +1085,26 @@ public class RabbitService {
             history.setFromStatus("后备兔");
             history.setToStatus("1".equals(rabbit.getGender()) ? "种公兔" : "种母兔");
             history.setChangeTime(now);
-            history.setReason("后备成熟转种");
+            history.setReason(earlyPromotion
+                ? "提前转种：" + normalizedReason
+                : normalizedReason.isEmpty()
+                    ? "后备成熟转种"
+                    : "后备成熟转种：" + normalizedReason);
             history.setRelatedRecordId(replacement.getId());
             history.setRelatedRecordTable("replacement_records");
             rabbitStatusHistoryMapper.insert(history);
+
+            if ("0".equals(rabbit.getGender())) {
+                openReproEntryIfRequested(
+                    userId,
+                    houseId,
+                    rabbit,
+                    new ReproEntry(
+                        ReproStage.READY.name(), null, now, null, null, null
+                    ),
+                    requestId
+                );
+            }
 
             requestDedupService.markDone(houseId, userId, api, requestId);
         } catch (RuntimeException e) {
@@ -1258,9 +1303,8 @@ public class RabbitService {
         if ("2".equals(type) && growthStage == null) {
             growthStage = CommodityGrowthStage.ADAPTATION.name();
         }
-        if ("0".equals(type) && "0".equals(gender)) {
-            // 种母兔不让用户维护成长阶段；入栏即按成熟可售口径记录。
-            growthStage = CommodityGrowthStage.MATURE.name();
+        if (!"2".equals(type) && growthStage != null) {
+            throw new BizException(400, "只有商品兔可以维护生长阶段");
         }
         if (growthStage != null) {
             try {

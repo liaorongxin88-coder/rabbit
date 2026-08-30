@@ -422,6 +422,10 @@ void main() {
     expect(find.text('入场日期'), findsOneWidget);
     expect(find.text('进入后备阶段日期'), findsOneWidget);
     expect(
+      find.byKey(const ValueKey('rabbit-growth-stage')),
+      findsNothing,
+    );
+    expect(
       find.byKey(const ValueKey('rabbit-growth-stage-entered-at')),
       findsOneWidget,
     );

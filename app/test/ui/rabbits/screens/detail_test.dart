@@ -83,8 +83,7 @@ void main() {
     expect(find.text('兔只列表页'), findsOneWidget);
   });
 
-  testWidgets('active breeder and replacement rabbits use the sale action',
-      (tester) async {
+  testWidgets('active breeder uses the sale action', (tester) async {
     final router = _router();
     addTearDown(router.dispose);
 
@@ -97,6 +96,16 @@ void main() {
       find.byKey(const ValueKey('rabbit-detail-replacement-31')),
       findsNothing,
     );
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-promotion-31')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('active replacement exposes sale and promotion actions',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
 
     await tester.pumpWidget(_app(router: router, rabbit: _activeReplacement));
     await tester.pumpAndSettle();
@@ -105,6 +114,30 @@ void main() {
         find.byKey(const ValueKey('rabbit-detail-outbound-31')), findsNothing);
     expect(
       find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-promotion-31')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('replacement promotion requires control permission',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        router: router,
+        rabbit: _activeReplacement,
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-promotion-31')),
       findsNothing,
     );
   });
@@ -207,6 +240,10 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('rabbit-detail-replacement-31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-promotion-31')),
       findsNothing,
     );
     expect(tester.takeException(), isNull);

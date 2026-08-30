@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS rabbits (
   arrival_date DATETIME,
   weight DOUBLE,
   growth_stage VARCHAR(20),
+  growth_stage_entered_at DATETIME,
   reproductive_stage VARCHAR(20),
   current_stage VARCHAR(20),
   current_cycle_id BIGINT,
@@ -226,7 +227,11 @@ CREATE TABLE IF NOT EXISTS rabbits (
   UNIQUE KEY uk_rabbit_req (house_id, request_id),
   UNIQUE KEY uk_rabbits_house_active_breeding_cage (house_id, active_breeding_cage_id),
   CONSTRAINT fk_rabbits_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
-  CONSTRAINT fk_rabbits_cage FOREIGN KEY (cage_id) REFERENCES cages (id)
+  CONSTRAINT fk_rabbits_cage FOREIGN KEY (cage_id) REFERENCES cages (id),
+  CONSTRAINT ck_rabbits_commodity_growth_stage CHECK (
+    type = '2'
+    OR (growth_stage IS NULL AND growth_stage_entered_at IS NULL)
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS rabbit_departure_records (

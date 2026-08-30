@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  isReplacementPromotionTarget,
   rabbitArrivalMethodLabel,
   rabbitGenderLabel,
   rabbitStageSummary,
@@ -92,6 +93,12 @@ test('editable legacy reproductive stages stay limited by rabbit type and gender
   assert.deepEqual(reproductiveOptions('0', '1'), [['READY', '可配'], ['RESTING', '休整']])
   assert.deepEqual(reproductiveOptions('1', '0'), [['RESERVE', '后备']])
   assert.deepEqual(reproductiveOptions('2', '0'), [])
+})
+
+test('replacement promotion targets every active replacement rabbit', () => {
+  assert.equal(isReplacementPromotionTarget({ type: '1', isActive: true }), true)
+  assert.equal(isReplacementPromotionTarget({ type: '1', isActive: false }), false)
+  assert.equal(isReplacementPromotionTarget({ type: '2', isActive: true }), false)
 })
 
 test('arrival method labels preserve unknown server values', () => {

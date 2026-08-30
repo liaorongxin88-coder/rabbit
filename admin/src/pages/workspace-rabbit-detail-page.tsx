@@ -60,6 +60,7 @@ import {
 import { isIndividualSaleRabbit } from "@/lib/rabbit-sale";
 import { hasPermission, useWorkspace } from "@/lib/workspace";
 import {
+  isReplacementPromotionTarget,
   rabbitArrivalMethodLabel,
   rabbitGenderLabel,
   rabbitStageSummary,
@@ -216,8 +217,8 @@ export function WorkspaceRabbitDetailPage() {
 
   const cage = cages.find((item) => item.id === rabbit.cageId);
   const stageSummary = rabbitStageSummary(rabbit, reproStageLabels);
-  const isMatureReplacement =
-    rabbit.isActive && rabbit.type === "1" && rabbit.growthStage === "MATURE";
+  const canPromoteReplacement =
+    canControl && isReplacementPromotionTarget(rabbit);
   const canRetainAsReplacement =
     canControl && rabbit.isActive && rabbit.type === "2";
   const isIndividualSaleTarget =
@@ -263,10 +264,9 @@ export function WorkspaceRabbitDetailPage() {
                 留种转后备
               </Button>
             ) : null}
-            {isMatureReplacement ? (
+            {canPromoteReplacement ? (
               <Button
                 variant="outline"
-                disabled={!canControl}
                 onClick={() => setPromotionOpen(true)}
               >
                 <ArrowUpRightIcon data-icon="inline-start" />

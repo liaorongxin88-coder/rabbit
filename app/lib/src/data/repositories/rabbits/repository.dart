@@ -531,12 +531,16 @@ class RabbitRepository {
   Future<void> promoteReplacement({
     required int houseId,
     required int rabbitId,
+    String reason = '',
     String? requestId,
   }) {
     return _api.post<void>(
       '/api/rabbits/$rabbitId/promote-breeder',
       houseId: houseId,
-      body: {'requestId': requestId ?? _uuid.v4()},
+      body: {
+        'requestId': requestId ?? _uuid.v4(),
+        if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
       decode: (_) {},
     );
   }

@@ -45,6 +45,12 @@ export function rabbitTypeLabel(rabbit: Pick<Rabbit, 'type' | 'gender'>) {
   return rabbitTypeLabels[rabbit.type] ?? rabbit.type ?? '未分类'
 }
 
+export function isReplacementPromotionTarget(
+  rabbit: Pick<Rabbit, 'isActive' | 'type'>,
+) {
+  return rabbit.isActive && rabbit.type === '1'
+}
+
 export function rabbitGenderLabel(gender: string) {
   return gender === '0' ? '母' : gender === '1' ? '公' : '未知'
 }

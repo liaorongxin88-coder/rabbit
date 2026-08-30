@@ -214,10 +214,14 @@ export function promoteReplacementRabbit(
   houseId: number,
   rabbitId: number,
   promotionRequestId: string,
+  reason?: string,
 ) {
   return workspacePostJson<void>(
     `/api/rabbits/${rabbitId}/promote-breeder`,
-    { requestId: promotionRequestId },
+    {
+      requestId: promotionRequestId,
+      ...(reason?.trim() ? { reason: reason.trim() } : {}),
+    },
     { houseId },
   );
 }

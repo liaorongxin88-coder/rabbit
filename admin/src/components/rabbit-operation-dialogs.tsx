@@ -164,7 +164,7 @@ export function RabbitFormDialog({
     setWeight(rabbit?.weight?.toString() ?? "");
     setQuantity("1");
     setTotalWeight("");
-    setGrowthStage(rabbit?.growthStage ?? "");
+    setGrowthStage(nextType === "2" ? (rabbit?.growthStage ?? "") : "");
     setReproductiveStage(
       rabbit?.reproductiveStage ??
         (rabbit ? "" : defaultReproductiveStage(nextType, nextGender)),
@@ -221,6 +221,7 @@ export function RabbitFormDialog({
 
   function handleTypeChange(nextType: string) {
     setType(nextType);
+    if (nextType !== "2") setGrowthStage("");
     resetReproductiveStage(nextType, gender);
     if (nextType !== "0" || gender !== "0") {
       setReproStage(NO_REPRO_ENTRY);
@@ -294,7 +295,7 @@ export function RabbitFormDialog({
       motherId: motherId ? Number(motherId) : undefined,
       arrivalDate: farmBusinessDateToIso(arrivalDate),
       weight: weight ? Number(weight) : undefined,
-      growthStage: growthStage || undefined,
+      growthStage: type === "2" ? growthStage || undefined : undefined,
       reproductiveStage:
         reproductiveStageOptions.length === 0
           ? undefined
@@ -474,23 +475,32 @@ export function RabbitFormDialog({
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="rabbit-growth-stage">生长阶段</FieldLabel>
-                <Select value={growthStage} onValueChange={setGrowthStage}>
-                  <SelectTrigger id="rabbit-growth-stage">
-                    <SelectValue placeholder="未填写" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {growthStageOptions.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
+              {type === "2" ? (
+                <Field>
+                  <FieldLabel htmlFor="rabbit-growth-stage">生长阶段</FieldLabel>
+                  <Select value={growthStage} onValueChange={setGrowthStage}>
+                    <SelectTrigger id="rabbit-growth-stage">
+                      <SelectValue placeholder="未填写" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {growthStageOptions.map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel>生长阶段</FieldLabel>
+                  <p className="min-h-9 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    仅商品兔记录生长阶段
+                  </p>
+                </Field>
+              )}
               {reproductiveStageOptions.length === 0 ? (
                 <Field>
                   <FieldLabel>繁殖阶段</FieldLabel>
@@ -1186,21 +1196,30 @@ export function RabbitPromotionDialog({
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
+  const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const pendingRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!rabbit) return;
+    setReason("");
+    setConfirmed(false);
     pendingRequestId.current = null;
   }, [rabbit]);
 
   async function handleSubmit() {
-    if (!rabbit || !houseId) return;
+    if (!rabbit || !houseId || !confirmed || !reason.trim()) return;
     const promotionRequestId = pendingRequestId.current ?? requestId();
     pendingRequestId.current = promotionRequestId;
     setSaving(true);
     try {
-      await promoteReplacementRabbit(houseId, rabbit.id, promotionRequestId);
+      await promoteReplacementRabbit(
+        houseId,
+        rabbit.id,
+        promotionRequestId,
+        reason,
+      );
       pendingRequestId.current = null;
       toast.success(`兔 #${rabbit.id} 已转为种兔`);
       onOpenChange(false);
@@ -1219,9 +1238,41 @@ export function RabbitPromotionDialog({
           <DialogTitle>后备兔转种兔</DialogTitle>
           <DialogDescription>
             兔 #{rabbit?.id ?? ""}{" "}
-            将转为种兔，当前笼位会同步设为种兔笼。符合条件的母兔会进入待催情生产周期。
+            转种后保留原兔 ID 和笼位。母兔进入待催情生产流程，公兔进入可配状态。
           </DialogDescription>
         </DialogHeader>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="replacement-promotion-reason">
+              转种原因
+            </FieldLabel>
+            <Textarea
+              id="replacement-promotion-reason"
+              value={reason}
+              maxLength={200}
+              placeholder="例如：育种计划调整"
+              onChange={(event) => setReason(event.target.value)}
+            />
+            <FieldDescription>
+              成熟日前提前转种时，服务端会核验并记录此原因。
+            </FieldDescription>
+          </Field>
+          <Field>
+            <label
+              className="flex items-start gap-3 text-sm"
+              htmlFor="replacement-promotion-confirm"
+            >
+              <input
+                id="replacement-promotion-confirm"
+                type="checkbox"
+                className="mt-1"
+                checked={confirmed}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              <span>我确认转种信息无误，并了解生产流程会同步调整。</span>
+            </label>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button
             variant="outline"
@@ -1230,7 +1281,10 @@ export function RabbitPromotionDialog({
           >
             取消
           </Button>
-          <Button disabled={saving} onClick={() => void handleSubmit()}>
+          <Button
+            disabled={saving || !confirmed || !reason.trim()}
+            onClick={() => void handleSubmit()}
+          >
             {saving ? (
               <Spinner data-icon="inline-start" />
             ) : (

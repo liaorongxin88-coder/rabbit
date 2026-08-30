@@ -1554,7 +1554,6 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
   Widget _buildStageFields(BuildContext context) {
     final reproductiveOptions = _reproductiveStageOptions;
     final fixedReproductiveStage = _type == '1';
-    final breedingDoe = _type == '0' && _gender == '0';
     // 种母兔的选项为空（阶段由生产流程维护），不能再渲染一个空下拉给用户点。
     final hasReproductiveStage = _type != '2' &&
         (fixedReproductiveStage || reproductiveOptions.isNotEmpty);
@@ -1568,7 +1567,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           '记录入栏时状态；后续繁殖进度由批次流程维护。',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        if (!breedingDoe) ...[
+        if (_type == '2') ...[
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             key: const ValueKey('rabbit-growth-stage'),
@@ -1587,7 +1586,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                 ? null
                 : (value) => setState(() => _growthStage = value),
           ),
-          if (!_isEdit && (_type == '1' || _type == '2')) ...[
+          if (!_isEdit) ...[
             const SizedBox(height: 12),
             _buildDateField(
               key: const ValueKey('rabbit-growth-stage-entered-at'),
@@ -1597,6 +1596,14 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   setState(() => _growthStageEnteredAt = value),
             ),
           ],
+        ] else if (!_isEdit && _type == '1') ...[
+          const SizedBox(height: 10),
+          _buildDateField(
+            key: const ValueKey('rabbit-growth-stage-entered-at'),
+            label: _growthStageDateLabel,
+            value: _growthStageEnteredAt,
+            onPicked: (value) => setState(() => _growthStageEnteredAt = value),
+          ),
         ],
         if (hasReproductiveStage) ...[
           const SizedBox(height: 12),
@@ -2112,7 +2119,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               arrivalMethod: _arrivalMethod,
               arrivalDate: _arrivalDate,
               weight: double.tryParse(_weightController.text.trim()),
-              growthStage: _growthStage,
+              growthStage: _type == '2' ? _growthStage : null,
               reproductiveStage: _reproductiveStage,
             );
       } else if (_isBatchEntry) {
@@ -2131,7 +2138,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                   sourceSeller: _sourceSellerController.text,
                   motherId: int.tryParse(_motherIdController.text.trim()),
                   arrivalDate: _arrivalDate!,
-                  growthStage: _growthStage,
+                  growthStage: _type == '2' ? _growthStage : null,
                   growthStageEnteredAt: _growthStageEnteredAt,
                   reproductiveStage: _reproductiveStage,
                   requestId: requestId,
@@ -2160,7 +2167,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               motherId: int.tryParse(_motherIdController.text.trim()),
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
-              growthStage: _growthStage,
+              growthStage: _type == '2' ? _growthStage : null,
               growthStageEnteredAt: _growthStageEnteredAt,
               reproductiveStage: _reproductiveStage,
               reproStage: _canOpenReproEntry ? _reproStage : null,

@@ -173,7 +173,9 @@ public class RabbitController {
     ) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "control");
-        rabbitService.promoteReplacement(userId, houseId, id, req.getRequestId());
+        rabbitService.promoteReplacement(
+            userId, houseId, id, req.getReason(), req.getRequestId()
+        );
         return ApiResponse.ok(null);
     }
 
