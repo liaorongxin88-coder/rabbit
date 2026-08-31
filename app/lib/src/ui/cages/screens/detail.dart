@@ -111,6 +111,7 @@ class _DetailBody extends ConsumerWidget {
     }
 
     return ListView(
+      key: const ValueKey('cage-detail-scroll'),
       padding: AppSpacing.pagePadding,
       children: [
         _CageIdentityBand(summary: summary, houseName: houseName),

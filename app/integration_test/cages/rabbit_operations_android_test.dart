@@ -109,17 +109,16 @@ void main() {
       // ── 一、多只商品兔笼里挑一只登记死亡（recvrpTL16SBwu）
       // 这是原单点名的场景：单只兔笼可以直接标记，多只商品兔笼必须能在笼位详情里挑。
       await _openCageAt(tester, 3);
-      await _waitFor(tester, _rabbitRow(_commodityARabbitId));
+      await _scrollToRabbitRow(tester, _commodityARabbitId);
       expect(_rabbitRow(_commodityBRabbitId), findsOneWidget,
           reason: '笼内两只商品兔都应列出，才谈得上「挑一只」');
       await _takeScreenshot(binding, tester, '02-commodity-cage-two-rabbits');
 
       await _openRabbitDetail(tester, _commodityARabbitId);
       await _takeScreenshot(binding, tester, '02b-rabbit-detail');
-      await tester.tap(
-        find.byKey(
-          const ValueKey('rabbit-detail-departure-$_commodityARabbitId'),
-        ),
+      await _tapAndSettle(
+        tester,
+        const ValueKey('rabbit-detail-departure-$_commodityARabbitId'),
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-departure-submit')));
@@ -155,15 +154,16 @@ void main() {
       // ── 二、种母兔与后备兔对调笼位（recvqh5TC8wd3y 的第三条规则）
       await _backToCageGrid(tester);
       await _openCageAt(tester, 1);
-      await _waitFor(tester, _rabbitRow(_doeRabbitId));
+      await _scrollToRabbitRow(tester, _doeRabbitId);
       // 阶段能显示，才算 recvsrEA6TRuK6 的投影列真的接上了调用方。
       expect(find.textContaining('生产阶段：'), findsWidgets,
           reason: 'current_stage 应出现在笼内兔只行');
       await _takeScreenshot(binding, tester, '06-doe-cage-with-stage');
 
       await _openRabbitDetail(tester, _doeRabbitId);
-      await tester.tap(
-        find.byKey(const ValueKey('rabbit-detail-move-$_doeRabbitId')),
+      await _tapAndSettle(
+        tester,
+        const ValueKey('rabbit-detail-move-$_doeRabbitId'),
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
@@ -186,16 +186,17 @@ void main() {
       // 对调后原笼里站的应该是后备兔。
       await _backToCageDetail(tester);
       await _pumpUntilSettled(tester);
-      await _waitFor(tester, _rabbitRow(_reserveRabbitId));
+      await _scrollToRabbitRow(tester, _reserveRabbitId);
       expect(_rabbitRow(_doeRabbitId), findsNothing, reason: '种母兔已换到后备兔原来的笼位');
 
       // ── 三、商品兔并入未满的商品兔笼（recvqh5TC8wd3y 的第二条规则）
       await _backToCageGrid(tester);
       await _openCageAt(tester, 4);
-      await _waitFor(tester, _rabbitRow(_commodityCRabbitId));
+      await _scrollToRabbitRow(tester, _commodityCRabbitId);
       await _openRabbitDetail(tester, _commodityCRabbitId);
-      await tester.tap(
-        find.byKey(const ValueKey('rabbit-detail-move-$_commodityCRabbitId')),
+      await _tapAndSettle(
+        tester,
+        const ValueKey('rabbit-detail-move-$_commodityCRabbitId'),
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-move-cage-submit')));
@@ -210,8 +211,11 @@ void main() {
       if (_weaningRecordId > 0) {
         await _backToCageGrid(tester);
         await _openCageAt(tester, 4);
-        await _tapAndSettle(tester, const ValueKey('cage-rabbit-entry'));
-        await _waitFor(tester, find.text('选择兔只来源'));
+        await _tapCageDetailAction(
+          tester,
+          const ValueKey('cage-rabbit-entry'),
+        );
+        await _waitFor(tester, find.text('选择兔子录入方式'));
         await tester.tap(
           find.byKey(const ValueKey('rabbit-intake-production')),
         );
@@ -255,8 +259,11 @@ void main() {
       // ── 五、录入种母兔并直接入轨（recvsrnEJ8bKrk / recvsrpMlvu2SC）
       await _backToCageGrid(tester);
       await _openCageAt(tester, 6);
-      await _tapAndSettle(tester, const ValueKey('cage-rabbit-entry'));
-      await _waitFor(tester, find.text('选择兔只来源'));
+      await _tapCageDetailAction(
+        tester,
+        const ValueKey('cage-rabbit-entry'),
+      );
+      await _waitFor(tester, find.text('选择兔子录入方式'));
       await tester.tap(find.byKey(const ValueKey('rabbit-intake-purchase')));
       await _waitFor(tester, find.text('请选择录入兔子类型'));
       await tester.tap(find.text('种公兔/种母兔'));
@@ -292,16 +299,18 @@ void main() {
       await tester.tap(cageOpsBatch.last);
       await tester.pumpAndSettle();
 
-      // 待摸胎要补录配种日期，字段随字典出现。
-      final matingDate = find.byKey(const ValueKey('rabbit-mating-date'));
-      expect(matingDate, findsOneWidget, reason: '待摸胎必须要求配种日期');
-      await tester.ensureVisible(matingDate);
-      await tester.tap(matingDate);
-      // 日期选择器的确定是 TextButton，表单提交按钮同样写着「确定」但是 ElevatedButton，
-      // 只按文本找会命中两个。
-      final pickerConfirm = find.widgetWithText(TextButton, '确定');
-      await _waitFor(tester, pickerConfirm);
-      await tester.tap(pickerConfirm.last);
+      // 待摸胎所需事实由后端字典决定；当前规则要求选定配种公兔，
+      // 配种方式默认自然交配，进入阶段日期默认当天。
+      final matingMale = find.byKey(
+        const ValueKey('rabbit-entry-mating-male'),
+      );
+      await _waitFor(tester, matingMale);
+      await tester.ensureVisible(matingMale);
+      await tester.tap(matingMale);
+      await tester.pumpAndSettle();
+      final cageOpsSire = find.textContaining('CAGEOPS-SIRE');
+      await _waitFor(tester, cageOpsSire);
+      await tester.tap(cageOpsSire.last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(reproBatch);
       await tester.pumpAndSettle();
@@ -315,6 +324,16 @@ void main() {
         tester,
         const ValueKey('rabbit-entry-breed'),
         'CAGEOPS-NEWDOE',
+      );
+      await _enterField(
+        tester,
+        const ValueKey('rabbit-entry-weight'),
+        '4.20',
+      );
+      await _enterField(
+        tester,
+        const ValueKey('rabbit-entry-source-seller'),
+        'CAGEOPS-FIXTURE',
       );
       await _tapSubmit(tester, const ValueKey('rabbit-entry-submit'));
       // 提示语要说清楚入的是哪个阶段，否则人不知道还要不要再去生产流程里补一次。
@@ -336,12 +355,14 @@ void main() {
       await _openCageAt(tester, 1);
       // 对调把后备兔放进了原种兔笼，这里是它唯一的断言点：
       // 接下来碰标签会把它再搬走，终态的数据库元组就看不到它曾在 C1 了。
+      await _scrollToRabbitRow(tester, _reserveRabbitId);
       expect(find.byKey(const ValueKey('cage-rabbit-row-$_reserveRabbitId')),
           findsOneWidget,
           reason: '对调后后备兔应当在原种兔笼 1-1-1 里');
       await _openRabbitDetail(tester, _reserveRabbitId);
-      await tester.tap(
-        find.byKey(const ValueKey('rabbit-detail-move-$_reserveRabbitId')),
+      await _tapAndSettle(
+        tester,
+        const ValueKey('rabbit-detail-move-$_reserveRabbitId'),
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-move-cage-nfc')));
@@ -562,13 +583,27 @@ Future<void> _backToCageGrid(WidgetTester tester) async {
 Future<void> _openCageAt(WidgetTester tester, int positionIndex) async {
   final cell =
       find.byKey(ValueKey('cage-map-cell-${_cageIdAt(positionIndex)}'));
+  final scrollable = find.byKey(const ValueKey('house-cage-list-scroll'));
   await _scrollUntilPresent(
     tester,
     cell,
-    scrollable: find.byKey(const ValueKey('house-cage-list-scroll')),
+    scrollable: scrollable,
   );
   await tester.ensureVisible(cell);
   await tester.pumpAndSettle();
+  ScaffoldMessenger.maybeOf(tester.element(cell))?.removeCurrentSnackBar();
+  await tester.pump();
+  final logicalHeight =
+      tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  final safeCenterY = logicalHeight - 320;
+  final centerY = tester.getRect(cell).center.dy;
+  if (centerY > safeCenterY) {
+    await tester.drag(
+      scrollable,
+      Offset(0, -(centerY - safeCenterY + 24)),
+    );
+    await tester.pumpAndSettle();
+  }
   await tester.tap(cell);
   await _waitFor(tester, find.byKey(const ValueKey('cage-detail-back-button')));
   await _pumpUntilSettled(tester);
@@ -661,6 +696,7 @@ String _foreignHousePayload(String payload) {
 
 Future<void> _openRabbitDetail(WidgetTester tester, int rabbitId) async {
   final row = _rabbitRow(rabbitId);
+  await _scrollToRabbitRow(tester, rabbitId);
   await tester.ensureVisible(row);
   await tester.pumpAndSettle();
   await tester.tap(row);
@@ -669,6 +705,30 @@ Future<void> _openRabbitDetail(WidgetTester tester, int rabbitId) async {
     find.byKey(const ValueKey('rabbit-detail-page-content')),
   );
   expect(find.text('兔 #$rabbitId'), findsOneWidget);
+}
+
+Future<void> _tapCageDetailAction(
+  WidgetTester tester,
+  ValueKey<String> key,
+) async {
+  final action = find.byKey(key);
+  await _scrollUntilPresent(
+    tester,
+    action,
+    scrollable: find.byKey(const ValueKey('cage-detail-scroll')),
+  );
+  await _tapAndSettle(tester, key);
+}
+
+Future<void> _scrollToRabbitRow(
+  WidgetTester tester,
+  int rabbitId,
+) {
+  return _scrollUntilPresent(
+    tester,
+    _rabbitRow(rabbitId),
+    scrollable: find.byKey(const ValueKey('cage-detail-scroll')),
+  );
 }
 
 /// 在换笼弹窗的地图上选中目标笼（默认就是地图选择）。

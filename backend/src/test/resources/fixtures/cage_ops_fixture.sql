@@ -79,6 +79,7 @@ SET @c4 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-
 SET @c5 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-5-1');
 SET @c6 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-6-1');
 SET @c7 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-7-1');
+SET @c8 = (SELECT id FROM cages WHERE house_id = @house_id AND cage_number = '1-8-1');
 
 -- type: '0' 种兔 / '1' 后备兔 / '2' 商品兔；gender: '0' 母 / '1' 公
 -- 种母兔的 current_stage 由生产流程投影，这里直接给一个在轨阶段，验的正是列表能读到它。
@@ -90,10 +91,10 @@ INSERT INTO rabbits (
 )
 VALUES
     (@house_id, @c1, '0', '0', 'CAGEOPS-DOE', '0', NOW() - INTERVAL 200 DAY, 4.10,
-     'MATURE', NULL, 'AWAIT_MATING', NOW() - INTERVAL 3 DAY,
+     NULL, NULL, 'AWAIT_MATING', NOW() - INTERVAL 3 DAY,
      0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-DOE'), @actor, @actor),
     (@house_id, @c2, '1', '0', 'CAGEOPS-RESERVE', '0', NOW() - INTERVAL 90 DAY, 3.20,
-     'GROWING', 'RESERVE', NULL, NULL,
+     NULL, 'RESERVE', NULL, NULL,
      0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-RESERVE'), @actor, @actor),
     (@house_id, @c3, '2', '0', 'CAGEOPS-COMM-A', '0', NOW() - INTERVAL 50 DAY, 2.80,
      'FATTENING', NULL, NULL, NULL,
@@ -149,6 +150,17 @@ VALUES (
     0, FALSE, FALSE, CONCAT('cage-ops-parent-', @run_id, '-SIRE'), @actor, @actor
 );
 SET @sire_id = LAST_INSERT_ID();
+
+-- 待摸胎入轨需要选择仍在栏的种公兔。1-8-1 本来就用于账实不符检查，
+-- 放入一只种公兔后仍与 cage.rabbit_count=2 不一致，不改变地图的异常状态。
+INSERT INTO rabbits (
+    house_id, cage_id, type, gender, breed, arrival_method, arrival_date,
+    state_version, is_active, is_quarantined, request_id, create_by, update_by
+)
+VALUES (
+    @house_id, @c8, '0', '1', 'CAGEOPS-SIRE-ACTIVE', '0', NOW() - INTERVAL 180 DAY,
+    0, TRUE, FALSE, CONCAT('cage-ops-rabbit-', @run_id, '-ACTIVE-SIRE'), @actor, @actor
+);
 
 INSERT INTO breeding_cycles (
     house_id, batch_id, mother_rabbit_id, male_rabbit_id, cycle_no,
