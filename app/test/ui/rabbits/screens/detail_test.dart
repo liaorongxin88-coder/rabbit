@@ -85,6 +85,14 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('关闭'), findsNothing);
+    expect(find.text('异常记录'), findsOneWidget);
+    expect(find.text('单兔出库'), findsOneWidget);
+    expect(find.text('留种转后备'), findsOneWidget);
+    expect(find.text('换笼'), findsOneWidget);
+    expect(find.text('编辑'), findsOneWidget);
+    expect(find.text('接种疫苗'), findsOneWidget);
+    expect(find.text('登记离场'), findsOneWidget);
+    expect(find.text('死亡'), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const ValueKey('page-back-button')));
@@ -152,6 +160,103 @@ void main() {
     expect(
       find.byKey(const ValueKey('rabbit-detail-promotion-31')),
       findsNothing,
+    );
+  });
+
+  testWidgets('sale is a danger action and keeps its confirmation step',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeBreeder));
+    await tester.pumpAndSettle();
+
+    final sale = find.byKey(const ValueKey('rabbit-detail-sale-31'));
+    final button = tester.widget<OutlinedButton>(sale);
+    final palette = AppPalette.of(tester.element(sale));
+    expect(button.style?.foregroundColor?.resolve({}), palette.danger);
+    expect(find.text('出售'), findsOneWidget);
+
+    await tester.ensureVisible(sale);
+    await tester.tap(sale);
+    await tester.pumpAndSettle();
+
+    expect(find.text('出售出栏'), findsOneWidget);
+    final confirmation = find.byKey(const ValueKey('rabbit-sale-confirm'));
+    await tester.scrollUntilVisible(
+      confirmation,
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(confirmation, findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('rabbit-sale-submit')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tap(confirmation);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('rabbit-sale-submit')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('death remains inside the existing departure form',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeRabbit));
+    await tester.pumpAndSettle();
+
+    expect(find.text('死亡'), findsNothing);
+    final departure = find.byKey(const ValueKey('rabbit-detail-departure-31'));
+    final button = tester.widget<OutlinedButton>(departure);
+    final palette = AppPalette.of(tester.element(departure));
+    expect(button.style?.foregroundColor?.resolve({}), palette.danger);
+
+    await tester.ensureVisible(departure);
+    await tester.tap(departure);
+    await tester.pumpAndSettle();
+
+    expect(find.text('登记离场'), findsNWidgets(2));
+    expect(find.text('死亡'), findsOneWidget);
+    final confirmation =
+        find.byKey(const ValueKey('rabbit-departure-confirm-risk'));
+    await tester.scrollUntilVisible(
+      confirmation,
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(confirmation, findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('rabbit-departure-submit')),
+          )
+          .onPressed,
+      isNull,
     );
   });
 

@@ -79,35 +79,60 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
                 title: house.name,
                 subtitle: '点击具体笼位进入管理 · ${house.layoutLabel}',
                 expandForLargeText: true,
-                footer: canEdit
-                    ? Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                footer: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final palette = AppPalette.of(context);
+                    final textScale =
+                        MediaQuery.textScalerOf(context).scale(16) / 16;
+                    final vertical =
+                        textScale > 1.35 || constraints.maxWidth < 320;
+                    final actions = <Widget>[
+                      OutlinedButton.icon(
+                        key: const ValueKey('house-feed-entry-action'),
+                        onPressed: canEdit
+                            ? () => context.push('/houses/$houseId/feed')
+                            : null,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                        icon: const Icon(Icons.restaurant_outlined),
+                        label: const Text('投喂录入'),
+                      ),
+                      FilledButton.icon(
+                        key: const ValueKey('house-outbound-action'),
+                        onPressed: canEdit
+                            ? () => context.push(
+                                  '/houses/$houseId/outbound?entryType=HOUSE',
+                                )
+                            : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: palette.danger,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                        icon: const Icon(Icons.sell_outlined),
+                        label: const Text('整舍出库'),
+                      ),
+                    ];
+                    if (vertical) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          OutlinedButton.icon(
-                            key: const ValueKey('house-feed-entry-action'),
-                            onPressed: () =>
-                                context.push('/houses/$houseId/feed'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                            ),
-                            icon: const Icon(Icons.restaurant_outlined),
-                            label: const Text('投喂录入'),
-                          ),
-                          FilledButton.icon(
-                            key: const ValueKey('house-outbound-action'),
-                            onPressed: () => context.push(
-                              '/houses/$houseId/outbound?entryType=HOUSE',
-                            ),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                            ),
-                            icon: const Icon(Icons.local_shipping_outlined),
-                            label: const Text('整舍批量出库'),
-                          ),
+                          actions[0],
+                          const SizedBox(height: 8),
+                          actions[1],
                         ],
-                      )
-                    : null,
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: actions[0]),
+                        const SizedBox(width: 8),
+                        Expanded(child: actions[1]),
+                      ],
+                    );
+                  },
+                ),
               ),
               const SizedBox(height: 12),
               CageManagementSection(

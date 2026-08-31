@@ -323,10 +323,23 @@ void main() {
     expect(find.byKey(const ValueKey('rabbit-row-outbound-1')), findsNothing);
     expect(find.byKey(const ValueKey('rabbit-row-move-1')), findsNothing);
     expect(find.byKey(const ValueKey('rabbit-row-edit-1')), findsNothing);
-    expect(find.text('整舍批量出库'), findsOneWidget);
+    expect(find.text('批量出售'), findsOneWidget);
+    expect(find.byTooltip('整舍批量出售'), findsOneWidget);
     expect(find.text('查看详情'), findsOneWidget);
+    final outboundButton = tester.widget<FilledButton>(houseOutbound);
+    expect(
+      outboundButton.style?.backgroundColor?.resolve({}),
+      AppPalette.of(tester.element(houseOutbound)).danger,
+    );
+    final narrowWidth = tester.getSize(houseOutbound).width;
     expect(tester.getSize(houseOutbound).height, greaterThanOrEqualTo(48));
     expect(tester.getSize(rabbitDetail).height, greaterThanOrEqualTo(48));
+    expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(houseOutbound).width, greaterThan(narrowWidth));
+    expect(find.text('批量出售'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

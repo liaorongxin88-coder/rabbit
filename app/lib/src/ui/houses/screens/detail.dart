@@ -127,11 +127,14 @@ class _HouseDetailContent extends ConsumerWidget {
                       ),
                     ),
                     if (perm.canEditHouse)
-                      IconButton(
-                        key: const ValueKey('house-edit-name-entry'),
-                        tooltip: '编辑兔舍信息',
-                        onPressed: () => _showEditHouseSheet(context, house),
-                        icon: const Icon(Icons.edit_outlined),
+                      Tooltip(
+                        message: '编辑兔舍信息',
+                        child: TextButton.icon(
+                          key: const ValueKey('house-edit-name-entry'),
+                          onPressed: () => _showEditHouseSheet(context, house),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('编辑'),
+                        ),
                       ),
                   ],
                 ),

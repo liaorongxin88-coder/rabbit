@@ -616,6 +616,10 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           OutlinedButton.icon(
             key: ValueKey('rabbit-detail-departure-${rabbit.id}'),
             onPressed: _openDeparture,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppPalette.of(context).danger,
+              side: BorderSide(color: AppPalette.of(context).danger),
+            ),
             icon: const Icon(Icons.exit_to_app_outlined),
             label: const Text('登记离场'),
           ),
@@ -727,13 +731,19 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
   }
 
   List<Widget> _actionButtons() {
+    final palette = AppPalette.of(context);
+    final dangerStyle = OutlinedButton.styleFrom(
+      foregroundColor: palette.danger,
+      side: BorderSide(color: palette.danger),
+    );
     return [
       if (widget.onSale != null)
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-sale-${widget.rabbit.id}'),
           onPressed: widget.onSale,
+          style: dangerStyle,
           icon: const Icon(Icons.sell_outlined),
-          label: const Text('出售出栏'),
+          label: const Text('出售'),
         ),
       if (widget.onOutbound != null)
         OutlinedButton.icon(
@@ -788,6 +798,7 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-departure-${widget.rabbit.id}'),
           onPressed: _openDeparture,
+          style: dangerStyle,
           icon: const Icon(Icons.exit_to_app_outlined),
           label: const Text('登记离场'),
         ),
@@ -1389,15 +1400,17 @@ class _RabbitListHeader extends StatelessWidget {
           if (canEdit && onOutbound != null) ...[
             const SizedBox(height: 12),
             Tooltip(
-              message: '整舍批量出库',
+              message: '整舍批量出售',
               child: FilledButton.icon(
                 key: const ValueKey('house-rabbits-outbound-action'),
                 onPressed: onOutbound,
                 style: FilledButton.styleFrom(
+                  backgroundColor: palette.danger,
+                  foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(48),
                 ),
-                icon: const Icon(Icons.local_shipping_outlined),
-                label: const Text('整舍批量出库'),
+                icon: const Icon(Icons.sell_outlined),
+                label: const Text('批量出售'),
               ),
             ),
           ],

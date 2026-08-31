@@ -52,7 +52,10 @@ void main() {
         expect(find.text('NFC 状态加载失败，请重试'), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         final firstCalls = calls;
-        await tester.tap(find.byKey(const ValueKey('nfc-status-retry')));
+        final retry = find.byKey(const ValueKey('nfc-status-retry'));
+        await tester.ensureVisible(retry);
+        await tester.pumpAndSettle();
+        await tester.tap(retry);
         await tester.pumpAndSettle();
         expect(calls, greaterThan(firstCalls));
         expect(tester.takeException(), isNull);
@@ -107,7 +110,10 @@ void main() {
     expect(find.text('刷新'), findsOneWidget);
     expect(find.text('待分配入笼商品兔 4 只'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('cage-create-entry')));
+    final createCage = find.byKey(const ValueKey('cage-create-entry'));
+    await tester.ensureVisible(createCage);
+    await tester.pumpAndSettle();
+    await tester.tap(createCage);
     await tester.pumpAndSettle();
     expect(find.text('关闭'), findsOneWidget);
     expect(tester.takeException(), isNull);

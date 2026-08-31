@@ -184,7 +184,6 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
             child: permission.when(
               data: (perm) => _CageHeader(
                 house: widget.house,
-                canManageCages: perm.canControl,
                 showEntryHint: perm.canEdit,
                 onCreate: perm.canControl
                     ? () => _showCreateCagesSheet(context)
@@ -198,30 +197,31 @@ class _CageManagementSectionState extends ConsumerState<CageManagementSection> {
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
-                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
+                  ref.invalidate(
+                      pendingCommodityAllocationCountProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
               loading: () => _CageHeader(
                 house: widget.house,
-                canManageCages: false,
                 onCreate: null,
                 onRangeEntry: null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
-                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
+                  ref.invalidate(
+                      pendingCommodityAllocationCountProvider(houseId));
                 },
               ),
               error: (_, __) => _CageHeader(
                 house: widget.house,
-                canManageCages: false,
                 onCreate: null,
                 onRangeEntry: null,
                 onRefresh: () {
                   ref.invalidate(houseCagesProvider(houseId));
                   ref.invalidate(houseBreedingRabbitsProvider(houseId));
-                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId));
+                  ref.invalidate(
+                      pendingCommodityAllocationCountProvider(houseId));
                   ref.invalidate(housePermissionProvider(houseId));
                 },
               ),
@@ -687,44 +687,46 @@ class _PendingCommodityAllocationBand extends ConsumerWidget {
       data: (count) => count == 0
           ? const SizedBox.shrink()
           : Container(
-        key: const ValueKey('pending-commodity-allocation'),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: count > 0 ? palette.warningSoft : palette.successSoft,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.call_split_outlined,
-                  color: count > 0 ? palette.warning : palette.success,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '待分配入笼商品兔 $count 只',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-              ],
-            ),
-            if (count > 0)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  key: const ValueKey('pending-commodity-allocation-action'),
-                  onPressed: () => context.push('/houses/$houseId/batches'),
-                  icon: const Icon(Icons.arrow_forward_outlined),
-                  label: const Text('去分配'),
-                ),
+              key: const ValueKey('pending-commodity-allocation'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: count > 0 ? palette.warningSoft : palette.successSoft,
+                borderRadius: BorderRadius.circular(8),
               ),
-          ],
-        ),
-      ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.call_split_outlined,
+                        color: count > 0 ? palette.warning : palette.success,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '待分配入笼商品兔 $count 只',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (count > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        key: const ValueKey(
+                            'pending-commodity-allocation-action'),
+                        onPressed: () =>
+                            context.push('/houses/$houseId/batches'),
+                        icon: const Icon(Icons.arrow_forward_outlined),
+                        label: const Text('去分配'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
       loading: () => const LinearProgressIndicator(
         key: ValueKey('pending-commodity-allocation-loading'),
       ),
@@ -741,8 +743,8 @@ class _PendingCommodityAllocationBand extends ConsumerWidget {
             const SizedBox(width: 10),
             const Expanded(child: Text('待分配数量加载失败，请重试')),
             TextButton(
-              onPressed: () =>
-                  ref.invalidate(pendingCommodityAllocationCountProvider(houseId)),
+              onPressed: () => ref
+                  .invalidate(pendingCommodityAllocationCountProvider(houseId)),
               child: const Text('重试'),
             ),
           ],
@@ -755,7 +757,6 @@ class _PendingCommodityAllocationBand extends ConsumerWidget {
 class _CageHeader extends StatelessWidget {
   const _CageHeader({
     required this.house,
-    required this.canManageCages,
     required this.onCreate,
     required this.onRangeEntry,
     required this.onRefresh,
@@ -763,7 +764,6 @@ class _CageHeader extends StatelessWidget {
   });
 
   final RabbitHouse house;
-  final bool canManageCages;
   final bool showEntryHint;
   final VoidCallback? onCreate;
   final VoidCallback? onRangeEntry;
@@ -798,51 +798,79 @@ class _CageHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (showEntryHint) ...[
-                const SizedBox(height: 2),
-                Text(
+              const SizedBox(height: 2),
+              Visibility(
+                visible: showEntryHint,
+                maintainAnimation: true,
+                maintainSize: true,
+                maintainState: true,
+                child: Text(
                   '点击笼位可录入新兔子（兔场初始化）',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: palette.muted,
                       ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
       ],
     );
-    final actions = Wrap(
-      alignment: WrapAlignment.end,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        TextButton.icon(
+    final actions = <Widget>[
+      Tooltip(
+        message: '刷新笼位',
+        child: TextButton.icon(
           key: const ValueKey('cage-refresh'),
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh),
           label: const Text('刷新'),
         ),
-        FilledButton.icon(
-          key: const ValueKey('cage-range-entry'),
-          onPressed: onRangeEntry,
-          icon: const Icon(Icons.select_all_outlined),
-          label: const Text('范围入栏'),
-        ),
-        FilledButton.icon(
-          key: const ValueKey('cage-create-entry'),
-          onPressed: onCreate,
-          icon: const Icon(Icons.add),
-          label: const Text('新增'),
-        ),
-      ],
-    );
+      ),
+      FilledButton.icon(
+        key: const ValueKey('cage-range-entry'),
+        onPressed: onRangeEntry,
+        icon: const Icon(Icons.select_all_outlined),
+        label: const Text('范围入栏'),
+      ),
+      FilledButton.icon(
+        key: const ValueKey('cage-create-entry'),
+        onPressed: onCreate,
+        icon: const Icon(Icons.add),
+        label: const Text('新增笼位'),
+      ),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         heading,
         const SizedBox(height: 8),
-        Align(alignment: Alignment.centerRight, child: actions),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
+            final vertical = textScale > 1.35 || constraints.maxWidth < 320;
+            if (vertical) {
+              return Column(
+                key: const ValueKey('cage-header-actions-vertical'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var index = 0; index < actions.length; index++) ...[
+                    if (index > 0) const SizedBox(height: 8),
+                    SizedBox(width: double.infinity, child: actions[index]),
+                  ],
+                ],
+              );
+            }
+            return Row(
+              key: const ValueKey('cage-header-actions-inline'),
+              children: [
+                for (var index = 0; index < actions.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(child: actions[index]),
+                ],
+              ],
+            );
+          },
+        ),
       ],
     );
   }

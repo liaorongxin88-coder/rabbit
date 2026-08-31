@@ -26,6 +26,128 @@ void main() {
     expect(find.byKey(const ValueKey('cage-map-row-R2')), findsOneWidget);
   });
 
+  testWidgets('cage actions use Chinese labels and stay inline at normal text',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _testApp(
+        _rack,
+        permission: const HousePermission(perms: 'control', isAdmin: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('cage-header-actions-inline')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('cage-header-actions-vertical')),
+        findsNothing);
+    expect(find.text('刷新'), findsOneWidget);
+    expect(find.text('范围入栏'), findsOneWidget);
+    expect(find.text('新增笼位'), findsOneWidget);
+    expect(find.byTooltip('刷新笼位'), findsOneWidget);
+
+    final centers = [
+      tester.getCenter(find.byKey(const ValueKey('cage-refresh'))),
+      tester.getCenter(find.byKey(const ValueKey('cage-range-entry'))),
+      tester.getCenter(find.byKey(const ValueKey('cage-create-entry'))),
+    ];
+    expect(centers[1].dy, closeTo(centers[0].dy, 1));
+    expect(centers[2].dy, closeTo(centers[0].dy, 1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in const [Size(360, 800), Size(412, 915)]) {
+    testWidgets(
+      'cage actions stack full width at 200 percent on '
+      '${size.width.toInt()}x${size.height.toInt()}',
+      (tester) async {
+        await tester.binding.setSurfaceSize(size);
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        await tester.pumpWidget(
+          _testApp(
+            _rack,
+            permission: const HousePermission(perms: 'control', isAdmin: true),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('cage-header-actions-vertical')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('cage-header-actions-inline')),
+            findsNothing);
+        final actionFinders = [
+          find.byKey(const ValueKey('cage-refresh')),
+          find.byKey(const ValueKey('cage-range-entry')),
+          find.byKey(const ValueKey('cage-create-entry')),
+        ];
+        final rects = actionFinders.map(tester.getRect).toList();
+        expect(rects[0].width, greaterThan(size.width - 80));
+        expect(rects[1].width, closeTo(rects[0].width, 1));
+        expect(rects[2].width, closeTo(rects[0].width, 1));
+        expect(rects[1].top, greaterThan(rects[0].bottom));
+        expect(rects[2].top, greaterThan(rects[1].bottom));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('permission changes keep the cage title and action slots stable',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _testApp(
+        _rack,
+        permission: const HousePermission(perms: 'control', isAdmin: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final editableTitle = tester.getRect(find.text('分层笼位图'));
+    final editableActions = tester.getRect(
+      find.byKey(const ValueKey('cage-header-actions-inline')),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(_testApp(_rack));
+    await tester.pumpAndSettle();
+
+    final readOnlyTitle = tester.getRect(find.text('分层笼位图'));
+    final readOnlyActions = tester.getRect(
+      find.byKey(const ValueKey('cage-header-actions-inline')),
+    );
+    expect(readOnlyTitle.top, closeTo(editableTitle.top, 1));
+    expect(readOnlyActions.top, closeTo(editableActions.top, 1));
+    expect(readOnlyActions.height, closeTo(editableActions.height, 1));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('cage-range-entry')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('cage-create-entry')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the first row of cages is visible without scrolling',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(412, 915));
@@ -79,7 +201,10 @@ void main() {
       reason: '二层的笼不该和一层混在同一屏里——现场是错位的阶梯，看的人只站在一层前面',
     );
 
-    await tester.tap(find.byKey(const ValueKey('cage-map-layer-2')));
+    final secondLayer = find.byKey(const ValueKey('cage-map-layer-2'));
+    await tester.ensureVisible(secondLayer);
+    await tester.pumpAndSettle();
+    await tester.tap(secondLayer);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('cage-map-cell-3')), findsOneWidget);

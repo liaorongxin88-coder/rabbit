@@ -80,6 +80,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Batch list has one creation entry in the overview card',
+      (tester) async {
+    await tester.pumpWidget(
+      _screenApp(
+        batchOverride:
+            houseBatchesProvider(8).overrideWith((_) async => const []),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('batch-create-action')), findsNothing);
+    expect(find.byKey(const ValueKey('batch-create-button')), findsOneWidget);
+    expect(find.text('创建批次'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('loading state waits for the complete Batch result',
       (tester) async {
     final pending = Completer<List<Batch>>();

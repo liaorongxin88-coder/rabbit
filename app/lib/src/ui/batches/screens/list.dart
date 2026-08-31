@@ -25,23 +25,12 @@ class HouseBatchesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final houses = ref.watch(housesProvider);
-    final permission = ref.watch(housePermissionProvider(houseId));
-    final house = _findHouse(houses.valueOrNull);
-    final canEdit = permission.valueOrNull?.canEdit == true;
-
     return AppPage(
       title: '生产批次',
       parentRoute: parentRoute ?? '/houses/$houseId',
       actions: [
-        if (canEdit && house != null)
-          IconButton(
-            key: const ValueKey('batch-create-action'),
-            tooltip: '创建批次',
-            onPressed: () => _showCreateBatch(context, house),
-            icon: const Icon(Icons.add),
-          ),
         IconButton(
-          tooltip: '刷新批次',
+          tooltip: '刷新批次列表',
           onPressed: () => ref.invalidate(houseBatchesProvider(houseId)),
           icon: const Icon(Icons.refresh),
         ),
@@ -76,17 +65,6 @@ class HouseBatchesScreen extends ConsumerWidget {
       }
     }
     return null;
-  }
-
-  Future<Batch?> _showCreateBatch(
-    BuildContext context,
-    RabbitHouse house,
-  ) {
-    return showCreateBatchSheet(
-      context: context,
-      houseId: house.id,
-      houseName: house.name,
-    );
   }
 }
 
@@ -306,12 +284,8 @@ class _BatchListContentState extends State<_BatchListContent> {
                     : widget.canEdit
                         ? '创建首个批次后，可在这里统一查看生产周期。'
                         : '当前兔舍还没有生产批次。',
-                actionLabel: hasBatches
-                    ? '重置筛选'
-                    : widget.canEdit
-                        ? '创建批次'
-                        : null,
-                onAction: hasBatches ? _resetFilters : widget.onCreate,
+                actionLabel: hasBatches ? '重置筛选' : null,
+                onAction: hasBatches ? _resetFilters : null,
               ),
             ),
           );
