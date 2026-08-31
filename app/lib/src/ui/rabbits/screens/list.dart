@@ -285,6 +285,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
     this.onOutbound,
     this.onConvertToReplacement,
     this.onPromoteReplacement,
+    this.onAbnormal,
     this.onChanged,
     this.onOpenBatch,
     this.onBindBatch,
@@ -302,6 +303,7 @@ class RabbitDetailSheet extends ConsumerStatefulWidget {
   final VoidCallback? onOutbound;
   final VoidCallback? onConvertToReplacement;
   final VoidCallback? onPromoteReplacement;
+  final VoidCallback? onAbnormal;
   final VoidCallback? onChanged;
   final ValueChanged<int>? onOpenBatch;
   final VoidCallback? onBindBatch;
@@ -767,6 +769,13 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           onPressed: widget.onEdit,
           icon: const Icon(Icons.edit_outlined),
           label: const Text('编辑'),
+        ),
+      if (widget.onAbnormal != null)
+        OutlinedButton.icon(
+          key: ValueKey('rabbit-detail-abnormal-${widget.rabbit.id}'),
+          onPressed: widget.onAbnormal,
+          icon: const Icon(Icons.report_problem_outlined),
+          label: const Text('异常记录'),
         ),
       if (widget.canEdit && widget.rabbit.isActive)
         OutlinedButton.icon(

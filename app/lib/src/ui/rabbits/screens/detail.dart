@@ -43,34 +43,11 @@ class RabbitDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rabbit = ref.watch(rabbitDetailProvider(_request));
-    final permission = ref.watch(housePermissionProvider(houseId));
-    final canCreateAbnormal = permission.valueOrNull?.canEdit == true &&
-        rabbit.valueOrNull?.isActive == true;
 
     return AppPage(
       title: '兔只详情',
       fallbackBackLocation: '/houses/$houseId/rabbits',
       actions: [
-        if (canCreateAbnormal)
-          IconButton(
-            key: const ValueKey('rabbit-add-abnormal-action'),
-            tooltip: '新增异常记录',
-            onPressed: () async {
-              final currentRabbit = rabbit.valueOrNull;
-              if (currentRabbit == null) {
-                return;
-              }
-              final recorded = await showRabbitAbnormalSheet(
-                context: context,
-                houseId: houseId,
-                rabbit: currentRabbit,
-              );
-              if (recorded && context.mounted) {
-                _refresh(ref);
-              }
-            },
-            icon: const Icon(Icons.report_problem_outlined),
-          ),
         IconButton(
           tooltip: '刷新兔只详情',
           onPressed: () => _refresh(ref),
@@ -253,6 +230,18 @@ class _RabbitDetailContent extends ConsumerWidget {
                 rabbit: rabbit,
               );
               if (promoted && context.mounted) {
+                onRefresh();
+              }
+            }
+          : null,
+      onAbnormal: canOperate
+          ? () async {
+              final recorded = await showRabbitAbnormalSheet(
+                context: context,
+                houseId: request.houseId,
+                rabbit: rabbit,
+              );
+              if (recorded && context.mounted) {
                 onRefresh();
               }
             }

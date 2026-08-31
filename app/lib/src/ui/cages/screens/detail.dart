@@ -10,12 +10,14 @@ import 'package:rabbit_flutter/src/domain/houses/permission.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
+import 'package:rabbit_flutter/src/ui/cages/sheets/rabbit_picker.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/queue.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/sheets/abnormal.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
 
 class CageDetailScreen extends ConsumerWidget {
@@ -102,6 +104,11 @@ class _DetailBody extends ConsumerWidget {
     final cage = cages.valueOrNull
         ?.where((item) => item.id == summary.cageId)
         .firstOrNull;
+    void refreshCage() {
+      ref.invalidate(cageSummaryProvider(key));
+      ref.invalidate(cageRabbitsProvider(key));
+      ref.invalidate(houseCagesProvider(houseId));
+    }
 
     return ListView(
       padding: AppSpacing.pagePadding,
@@ -116,17 +123,20 @@ class _DetailBody extends ConsumerWidget {
         const SizedBox(height: 12),
         _OperationsSummary(summary: summary),
         const SizedBox(height: 12),
+        _CageRecordActions(
+          houseId: houseId,
+          rabbits: rabbits,
+          permission: permission,
+          onChanged: refreshCage,
+        ),
+        const SizedBox(height: 12),
         rabbits.when(
           data: (items) => _RabbitSection(
             houseId: houseId,
             cage: cage ?? _fallbackCage(summary, houseId),
             rabbits: items,
             permission: permission,
-            onChanged: () {
-              ref.invalidate(cageSummaryProvider(key));
-              ref.invalidate(cageRabbitsProvider(key));
-              ref.invalidate(houseCagesProvider(houseId));
-            },
+            onChanged: refreshCage,
           ),
           loading: () => const SectionCard(
             child: Center(child: CircularProgressIndicator()),
@@ -386,6 +396,102 @@ class _SummaryRow extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _CageRecordActions extends StatelessWidget {
+  const _CageRecordActions({
+    required this.houseId,
+    required this.rabbits,
+    required this.permission,
+    required this.onChanged,
+  });
+
+  final int houseId;
+  final AsyncValue<List<Rabbit>> rabbits;
+  final HousePermission permission;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeRabbits = (rabbits.valueOrNull ?? const <Rabbit>[])
+        .where((rabbit) => rabbit.isActive)
+        .toList(growable: false);
+    final unavailableReason = _unavailableReason(activeRabbits);
+
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('现场记录', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          Semantics(
+            hint: unavailableReason,
+            child: Tooltip(
+              message: unavailableReason ?? '为笼内兔只新增异常记录',
+              child: OutlinedButton.icon(
+                key: const ValueKey('cage-abnormal-entry'),
+                onPressed: unavailableReason == null
+                    ? () => _openAbnormalSheet(context, activeRabbits)
+                    : null,
+                icon: const Icon(Icons.report_problem_outlined),
+                label: const Text('异常记录'),
+              ),
+            ),
+          ),
+          if (unavailableReason != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              unavailableReason,
+              key: const ValueKey('cage-abnormal-unavailable-reason'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String? _unavailableReason(List<Rabbit> activeRabbits) {
+    if (!permission.canEdit) {
+      return '当前账号仅可查看，无法新增异常记录';
+    }
+    if (rabbits.isLoading) {
+      return '正在读取笼内兔只，暂时无法新增异常记录';
+    }
+    if (rabbits.hasError) {
+      return '无法读取笼内兔只，请重试后新增异常记录';
+    }
+    if (activeRabbits.isEmpty) {
+      return '当前笼位没有在栏兔只，无法新增异常记录';
+    }
+    return null;
+  }
+
+  Future<void> _openAbnormalSheet(
+    BuildContext context,
+    List<Rabbit> activeRabbits,
+  ) async {
+    Rabbit? rabbit;
+    if (activeRabbits.length == 1) {
+      rabbit = activeRabbits.single;
+    } else {
+      rabbit = await showCageRabbitPickerSheet(
+        context: context,
+        rabbits: activeRabbits,
+      );
+    }
+    if (rabbit == null || !context.mounted) {
+      return;
+    }
+    final recorded = await showRabbitAbnormalSheet(
+      context: context,
+      houseId: houseId,
+      rabbit: rabbit,
+    );
+    if (recorded) {
+      onChanged();
+    }
   }
 }
 

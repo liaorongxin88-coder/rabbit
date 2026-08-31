@@ -62,6 +62,11 @@ void main() {
       find.byKey(const ValueKey('cage-rabbit-entry')),
     );
     expect(entryButton.onPressed, isNull);
+    final abnormalButton = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('cage-abnormal-entry')),
+    );
+    expect(abnormalButton.onPressed, isNull);
+    expect(find.text('当前账号仅可查看，无法新增异常记录'), findsOneWidget);
   });
 
   testWidgets('control permission enables NFC and opens rabbit detail',
@@ -133,11 +138,132 @@ void main() {
 
     final rabbitRow = find.byKey(const ValueKey('cage-rabbit-row-801'));
     await tester.ensureVisible(rabbitRow);
+    await tester.drag(
+      find.byType(Scrollable).first,
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(rabbitRow);
     await tester.pumpAndSettle();
 
     expect(find.text('兔只详情页'), findsOneWidget);
     expect(find.byKey(const ValueKey('cage-rabbit-menu-801')), findsNothing);
+  });
+
+  testWidgets('empty cage keeps abnormal entry disabled with a reason',
+      (tester) async {
+    await tester.pumpWidget(
+      _cageDetailApp(
+        rabbits: () async => const <Rabbit>[],
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('cage-abnormal-entry')),
+    );
+    expect(button.onPressed, isNull);
+    expect(
+      find.text('当前笼位没有在栏兔只，无法新增异常记录'),
+      findsOneWidget,
+    );
+    expect(
+      find.byTooltip('当前笼位没有在栏兔只，无法新增异常记录'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('single-rabbit cage opens the shared abnormal sheet directly',
+      (tester) async {
+    await tester.pumpWidget(
+      _cageDetailApp(
+        rabbits: () async => const [_rabbit],
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('cage-abnormal-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增异常记录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-abnormal-target-801')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('cage-abnormal-rabbit-picker')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-abnormal-submit')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'multi-rabbit cage selects a target before opening abnormal sheet',
+      (tester) async {
+    await tester.pumpWidget(
+      _cageDetailApp(
+        rabbits: () async => const [_rabbit, _secondRabbit],
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('cage-abnormal-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择异常兔只'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('cage-abnormal-rabbit-802')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('cage-abnormal-rabbit-802')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增异常记录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-abnormal-target-802')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-abnormal-submit')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'rabbit loading failure keeps abnormal entry visible and disabled',
+      (tester) async {
+    await tester.pumpWidget(
+      _cageDetailApp(
+        rabbits: () => Future<List<Rabbit>>.error(StateError('读取失败')),
+        permission: const HousePermission(perms: 'edit', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('cage-abnormal-entry')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const ValueKey('cage-abnormal-entry')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.text('无法读取笼内兔只，请重试后新增异常记录'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('cage detail back button returns to the cage list',
@@ -186,6 +312,26 @@ void main() {
   });
 }
 
+Widget _cageDetailApp({
+  required Future<List<Rabbit>> Function() rabbits,
+  required HousePermission permission,
+}) {
+  const key = (houseId: 8, cageId: 10);
+  return ProviderScope(
+    overrides: [
+      cageSummaryProvider(key).overrideWith((_) async => _summary),
+      cageRabbitsProvider(key).overrideWith((_) => rabbits()),
+      houseCagesProvider(8).overrideWith((_) async => const [_cage]),
+      housesProvider.overrideWith((_) async => const [_house]),
+      housePermissionProvider(8).overrideWith((_) async => permission),
+    ],
+    child: MaterialApp(
+      theme: buildAppTheme(),
+      home: const CageDetailScreen(houseId: 8, cageId: 10),
+    ),
+  );
+}
+
 const _summary = CageSummary(
   cageId: 10,
   cageNumber: '1-1-1',
@@ -229,5 +375,19 @@ const _rabbit = Rabbit(
   arrivalMethod: '0',
   arrivalDate: null,
   weight: 2.8,
+  isActive: true,
+);
+
+const _secondRabbit = Rabbit(
+  id: 802,
+  houseId: 8,
+  cageId: 10,
+  motherId: null,
+  type: '2',
+  gender: '0',
+  breed: '伊拉兔',
+  arrivalMethod: '0',
+  arrivalDate: null,
+  weight: 2.6,
   isActive: true,
 );

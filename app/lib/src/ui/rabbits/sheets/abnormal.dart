@@ -12,24 +12,37 @@ import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 
 const _abnormalStatuses = <String>['外伤', '采食异常', '精神萎靡', '疑似疾病', '其他异常'];
 
+typedef RabbitAbnormalImagePicker = Future<XFile?> Function(
+  ImageSource source,
+);
+
 Future<bool> showRabbitAbnormalSheet({
   required BuildContext context,
   required int houseId,
   required Rabbit rabbit,
+  RabbitAbnormalImagePicker? pickImage,
 }) async {
   final recorded = await showAppModalSheet<bool>(
     context: context,
-    builder: (context) =>
-        _RabbitAbnormalSheet(houseId: houseId, rabbit: rabbit),
+    builder: (context) => _RabbitAbnormalSheet(
+      houseId: houseId,
+      rabbit: rabbit,
+      pickImage: pickImage,
+    ),
   );
   return recorded ?? false;
 }
 
 class _RabbitAbnormalSheet extends ConsumerStatefulWidget {
-  const _RabbitAbnormalSheet({required this.houseId, required this.rabbit});
+  const _RabbitAbnormalSheet({
+    required this.houseId,
+    required this.rabbit,
+    this.pickImage,
+  });
 
   final int houseId;
   final Rabbit rabbit;
+  final RabbitAbnormalImagePicker? pickImage;
 
   @override
   ConsumerState<_RabbitAbnormalSheet> createState() =>
@@ -42,6 +55,7 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
   final _writeRequest = BatchWriteRequestController();
 
   XFile? _image;
+  String? _uploadedImageFileId;
   String _warningStatus = _abnormalStatuses.first;
   String? _submitError;
   var _saving = false;
@@ -77,14 +91,17 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
       return;
     }
     try {
-      final selected = await ImagePicker().pickImage(
-        source: source,
-        imageQuality: 85,
-        maxWidth: 2048,
-      );
+      final selected = await (widget.pickImage != null
+          ? widget.pickImage!(source)
+          : ImagePicker().pickImage(
+              source: source,
+              imageQuality: 85,
+              maxWidth: 2048,
+            ));
       if (selected != null && mounted) {
         setState(() {
           _image = selected;
+          _uploadedImageFileId = null;
           _submitError = null;
           _writeRequest.startNewDraft();
         });
@@ -131,11 +148,15 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
     });
     try {
       final repository = ref.read(rabbitRepositoryProvider);
-      final imageFileId = await repository.uploadImage(
-        houseId: widget.houseId,
-        filePath: image.path,
-        fileName: image.name,
-      );
+      var imageFileId = _uploadedImageFileId;
+      if (imageFileId == null) {
+        imageFileId = await repository.uploadImage(
+          houseId: widget.houseId,
+          filePath: image.path,
+          fileName: image.name,
+        );
+        _uploadedImageFileId = imageFileId;
+      }
       await repository.createAbnormalCondition(
         houseId: widget.houseId,
         rabbitId: widget.rabbit.id,
@@ -198,6 +219,9 @@ class _RabbitAbnormalSheetState extends ConsumerState<_RabbitAbnormalSheet> {
                           const SizedBox(height: 4),
                           Text(
                             '兔 #${widget.rabbit.id} · ${widget.rabbit.typeLabel}',
+                            key: ValueKey(
+                              'rabbit-abnormal-target-${widget.rabbit.id}',
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodyMedium,

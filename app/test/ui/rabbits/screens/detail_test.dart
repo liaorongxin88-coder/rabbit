@@ -65,6 +65,15 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const ValueKey('rabbit-detail-abnormal-31')),
+      findsOneWidget,
+    );
+    expect(find.text('异常记录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-add-abnormal-action')),
+      findsNothing,
+    );
+    expect(
       find.byKey(const ValueKey('rabbit-detail-fixed-actions')),
       findsNothing,
     );
@@ -81,6 +90,50 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('page-back-button')));
     await tester.pumpAndSettle();
     expect(find.text('兔只列表页'), findsOneWidget);
+  });
+
+  testWidgets('rabbit detail abnormal action opens the shared abnormal sheet',
+      (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeRabbit));
+    await tester.pumpAndSettle();
+
+    final action = find.byKey(const ValueKey('rabbit-detail-abnormal-31'));
+    await tester.ensureVisible(action);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增异常记录'), findsOneWidget);
+    expect(find.text('兔 #31 · 商品兔'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-abnormal-submit')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('view-only rabbit detail hides abnormal action', (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      _app(
+        router: router,
+        rabbit: _activeRabbit,
+        permission: const HousePermission(perms: 'view', isAdmin: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-abnormal-31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-add-abnormal-action')),
+      findsNothing,
+    );
   });
 
   testWidgets('active breeder uses the sale action', (tester) async {
@@ -244,6 +297,10 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('rabbit-detail-promotion-31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-detail-abnormal-31')),
       findsNothing,
     );
     expect(tester.takeException(), isNull);
