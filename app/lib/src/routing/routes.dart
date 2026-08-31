@@ -193,7 +193,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final houseId =
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
-                child: HouseDetailScreen(houseId: houseId),
+                child: HouseDetailScreen(
+                  houseId: houseId,
+                  parentRoute: '/houses',
+                ),
               );
             },
           ),
@@ -213,7 +216,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final houseId =
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
-                child: HouseCagesScreen(houseId: houseId),
+                child: HouseCagesScreen(
+                  houseId: houseId,
+                  parentRoute: '/houses/$houseId',
+                ),
               );
             },
           ),
@@ -237,6 +243,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 child: HouseMembersScreen(
                   houseId: houseId,
                   houseName: houseName,
+                  parentRoute: '/houses/$houseId',
                 ),
               );
             },
@@ -302,7 +309,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final houseId =
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
               return NoTransitionPage(
-                child: HouseBatchesScreen(houseId: houseId),
+                child: HouseBatchesScreen(
+                  houseId: houseId,
+                  parentRoute: '/houses/$houseId',
+                ),
               );
             },
           ),
@@ -331,6 +341,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 child: ProductionSettingsScreen(
                   houseId: houseId,
                   houseName: houseName,
+                  parentRoute: '/houses/$houseId',
                 ),
               );
             },
@@ -370,7 +381,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/production',
         pageBuilder: (context, state) => const NoTransitionPage(
-          child: ProductionSettingsScreen(),
+          child: ProductionSettingsScreen(parentRoute: '/profile'),
         ),
       ),
       GoRoute(

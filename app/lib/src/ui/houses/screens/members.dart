@@ -18,10 +18,12 @@ class HouseMembersScreen extends ConsumerStatefulWidget {
     super.key,
     required this.houseId,
     this.houseName = '',
+    this.parentRoute,
   });
 
   final int houseId;
   final String houseName;
+  final String? parentRoute;
 
   @override
   ConsumerState<HouseMembersScreen> createState() => _HouseMembersScreenState();
@@ -48,7 +50,7 @@ class _HouseMembersScreenState extends ConsumerState<HouseMembersScreen> {
 
     return AppPage(
       title: title,
-      fallbackBackLocation: '/houses/${widget.houseId}',
+      parentRoute: widget.parentRoute ?? '/houses/${widget.houseId}',
       child: permission.when(
         data: (perm) {
           if (!perm.canManageMembers) {

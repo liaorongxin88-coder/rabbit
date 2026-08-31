@@ -15,9 +15,14 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 class HouseDetailScreen extends ConsumerWidget {
-  const HouseDetailScreen({super.key, required this.houseId});
+  const HouseDetailScreen({
+    super.key,
+    required this.houseId,
+    this.parentRoute = '/houses',
+  });
 
   final int houseId;
+  final String parentRoute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,12 +30,8 @@ class HouseDetailScreen extends ConsumerWidget {
 
     return AppPage(
       title: '兔舍详情',
+      parentRoute: parentRoute,
       actions: [
-        IconButton(
-          tooltip: '返回兔舍列表',
-          onPressed: () => context.go('/houses'),
-          icon: const Icon(Icons.list_alt_outlined),
-        ),
         IconButton(
           tooltip: '刷新',
           onPressed: () {
@@ -105,12 +106,6 @@ class _HouseDetailContent extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      tooltip: '返回',
-                      onPressed: () => context.go('/houses'),
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                    const SizedBox(width: 6),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

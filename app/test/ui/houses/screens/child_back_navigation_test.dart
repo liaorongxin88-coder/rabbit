@@ -21,6 +21,7 @@ void main() {
       final router = GoRouter(
         initialLocation: settingsPath,
         routes: [
+          _entryRoute(),
           _houseRoute(),
           GoRoute(
             path: '/houses/:houseId/settings/production',
@@ -70,6 +71,7 @@ void main() {
       final router = GoRouter(
         initialLocation: membersPath,
         routes: [
+          _entryRoute(),
           _houseRoute(),
           GoRoute(
             path: '/houses/:houseId/members',
@@ -121,18 +123,50 @@ Future<void> _verifyBackNavigation(
   required String pagePath,
   required String pageTitle,
 }) async {
+  final backButton = find.byKey(const ValueKey('page-back-button'));
   expect(find.text(pageTitle), findsOneWidget);
-  expect(find.byKey(const ValueKey('page-back-button')), findsOneWidget);
+  expect(find.text('返回'), findsOneWidget);
+  expect(backButton, findsOneWidget);
 
-  await tester.tap(find.byKey(const ValueKey('page-back-button')));
+  await tester.tap(backButton);
   await tester.pumpAndSettle();
-  expect(find.text('兔舍详情 #8'), findsOneWidget);
+  _expectHouseParent(router);
+
+  router.go('/entry');
+  await tester.pumpAndSettle();
+  router.push<void>(pagePath);
+  await tester.pumpAndSettle();
+  expect(find.text(pageTitle), findsOneWidget);
+  await tester.tap(backButton);
+  await tester.pumpAndSettle();
+  _expectHouseParent(router);
 
   router.go(pagePath);
   await tester.pumpAndSettle();
   await tester.binding.handlePopRoute();
   await tester.pumpAndSettle();
-  expect(find.text('兔舍详情 #8'), findsOneWidget);
+  _expectHouseParent(router);
+
+  router.go('/entry');
+  await tester.pumpAndSettle();
+  router.push<void>(pagePath);
+  await tester.pumpAndSettle();
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+  _expectHouseParent(router);
+}
+
+void _expectHouseParent(GoRouter router) {
+  expect(router.routeInformationProvider.value.uri.path, '/houses/8');
+}
+
+GoRoute _entryRoute() {
+  return GoRoute(
+    path: '/entry',
+    builder: (_, __) => const Scaffold(
+      body: Center(child: Text('非业务来源页')),
+    ),
+  );
 }
 
 GoRoute _houseRoute() {

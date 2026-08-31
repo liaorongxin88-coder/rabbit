@@ -16,10 +16,12 @@ class ProductionSettingsScreen extends ConsumerWidget {
     super.key,
     this.houseId,
     this.houseName,
+    this.parentRoute,
   });
 
   final int? houseId;
   final String? houseName;
+  final String? parentRoute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +31,7 @@ class ProductionSettingsScreen extends ConsumerWidget {
       final setting = ref.watch(houseSettingProvider(targetHouseId));
       return AppPage(
         title: '兔舍生产设置',
-        fallbackBackLocation: '/houses/$targetHouseId',
+        parentRoute: parentRoute ?? '/houses/$targetHouseId',
         actions: [
           IconButton(
             tooltip: '刷新',
@@ -58,7 +60,7 @@ class ProductionSettingsScreen extends ConsumerWidget {
     final setting = ref.watch(userSettingProvider);
     return AppPage(
       title: '默认生产设置',
-      fallbackBackLocation: '/profile',
+      parentRoute: parentRoute ?? '/profile',
       actions: [
         IconButton(
           tooltip: '刷新',

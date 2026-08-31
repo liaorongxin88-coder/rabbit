@@ -13,9 +13,14 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 class HouseCagesScreen extends ConsumerStatefulWidget {
-  const HouseCagesScreen({super.key, required this.houseId});
+  const HouseCagesScreen({
+    super.key,
+    required this.houseId,
+    this.parentRoute,
+  });
 
   final int houseId;
+  final String? parentRoute;
 
   @override
   ConsumerState<HouseCagesScreen> createState() => _HouseCagesScreenState();
@@ -40,12 +45,8 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
 
     return AppPage(
       title: '笼位管理',
+      parentRoute: widget.parentRoute ?? '/houses/$houseId',
       actions: [
-        IconButton(
-          tooltip: '返回兔舍详情',
-          onPressed: () => context.go('/houses/$houseId'),
-          icon: const Icon(Icons.storefront_outlined),
-        ),
         IconButton(
           tooltip: '刷新',
           onPressed: () {
@@ -78,7 +79,6 @@ class _HouseCagesScreenState extends ConsumerState<HouseCagesScreen> {
                 title: house.name,
                 subtitle: '点击具体笼位进入管理 · ${house.layoutLabel}',
                 expandForLargeText: true,
-                onBack: () => context.go('/houses/${house.id}'),
                 footer: canEdit
                     ? Wrap(
                         spacing: 8,

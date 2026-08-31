@@ -13,9 +13,14 @@ import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
 class HouseBatchesScreen extends ConsumerWidget {
-  const HouseBatchesScreen({super.key, required this.houseId});
+  const HouseBatchesScreen({
+    super.key,
+    required this.houseId,
+    this.parentRoute,
+  });
 
   final int houseId;
+  final String? parentRoute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,6 +31,7 @@ class HouseBatchesScreen extends ConsumerWidget {
 
     return AppPage(
       title: '生产批次',
+      parentRoute: parentRoute ?? '/houses/$houseId',
       actions: [
         if (canEdit && house != null)
           IconButton(
@@ -34,11 +40,6 @@ class HouseBatchesScreen extends ConsumerWidget {
             onPressed: () => _showCreateBatch(context, house),
             icon: const Icon(Icons.add),
           ),
-        IconButton(
-          tooltip: '返回兔舍详情',
-          onPressed: () => context.go('/houses/$houseId'),
-          icon: const Icon(Icons.storefront_outlined),
-        ),
         IconButton(
           tooltip: '刷新批次',
           onPressed: () => ref.invalidate(houseBatchesProvider(houseId)),
@@ -262,7 +263,6 @@ class _BatchListContentState extends State<_BatchListContent> {
               title: widget.house.name,
               subtitle: '兔舍级批次查看与筛选',
               subtitleMaxLines: 2,
-              onBack: () => context.go('/houses/${widget.house.id}'),
             );
           case 1:
             return const SizedBox(height: 12);
