@@ -241,7 +241,8 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         );
         Date schedulerNow = new Date();
         Date fatteningEnteredAt = DateUtil.plusDays(schedulerNow, -3);
-        Date arrivalAnchor = DateUtil.plusDays(schedulerNow, -7);
+        // 放在成熟阈值后一天，避免 DATETIME 秒精度让等号比较依赖 JVM 毫秒位。
+        Date arrivalAnchor = DateUtil.plusDays(schedulerNow, -8);
         jdbc.update(
             "update rabbits set growth_stage = 'MATURE', growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
