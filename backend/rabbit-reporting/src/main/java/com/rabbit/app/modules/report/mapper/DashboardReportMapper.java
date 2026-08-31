@@ -10,19 +10,25 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface DashboardReportMapper {
-    RabbitDashboardStats selectRabbitStats(@Param("houseIds") List<Long> houseIds);
+    RabbitDashboardStats selectRabbitStats(@Param("houseIds") List<Long> houseIds,
+                                            @Param("batchId") Long batchId);
 
-    Integer countActiveBreedingMothers(@Param("houseIds") List<Long> houseIds);
+    Integer countActiveBreedingMothers(@Param("houseIds") List<Long> houseIds,
+                                        @Param("batchId") Long batchId);
 
-    BreedingSummary selectBreedingSummary(@Param("houseIds") List<Long> houseIds);
+    BreedingSummary selectBreedingSummary(@Param("houseIds") List<Long> houseIds,
+                                           @Param("batchId") Long batchId);
 
-    Integer sumCurrentNursingKits(@Param("houseIds") List<Long> houseIds);
+    Integer sumCurrentNursingKits(@Param("houseIds") List<Long> houseIds,
+                                  @Param("batchId") Long batchId);
 
     List<MonthlyCount> selectMonthlyBirths(@Param("houseIds") List<Long> houseIds,
+                                           @Param("batchId") Long batchId,
                                            @Param("from") Date from,
                                            @Param("to") Date to);
 
     List<MonthlyCount> selectMonthlyWeaned(@Param("houseIds") List<Long> houseIds,
+                                           @Param("batchId") Long batchId,
                                            @Param("from") Date from,
                                            @Param("to") Date to);
 }

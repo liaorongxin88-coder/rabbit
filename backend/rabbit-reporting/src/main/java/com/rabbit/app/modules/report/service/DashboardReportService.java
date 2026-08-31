@@ -1,6 +1,8 @@
 package com.rabbit.app.modules.report.service;
 
+import com.rabbit.app.common.BizException;
 import com.rabbit.app.modules.batch.dto.BreedingSummary;
+import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.house.entity.RabbitHouse;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.report.dto.DashboardSummary;
@@ -18,24 +20,26 @@ import org.springframework.stereotype.Service;
 @Service
 public class DashboardReportService {
     private final HouseService houseService;
+    private final BatchMapper batchMapper;
     private final DashboardReportMapper mapper;
 
-    public DashboardReportService(HouseService houseService, DashboardReportMapper mapper) {
+    public DashboardReportService(HouseService houseService, BatchMapper batchMapper, DashboardReportMapper mapper) {
         this.houseService = houseService;
+        this.batchMapper = batchMapper;
         this.mapper = mapper;
     }
 
-    public DashboardSummary load(Long userId, Long selectedHouseId, Integer requestedYear) {
+    public DashboardSummary load(Long userId, Long selectedHouseId, Long selectedBatchId, Integer requestedYear) {
         int year = normalizeYear(requestedYear);
-        List<Long> houseIds = resolveHouseIds(userId, selectedHouseId);
-        DashboardSummary result = emptySummary(selectedHouseId, houseIds.size(), year);
+        List<Long> houseIds = resolveHouseIds(userId, selectedHouseId, selectedBatchId);
+        DashboardSummary result = emptySummary(selectedHouseId, selectedBatchId, houseIds.size(), year);
         if (houseIds.isEmpty()) {
             return result;
         }
 
-        RabbitDashboardStats rabbits = mapper.selectRabbitStats(houseIds);
-        BreedingSummary breeding = mapper.selectBreedingSummary(houseIds);
-        int bred = value(mapper.countActiveBreedingMothers(houseIds));
+        RabbitDashboardStats rabbits = mapper.selectRabbitStats(houseIds, selectedBatchId);
+        BreedingSummary breeding = mapper.selectBreedingSummary(houseIds, selectedBatchId);
+        int bred = value(mapper.countActiveBreedingMothers(houseIds, selectedBatchId));
         int femaleSeedRabbits = rabbits == null ? 0 : value(rabbits.getFemaleSeedRabbits());
         int totalKits = breeding == null ? 0 : value(breeding.getTotalKits());
         int liveKits = breeding == null ? 0 : value(breeding.getTotalLiveKits());
@@ -47,7 +51,7 @@ public class DashboardReportService {
         result.setBredRabbits(bred);
         result.setReadyForBreeding(Math.max(femaleSeedRabbits - bred, 0));
         result.setLitters(breeding == null ? 0 : value(breeding.getTotalLitters()));
-        result.setNursingKits(value(mapper.sumCurrentNursingKits(houseIds)));
+        result.setNursingKits(value(mapper.sumCurrentNursingKits(houseIds, selectedBatchId)));
         result.setCommodityRabbits(rabbits == null ? 0 : value(rabbits.getCommodityRabbits()));
         result.setReplacementRabbits(rabbits == null ? 0 : value(rabbits.getReplacementRabbits()));
         result.setLiveRate(totalKits <= 0 ? 0D : (double) liveKits / totalKits);
@@ -55,14 +59,20 @@ public class DashboardReportService {
         ZoneId zone = ZoneId.systemDefault();
         Date from = Date.from(LocalDate.of(year, 1, 1).atStartOfDay(zone).toInstant());
         Date to = Date.from(LocalDate.of(year + 1, 1, 1).atStartOfDay(zone).toInstant());
-        result.setMonthlyBirths(toMonths(mapper.selectMonthlyBirths(houseIds, from, to)));
-        result.setMonthlyWeaned(toMonths(mapper.selectMonthlyWeaned(houseIds, from, to)));
+        result.setMonthlyBirths(toMonths(mapper.selectMonthlyBirths(houseIds, selectedBatchId, from, to)));
+        result.setMonthlyWeaned(toMonths(mapper.selectMonthlyWeaned(houseIds, selectedBatchId, from, to)));
         return result;
     }
 
-    private List<Long> resolveHouseIds(Long userId, Long selectedHouseId) {
+    private List<Long> resolveHouseIds(Long userId, Long selectedHouseId, Long selectedBatchId) {
+        if (selectedBatchId != null && selectedHouseId == null) {
+            throw new BizException(400, "选择批次时必须指定兔舍");
+        }
         if (selectedHouseId != null) {
             houseService.assertHousePermission(userId, selectedHouseId, "view");
+            if (selectedBatchId != null && batchMapper.selectById(selectedHouseId, selectedBatchId) == null) {
+                throw new BizException(400, "批次不属于当前兔舍");
+            }
             return Collections.singletonList(selectedHouseId);
         }
         List<Long> ids = new ArrayList<Long>();
@@ -74,9 +84,10 @@ public class DashboardReportService {
         return ids;
     }
 
-    private static DashboardSummary emptySummary(Long selectedHouseId, int houseCount, int year) {
+    private static DashboardSummary emptySummary(Long selectedHouseId, Long selectedBatchId, int houseCount, int year) {
         DashboardSummary result = new DashboardSummary();
         result.setSelectedHouseId(selectedHouseId);
+        result.setSelectedBatchId(selectedBatchId);
         result.setHouseCount(houseCount);
         result.setYear(year);
         result.setTotalRabbits(0);

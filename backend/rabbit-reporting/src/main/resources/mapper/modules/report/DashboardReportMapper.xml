@@ -17,9 +17,18 @@
                coalesce(sum(case when type = '0' and gender = '0' then 1 else 0 end), 0) as femaleSeedRabbits,
                coalesce(sum(case when type = '2' then 1 else 0 end), 0) as commodityRabbits,
                coalesce(sum(case when type = '1' then 1 else 0 end), 0) as replacementRabbits
-        from rabbits
-        where house_id in <include refid="houseIds"/>
-          and is_active = true
+        from rabbits r
+        where r.house_id in <include refid="houseIds"/>
+          and r.is_active = true
+        <if test="batchId != null">
+          and exists (
+              select 1
+              from batch_rabbits br
+              where br.batch_id = #{batchId}
+                and br.rabbit_id = r.id
+                and br.is_active = true
+          )
+        </if>
     </select>
 
     <select id="countActiveBreedingMothers" resultType="int">
@@ -29,6 +38,9 @@
             and r.house_id = bc.house_id
         where bc.house_id in <include refid="houseIds"/>
           and bc.closed_at is null
+        <if test="batchId != null">
+          and bc.batch_id = #{batchId}
+        </if>
           <!--
             「已配种」看的是周期是否真的过了配种这一步，而不是「有一条未关闭的周期」。
             doe-breeding-v2 之后母兔入批即入轨，一开始就有一条处于待催情的开放周期；
@@ -43,14 +55,17 @@
     </select>
 
     <select id="selectBreedingSummary" resultType="com.rabbit.app.modules.batch.dto.BreedingSummary">
-        select coalesce(sum(total_litters), 0) as totalLitters,
+        select count(1) as totalLitters,
                coalesce(sum(total_kits), 0) as totalKits,
-               coalesce(sum(total_live_kits), 0) as totalLiveKits,
-               coalesce(sum(total_weaned), 0) as totalWeaned,
-               coalesce(sum(success_breeding_count), 0) as successBreedingCount,
-               coalesce(sum(failed_breeding_count), 0) as failedBreedingCount
-        from breeding_performance
+               coalesce(sum(live_kits), 0) as totalLiveKits,
+               coalesce(sum(coalesce(weaned_count, 0)), 0) as totalWeaned,
+               0 as successBreedingCount,
+               0 as failedBreedingCount
+        from litters
         where house_id in <include refid="houseIds"/>
+        <if test="batchId != null">
+          and batch_id = #{batchId}
+        </if>
     </select>
 
     <select id="sumCurrentNursingKits" resultType="int">
@@ -63,12 +78,18 @@
         from litters l
         where l.house_id in <include refid="houseIds"/>
           and l.status = 'NURSING'
+        <if test="batchId != null">
+          and l.batch_id = #{batchId}
+        </if>
     </select>
 
     <select id="selectMonthlyBirths" resultType="com.rabbit.app.modules.report.dto.MonthlyCount">
         select month(birth_date) as month, coalesce(sum(live_kits), 0) as count
         from parturition_records
         where house_id in <include refid="houseIds"/>
+        <if test="batchId != null">
+          and batch_id = #{batchId}
+        </if>
           and birth_date &gt;= #{from}
           and birth_date &lt; #{to}
         group by month(birth_date)
@@ -79,6 +100,9 @@
         select month(weaning_date) as month, coalesce(sum(weaning_count), 0) as count
         from weaning_records
         where house_id in <include refid="houseIds"/>
+        <if test="batchId != null">
+          and batch_id = #{batchId}
+        </if>
           and weaning_date &gt;= #{from}
           and weaning_date &lt; #{to}
         group by month(weaning_date)

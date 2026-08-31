@@ -4,6 +4,7 @@ import java.util.List;
 
 public class DashboardSummary {
     private Long selectedHouseId;
+    private Long selectedBatchId;
     private Integer houseCount;
     private Integer year;
     private Integer totalRabbits;
@@ -22,6 +23,8 @@ public class DashboardSummary {
 
     public Long getSelectedHouseId() { return selectedHouseId; }
     public void setSelectedHouseId(Long selectedHouseId) { this.selectedHouseId = selectedHouseId; }
+    public Long getSelectedBatchId() { return selectedBatchId; }
+    public void setSelectedBatchId(Long selectedBatchId) { this.selectedBatchId = selectedBatchId; }
     public Integer getHouseCount() { return houseCount; }
     public void setHouseCount(Integer houseCount) { this.houseCount = houseCount; }
     public Integer getYear() { return year; }

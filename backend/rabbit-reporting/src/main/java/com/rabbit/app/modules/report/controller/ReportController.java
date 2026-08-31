@@ -60,9 +60,12 @@ public class ReportController {
     @GetMapping("/dashboard")
     @RequiresPermission(PermissionCode.DASHBOARD_QUERY)
     public ApiResponse<DashboardSummary> dashboard(
+            @RequestHeader(value = "X-House-Id", required = false) Long scopedHouseId,
             @RequestParam(value = "houseId", required = false) Long houseId,
+            @RequestParam(value = "batchId", required = false) Long batchId,
             @RequestParam(value = "year", required = false) Integer year) {
-        return ApiResponse.ok(dashboardReportService.load(requireLogin(), houseId, year));
+        Long effectiveHouseId = dashboardHouseId(scopedHouseId, houseId, batchId);
+        return ApiResponse.ok(dashboardReportService.load(requireLogin(), effectiveHouseId, batchId, year));
     }
 
     @GetMapping("/feed-summary")
@@ -207,6 +210,16 @@ public class ReportController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=event_ack_summary.csv")
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .body(body);
+    }
+
+    private Long dashboardHouseId(Long scopedHouseId, Long houseId, Long batchId) {
+        if (scopedHouseId != null && houseId != null && !scopedHouseId.equals(houseId)) {
+            throw new BizException(400, "兔舍统计范围不一致");
+        }
+        if (batchId != null && scopedHouseId == null) {
+            throw new BizException(400, "选择批次时必须指定兔舍");
+        }
+        return scopedHouseId == null ? houseId : scopedHouseId;
     }
 
     private Long requireLogin() {

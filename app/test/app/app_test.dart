@@ -27,6 +27,7 @@ import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
 import 'package:rabbit_flutter/src/domain/auth/sms_code_delivery.dart';
 import 'package:rabbit_flutter/src/ui/auth/screens/login.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
@@ -843,7 +844,7 @@ void main() {
     expect(find.byKey(const ValueKey('reminder-house')), findsNothing);
   });
 
-  testWidgets('dashboard defaults to all houses and filters one house',
+  testWidgets('dashboard defaults to one house and can summarize all houses',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'userId': 3,
@@ -876,6 +877,7 @@ void main() {
             ],
           ),
           homeEventsProvider.overrideWith((_) async => const <EventItem>[]),
+          houseBatchesProvider.overrideWith((_, __) async => const []),
           dashboardSummaryProvider.overrideWith((_, query) async {
             final selected = query.houseId;
             return DashboardSummary(
@@ -903,18 +905,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('数据面板'), findsWidgets);
-    expect(find.text('全部兔舍'), findsOneWidget);
+    expect(find.textContaining('测试1 / 全部批次'), findsOneWidget);
+    expect(find.text('统计该兔舍的全部生产数据'), findsOneWidget);
+    expect(find.text('2'), findsAtLeastNWidgets(1));
+
+    await tester.tap(
+      find.byKey(const ValueKey('dashboard-house-selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('全部兔舍').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('全部兔舍 /'), findsOneWidget);
     expect(find.text('已汇总 2 个兔舍'), findsOneWidget);
     expect(find.text('3'), findsAtLeastNWidgets(1));
-
-    await tester.tap(find.byTooltip('选择兔舍'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('测试1').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('测试1'), findsOneWidget);
-    expect(find.text('仅显示当前选择的兔舍'), findsOneWidget);
-    expect(find.text('2'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('blocks account login when legal consent is unchecked',

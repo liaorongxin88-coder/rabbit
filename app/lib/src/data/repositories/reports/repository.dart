@@ -16,15 +16,19 @@ class ReportRepository {
 
   Future<DashboardSummary> loadDashboardSummary({
     required int? houseId,
+    required int? batchId,
     required int year,
     CancelToken? cancelToken,
   }) {
+    final query = <String, dynamic>{
+      if (houseId != null && houseId > 0) 'houseId': houseId,
+      if (batchId != null && batchId > 0) 'batchId': batchId,
+      'year': year,
+    };
     return _api.get<DashboardSummary>(
       '/api/reports/dashboard',
-      query: {
-        if (houseId != null && houseId > 0) 'houseId': houseId,
-        'year': year,
-      },
+      houseId: houseId,
+      query: query,
       cancelToken: cancelToken,
       decode: (data) => DashboardSummary.fromJson(
         requireJsonObject(data, message: '数据面板格式不正确'),

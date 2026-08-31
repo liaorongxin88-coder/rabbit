@@ -3,49 +3,26 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/houses/house.dart';
 import 'package:rabbit_flutter/src/domain/reports/dashboard.dart';
+import 'package:rabbit_flutter/src/ui/auth/view_models/controller.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 
-final _selectedDashboardHouseProvider = StateProvider<int?>((ref) => null);
+const _uninitializedDashboardHouseId = -1;
+
+final _selectedDashboardHouseProvider = StateProvider<int?>(
+  (ref) => _uninitializedDashboardHouseId,
+);
+final _selectedDashboardBatchProvider = StateProvider<int?>((ref) => null);
 final _selectedDashboardYearProvider = StateProvider<int>(
   (ref) => DateTime.now().year,
 );
-
-final _dashboardPanelProvider =
-    FutureProvider<_DashboardPanelData>((ref) async {
-  final selectedHouseId = ref.watch(_selectedDashboardHouseProvider);
-  final selectedYear = ref.watch(_selectedDashboardYearProvider);
-  final houses = await ref.watch(housesProvider.future);
-  final selectedHouse = _findHouse(houses, selectedHouseId);
-  final effectiveSelectedHouseId = selectedHouse?.id;
-  final visibleHouses =
-      selectedHouse == null ? houses : <RabbitHouse>[selectedHouse];
-  if (visibleHouses.isEmpty) {
-    return _DashboardPanelData.empty(
-      selectedHouseId: effectiveSelectedHouseId,
-      houses: houses,
-      year: selectedYear,
-    );
-  }
-
-  final summary = await ref.watch(
-    dashboardSummaryProvider((
-      houseId: effectiveSelectedHouseId,
-      year: selectedYear,
-    )).future,
-  );
-
-  return _DashboardPanelData(
-    selectedHouseId: effectiveSelectedHouseId,
-    houses: houses,
-    summary: summary,
-  );
-});
 
 RabbitHouse? _findHouse(List<RabbitHouse> houses, int? houseId) {
   if (houseId == null) {
@@ -59,83 +36,160 @@ RabbitHouse? _findHouse(List<RabbitHouse> houses, int? houseId) {
   return null;
 }
 
+RabbitHouse? _resolveDashboardHouse(
+  List<RabbitHouse> houses,
+  int? selectedHouseId,
+  int? preferredHouseId,
+) {
+  if (selectedHouseId == null) {
+    return null;
+  }
+  if (selectedHouseId != _uninitializedDashboardHouseId) {
+    return _findHouse(houses, selectedHouseId);
+  }
+  return _findHouse(houses, preferredHouseId) ??
+      (houses.isEmpty ? null : houses.first);
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final panel = ref.watch(_dashboardPanelProvider);
+    final houses = ref.watch(housesProvider);
     final selectedHouseId = ref.watch(_selectedDashboardHouseProvider);
+    final preferredHouseId =
+        ref.watch(authControllerProvider).valueOrNull?.houseId;
+    final selectedBatchId = ref.watch(_selectedDashboardBatchProvider);
     final selectedYear = ref.watch(_selectedDashboardYearProvider);
     final palette = AppPalette.of(context);
 
     return AppPage(
       title: '数据面板',
       actions: [
-        panel.maybeWhen(
-          data: (data) => _HouseFilterMenu(
-            houses: data.houses,
-            selectedHouseId: selectedHouseId,
-            onChanged: (houseId) {
-              ref.read(_selectedDashboardHouseProvider.notifier).state =
-                  houseId;
-            },
-          ),
-          orElse: () => const SizedBox.shrink(),
-        ),
         IconButton(
           tooltip: '刷新',
           onPressed: () => _refresh(ref),
           icon: const Icon(Icons.refresh),
         ),
       ],
-      child: panel.when(
-        data: (data) {
-          if (data.houses.isEmpty) {
+      child: houses.when(
+        data: (items) {
+          if (items.isEmpty) {
             return const EmptyState(
               icon: Icons.storefront_outlined,
               title: '尚未加入兔舍',
               message: '创建兔舍或接受手机号邀请后，这里会汇总可访问兔舍的生产数据。',
             );
           }
+          final selectedHouse = _resolveDashboardHouse(
+            items,
+            selectedHouseId,
+            preferredHouseId,
+          );
+          final effectiveHouseId = selectedHouse?.id;
+          final effectiveBatchId =
+              effectiveHouseId == null ? null : selectedBatchId;
+          final query = (
+            houseId: effectiveHouseId,
+            batchId: effectiveBatchId,
+            year: selectedYear,
+          );
+          final summary = ref.watch(dashboardSummaryProvider(query));
+          final batches = effectiveHouseId == null
+              ? null
+              : ref.watch(houseBatchesProvider(effectiveHouseId));
+
           return RefreshIndicator(
             onRefresh: () => _refresh(ref),
             child: ListView(
               padding: AppSpacing.pagePadding,
               children: [
-                _DashboardScopeBanner(data: data),
-                const SizedBox(height: 12),
-                _DashboardHero(stats: data.stats),
-                const SizedBox(height: 18),
-                _MetricGrid(metrics: data.metrics),
-                const SizedBox(height: 26),
-                _SectionTitle(
-                  year: selectedYear,
-                  onYearChanged: (year) {
-                    ref.read(_selectedDashboardYearProvider.notifier).state =
-                        year;
+                _DashboardFilters(
+                  houses: items,
+                  selectedHouseId: effectiveHouseId,
+                  selectedBatchId: effectiveBatchId,
+                  batches: batches,
+                  onHouseChanged: (houseId) {
+                    ref.read(_selectedDashboardBatchProvider.notifier).state =
+                        null;
+                    ref.read(_selectedDashboardHouseProvider.notifier).state =
+                        houseId;
                   },
+                  onBatchChanged: (batchId) {
+                    ref.read(_selectedDashboardBatchProvider.notifier).state =
+                        batchId;
+                  },
+                  onRetryBatches: effectiveHouseId == null
+                      ? null
+                      : () => ref.invalidate(
+                            houseBatchesProvider(effectiveHouseId),
+                          ),
                 ),
                 const SizedBox(height: 12),
-                _MonthlyChartCard(
-                  title: '每月出生兔子数量',
-                  color: palette.primary,
-                  values: data.monthlyBirths,
+                _DashboardScopeBanner(
+                  houses: items,
+                  selectedHouse: selectedHouse,
+                  selectedBatchId: effectiveBatchId,
+                  batches: batches,
+                  year: selectedYear,
                 ),
-                const SizedBox(height: 22),
-                Text(
-                  '$selectedYear年每月满月兔子数量',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: palette.primary,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
+                const SizedBox(height: 12),
+                ...summary.when(
+                  data: (value) {
+                    final data = _DashboardPanelData(summary: value);
+                    return [
+                      _DashboardHero(stats: data.stats),
+                      const SizedBox(height: 18),
+                      _MetricGrid(metrics: data.metrics),
+                      const SizedBox(height: 26),
+                      _SectionTitle(
+                        year: selectedYear,
+                        onYearChanged: (year) {
+                          ref
+                              .read(_selectedDashboardYearProvider.notifier)
+                              .state = year;
+                        },
                       ),
-                ),
-                const SizedBox(height: 12),
-                _MonthlyChartCard(
-                  title: '每月满月兔子数量',
-                  color: palette.success,
-                  values: data.monthlyWeaned,
+                      const SizedBox(height: 12),
+                      _MonthlyChartCard(
+                        title: '每月出生兔子数量',
+                        color: palette.primary,
+                        values: data.monthlyBirths,
+                      ),
+                      const SizedBox(height: 22),
+                      Text(
+                        '$selectedYear年每月满月兔子数量',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              color: palette.primary,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      _MonthlyChartCard(
+                        title: '每月满月兔子数量',
+                        color: palette.success,
+                        values: data.monthlyWeaned,
+                      ),
+                    ];
+                  },
+                  loading: () => const [
+                    SizedBox(
+                      height: 180,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ],
+                  error: (error, _) => [
+                    ErrorState(
+                      message: error.toString(),
+                      onRetry: () =>
+                          ref.invalidate(dashboardSummaryProvider(query)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -144,72 +198,42 @@ class DashboardScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => ErrorState(
           message: error.toString(),
-          onRetry: () => ref.invalidate(_dashboardPanelProvider),
+          onRetry: () => ref.invalidate(housesProvider),
         ),
       ),
     );
   }
 
   Future<void> _refresh(WidgetRef ref) async {
-    final data = ref.read(_dashboardPanelProvider).valueOrNull;
-    ref.invalidate(_dashboardPanelProvider);
+    final houses =
+        ref.read(housesProvider).valueOrNull ?? const <RabbitHouse>[];
+    final selectedHouse = _resolveDashboardHouse(
+      houses,
+      ref.read(_selectedDashboardHouseProvider),
+      ref.read(authControllerProvider).valueOrNull?.houseId,
+    );
+    final houseId = selectedHouse?.id;
+    final batchId =
+        houseId == null ? null : ref.read(_selectedDashboardBatchProvider);
+    final query = (
+      houseId: houseId,
+      batchId: batchId,
+      year: ref.read(_selectedDashboardYearProvider),
+    );
+
     ref.invalidate(housesProvider);
-    if (data != null) {
-      ref.invalidate(dashboardSummaryProvider((
-        houseId: data.selectedHouseId,
-        year: data.summary.year,
-      )));
+    if (houseId != null) {
+      ref.invalidate(houseBatchesProvider(houseId));
     }
-    await ref.read(_dashboardPanelProvider.future);
+    ref.invalidate(dashboardSummaryProvider(query));
+    await ref.read(dashboardSummaryProvider(query).future);
   }
 }
 
 class _DashboardPanelData {
-  const _DashboardPanelData({
-    required this.selectedHouseId,
-    required this.houses,
-    required this.summary,
-  });
+  const _DashboardPanelData({required this.summary});
 
-  final int? selectedHouseId;
-  final List<RabbitHouse> houses;
   final DashboardSummary summary;
-
-  factory _DashboardPanelData.empty({
-    required int? selectedHouseId,
-    required List<RabbitHouse> houses,
-    required int year,
-  }) {
-    return _DashboardPanelData(
-      selectedHouseId: selectedHouseId,
-      houses: houses,
-      summary: DashboardSummary.empty(year: year),
-    );
-  }
-
-  bool get isAllHouses => selectedHouseId == null;
-
-  List<RabbitHouse> get visibleHouses {
-    if (selectedHouseId == null) {
-      return houses;
-    }
-    return houses.where((house) => house.id == selectedHouseId).toList();
-  }
-
-  String get scopeTitle {
-    if (isAllHouses) {
-      return '全部兔舍';
-    }
-    final visible = visibleHouses;
-    return visible.isEmpty ? '已选择兔舍' : visible.first.name;
-  }
-
-  String get scopeDescription {
-    if (isAllHouses) {
-      return '已汇总 ${houses.length} 个兔舍';
-    }
-    return '仅显示当前选择的兔舍';
-  }
 
   _RabbitStats get stats => _RabbitStats.fromSummary(summary);
 
@@ -277,90 +301,239 @@ class _RabbitStats {
   }
 }
 
-class _HouseFilterMenu extends StatelessWidget {
-  const _HouseFilterMenu({
+class _DashboardFilters extends StatelessWidget {
+  const _DashboardFilters({
     required this.houses,
     required this.selectedHouseId,
-    required this.onChanged,
+    required this.selectedBatchId,
+    required this.batches,
+    required this.onHouseChanged,
+    required this.onBatchChanged,
+    required this.onRetryBatches,
   });
 
   final List<RabbitHouse> houses;
   final int? selectedHouseId;
-  final ValueChanged<int?> onChanged;
+  final int? selectedBatchId;
+  final AsyncValue<List<Batch>>? batches;
+  final ValueChanged<int?> onHouseChanged;
+  final ValueChanged<int?> onBatchChanged;
+  final VoidCallback? onRetryBatches;
 
   @override
   Widget build(BuildContext context) {
-    final selectedValue = selectedHouseId ?? 0;
-    return PopupMenuButton<int>(
-      tooltip: '选择兔舍',
-      enabled: houses.isNotEmpty,
-      initialValue: selectedValue,
-      onSelected: (value) => onChanged(value == 0 ? null : value),
-      itemBuilder: (context) => [
-        PopupMenuItem<int>(
-          value: 0,
-          child: _HouseFilterMenuItem(
-            selected: selectedHouseId == null,
-            title: '全部兔舍',
-          ),
-        ),
-        for (final house in houses)
-          PopupMenuItem<int>(
-            value: house.id,
-            child: _HouseFilterMenuItem(
-              selected: selectedHouseId == house.id,
-              title: house.name,
+    final palette = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.line),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final house = _SelectorField(
+            label: '兔舍范围',
+            child: _selectorShell(
+              context,
+              DropdownButton<int>(
+                key: const ValueKey('dashboard-house-selector'),
+                value: selectedHouseId ?? 0,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
+                  for (final house in houses)
+                    DropdownMenuItem(
+                      value: house.id,
+                      child: Text(
+                        house.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (value) =>
+                    onHouseChanged(value == null || value == 0 ? null : value),
+              ),
             ),
+          );
+          final batch = _SelectorField(
+            label: '批次范围',
+            child: _buildBatchSelector(context),
+          );
+
+          if (constraints.maxWidth >= 560) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: house),
+                const SizedBox(width: 12),
+                Expanded(child: batch),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              house,
+              const SizedBox(height: 12),
+              batch,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBatchSelector(BuildContext context) {
+    if (selectedHouseId == null) {
+      return _statusBatchSelector(context, '选择单一兔舍后可选批次');
+    }
+    final state = batches;
+    if (state == null) {
+      return _statusBatchSelector(context, '正在加载批次');
+    }
+    return state.when(
+      data: (items) {
+        if (items.isEmpty) {
+          return _statusBatchSelector(context, '当前兔舍暂无批次');
+        }
+        final selectedExists = selectedBatchId != null &&
+            items.any((batch) => batch.id == selectedBatchId);
+        return _selectorShell(
+          context,
+          DropdownButton<int>(
+            key: const ValueKey('dashboard-batch-selector'),
+            value: selectedBatchId ?? 0,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(value: 0, child: Text('全部批次')),
+              if (selectedBatchId != null && !selectedExists)
+                DropdownMenuItem(
+                  value: selectedBatchId,
+                  child: Text('批次 #$selectedBatchId'),
+                ),
+              for (final batch in items)
+                DropdownMenuItem(
+                  value: batch.id,
+                  child: Text(
+                    batch.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) =>
+                onBatchChanged(value == null || value == 0 ? null : value),
           ),
-      ],
-      icon: const Icon(Icons.filter_list_rounded),
+        );
+      },
+      loading: () => _statusBatchSelector(context, '正在加载批次'),
+      error: (_, __) => _selectorShell(
+        context,
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '批次加载失败',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              tooltip: '重新加载批次',
+              onPressed: onRetryBatches,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusBatchSelector(BuildContext context, String text) {
+    return _selectorShell(
+      context,
+      DropdownButton<int>(
+        key: const ValueKey('dashboard-batch-selector'),
+        value: 0,
+        isExpanded: true,
+        items: [DropdownMenuItem(value: 0, child: Text(text))],
+        onChanged: null,
+      ),
+    );
+  }
+
+  Widget _selectorShell(BuildContext context, Widget child) {
+    final palette = AppPalette.of(context);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: palette.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: palette.line),
+      ),
+      child: DropdownButtonHideUnderline(child: child),
     );
   }
 }
 
-class _HouseFilterMenuItem extends StatelessWidget {
-  const _HouseFilterMenuItem({
-    required this.selected,
-    required this.title,
-  });
+class _SelectorField extends StatelessWidget {
+  const _SelectorField({required this.label, required this.child});
 
-  final bool selected;
-  final String title;
+  final String label;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          selected ? Icons.check_rounded : Icons.storefront_outlined,
-          size: 20,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        Text(label, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 6),
+        child,
       ],
     );
   }
 }
 
 class _DashboardScopeBanner extends StatelessWidget {
-  const _DashboardScopeBanner({required this.data});
+  const _DashboardScopeBanner({
+    required this.houses,
+    required this.selectedHouse,
+    required this.selectedBatchId,
+    required this.batches,
+    required this.year,
+  });
 
-  final _DashboardPanelData data;
+  final List<RabbitHouse> houses;
+  final RabbitHouse? selectedHouse;
+  final int? selectedBatchId;
+  final AsyncValue<List<Batch>>? batches;
+  final int year;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
+    final selectedBatch = selectedBatchId == null
+        ? null
+        : _findBatch(batches?.valueOrNull ?? const <Batch>[], selectedBatchId!);
+    final scope = selectedHouse == null
+        ? '全部兔舍 / $year年'
+        : '${selectedHouse!.name} / '
+            '${selectedBatchId == null ? '全部批次' : selectedBatch?.title ?? '批次 #$selectedBatchId'} / '
+            '$year年';
+    final description = selectedHouse == null
+        ? '已汇总 ${houses.length} 个兔舍'
+        : selectedBatchId == null
+            ? '统计该兔舍的全部生产数据'
+            : '统计所选批次的生产数据';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: palette.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: palette.line),
       ),
       child: Row(
@@ -369,15 +542,16 @@ class _DashboardScopeBanner extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color:
-                  data.isAllHouses ? palette.primarySoft : palette.successSoft,
+              color: selectedHouse == null
+                  ? palette.primarySoft
+                  : palette.successSoft,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              data.isAllHouses
+              selectedHouse == null
                   ? Icons.grid_view_rounded
-                  : Icons.storefront_outlined,
-              color: data.isAllHouses ? palette.primary : palette.success,
+                  : Icons.filter_alt_outlined,
+              color: selectedHouse == null ? palette.primary : palette.success,
               size: 20,
             ),
           ),
@@ -387,8 +561,8 @@ class _DashboardScopeBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  data.scopeTitle,
-                  maxLines: 1,
+                  '当前统计范围：$scope',
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
@@ -396,7 +570,7 @@ class _DashboardScopeBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  data.scopeDescription,
+                  description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: palette.muted,
                       ),
@@ -408,6 +582,15 @@ class _DashboardScopeBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+Batch? _findBatch(List<Batch> batches, int batchId) {
+  for (final batch in batches) {
+    if (batch.id == batchId) {
+      return batch;
+    }
+  }
+  return null;
 }
 
 class _DashboardHero extends StatelessWidget {
@@ -492,6 +675,7 @@ class _HeroNumber extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               valueText ?? '${value ?? 0}',
+              key: ValueKey('dashboard-hero-value-$label'),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: palette.primary,
                     fontSize: 26,
@@ -706,6 +890,7 @@ class _SectionTitle extends StatelessWidget {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
+          key: const ValueKey('dashboard-year-selector'),
           value: year,
           icon: const Icon(Icons.keyboard_arrow_down_rounded),
           items: [

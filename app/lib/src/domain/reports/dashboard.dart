@@ -115,6 +115,7 @@ class DashboardReport {
 class DashboardSummary {
   const DashboardSummary({
     required this.selectedHouseId,
+    this.selectedBatchId,
     required this.houseCount,
     required this.year,
     required this.totalRabbits,
@@ -133,6 +134,7 @@ class DashboardSummary {
   });
 
   final int? selectedHouseId;
+  final int? selectedBatchId;
   final int houseCount;
   final int year;
   final int totalRabbits;
@@ -152,6 +154,7 @@ class DashboardSummary {
   factory DashboardSummary.empty({required int year}) {
     return DashboardSummary(
       selectedHouseId: null,
+      selectedBatchId: null,
       houseCount: 0,
       year: year,
       totalRabbits: 0,
@@ -173,6 +176,7 @@ class DashboardSummary {
   static DashboardSummary fromJson(Map<String, dynamic> json) {
     return DashboardSummary(
       selectedHouseId: _nullableIntValue(json['selectedHouseId']),
+      selectedBatchId: _nullableIntValue(json['selectedBatchId']),
       houseCount: _intValue(json['houseCount']),
       year: _intValue(json['year']),
       totalRabbits: _intValue(json['totalRabbits']),
