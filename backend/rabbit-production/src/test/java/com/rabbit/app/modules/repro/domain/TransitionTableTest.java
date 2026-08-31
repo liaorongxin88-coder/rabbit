@@ -193,7 +193,9 @@ class TransitionTableTest {
         );
 
         assertAll(
-            () -> assertEquals(DueAnchor.PREPARTUM_LEAD, palpation.dueAnchor()),
+            () -> assertEquals(
+                DueAnchor.PALPATION_TO_PREPARTUM, palpation.dueAnchor()
+            ),
             () -> assertEquals(DueAnchor.SAME_DAY, prepartum.dueAnchor())
         );
     }

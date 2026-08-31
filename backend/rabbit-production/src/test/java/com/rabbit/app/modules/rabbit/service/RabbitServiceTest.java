@@ -42,34 +42,29 @@ import com.rabbit.app.util.DateUtil;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 class RabbitServiceTest {
-    @ParameterizedTest
-    @CsvSource({
-        "ADAPTATION, 36",
-        "GROWING, 31",
-        "FATTENING, 10",
-        "MATURE, 0"
-    })
-    void commodityMaturityUsesTheEnteredStageDateAndRemainingStages(
-            String growthStage, int remainingDays) {
+    @Test
+    void commodityEntryDerivesStageAndMaturityFromTheWeaningDate() {
         CreationFixture fixture = creationFixture();
-        Date arrivalDate = new Date(1_704_067_200_000L);
-        Date stageEnteredAt = new Date(1_706_745_600_000L);
-        Rabbit rabbit = rabbit("2", arrivalDate, stageEnteredAt);
-        rabbit.setGrowthStage(growthStage);
+        Date weaningDate = DateUtil.now();
+        Rabbit rabbit = rabbit(
+            "2",
+            weaningDate,
+            DateUtil.plusDays(weaningDate, -10)
+        );
+        rabbit.setGrowthStage("FATTENING");
 
-        fixture.service().createRabbit(7L, 8L, rabbit, null, "commodity-" + growthStage);
+        fixture.service().createRabbit(7L, 8L, rabbit, null, "commodity-auto-stage");
 
         ArgumentCaptor<WorkTaskWriter.RabbitTaskScheduleRequest> task =
             ArgumentCaptor.forClass(WorkTaskWriter.RabbitTaskScheduleRequest.class);
         verify(fixture.workTaskWriter()).scheduleForRabbit(task.capture());
-        assertEquals(stageEnteredAt, rabbit.getGrowthStageEnteredAt());
+        assertEquals("ADAPTATION", rabbit.getGrowthStage());
+        assertEquals(weaningDate, rabbit.getGrowthStageEnteredAt());
         assertEquals(
-            DateUtil.plusDays(stageEnteredAt, remainingDays),
+            DateUtil.plusDays(weaningDate, 37),
             task.getValue().dueTime()
         );
     }
@@ -110,29 +105,32 @@ class RabbitServiceTest {
     }
 
     @Test
-    void oldClientFallsBackToArrivalDateForGrowthStageEntry() {
+    void oldClientStageFieldsAreIgnoredInFavorOfTheWeaningDate() {
         CreationFixture fixture = creationFixture();
-        Date arrivalDate = new Date(1_706_745_600_000L);
-        Rabbit rabbit = rabbit("2", arrivalDate, null);
+        Date weaningDate = new Date(1_706_745_600_000L);
+        Rabbit rabbit = rabbit("2", weaningDate, DateUtil.plusDays(weaningDate, -5));
         rabbit.setGrowthStage("ADAPTATION");
 
         fixture.service().createRabbit(7L, 8L, rabbit, null, "legacy-client");
 
-        assertEquals(arrivalDate, rabbit.getGrowthStageEnteredAt());
+        assertEquals("MATURE", rabbit.getGrowthStage());
+        assertEquals(
+            DateUtil.plusDays(weaningDate, 37),
+            rabbit.getGrowthStageEnteredAt()
+        );
     }
 
     @Test
-    void futureGrowthStageEntryDateIsRejected() {
+    void commodityEntryRejectsAFutureWeaningDate() {
         CreationFixture fixture = creationFixture();
         Date tomorrow = DateUtil.plusDays(DateUtil.now(), 1);
-        Rabbit rabbit = rabbit("2", DateUtil.now(), tomorrow);
-        rabbit.setGrowthStage("ADAPTATION");
+        Rabbit rabbit = rabbit("2", tomorrow, null);
 
         BizException error = assertThrows(BizException.class,
-            () -> fixture.service().createRabbit(7L, 8L, rabbit, null, "future-stage"));
+            () -> fixture.service().createRabbit(7L, 8L, rabbit, null, "future-weaning"));
 
         assertEquals(400, error.getCode());
-        assertEquals("进入当前阶段日期不能晚于今天", error.getMessage());
+        assertEquals("断奶日期不能晚于今天", error.getMessage());
     }
 
     @Test

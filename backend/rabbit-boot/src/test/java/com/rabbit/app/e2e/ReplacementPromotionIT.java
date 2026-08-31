@@ -97,7 +97,7 @@ public class ReplacementPromotionIT extends E2eTestSupport {
     }
 
     @Test
-    void historicalCommodityEntryDatesPersistAdvanceAndKeepReminderCalendarDays() {
+    void historicalCommodityWeaningDatesImmediatelyDeriveMaturityAndReminderDays() {
         UserSession owner = register("commodity_entry_dates");
         long houseId = createHouse(owner, "商品兔历史入场日期兔舍", 1, 1, 1);
         long cageId = cageIds(owner, houseId).get(0);
@@ -134,12 +134,14 @@ public class ReplacementPromotionIT extends E2eTestSupport {
                     + " where house_id = ? and id = ?",
                 String.class, houseId, rabbitId
             ));
-            Assertions.assertEquals(selectedDate.toString(), jdbc.queryForObject(
+            String expectedMatureDate = selectedDate.plusDays(maturityDays + 1).toString();
+            Assertions.assertEquals(expectedMatureDate, jdbc.queryForObject(
                 "select date_format(growth_stage_entered_at, '%Y-%m-%d') from rabbits"
                     + " where house_id = ? and id = ?",
                 String.class, houseId, rabbitId
             ));
-            String expectedDueDate = selectedDate.plusDays(maturityDays).toString();
+            Assertions.assertEquals("MATURE", rabbit.get("growthStage").asText());
+            String expectedDueDate = expectedMatureDate;
             String dueDate = jdbc.queryForObject(
                 "select date_format(due_date, '%Y-%m-%d') from work_tasks"
                     + " where house_id = ? and rabbit_id = ?"
@@ -155,7 +157,7 @@ public class ReplacementPromotionIT extends E2eTestSupport {
                 java.sql.Date.valueOf(dueDates.get(0)),
                 java.sql.Date.valueOf(dueDates.get(1))
             ));
-        Assertions.assertEquals(2, commodityGrowthService.advanceHouse(houseId, new Date()));
+        Assertions.assertEquals(0, commodityGrowthService.advanceHouse(houseId, new Date()));
         for (Long rabbitId : rabbitIds) {
             Assertions.assertEquals("MATURE", jdbc.queryForObject(
                 "select growth_stage from rabbits where house_id = ? and id = ?",
@@ -188,6 +190,7 @@ public class ReplacementPromotionIT extends E2eTestSupport {
 
         jdbc.update(
             "update rabbits set growth_stage = 'JUVENILE',"
+                + " arrival_date = date_sub(curdate(), interval 40 day),"
                 + " growth_stage_entered_at = date_sub(now(), interval 40 day) where id = ?",
             rabbitId
         );
@@ -293,9 +296,9 @@ public class ReplacementPromotionIT extends E2eTestSupport {
             houseId
         );
 
-        assertCommodityGrowthStage(houseId, rabbitId, 2, "GROWING");
-        assertCommodityGrowthStage(houseId, rabbitId, 17, "FATTENING");
-        assertCommodityGrowthStage(houseId, rabbitId, 29, "MATURE");
+        assertCommodityGrowthStage(houseId, rabbitId, 3, "GROWING");
+        assertCommodityGrowthStage(houseId, rabbitId, 18, "FATTENING");
+        assertCommodityGrowthStage(houseId, rabbitId, 30, "MATURE");
     }
 
     private void assertCommodityGrowthStage(long houseId, long rabbitId, int daysSinceEntry, String expectedStage) {
@@ -312,8 +315,9 @@ public class ReplacementPromotionIT extends E2eTestSupport {
         Date enteredAt = new Date(DateUtil.plusDays(now, -daysSinceEntry).getTime() - 3_600_000L);
         jdbc.update(
             "update rabbits set growth_stage = 'JUVENILE',"
-                + " growth_stage_entered_at = ?"
+                + " arrival_date = ?, growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
+            enteredAt,
             enteredAt,
             houseId,
             rabbitId

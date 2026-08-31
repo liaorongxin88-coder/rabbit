@@ -1079,7 +1079,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     _arrivalDate = rabbit?.arrivalDate == null
         ? _farmToday()
         : _dateOnly(rabbit!.arrivalDate!);
-    _growthStageEnteredAt = rabbit == null ? _arrivalDate : null;
+    _growthStageEnteredAt =
+        rabbit == null && widget.initialType == '1' ? _arrivalDate : null;
     if (rabbit == null) {
       _type = widget.initialType;
       _growthStage = null;
@@ -1341,8 +1342,10 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
           ),
           const SizedBox(height: 18),
         ],
-        _buildStageFields(context),
-        const SizedBox(height: 18),
+        if (_isEdit || _type != '2') ...[
+          _buildStageFields(context),
+          const SizedBox(height: 18),
+        ],
         if (_isEdit) ...[
           const _SectionLabel('当前笼位'),
           const SizedBox(height: 8),
@@ -1382,7 +1385,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         const SizedBox(height: 12),
         _buildDateField(
           key: const ValueKey('rabbit-arrival-date'),
-          label: '入场日期',
+          label: _type == '2' ? '断奶日期' : '入场日期',
           value: _arrivalDate,
           enabled: !_isEdit,
           onPicked: (value) => setState(() {
@@ -2125,24 +2128,25 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
       } else if (_isBatchEntry) {
         final requestId = _batchRequestId ?? _uuid.v4();
         _batchRequestId = requestId;
-        final result =
-            await ref.read(rabbitRepositoryProvider).createRabbitBatch(
-                  houseId: widget.houseId,
-                  cageId: _createCage.id,
-                  quantity: _quantity,
-                  totalWeight: double.parse(_weightController.text.trim()),
-                  type: _type,
-                  gender: _gender,
-                  breed: _breedController.text,
-                  arrivalMethod: _arrivalMethod,
-                  sourceSeller: _sourceSellerController.text,
-                  motherId: int.tryParse(_motherIdController.text.trim()),
-                  arrivalDate: _arrivalDate!,
-                  growthStage: _type == '2' ? _growthStage : null,
-                  growthStageEnteredAt: _growthStageEnteredAt,
-                  reproductiveStage: _reproductiveStage,
-                  requestId: requestId,
-                );
+        final result = await ref
+            .read(rabbitRepositoryProvider)
+            .createRabbitBatch(
+              houseId: widget.houseId,
+              cageId: _createCage.id,
+              quantity: _quantity,
+              totalWeight: double.parse(_weightController.text.trim()),
+              type: _type,
+              gender: _gender,
+              breed: _breedController.text,
+              arrivalMethod: _arrivalMethod,
+              sourceSeller: _sourceSellerController.text,
+              motherId: int.tryParse(_motherIdController.text.trim()),
+              arrivalDate: _arrivalDate!,
+              growthStage: null,
+              growthStageEnteredAt: _type == '1' ? _growthStageEnteredAt : null,
+              reproductiveStage: _reproductiveStage,
+              requestId: requestId,
+            );
         ref.invalidate(houseRabbitsProvider(widget.houseId));
         ref.invalidate(houseCagesProvider(widget.houseId));
         ref.invalidate(homeEventsProvider);
@@ -2167,8 +2171,8 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
               motherId: int.tryParse(_motherIdController.text.trim()),
               arrivalDate: _arrivalDate!,
               weight: double.tryParse(_weightController.text.trim()),
-              growthStage: _type == '2' ? _growthStage : null,
-              growthStageEnteredAt: _growthStageEnteredAt,
+              growthStage: null,
+              growthStageEnteredAt: _type == '1' ? _growthStageEnteredAt : null,
               reproductiveStage: _reproductiveStage,
               reproStage: _canOpenReproEntry ? _reproStage : null,
               batchId: _canOpenReproEntry ? batchId : null,

@@ -218,8 +218,8 @@ class _ProductionSettingsFormState
                 const SizedBox(height: 12),
                 _DayField(
                   fieldKey: const ValueKey('production-prepartum-days'),
-                  label: '备产提前天数',
-                  helperText: '按预产期提前设置的天数，到期提醒备产。',
+                  label: '摸胎至备产时长',
+                  helperText: '摸胎确认怀孕后开始计算，到期提醒备产。',
                   controller: _prepartumController,
                   min: 1,
                   max: 29,

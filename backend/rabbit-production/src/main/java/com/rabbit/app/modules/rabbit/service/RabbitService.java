@@ -238,7 +238,9 @@ public class RabbitService {
             }
 
             normalizeAndValidateStages(rabbit.getType(), rabbit.getGender(), rabbit);
-            Date replacementStageEnteredAt = normalizeEntryStageDates(rabbit);
+            Date replacementStageEnteredAt = normalizeEntryStageDates(
+                userId, houseId, rabbit
+            );
             validateMotherReference(houseId, rabbit);
             validateDoeEntryProfile(houseId, rabbit, reproEntry);
             lockReproBatchIfRequested(houseId, reproEntry);
@@ -309,23 +311,33 @@ public class RabbitService {
         }
     }
 
-    private Date normalizeEntryStageDates(Rabbit rabbit) {
+    private Date normalizeEntryStageDates(Long userId, Long houseId, Rabbit rabbit) {
         if (!"1".equals(rabbit.getType()) && !"2".equals(rabbit.getType())) {
             rabbit.setGrowthStageEnteredAt(null);
             return null;
         }
-        Date enteredAt = rabbit.getGrowthStageEnteredAt() != null
-            ? rabbit.getGrowthStageEnteredAt()
-            : rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : DateUtil.now();
-        if (enteredAt.after(DateUtil.now())) {
-            throw new BizException(400, "进入当前阶段日期不能晚于今天");
-        }
+        Date now = DateUtil.now();
         if ("2".equals(rabbit.getType())) {
-            rabbit.setGrowthStageEnteredAt(enteredAt);
+            Date weaningDate = rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : now;
+            if (DateUtil.daysBetween(now, weaningDate) > 0) {
+                throw new BizException(400, "断奶日期不能晚于今天");
+            }
+            GlobalSetting setting = settingService.getEffectiveSetting(userId, houseId);
+            CommodityGrowthStage stage = CommodityGrowthStage.onDate(
+                weaningDate, now, setting
+            );
+            rabbit.setGrowthStage(stage.name());
+            rabbit.setGrowthStageEnteredAt(stage.enteredAt(weaningDate, setting));
             return null;
         }
+        Date enteredAt = rabbit.getGrowthStageEnteredAt() != null
+            ? rabbit.getGrowthStageEnteredAt()
+            : rabbit.getArrivalDate() != null ? rabbit.getArrivalDate() : now;
+        if (enteredAt.after(now)) {
+            throw new BizException(400, "进入当前阶段日期不能晚于今天");
+        }
         rabbit.setGrowthStageEnteredAt(null);
-        return "1".equals(rabbit.getType()) ? enteredAt : null;
+        return enteredAt;
     }
 
     private void scheduleEntryLifecycleTask(

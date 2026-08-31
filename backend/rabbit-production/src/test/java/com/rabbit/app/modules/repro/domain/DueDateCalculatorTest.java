@@ -31,37 +31,35 @@ class DueDateCalculatorTest {
     }
 
     @Test
-    void prepartumReminderUsesExpectedBirthDateLeadTime() {
-        Date matingDate = date(2026, 3, 1);
+    void prepartumReminderUsesThePalpationDateAndHouseDuration() {
         Date palpationDate = date(2026, 3, 13);
-        Date expectedBirth = date(2026, 3, 31);
-        DueContext context = DueContext.builder(palpationDate, palpationDate)
-            .matingDate(matingDate)
-            .expectedBirthDate(expectedBirth)
-            .build();
+        DueContext context = DueContext.builder(palpationDate, palpationDate).build();
 
         Date prepartumDue = DueDateCalculator.compute(
-            DueAnchor.PREPARTUM_LEAD, context, SETTINGS
+            DueAnchor.PALPATION_TO_PREPARTUM, context, SETTINGS
         );
         Date deliveryDue = DueDateCalculator.compute(DueAnchor.SAME_DAY, context, SETTINGS);
 
         assertAll(
-            () -> assertEquals(date(2026, 3, 28), prepartumDue, "待备产 = 预产期前 3 天"),
+            () -> assertEquals(date(2026, 3, 16), prepartumDue, "待备产 = 摸胎日后 3 天"),
             () -> assertEquals(palpationDate, deliveryDue, "备产完成后当天进入待分娩")
         );
     }
 
     @Test
-    void prepartumReminderFallsBackToTheFixedGestationReference() {
-        Date palpationDate = date(2026, 3, 13);
-        DueContext context = DueContext.builder(palpationDate, palpationDate)
-            .matingDate(date(2026, 3, 1))
-            .build();
+    void prepartumReminderRequiresThePalpationOperationDate() {
+        Date today = date(2026, 3, 13);
+        DueContext context = DueContext.builder(null, today).build();
 
-        assertEquals(
-            date(2026, 3, 28),
-            DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS)
+        BizException error = assertThrows(
+            BizException.class,
+            () -> DueDateCalculator.compute(
+                DueAnchor.PALPATION_TO_PREPARTUM, context, SETTINGS
+            )
         );
+
+        assertEquals(400, error.getCode());
+        assertTrue(error.getMessage().contains("摸胎操作日期"), error.getMessage());
     }
 
     @Test
@@ -87,9 +85,11 @@ class DueDateCalculatorTest {
                 "配种 → 摸胎 = 配种日 + 12"
             ),
             () -> assertEquals(
-                date(2026, 3, 28),
-                DueDateCalculator.compute(DueAnchor.PREPARTUM_LEAD, context, SETTINGS),
-                "待备产 = 预产期前 3 天"
+                date(2026, 3, 4),
+                DueDateCalculator.compute(
+                    DueAnchor.PALPATION_TO_PREPARTUM, context, SETTINGS
+                ),
+                "摸胎 → 备产 = 摸胎日 + 3"
             ),
             () -> assertEquals(
                 today,

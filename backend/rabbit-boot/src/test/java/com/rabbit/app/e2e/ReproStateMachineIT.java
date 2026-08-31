@@ -200,8 +200,19 @@ public class ReproStateMachineIT extends E2eTestSupport {
     }
 
     @Test
-    void everyOperationSynchronizesStageTimeAndNextReminder() {
+    void everyOperationUsesTheCurrentHouseCycleForItsNextReminder() {
         Fixture fixture = fixture("repro_time_sync");
+        api.putOk("/api/house-settings", fixture.owner.token, fixture.houseId, obj(
+            "aphrodisiacDays", 4,
+            "palpationDays", 5,
+            "prepartumDays", 6,
+            "weaningDays", 7,
+            "postpartumDays", 8,
+            "saleDays", 33,
+            "replacementDays", 90,
+            "remark", "五段提醒验收配置",
+            "requestId", requestId("time_sync_house_setting")
+        ));
         ReproResult opened = openAtEstrus(fixture, "time_sync_open");
 
         Date estrusAt = new Date();
@@ -209,7 +220,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
             fixture, opened.cycleId(), ReproAction.ESTRUS, "time_sync_estrus",
             b -> b.occurredAt(estrusAt)
         );
-        assertTransitionTiming(opened.cycleId(), estrusAt, estrus, 2);
+        assertTransitionTiming(opened.cycleId(), estrusAt, estrus, 4);
 
         Date matingAt = new Date();
         ReproResult mating = apply(
@@ -218,7 +229,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
                 .maleRabbitId(fixture.sireId)
                 .matingMethod(MatingMethod.NATURAL)
         );
-        assertTransitionTiming(opened.cycleId(), matingAt, mating, 12);
+        assertTransitionTiming(opened.cycleId(), matingAt, mating, 5);
 
         Date palpationAt = new Date();
         ReproResult palpation = apply(
@@ -227,7 +238,7 @@ public class ReproStateMachineIT extends E2eTestSupport {
                 .outcome(PalpationResult.PREGNANT.name())
                 .palpationResult(PalpationResult.PREGNANT)
         );
-        assertTransitionTiming(opened.cycleId(), palpationAt, palpation, 27);
+        assertTransitionTiming(opened.cycleId(), palpationAt, palpation, 6);
 
         Date prepartumAt = new Date();
         ReproResult prepartum = apply(
@@ -245,7 +256,15 @@ public class ReproStateMachineIT extends E2eTestSupport {
                 .liveKits(7)
                 .keptKits(7)
         );
-        assertTransitionTiming(opened.cycleId(), deliveryAt, delivery, 30);
+        assertTransitionTiming(opened.cycleId(), deliveryAt, delivery, 7);
+        Date recoveryDue = jdbc.queryForObject(
+            "select due_time from work_tasks where house_id = ? and cycle_id = ?"
+                + " and task_type = 'RECOVERY' and status = 'PENDING'",
+            Date.class,
+            fixture.houseId,
+            delivery.currentCycleId()
+        );
+        Assertions.assertEquals(8, daysBetween(deliveryAt, recoveryDue));
 
         Date weaningAt = new Date();
         ReproResult weaning = apply(

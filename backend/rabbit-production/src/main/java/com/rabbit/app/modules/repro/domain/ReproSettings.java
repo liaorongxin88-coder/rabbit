@@ -13,8 +13,8 @@ public record ReproSettings(
     int estrusDurationDays,
     /** 配种 → 摸胎的等待天数（旧列 palpation_days）。 */
     int palpationWaitDays,
-    /** 预产期前开始备产的提前天数（旧列 prepartum_days）。 */
-    int prepartumLeadDays,
+    /** 摸胎确认怀孕 → 备产的等待天数（物理列仍为 prepartum_days）。 */
+    int palpationToPrepartumDays,
     /** 分娩 → 分笼的哺乳天数（旧列 weaning_days）。 */
     int weaningDays,
     /** 接产 / 空怀 / 流产 / 分娩失败后的恢复天数（旧列 postpartum_days）。 */

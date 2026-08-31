@@ -266,17 +266,19 @@
         set r.growth_stage = case
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days + 1) day
                 ) &lt;= #{now} then 'MATURE'
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + 1) day
                 ) &lt;= #{now} then 'FATTENING'
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
-                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
-                then 'GROWING'
+                and date_add(
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + 1) day
+                ) &lt;= #{now} then 'GROWING'
               when r.growth_stage = 'GROWING'
                 and date_add(
                   r.growth_stage_entered_at,
@@ -294,23 +296,28 @@
             r.growth_stage_entered_at = case
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days + 1) day
                 ) &lt;= #{now} then date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days + 1) day
                 )
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + 1) day
                 ) &lt;= #{now} then date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + 1) day
                 )
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
-                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
-                then date_add(r.growth_stage_entered_at, interval gs.adaptation_days day)
+                and date_add(
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + 1) day
+                ) &lt;= #{now} then date_add(
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + 1) day
+                )
               when r.growth_stage = 'GROWING'
                 and date_add(
                   r.growth_stage_entered_at,
@@ -333,21 +340,23 @@
         where r.house_id = #{houseId}
           and r.is_active = true
           and r.type = '2'
-          and r.growth_stage_entered_at is not null
+          and (r.arrival_date is not null or r.growth_stage_entered_at is not null)
           and r.growth_stage &lt;&gt; case
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + gs.fattening_days + 1) day
                 ) &lt;= #{now} then 'MATURE'
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
                 and date_add(
-                  r.growth_stage_entered_at,
-                  interval (gs.adaptation_days + gs.growing_days) day
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + gs.growing_days + 1) day
                 ) &lt;= #{now} then 'FATTENING'
               when r.growth_stage in ('JUVENILE', 'ADAPTATION')
-                and date_add(r.growth_stage_entered_at, interval gs.adaptation_days day) &lt;= #{now}
-                then 'GROWING'
+                and date_add(
+                  coalesce(r.arrival_date, r.growth_stage_entered_at),
+                  interval (gs.adaptation_days + 1) day
+                ) &lt;= #{now} then 'GROWING'
               when r.growth_stage = 'GROWING'
                 and date_add(
                   r.growth_stage_entered_at,

@@ -5,7 +5,7 @@ import java.util.Locale;
 
 /** 摸胎结果（设计 §3.2 T4a/T4b/T4c，§5.2 表单必填字段）。 */
 public enum PalpationResult {
-    /** T4a 怀孕：进入待备产，提醒日 = 预产期 - 备产提前天数。 */
+    /** T4a 怀孕：进入待备产，提醒日 = 摸胎操作日 + 摸胎至备产时长。 */
     PREGNANT("怀孕"),
     /** T4b 空怀：关闭本周期并立即开新周期催情。 */
     EMPTY("空怀"),

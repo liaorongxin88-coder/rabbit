@@ -295,7 +295,8 @@ export function RabbitFormDialog({
       motherId: motherId ? Number(motherId) : undefined,
       arrivalDate: farmBusinessDateToIso(arrivalDate),
       weight: weight ? Number(weight) : undefined,
-      growthStage: type === "2" ? growthStage || undefined : undefined,
+      growthStage:
+        rabbit && type === "2" ? growthStage || undefined : undefined,
       reproductiveStage:
         reproductiveStageOptions.length === 0
           ? undefined
@@ -475,9 +476,11 @@ export function RabbitFormDialog({
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              {type === "2" ? (
+              {type === "2" && rabbit ? (
                 <Field>
-                  <FieldLabel htmlFor="rabbit-growth-stage">生长阶段</FieldLabel>
+                  <FieldLabel htmlFor="rabbit-growth-stage">
+                    生长阶段
+                  </FieldLabel>
                   <Select value={growthStage} onValueChange={setGrowthStage}>
                     <SelectTrigger id="rabbit-growth-stage">
                       <SelectValue placeholder="未填写" />
@@ -493,14 +496,14 @@ export function RabbitFormDialog({
                     </SelectContent>
                   </Select>
                 </Field>
-              ) : (
+              ) : type !== "2" ? (
                 <Field>
                   <FieldLabel>生长阶段</FieldLabel>
                   <p className="min-h-9 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
                     仅商品兔记录生长阶段
                   </p>
                 </Field>
-              )}
+              ) : null}
               {reproductiveStageOptions.length === 0 ? (
                 <Field>
                   <FieldLabel>繁殖阶段</FieldLabel>
@@ -703,7 +706,9 @@ export function RabbitFormDialog({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="rabbit-date">入场日期</FieldLabel>
+                <FieldLabel htmlFor="rabbit-date">
+                  {type === "2" ? "断奶日期" : "入场日期"}
+                </FieldLabel>
                 <Input
                   id="rabbit-date"
                   type="date"
@@ -1237,8 +1242,8 @@ export function RabbitPromotionDialog({
         <DialogHeader>
           <DialogTitle>后备兔转种兔</DialogTitle>
           <DialogDescription>
-            兔 #{rabbit?.id ?? ""}{" "}
-            转种后保留原兔 ID 和笼位。母兔进入待催情生产流程，公兔进入可配状态。
+            兔 #{rabbit?.id ?? ""} 转种后保留原兔 ID
+            和笼位。母兔进入待催情生产流程，公兔进入可配状态。
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>

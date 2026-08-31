@@ -100,11 +100,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('摸胎至备产时长'), findsOneWidget);
+    expect(find.text('备产提前天数'), findsNothing);
+
     final scrollable = find.byType(Scrollable).first;
     for (final description in const [
       '执行催情后开始计算，到期提醒配种。',
       '完成配种后开始计算，到期提醒摸胎。',
-      '按预产期提前设置的天数，到期提醒备产。',
+      '摸胎确认怀孕后开始计算，到期提醒备产。',
       '完成接产后开始计算，到期提醒断奶分笼。',
       '接产后开始计算休养到期；空怀、流产或分娩失败后也用这一天数安排下一轮催情。',
       '进入后备阶段后开始计算，到期提醒转为种兔。',

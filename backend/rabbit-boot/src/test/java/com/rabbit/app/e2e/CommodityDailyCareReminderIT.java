@@ -12,6 +12,7 @@ import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 public class CommodityDailyCareReminderIT extends E2eTestSupport {
@@ -80,7 +81,7 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         ));
 
         Date growingNow = new Date();
-        updateGrowthEntry(houseId, rabbitId, "ADAPTATION", growingNow, 2);
+        updateGrowthEntry(houseId, rabbitId, "ADAPTATION", growingNow, 3);
         assertEquals(1, commodityGrowthService.advanceHouse(houseId, growingNow));
         assertGrowthStageEnteredAt(
             houseId,
@@ -142,6 +143,75 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(0, pendingCareCount(houseId, rabbitId));
         assertEquals(1, pendingSaleReadyCount(houseId, rabbitId));
         assertEquals(1, totalSaleReadyCount(houseId, rabbitId));
+    }
+
+    @Test
+    void feedingCompletesOnlyTheSubmittedRabbitsCareForThatBusinessDate() {
+        UserSession owner = register("commodity_feed_completes_care");
+        long houseId = createHouse(owner, "商品兔投喂完成观察兔舍", 1, 2, 1);
+        List<Long> cages = cageIds(owner, houseId);
+        long fedRabbit = createRabbit(
+            owner, houseId, cages.get(0), "2", "0", "已投喂商品兔"
+        );
+        long untouchedRabbit = createRabbit(
+            owner, houseId, cages.get(1), "2", "0", "未投喂商品兔"
+        );
+        Date feedTime = new Date();
+        commodityDailyCareReminderService.scheduleHouse(houseId, feedTime);
+
+        assertEquals(1, pendingCareCount(houseId, fedRabbit));
+        assertEquals(1, pendingCareCount(houseId, untouchedRabbit));
+        assertTrue(hasDailyCareEvent(owner, houseId, fedRabbit));
+        assertTrue(hasDailyCareEvent(owner, houseId, untouchedRabbit));
+
+        String feedRequestId = requestId("complete_daily_care");
+        api.postOk("/api/feed-logs", owner.token, houseId, obj(
+            "rabbitIds", List.of(fedRabbit),
+            "feedTime", feedTime.getTime(),
+            "feedType", "日常投喂",
+            "unit", "kg",
+            "amount", 0.8,
+            "requestId", feedRequestId
+        ));
+        api.postOk("/api/feed-logs", owner.token, houseId, obj(
+            "rabbitIds", List.of(fedRabbit),
+            "feedTime", feedTime.getTime(),
+            "feedType", "日常投喂",
+            "unit", "kg",
+            "amount", 0.8,
+            "requestId", feedRequestId
+        ));
+
+        assertEquals(0, pendingCareCount(houseId, fedRabbit));
+        assertEquals(1, pendingCareCount(houseId, untouchedRabbit));
+        assertFalse(hasDailyCareEvent(owner, houseId, fedRabbit));
+        assertTrue(hasDailyCareEvent(owner, houseId, untouchedRabbit));
+        assertEquals(1, jdbc.queryForObject(
+            "select count(*) from feed_logs where house_id = ? and request_id = ?",
+            Integer.class,
+            houseId,
+            feedRequestId
+        ));
+
+        String failedRequestId = requestId("failed_feed_keeps_daily_care");
+        api.expectError("/api/feed-logs", HttpMethod.POST, owner.token, houseId, obj(
+            "rabbitIds", List.of(untouchedRabbit),
+            "feedTime", feedTime.getTime(),
+            "feedType", "日常投喂",
+            "itemId", Long.MAX_VALUE,
+            "unit", "kg",
+            "amount", 0.8,
+            "requestId", failedRequestId
+        ), 400, "物料不存在");
+
+        assertEquals(1, pendingCareCount(houseId, untouchedRabbit));
+        assertTrue(hasDailyCareEvent(owner, houseId, untouchedRabbit));
+        assertEquals(0, jdbc.queryForObject(
+            "select count(*) from feed_logs where house_id = ? and request_id = ?",
+            Integer.class,
+            houseId,
+            failedRequestId
+        ));
     }
 
     @Test
@@ -260,8 +330,8 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             elapsedDueTime.getTime() - DateUtil.plusDays(fatteningEnteredAt, 2).getTime()
         ) < 1_000L, "育肥期应按进入当前阶段日期加剩余时长计算成熟时间");
         assertTrue(Math.abs(
-            arrivalDueTime.getTime() - DateUtil.plusDays(arrivalAnchor, 6).getTime()
-        ) < 1_000L, "缺少阶段时间时必须回退到入场日期计算成熟时间");
+            arrivalDueTime.getTime() - DateUtil.plusDays(arrivalAnchor, 7).getTime()
+        ) < 1_000L, "缺少阶段时间时必须回退到断奶日期计算成熟时间");
     }
 
     @Test
@@ -342,12 +412,25 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         Date now,
         int daysAgo
     ) {
-        // This scenario needs an overdue current stage, not an exact DATETIME threshold.
+        // 适应期以断奶日为准；后续阶段继续使用各自的进入日期。
+        Date enteredAt = DateUtil.plusDays(now, -daysAgo - 1);
+        if ("ADAPTATION".equals(growthStage)) {
+            jdbc.update(
+                "update rabbits set growth_stage = ?, arrival_date = ?,"
+                    + " growth_stage_entered_at = ? where house_id = ? and id = ?",
+                growthStage,
+                enteredAt,
+                enteredAt,
+                houseId,
+                rabbitId
+            );
+            return;
+        }
         jdbc.update(
             "update rabbits set growth_stage = ?, growth_stage_entered_at = ?"
                 + " where house_id = ? and id = ?",
             growthStage,
-            DateUtil.plusDays(now, -daysAgo - 1),
+            enteredAt,
             houseId,
             rabbitId
         );

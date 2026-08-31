@@ -142,7 +142,8 @@ void main() {
     expect(request.body['quantity'], 3);
     expect(request.body['totalWeight'], 7.5);
     expect(request.body['sourceSeller'], '测试供应方');
-    expect(request.body['growthStageEnteredAt'], isNotNull);
+    expect(request.body.containsKey('growthStage'), isFalse);
+    expect(request.body.containsKey('growthStageEnteredAt'), isFalse);
   });
 
   testWidgets('commodity batch entry shows partial result in the form',
@@ -359,7 +360,7 @@ void main() {
     );
   });
 
-  testWidgets('commodity stage label and historical stage date are submitted',
+  testWidgets('commodity creation uses weaning date without stage inputs',
       (tester) async {
     final adapter = _CapturingAdapter();
     await tester.pumpWidget(
@@ -370,33 +371,11 @@ void main() {
     await tester.tap(find.text('确定'));
     await tester.pumpAndSettle();
 
-    expect(find.text('进入成长阶段日期'), findsOneWidget);
-    final growthStage = find.byKey(const ValueKey('rabbit-growth-stage'));
-    await tester.ensureVisible(growthStage);
-    await tester.tap(growthStage);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('育肥期').last);
-    await tester.pumpAndSettle();
-    expect(find.text('进入育肥期日期'), findsOneWidget);
-
-    final stageDate =
-        find.byKey(const ValueKey('rabbit-growth-stage-entered-at'));
-    await tester.ensureVisible(stageDate);
-    await tester.tap(stageDate);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.chevron_left).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('15').last);
-    await tester.tap(find.text('确定').last);
-    await tester.pumpAndSettle();
-
-    final now = DateTime.now();
-    final historicalDate = DateTime(now.year, now.month - 1, 15);
-    final expectedDate = '${historicalDate.year.toString().padLeft(4, '0')}-'
-        '${historicalDate.month.toString().padLeft(2, '0')}-15';
+    expect(find.text('断奶日期'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsNothing);
     expect(
-      find.descendant(of: stageDate, matching: find.text(expectedDate)),
-      findsOneWidget,
+      find.byKey(const ValueKey('rabbit-growth-stage-entered-at')),
+      findsNothing,
     );
 
     final submit = find.byKey(const ValueKey('rabbit-entry-submit'));
@@ -404,10 +383,11 @@ void main() {
     await tester.tap(submit);
     await _waitForCapturedRequest(tester, adapter);
 
-    expect(adapter.requests.single.body['growthStage'], 'FATTENING');
+    expect(adapter.requests.single.body.containsKey('arrivalDate'), isTrue);
+    expect(adapter.requests.single.body.containsKey('growthStage'), isFalse);
     expect(
-      adapter.requests.single.body['growthStageEnteredAt'],
-      expectedDate,
+      adapter.requests.single.body.containsKey('growthStageEnteredAt'),
+      isFalse,
     );
   });
 
@@ -653,7 +633,8 @@ void main() {
     await tester.tap(find.text('确定'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsOneWidget);
+    expect(find.text('断奶日期'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsNothing);
     expect(
       find.byKey(const ValueKey('rabbit-reproductive-stage')),
       findsNothing,

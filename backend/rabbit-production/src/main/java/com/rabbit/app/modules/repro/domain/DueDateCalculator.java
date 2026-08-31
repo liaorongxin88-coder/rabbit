@@ -46,7 +46,10 @@ public final class DueDateCalculator {
                 require(context.matingDate(), "配种日期"),
                 settings.palpationWaitDays()
             );
-            case PREPARTUM_LEAD -> prepartumDue(context, settings);
+            case PALPATION_TO_PREPARTUM -> DateUtil.plusDays(
+                require(context.occurredAt(), "摸胎操作日期"),
+                settings.palpationToPrepartumDays()
+            );
             case SAME_DAY -> require(context.occurredAt(), "操作日期");
             case WEANING_DUE -> DateUtil.plusDays(
                 require(context.birthDate(), "分娩日期"),
@@ -61,16 +64,6 @@ public final class DueDateCalculator {
             case USER_SPECIFIED -> context.userSpecified() != null ? context.userSpecified() : context.today();
             case NONE -> null;
         };
-    }
-
-    private static Date prepartumDue(DueContext context, ReproSettings settings) {
-        Date expectedBirth = context.expectedBirthDate();
-        if (expectedBirth == null) {
-            expectedBirth = expectedBirthDate(
-                require(context.matingDate(), "配种日期")
-            );
-        }
-        return DateUtil.plusDays(expectedBirth, -settings.prepartumLeadDays());
     }
 
     private static Date require(Date value, String what) {
