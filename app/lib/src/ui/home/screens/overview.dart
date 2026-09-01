@@ -625,31 +625,29 @@ class _WorkQueueFilters extends StatelessWidget {
             ),
             onChanged: onQueryChanged,
           ),
-          if (houseItems.length > 1) ...[
-            const SizedBox(height: 10),
-            DropdownButtonFormField<int>(
-              key: const ValueKey('production-house-filter'),
-              value: selectedHouseId ?? 0,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: '兔舍范围',
-                prefixIcon: Icon(Icons.home_work_outlined),
-              ),
-              items: [
-                const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
-                for (final house in houseItems)
-                  DropdownMenuItem(
-                    value: house.id,
-                    child: Text(
-                      house.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (value) => onHouseChanged(value ?? 0),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(
+            key: const ValueKey('production-house-filter'),
+            value: selectedHouseId ?? 0,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: '兔舍范围',
+              prefixIcon: Icon(Icons.home_work_outlined),
             ),
-          ],
+            items: [
+              const DropdownMenuItem(value: 0, child: Text('全部兔舍')),
+              for (final house in houseItems)
+                DropdownMenuItem(
+                  value: house.id,
+                  child: Text(
+                    house.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) => onHouseChanged(value ?? 0),
+          ),
           if (batches.isNotEmpty || _hasUnbatchedTasks) ...[
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(

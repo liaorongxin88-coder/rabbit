@@ -94,6 +94,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('3 / 3'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-house-filter')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-batch-filter')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     final flowSection = find.byKey(
@@ -314,6 +322,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final flowSection = find.byKey(
+      const ValueKey('home-production-flow-section'),
+    );
+    await tester.ensureVisible(flowSection);
+    await tester.pumpAndSettle();
     final replacementTab = find.descendant(
       of: find.byType(TabBar),
       matching: find.text('后备兔'),
@@ -589,7 +602,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('single accessible house does not add a redundant house filter',
+  testWidgets('single accessible house keeps the house selector available',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -613,9 +626,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final houseFilter = find.byKey(
+      const ValueKey('production-house-filter'),
+    );
+    expect(houseFilter, findsOneWidget);
+    expect(find.text('全部兔舍'), findsOneWidget);
+
+    await tester.ensureVisible(houseFilter);
+    await tester.tap(houseFilter);
+    await tester.pumpAndSettle();
+    expect(find.text('唯一兔舍'), findsOneWidget);
+    await tester.tap(find.text('唯一兔舍'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('唯一兔舍'), findsWidgets);
     expect(
-      find.byKey(const ValueKey('production-house-filter')),
-      findsNothing,
+      find.byKey(const ValueKey('production-filter-clear')),
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });
@@ -660,6 +687,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final flowSection = find.byKey(
+      const ValueKey('home-production-flow-section'),
+    );
+    await tester.ensureVisible(flowSection);
+    await tester.pumpAndSettle();
     final dailyTab = find.descendant(
       of: find.byType(TabBar),
       matching: find.text('日常'),
