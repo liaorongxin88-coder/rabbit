@@ -163,6 +163,24 @@ void main() {
     );
   });
 
+  testWidgets('breeding rabbit places vaccination before sale', (tester) async {
+    final router = _router();
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(_app(router: router, rabbit: _activeBreeder));
+    await tester.pumpAndSettle();
+
+    final vaccination =
+        find.byKey(const ValueKey('rabbit-detail-vaccination-31'));
+    final sale = find.byKey(const ValueKey('rabbit-detail-sale-31'));
+    await tester.ensureVisible(vaccination);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(vaccination).dy,
+        lessThan(tester.getTopLeft(sale).dy));
+    expect(tester.getTopLeft(vaccination).dx, tester.getTopLeft(sale).dx);
+  });
+
   testWidgets('sale is a danger action and keeps its confirmation step',
       (tester) async {
     final router = _router();

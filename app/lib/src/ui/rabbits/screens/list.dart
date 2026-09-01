@@ -736,15 +736,27 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
       foregroundColor: palette.danger,
       side: BorderSide(color: palette.danger),
     );
+    final isBreedingRabbit = widget.rabbit.type == '0';
+    final saleAction = widget.onSale == null
+        ? null
+        : OutlinedButton.icon(
+            key: ValueKey('rabbit-detail-sale-${widget.rabbit.id}'),
+            onPressed: widget.onSale,
+            style: dangerStyle,
+            icon: const Icon(Icons.sell_outlined),
+            label: const Text('出售'),
+          );
+    final vaccinationAction = widget.canEdit && widget.rabbit.isActive
+        ? OutlinedButton.icon(
+            key: ValueKey('rabbit-detail-vaccination-${widget.rabbit.id}'),
+            onPressed: _openVaccination,
+            icon: const Icon(Icons.vaccines_outlined),
+            label: const Text('接种疫苗'),
+          )
+        : null;
     return [
-      if (widget.onSale != null)
-        OutlinedButton.icon(
-          key: ValueKey('rabbit-detail-sale-${widget.rabbit.id}'),
-          onPressed: widget.onSale,
-          style: dangerStyle,
-          icon: const Icon(Icons.sell_outlined),
-          label: const Text('出售'),
-        ),
+      if (isBreedingRabbit && vaccinationAction != null) vaccinationAction,
+      if (!isBreedingRabbit && saleAction != null) saleAction,
       if (widget.onOutbound != null)
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-outbound-${widget.rabbit.id}'),
@@ -787,13 +799,8 @@ class _RabbitDetailSheetState extends ConsumerState<RabbitDetailSheet> {
           icon: const Icon(Icons.report_problem_outlined),
           label: const Text('异常记录'),
         ),
-      if (widget.canEdit && widget.rabbit.isActive)
-        OutlinedButton.icon(
-          key: ValueKey('rabbit-detail-vaccination-${widget.rabbit.id}'),
-          onPressed: _openVaccination,
-          icon: const Icon(Icons.vaccines_outlined),
-          label: const Text('接种疫苗'),
-        ),
+      if (isBreedingRabbit && saleAction != null) saleAction,
+      if (!isBreedingRabbit && vaccinationAction != null) vaccinationAction,
       if (widget.rabbit.isActive && (widget.pageMode || !_isDoe))
         OutlinedButton.icon(
           key: ValueKey('rabbit-detail-departure-${widget.rabbit.id}'),
