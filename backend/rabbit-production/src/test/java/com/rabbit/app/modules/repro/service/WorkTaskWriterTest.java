@@ -5,6 +5,7 @@ import com.rabbit.app.modules.repro.domain.TaskType;
 import com.rabbit.app.modules.repro.entity.WorkTask;
 import com.rabbit.app.modules.repro.mapper.WorkTaskMapper;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -56,6 +57,35 @@ class WorkTaskWriterTest {
         Mockito.verify(mapper, Mockito.never()).complete(8L, 2L, null, "7");
         Mockito.verify(mapper, Mockito.never()).complete(8L, 3L, null, "7");
         Mockito.verify(mapper, Mockito.never()).complete(8L, 4L, null, "7");
+    }
+
+    @Test
+    void commodityCareRetentionKeepsOnlyTheCurrentBusinessDate() {
+        WorkTaskMapper mapper = Mockito.mock(WorkTaskMapper.class);
+        WorkTask currentCare = task(5L, TaskType.COMMODITY_GROWING_CARE);
+        currentCare.setDueDate(date("2026-03-10T01:00:00Z"));
+        WorkTask previousCare = task(6L, TaskType.COMMODITY_GROWING_CARE);
+        previousCare.setDueDate(date("2026-03-09T01:00:00Z"));
+        WorkTask otherStageCare = task(7L, TaskType.COMMODITY_FATTENING_CARE);
+        otherStageCare.setDueDate(date("2026-03-10T01:00:00Z"));
+        WorkTask saleReady = task(8L, TaskType.SALE_READY);
+        saleReady.setDueDate(date("2026-03-10T01:00:00Z"));
+        Mockito.when(mapper.selectPendingBySubject(8L, "RABBIT", 81L))
+            .thenReturn(List.of(currentCare, previousCare, otherStageCare, saleReady));
+        WorkTaskWriter writer = new WorkTaskWriter(mapper);
+
+        writer.cancelCommodityDailyCareForRabbitExcept(
+            8L,
+            81L,
+            TaskType.COMMODITY_GROWING_CARE,
+            LocalDate.of(2026, 3, 10),
+            "care-job"
+        );
+
+        Mockito.verify(mapper, Mockito.never()).cancel(8L, 5L, "care-job");
+        Mockito.verify(mapper).cancel(8L, 6L, "care-job");
+        Mockito.verify(mapper).cancel(8L, 7L, "care-job");
+        Mockito.verify(mapper, Mockito.never()).cancel(8L, 8L, "care-job");
     }
 
     @Test

@@ -86,7 +86,7 @@ public class WorkTaskWriter {
     }
 
     public void cancelCommodityDailyCareForRabbit(Long houseId, Long rabbitId, String operator) {
-        cancelCommodityDailyCareForRabbitExcept(houseId, rabbitId, null, operator);
+        cancelCommodityDailyCareForRabbitExcept(houseId, rabbitId, null, null, operator);
     }
 
     /** 保留当前阶段的每日任务，作废其它阶段尚未处理的日常任务。 */
@@ -96,9 +96,22 @@ public class WorkTaskWriter {
         TaskType retainedType,
         String operator
     ) {
+        cancelCommodityDailyCareForRabbitExcept(houseId, rabbitId, retainedType, null, operator);
+    }
+
+    /** 保留指定阶段和业务日的任务，作废其它尚未处理的商品兔日常任务。 */
+    public void cancelCommodityDailyCareForRabbitExcept(
+        Long houseId,
+        Long rabbitId,
+        TaskType retainedType,
+        LocalDate retainedDate,
+        String operator
+    ) {
         for (WorkTask task : pendingBySubject(houseId, TaskSubjectType.RABBIT, rabbitId)) {
-            if (TaskType.isCommodityDailyCare(task.getTaskType())
-                && (retainedType == null || !retainedType.name().equals(task.getTaskType()))) {
+            boolean retained = retainedType != null
+                && retainedType.name().equals(task.getTaskType())
+                && (retainedDate == null || retainedDate.equals(DateUtil.localDate(task.getDueDate())));
+            if (TaskType.isCommodityDailyCare(task.getTaskType()) && !retained) {
                 workTaskMapper.cancel(houseId, task.getId(), operator);
             }
         }

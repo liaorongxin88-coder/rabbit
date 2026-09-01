@@ -39,6 +39,56 @@ public class SettingIsolationIT extends E2eTestSupport {
         assertSetting(userSetting, 12, 23, 5, 27, 10, 34, 45);
     }
 
+    @Test
+    void commodityGrowthDurationsAcceptBothBusinessExamples() {
+        UserSession owner = register("commodity_growth_setting_examples");
+        long houseId = createHouse(owner, "商品兔阶段参数兔舍", 1, 1, 1);
+
+        updateCommoditySetting(owner, houseId, 3, 10, 8, "样例一");
+        assertCommoditySetting(
+            api.getOk("/api/house-settings", owner.token, houseId).get("setting"),
+            3,
+            10,
+            8
+        );
+
+        updateCommoditySetting(owner, houseId, 4, 15, 12, "样例二");
+        assertCommoditySetting(
+            api.getOk("/api/house-settings", owner.token, houseId).get("setting"),
+            4,
+            15,
+            12
+        );
+    }
+
+    private void updateCommoditySetting(
+        UserSession owner,
+        long houseId,
+        int adaptation,
+        int growing,
+        int fattening,
+        String remark
+    ) {
+        java.util.Map<String, Object> body = settingBody(
+            2, 12, 3, 30, 10, 33, 90, remark
+        );
+        body.put("adaptationDays", adaptation);
+        body.put("growingDays", growing);
+        body.put("fatteningDays", fattening);
+        api.putOk("/api/house-settings", owner.token, houseId, body);
+    }
+
+    private void assertCommoditySetting(
+        JsonNode setting,
+        int adaptation,
+        int growing,
+        int fattening
+    ) {
+        Assertions.assertEquals(adaptation, setting.get("adaptationDays").asInt());
+        Assertions.assertEquals(growing, setting.get("growingDays").asInt());
+        Assertions.assertEquals(fattening, setting.get("fatteningDays").asInt());
+    }
+
     private void updateUserSetting(UserSession owner, int aphrodisiac, int palpation,
                                    int prepartum, int weaning, int postpartum,
                                    int sale, int replacement) {

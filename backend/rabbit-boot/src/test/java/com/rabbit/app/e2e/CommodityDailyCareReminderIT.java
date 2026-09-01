@@ -71,10 +71,11 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
         assertEquals(1, pendingCareCount(houseId, rabbitId));
 
         commodityDailyCareReminderService.scheduleHouse(houseId, DateUtil.plusDays(today, 1));
-        assertEquals(2, pendingCareCount(houseId, rabbitId), "每天保留一条独立的待处理观察任务");
+        assertEquals(1, pendingCareCount(houseId, rabbitId), "首页只保留当前业务日的观察任务");
+        assertEquals(1, canceledCareCount(houseId, rabbitId), "未完成的前一日提醒应退出活动待办");
         assertEquals(2, jdbc.queryForObject(
             "select count(distinct dedup_key) from work_tasks where house_id = ? and rabbit_id = ?"
-                + " and task_type = 'COMMODITY_ADAPTATION_CARE' and status = 'PENDING'",
+                + " and task_type = 'COMMODITY_ADAPTATION_CARE'",
             Integer.class,
             houseId,
             rabbitId
@@ -455,6 +456,17 @@ public class CommodityDailyCareReminderIT extends E2eTestSupport {
             "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
                 + " and task_type in ('COMMODITY_ADAPTATION_CARE', 'COMMODITY_GROWING_CARE',"
                 + " 'COMMODITY_FATTENING_CARE') and status = 'PENDING'",
+            Integer.class,
+            houseId,
+            rabbitId
+        );
+    }
+
+    private int canceledCareCount(long houseId, long rabbitId) {
+        return jdbc.queryForObject(
+            "select count(*) from work_tasks where house_id = ? and rabbit_id = ?"
+                + " and task_type in ('COMMODITY_ADAPTATION_CARE', 'COMMODITY_GROWING_CARE',"
+                + " 'COMMODITY_FATTENING_CARE') and status = 'CANCELLED'",
             Integer.class,
             houseId,
             rabbitId

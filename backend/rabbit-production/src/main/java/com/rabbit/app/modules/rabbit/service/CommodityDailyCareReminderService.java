@@ -8,6 +8,7 @@ import com.rabbit.app.modules.repro.service.WorkTaskWriter;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.mapper.GlobalSettingMapper;
 import com.rabbit.app.util.DateUtil;
+import java.time.LocalDate;
 import java.util.Date;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,10 +74,12 @@ public class CommodityDailyCareReminderService {
                 houseId, rabbit.getId(), TaskType.SALE_READY, SCHEDULER_OPERATOR
             );
             TaskType taskType = TaskType.forCommodityGrowthStage(rabbit.getGrowthStage());
+            LocalDate taskDate = DateUtil.localDate(now);
             workTaskWriter.cancelCommodityDailyCareForRabbitExcept(
                 houseId,
                 rabbit.getId(),
                 taskType,
+                taskDate,
                 SCHEDULER_OPERATOR
             );
             if (taskType != null) {

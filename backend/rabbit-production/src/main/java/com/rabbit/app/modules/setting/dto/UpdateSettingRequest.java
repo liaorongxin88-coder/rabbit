@@ -27,16 +27,16 @@ public class UpdateSettingRequest {
     @Min(0)
     private Integer postpartumDays;
 
-    @Min(2)
-    @Max(3)
+    @Min(1)
+    @Max(365)
     private Integer adaptationDays;
 
-    @Min(15)
-    @Max(18)
+    @Min(1)
+    @Max(365)
     private Integer growingDays;
 
-    @Min(12)
-    @Max(15)
+    @Min(1)
+    @Max(365)
     private Integer fatteningDays;
 
     @NotNull
