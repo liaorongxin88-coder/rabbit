@@ -39,6 +39,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('首页观察提醒会预选对应兔只所在笼位', (tester) async {
+    await tester.pumpWidget(
+      _testApp(_FakeFeedGateway(), initialRabbitId: 101),
+    );
+    await tester.pumpAndSettle();
+
+    final cage = tester.widget<CheckboxListTile>(
+      find.byKey(const ValueKey('feed-cage-10')),
+    );
+    expect(cage.value, isTrue);
+    expect(find.text('已根据首页提醒选中兔 #101 所在笼位'), findsOneWidget);
+  });
+
   testWidgets('网络失败后保留输入并用相同 requestId 重试', (tester) async {
     final gateway = _FakeFeedGateway()..error = const ApiException('网络暂不可用');
     await tester.pumpWidget(_testApp(gateway));
@@ -133,7 +146,7 @@ Future<void> _tapSubmit(
   }
 }
 
-Widget _testApp(FeedGateway gateway) {
+Widget _testApp(FeedGateway gateway, {int? initialRabbitId}) {
   return ProviderScope(
     overrides: [
       feedRepositoryProvider.overrideWithValue(gateway),
@@ -147,7 +160,10 @@ Widget _testApp(FeedGateway gateway) {
     ],
     child: MaterialApp(
       theme: buildAppTheme(),
-      home: const FeedEntryScreen(houseId: 8),
+      home: FeedEntryScreen(
+        houseId: 8,
+        initialRabbitId: initialRabbitId,
+      ),
     ),
   );
 }

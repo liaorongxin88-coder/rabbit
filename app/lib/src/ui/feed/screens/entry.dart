@@ -23,9 +23,14 @@ import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 class FeedEntryScreen extends ConsumerStatefulWidget {
-  const FeedEntryScreen({super.key, required this.houseId});
+  const FeedEntryScreen({
+    super.key,
+    required this.houseId,
+    this.initialRabbitId,
+  });
 
   final int houseId;
+  final int? initialRabbitId;
 
   @override
   ConsumerState<FeedEntryScreen> createState() => _FeedEntryScreenState();
@@ -47,6 +52,19 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
   String? _nfcHint;
   var _saving = false;
   var _nfcListening = false;
+  var _initialSelectionApplied = false;
+
+  @override
+  void didUpdateWidget(covariant FeedEntryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.houseId != widget.houseId ||
+        oldWidget.initialRabbitId != widget.initialRabbitId) {
+      _selectedCageIds.clear();
+      _initialSelectionApplied = false;
+      _nfcHint = null;
+      _errorMessage = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -159,6 +177,25 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
 
   String _cageLabel(Cage cage) =>
       cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
+
+  void _applyInitialRabbitSelection(List<Rabbit> rabbits) {
+    if (_initialSelectionApplied) {
+      return;
+    }
+    _initialSelectionApplied = true;
+    final rabbitId = widget.initialRabbitId;
+    if (rabbitId == null || rabbitId <= 0) {
+      return;
+    }
+    for (final rabbit in rabbits) {
+      if (rabbit.id == rabbitId && rabbit.isActive) {
+        _selectedCageIds.add(rabbit.cageId);
+        _nfcHint = '已根据首页提醒选中兔 #$rabbitId 所在笼位';
+        return;
+      }
+    }
+    _errorMessage = '提醒对应的兔只不在当前兔舍，请刷新后重试';
+  }
 
   Future<void> _pickFeedDate() async {
     if (_saving) {
@@ -293,25 +330,28 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
           }
           return cages.when(
             data: (cageItems) => rabbits.when(
-              data: (rabbitItems) => _FeedEntryForm(
-                cages: cageItems,
-                rabbits: rabbitItems,
-                selectedCageIds: _selectedCageIds,
-                amountController: _amountController,
-                feedTypeController: _feedTypeController,
-                remarkController: _remarkController,
-                feedTime: _feedTime,
-                saving: _saving,
-                nfcListening: _nfcListening,
-                nfcHint: _nfcHint,
-                errorMessage: _errorMessage,
-                successMessage: _successMessage,
-                onToggleCage: _toggleCage,
-                onPickFeedDate: _pickFeedDate,
-                onStartNfc: _startNfcCapture,
-                onStopNfc: () => _stopNfcCapture(hint: '已停止读取 NFC 标签'),
-                onSubmit: () => _submit(cageItems, rabbitItems),
-              ),
+              data: (rabbitItems) {
+                _applyInitialRabbitSelection(rabbitItems);
+                return _FeedEntryForm(
+                  cages: cageItems,
+                  rabbits: rabbitItems,
+                  selectedCageIds: _selectedCageIds,
+                  amountController: _amountController,
+                  feedTypeController: _feedTypeController,
+                  remarkController: _remarkController,
+                  feedTime: _feedTime,
+                  saving: _saving,
+                  nfcListening: _nfcListening,
+                  nfcHint: _nfcHint,
+                  errorMessage: _errorMessage,
+                  successMessage: _successMessage,
+                  onToggleCage: _toggleCage,
+                  onPickFeedDate: _pickFeedDate,
+                  onStartNfc: _startNfcCapture,
+                  onStopNfc: () => _stopNfcCapture(hint: '已停止读取 NFC 标签'),
+                  onSubmit: () => _submit(cageItems, rabbitItems),
+                );
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => ErrorState(
                 message: '无法读取兔只：$error',

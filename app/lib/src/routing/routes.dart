@@ -228,8 +228,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) {
               final houseId =
                   int.tryParse(state.pathParameters['houseId'] ?? '') ?? 0;
+              final initialRabbitId =
+                  int.tryParse(state.uri.queryParameters['rabbitId'] ?? '');
               return NoTransitionPage(
-                child: FeedEntryScreen(houseId: houseId),
+                child: FeedEntryScreen(
+                  houseId: houseId,
+                  initialRabbitId: initialRabbitId,
+                ),
               );
             },
           ),

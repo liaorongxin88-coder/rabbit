@@ -123,11 +123,27 @@ void main() {
       expect(find.text(description), findsOneWidget);
     }
 
-    final save = find.byKey(const ValueKey('production-settings-save'));
-    for (var attempt = 0; attempt < 4 && save.evaluate().isEmpty; attempt++) {
-      await tester.drag(scrollable, const Offset(0, -320));
-      await tester.pumpAndSettle();
+    for (final entry in const [
+      (ValueKey('production-adaptation-days'), '4'),
+      (ValueKey('production-growing-days'), '10'),
+      (ValueKey('production-fattening-days'), '8'),
+    ]) {
+      final field = find.byKey(entry.$1);
+      await tester.scrollUntilVisible(
+        field,
+        220,
+        scrollable: scrollable,
+      );
+      await tester.enterText(field, entry.$2);
     }
+
+    final save = find.byKey(const ValueKey('production-settings-save'));
+    await tester.scrollUntilVisible(
+      save,
+      260,
+      scrollable: scrollable,
+    );
+    await tester.ensureVisible(save);
     expect(save, findsOneWidget);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -138,9 +154,9 @@ void main() {
     expect(repository.updatedSetting?.prepartumDays, 3);
     expect(repository.updatedSetting?.weaningDays, 30);
     expect(repository.updatedSetting?.postpartumDays, 10);
-    expect(repository.updatedSetting?.adaptationDays, 3);
-    expect(repository.updatedSetting?.growingDays, 18);
-    expect(repository.updatedSetting?.fatteningDays, 12);
+    expect(repository.updatedSetting?.adaptationDays, 4);
+    expect(repository.updatedSetting?.growingDays, 10);
+    expect(repository.updatedSetting?.fatteningDays, 8);
     expect(repository.updatedSetting?.replacementDays, 90);
     expect(find.text('兔舍生产设置已保存'), findsOneWidget);
     expect(tester.takeException(), isNull);

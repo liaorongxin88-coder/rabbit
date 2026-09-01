@@ -662,6 +662,22 @@ void main() {
       content: '观察采食、饮水和投料量。',
     );
 
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(path: '/', builder: (_, __) => const HomeScreen()),
+        GoRoute(
+          path: '/houses/:houseId/feed',
+          builder: (_, state) => Scaffold(
+            body: Text(
+              '投喂兔 ${state.uri.queryParameters['rabbitId']}',
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -678,10 +694,13 @@ void main() {
             ],
           ),
           homeEventsProvider.overrideWith((_) async => [event]),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(perms: 'edit', isAdmin: false),
+          ),
         ],
-        child: MaterialApp(
+        child: MaterialApp.router(
           theme: buildAppTheme(),
-          home: const HomeScreen(),
+          routerConfig: router,
         ),
       ),
     );
@@ -703,6 +722,13 @@ void main() {
     expect(find.text('生长饲喂观察'), findsOneWidget);
     expect(find.text('观察采食、饮水和投料量。'), findsOneWidget);
     expect(find.text('兔 #701'), findsOneWidget);
+    expect(find.text('去投喂并完成今日观察'), findsOneWidget);
+
+    final feedAction = find.text('去投喂并完成今日观察');
+    await tester.ensureVisible(feedAction);
+    await tester.tap(feedAction);
+    await tester.pumpAndSettle();
+    expect(find.text('投喂兔 701'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

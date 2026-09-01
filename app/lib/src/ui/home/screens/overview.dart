@@ -337,7 +337,7 @@ class _HomeContentState extends ConsumerState<_HomeContent>
   }
 
   Future<void> _handleEventTap(EventItem event) async {
-    if (!eventIsActionable(event)) {
+    if (!eventIsActionable(event) && !event.isCommodityCare) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该提醒暂不支持在此处理')),
       );
@@ -362,10 +362,26 @@ class _HomeContentState extends ConsumerState<_HomeContent>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            event.isReplacement ? '当前权限无法将后备兔转为种兔' : '当前为只读权限，无法执行生产操作',
+            event.isReplacement
+                ? '当前权限无法将后备兔转为种兔'
+                : event.isCommodityCare
+                    ? '当前为只读权限，无法录入投喂'
+                    : '当前为只读权限，无法执行生产操作',
           ),
         ),
       );
+      return;
+    }
+
+    if (event.isCommodityCare) {
+      final rabbitId = event.rabbitId;
+      if (rabbitId == null || rabbitId <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法识别兔只，请刷新后重试')),
+        );
+        return;
+      }
+      await context.push('/houses/$houseId/feed?rabbitId=$rabbitId');
       return;
     }
 
@@ -1027,8 +1043,9 @@ class _EventCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onOpenRabbit;
 
-  bool get _actionable => eventIsActionable(event);
-  String get _actionHint => productionActionHint(event);
+  bool get _actionable => eventIsActionable(event) || event.isCommodityCare;
+  String get _actionHint =>
+      event.isCommodityCare ? '去投喂并完成今日观察' : productionActionHint(event);
 
   IconData get _eventIcon {
     final type = event.eventType;

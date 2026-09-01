@@ -1386,6 +1386,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         _buildDateField(
           key: const ValueKey('rabbit-arrival-date'),
           label: _type == '2' ? '断奶日期' : '入场日期',
+          helperText: _type == '2' ? '系统根据断奶日期和兔舍生长参数自动计算成长阶段。' : null,
           value: _arrivalDate,
           enabled: !_isEdit,
           onPicked: (value) => setState(() {
@@ -1942,6 +1943,7 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
     required String label,
     required DateTime? value,
     required ValueChanged<DateTime> onPicked,
+    String? helperText,
     bool enabled = true,
   }) {
     final normalizedValue = value == null ? null : _dateOnly(value);
@@ -1950,7 +1952,11 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
         : DateFormat('yyyy-MM-dd').format(normalizedValue);
     return InputDecorator(
       key: key,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        helperMaxLines: 2,
+      ),
       child: InkWell(
         onTap: _saving || !enabled
             ? null

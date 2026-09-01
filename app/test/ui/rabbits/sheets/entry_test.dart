@@ -372,6 +372,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('断奶日期'), findsOneWidget);
+    expect(
+      find.text('系统根据断奶日期和兔舍生长参数自动计算成长阶段。'),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('rabbit-growth-stage')), findsNothing);
     expect(
       find.byKey(const ValueKey('rabbit-growth-stage-entered-at')),
