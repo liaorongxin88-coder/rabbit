@@ -7,20 +7,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
-import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
-import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/event.dart';
 import 'package:rabbit_flutter/src/domain/settings/production.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
@@ -1172,7 +1169,7 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
                                 child: Text('暂无可用种公兔，请先在笼位录入。'),
                               )
                             else ...[
-                              NfcRabbitPickerButton(
+                              NfcRabbitPicker(
                                 key: const ValueKey('mating-male-nfc'),
                                 houseId: widget.houseId,
                                 candidates: males,
@@ -1449,146 +1446,6 @@ class _ProductionEventSheetState extends ConsumerState<_ProductionEventSheet> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 通过笼位 NFC 标签选中该笼里可用的兔只。
-///
-/// NFC 标签绑定的是笼位而不是兔只，因此先验证标签所属兔舍，再按笼位从当前
-/// 表单候选中筛选。单选场景要求恰好一只候选兔，批量场景可一次加入同笼兔只。
-class NfcRabbitPickerButton extends ConsumerStatefulWidget {
-  const NfcRabbitPickerButton({
-    super.key,
-    required this.houseId,
-    required this.candidates,
-    required this.idleLabel,
-    required this.waitingLabel,
-    required this.onSelected,
-    this.enabled = true,
-    this.allowMultiple = false,
-  });
-
-  final int houseId;
-  final List<Rabbit> candidates;
-  final String idleLabel;
-  final String waitingLabel;
-  final ValueChanged<List<Rabbit>> onSelected;
-  final bool enabled;
-  final bool allowMultiple;
-
-  @override
-  ConsumerState<NfcRabbitPickerButton> createState() =>
-      _NfcRabbitPickerButtonState();
-}
-
-class _NfcRabbitPickerButtonState extends ConsumerState<NfcRabbitPickerButton> {
-  StreamSubscription<NfcLaunchEvent>? _subscription;
-  StateController<bool>? _captureFlag;
-  var _listening = false;
-  String? _hint;
-
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    _releaseCapture();
-    super.dispose();
-  }
-
-  void _releaseCapture() {
-    _captureFlag?.state = false;
-    _captureFlag = null;
-  }
-
-  Future<void> _start() async {
-    if (_listening || !widget.enabled) {
-      return;
-    }
-    final service = ref.read(nfcIntentServiceProvider);
-    await service.initialize();
-    if (!mounted) {
-      return;
-    }
-    final flag = ref.read(nfcCaptureActiveProvider.notifier);
-    flag.state = true;
-    _captureFlag = flag;
-    setState(() {
-      _listening = true;
-      _hint = widget.waitingLabel;
-    });
-    _subscription = service.events.listen(_onNfcEvent);
-  }
-
-  void _stop({String? hint}) {
-    _subscription?.cancel();
-    _subscription = null;
-    _releaseCapture();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _listening = false;
-      _hint = hint;
-    });
-  }
-
-  Future<void> _onNfcEvent(NfcLaunchEvent event) async {
-    try {
-      final target = NfcPayloadTarget.parse(event.payload);
-      if (target.houseId != widget.houseId) {
-        _stop(hint: '该标签属于其他兔舍，未选择兔只');
-        return;
-      }
-      final binding = await ref.read(nfcRepositoryProvider).resolve(
-            houseId: widget.houseId,
-            tagUid: event.tagUid,
-            payload: event.payload,
-          );
-      if (!mounted) {
-        return;
-      }
-      final matches = widget.candidates
-          .where((rabbit) => rabbit.cageId == binding.cageId)
-          .toList(growable: false);
-      if (matches.isEmpty) {
-        _stop(hint: '该笼位没有当前可选的兔只');
-        return;
-      }
-      if (!widget.allowMultiple && matches.length != 1) {
-        _stop(hint: '该笼位有 ${matches.length} 只可选兔只，请在列表中选择');
-        return;
-      }
-      widget.onSelected(matches);
-      final rabbitLabels = matches.map((rabbit) => '#${rabbit.id}').join('、');
-      _stop(hint: '已选择兔 $rabbitLabels');
-    } catch (error) {
-      _stop(
-        hint: error is ApiException ? error.message : '读取 NFC 标签失败，请重试',
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        OutlinedButton.icon(
-          key: widget.key,
-          onPressed:
-              !widget.enabled || _listening ? null : () => unawaited(_start()),
-          icon: const Icon(Icons.nfc),
-          label: Text(_listening ? widget.waitingLabel : widget.idleLabel),
-        ),
-        if (_hint != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            _hint!,
-            key: const ValueKey('nfc-rabbit-picker-hint'),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ],
     );
   }
 }

@@ -13,6 +13,7 @@ import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
@@ -596,9 +597,91 @@ class _ProductionWeaningSeparationSheetState
             records.any((item) => item.id == _recordId) ? _recordId : null;
         final record =
             records.where((item) => item.id == selectedRecordId).firstOrNull;
+
+        // 碰一下母兔所在的笼位，直接选中她那条待分笼记录。
+        //
+        // 现场的动作是「站在母兔笼前」，而不是在一列「母兔 #60 · 待分 9 只」里找。
+        // 下拉完整保留：没有 NFC 硬件、标签没贴、或笼里情况不满足时都得能选。
+        //
+        // 用 [NfcCagePicker] 而不是 [NfcRabbitPicker]：后者的拒绝文案是写死的
+        // 「该笼位没有当前可选的兔只」，而这里笼里往往**有**母兔，只是她在本批次
+        // 没有待分笼记录——那句话是错的。判据依赖记录级事实，只有调用方知道。
+        final recordsByDoe = <int, List<PendingWeaningRecord>>{};
+        for (final item in records) {
+          recordsByDoe
+              .putIfAbsent(item.rabbitId, () => <PendingWeaningRecord>[])
+              .add(item);
+        }
+        // 只认本兔舍的种母兔：公兔和商品兔即使同笼也不该算进来。
+        List<Rabbit> doesInCage(Cage cage) => parents
+            .where((rabbit) =>
+                rabbit.cageId == cage.id &&
+                rabbit.houseId == widget.houseId &&
+                rabbit.type == '0' &&
+                rabbit.gender == '0')
+            .toList(growable: false);
+        List<Rabbit> pendingDoesInCage(Cage cage) => doesInCage(cage)
+            .where((rabbit) => recordsByDoe.containsKey(rabbit.id))
+            .toList(growable: false);
+        bool acceptsDoeCage(Cage cage) {
+          final does = pendingDoesInCage(cage);
+          // 一笼一母一记录才直接选中；其余情况交给人，不猜。
+          return does.length == 1 && recordsByDoe[does.single.id]!.length == 1;
+        }
+
+        String doeCageRejectReason(Cage cage) {
+          final label = _cageName(cage);
+          final pending = pendingDoesInCage(cage);
+          if (pending.length > 1) {
+            final names = pending.map((item) => '#${item.id}').join('、');
+            return '$label 有 ${pending.length} 只母兔待分笼（$names），请在下方选择';
+          }
+          if (pending.length == 1) {
+            final doe = pending.single;
+            final count = recordsByDoe[doe.id]!.length;
+            return '母兔 #${doe.id} 在本批次有 $count 条待分笼记录，请在下方选择';
+          }
+          final all = doesInCage(cage);
+          if (all.isEmpty) {
+            return '$label 没有种母兔';
+          }
+          final names = all.map((item) => '#${item.id}').join('、');
+          return '$label 的母兔（$names）在本批次没有待分笼记录';
+        }
+
+        // 选中后该回显「选中了哪条记录」，而不是回显笼号：
+        // 用户要的是记录，笼号只是他碰到的东西。
+        String doeCageLabel(Cage cage) {
+          final does = pendingDoesInCage(cage);
+          if (does.length != 1) return _cageName(cage);
+          final matched = recordsByDoe[does.single.id]!;
+          if (matched.length != 1) return _cageName(cage);
+          return '母兔 #${does.single.id} · 待分 ${matched.single.waitingCount} 只';
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: NfcCagePicker(
+                key: const ValueKey('production-record-nfc'),
+                houseId: widget.houseId,
+                cages: cages,
+                enabled: !_saving,
+                accepts: acceptsDoeCage,
+                rejectReason: doeCageRejectReason,
+                cageLabel: doeCageLabel,
+                idleLabel: '碰一下母兔笼位',
+                waitingHint: '请将手机靠近母兔笼位的 NFC 标签',
+                unavailableLabel: '设备不支持NFC或NFC未开启，请在下方选择待分笼记录',
+                onSelected: (cage) {
+                  final doe = pendingDoesInCage(cage).single;
+                  _selectRecord(recordsByDoe[doe.id]!.single.id, records);
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
             DropdownButtonFormField<int>(
               key: const ValueKey('production-weaning-record'),
               value: selectedRecordId,
@@ -687,7 +770,9 @@ class _ProductionWeaningSeparationSheetState
                   });
                 },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _buildScopeNotice(record, cages),
+              const SizedBox(height: 12),
               _buildActions(
                 onSubmit: () => _submit(
                   batches: batches,
@@ -740,39 +825,109 @@ class _ProductionWeaningSeparationSheetState
       );
     }
     final selected = cages.any((item) => item.id == _cageId) ? _cageId : null;
-    return DropdownButtonFormField<int>(
-      key: const ValueKey('production-cage'),
-      value: selected,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: '目标笼位',
-        hintText: '请选择笼位',
-      ),
-      items: [
-        for (final cage in cages)
-          DropdownMenuItem(
-            value: cage.id,
-            child: Text(
-              _cageLabel(cage),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 现场是「手里拎着一窝断奶兔站在架子前」，在一屏笼号里找那一行才是不自然的动作。
+        // 碰一下是第三条路，不替代下拉：标签会掉、会没贴，手机也可能没有 NFC。
+        // 候选笼故意传 allCages 而不是下拉过滤后的列表——碰到满笼、停用笼时要说得出
+        // 「为什么不能选」，只传可选笼的话它们会退化成「未在当前兔舍找到该笼位」。
+        NfcCagePicker(
+          key: const ValueKey('production-cage-nfc'),
+          houseId: widget.houseId,
+          cages: allCages,
+          enabled: !_saving,
+          accepts: _acceptsTargetCage,
+          rejectReason: _cageRejectReason,
+          cageLabel: _cageLabel,
+          onSelected: (cage) => setState(() {
+            _cageId = cage.id;
+            _startNewDraft();
+          }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<int>(
+          key: const ValueKey('production-cage'),
+          value: selected,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: '目标笼位',
+            hintText: '请选择笼位',
           ),
+          items: [
+            for (final cage in cages)
+              DropdownMenuItem(
+                value: cage.id,
+                child: Text(
+                  _cageLabel(cage),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) {
+                  setState(() {
+                    _cageId = value;
+                    _startNewDraft();
+                  });
+                },
+        ),
       ],
-      onChanged: _saving
-          ? null
-          : (value) {
-              setState(() {
-                _cageId = value;
-                _startNewDraft();
-              });
-            },
     );
   }
 
+  /// 碰标签能选中的笼位，与下拉候选是同一条判据。
+  ///
+  /// 两边一旦分叉，碰一下就能选中一个下拉里根本不存在的笼，用户改主意想换回去时
+  /// 会发现列表里没有它。
+  bool _acceptsTargetCage(Cage cage) => cage.isProductionIntakeCage;
+
+  /// 拒绝时要说出上限本身，而不是「该笼不可选」。
+  ///
+  /// 人举着手机站在笼子前，需要知道的是「这笼还差多少」，才能决定去碰哪一个。
+  String _cageRejectReason(Cage cage) {
+    final name = _cageName(cage);
+    if (!cage.isEnabled) {
+      return '$name 已停用，不能作为分笼目标';
+    }
+    if (!cage.isCommodityCage) {
+      return '$name 是${cage.usageLabel}笼，分笼只能进空笼或商品兔笼';
+    }
+    if (cage.commodityRemainingCapacity <= 0) {
+      return '$name 已放 ${cage.rabbitCount} 只，'
+          '商品兔笼上限 ${Cage.commodityCapacity} 只，放不下了';
+    }
+    // 空闲笼却记着在栏数，属于账不平：不猜它到底能放几只，交给人去核对。
+    return '$name 标为空闲却记着 ${cage.rabbitCount} 只，请先核对笼内在栏数';
+  }
+
+  /// 笼位的裸名字。讨论容量以外的事情时用它，别把「还可放 N 只」带进句子。
+  String _cageName(Cage cage) =>
+      cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
+
   String _cageLabel(Cage cage) {
-    final name = cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber;
-    return '$name · ${cage.usageLabel} · 还可放 ${cage.commodityRemainingCapacity} 只';
+    return '${_cageName(cage)} · ${cage.usageLabel} · '
+        '还可放 ${cage.commodityRemainingCapacity} 只';
+  }
+
+  /// 提交前把这次的影响范围摆在按钮上方。
+  ///
+  /// 分笼一次只结算一条待分笼记录，但它仍然是批量写：一次生成多只兔。
+  /// 人按下「确认分笼」之前必须看得到动的是哪条记录、进的是哪个笼。
+  Widget _buildScopeNotice(PendingWeaningRecord record, List<Cage> cages) {
+    final cage = cages.where((item) => item.id == _cageId).firstOrNull ??
+        widget.currentCage;
+    final target = cage == null ? '尚未选择目标笼位' : _cageLabel(cage);
+    return Text(
+      '本次提交影响 1 条待分笼记录：'
+      '母兔 #${record.rabbitId}（待分 ${record.waitingCount} 只）→ $target',
+      key: const ValueKey('production-scope'),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodySmall,
+    );
   }
 
   List<Rabbit> _parentCandidates(

@@ -134,11 +134,7 @@ class _HouseBatchDetailScreenState
 
     return AppPage(
       title: '批次详情',
-      leading: IconButton(
-        tooltip: '返回批次列表',
-        onPressed: () => context.go('/houses/${widget.houseId}/batches'),
-        icon: const Icon(Icons.arrow_back),
-      ),
+      parentRoute: '/houses/${widget.houseId}/batches',
       actions: [
         IconButton(
           tooltip: '刷新批次',

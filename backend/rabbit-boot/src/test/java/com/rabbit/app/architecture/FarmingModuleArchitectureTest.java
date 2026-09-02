@@ -45,7 +45,7 @@ class FarmingModuleArchitectureTest {
      * {@code REQUIRES_NEW} 或加上 {@code @TrackedOperation}，绕过代理就从无害
      * 变成静默失效，而这种失效没有任何运行期信号。
      *
-     * <p>清单的完整版本见 {@code docs/project/transactional-self-invocation-audit.md}。
+     * <p>清单的完整版本见 {@code docs/backend/modules/operation-tracking.md}。
      */
     private static final Set<String> ALLOWED_TRANSACTIONAL_SELF_CALLS = Set.of(
             "SettingService#updateUserSetting -> getOrCreateUserSetting",
@@ -184,7 +184,7 @@ class FarmingModuleArchitectureTest {
                 violations.isEmpty(),
                 () -> "新增的 @Transactional 同类自调用会绕过代理。确认无害后加入 "
                         + "ALLOWED_TRANSACTIONAL_SELF_CALLS 并更新 "
-                        + "docs/project/transactional-self-invocation-audit.md:\n"
+                        + "docs/backend/modules/operation-tracking.md:\n"
                         + String.join("\n", violations)
         );
     }

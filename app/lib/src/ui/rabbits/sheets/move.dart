@@ -1,18 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/capture_scope.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
-import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/cages/layout.dart';
-import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/widgets/map.dart';
@@ -60,18 +54,12 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   static const _rowBatchSize = 4;
 
   final _searchController = TextEditingController();
-  StreamSubscription<NfcLaunchEvent>? _nfcSubscription;
 
-  /// 独占标记的控制器提前取好：`ref` 在 dispose 里已不可用，
-  /// 而此时恰恰是最需要归还它的时候。
-  StateController<bool>? _captureFlag;
   late int _selectedCageId;
   var _keyword = '';
   var _saving = false;
-  var _nfcListening = false;
   var _pickerMode = _TargetPickerMode.map;
   var _visibleRowCount = _rowBatchSize;
-  String? _nfcHint;
   String? _numberHint;
 
   Rabbit get _rabbit => widget.rabbit;
@@ -100,16 +88,8 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
 
   @override
   void dispose() {
-    _nfcSubscription?.cancel();
-    _nfcSubscription = null;
-    _releaseCaptureFlag();
     _searchController.dispose();
     super.dispose();
-  }
-
-  void _releaseCaptureFlag() {
-    _captureFlag?.state = false;
-    _captureFlag = null;
   }
 
   /// 目标笼位是否可选。
@@ -178,88 +158,6 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
       return '$name · ${cage.usageLabel} · ${cage.rabbitCount} 只';
     }
     return '$name · 空笼';
-  }
-
-  /// 碰一下目标笼位的 NFC 标签直接选中它。
-  ///
-  /// 现场的真实动作是“手里拎着兔、手机碰笼子”，在一屏笼位号里找到那一行才是不自然的。
-  Future<void> _startNfcCapture() async {
-    if (_nfcListening || _saving) {
-      return;
-    }
-    // 无硬件时先说明，不要让用户对着一个永远不会响的提示干等。
-    // 写标签路径（hardware.dart 里的 writePayload）一直有这个检查，读取路径漏了。
-    final available = await ref.read(nfcHardwareServiceProvider).isAvailable();
-    if (!mounted) {
-      return;
-    }
-    if (!available) {
-      setState(
-        () => _nfcHint = '设备不支持NFC或NFC未开启，请改用下方地图或列表选择',
-      );
-      return;
-    }
-    final service = ref.read(nfcIntentServiceProvider);
-    await service.initialize();
-    if (!mounted) {
-      return;
-    }
-    final flag = ref.read(nfcCaptureActiveProvider.notifier);
-    flag.state = true;
-    _captureFlag = flag;
-    setState(() {
-      _nfcListening = true;
-      _nfcHint = '请将手机靠近目标笼位的 NFC 标签';
-    });
-    _nfcSubscription = service.events.listen(_onNfcEvent);
-  }
-
-  void _stopNfcCapture({String? hint}) {
-    _nfcSubscription?.cancel();
-    _nfcSubscription = null;
-    _releaseCaptureFlag();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _nfcListening = false;
-      _nfcHint = hint;
-    });
-  }
-
-  Future<void> _onNfcEvent(NfcLaunchEvent event) async {
-    try {
-      final target = NfcPayloadTarget.parse(event.payload);
-      if (target.houseId != widget.houseId) {
-        _stopNfcCapture(hint: '该标签属于其它兔舍，未选中');
-        return;
-      }
-      final binding = await ref.read(nfcRepositoryProvider).resolve(
-            houseId: widget.houseId,
-            tagUid: event.tagUid,
-            payload: event.payload,
-          );
-      if (!mounted) {
-        return;
-      }
-      final cage = _cageById(binding.cageId);
-      if (cage == null) {
-        _stopNfcCapture(hint: '未在当前兔舍找到该笼位，请刷新后重试');
-        return;
-      }
-      if (!_acceptsTarget(cage)) {
-        _stopNfcCapture(hint: '${_cageLabel(cage)} 不能接收该兔');
-        return;
-      }
-      setState(() => _selectedCageId = cage.id);
-      _stopNfcCapture(hint: '已选中 ${_cageLabel(cage)}');
-    } catch (error) {
-      if (mounted) {
-        _stopNfcCapture(
-          hint: error is ApiException ? error.message : '读取标签失败，请重试',
-        );
-      }
-    }
   }
 
   /// 输入的编号能唯一对上时直接选中。
@@ -398,26 +296,19 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                        child: OutlinedButton.icon(
+                        child: NfcCagePicker(
                           key: const ValueKey('rabbit-move-cage-nfc'),
-                          onPressed: _saving || _nfcListening
-                              ? null
-                              : () => unawaited(_startNfcCapture()),
-                          icon: const Icon(Icons.nfc),
-                          label: Text(_nfcListening ? '等待碰标签…' : '碰一下目标笼位'),
+                          houseId: widget.houseId,
+                          cages: widget.cages,
+                          enabled: !_saving,
+                          accepts: _acceptsTarget,
+                          rejectReason: (cage) => '${_cageLabel(cage)} 不能接收该兔',
+                          cageLabel: _cageLabel,
+                          onSelected: (cage) =>
+                              setState(() => _selectedCageId = cage.id),
                         ),
                       ),
                     ),
-                    if (_nfcHint != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                          child: Text(
-                            _nfcHint!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -626,7 +517,7 @@ class _MoveCageSheetState extends ConsumerState<_MoveCageSheet> {
   }
 
   Future<void> _save() async {
-    _stopNfcCapture();
+    // NfcCagePicker 看到 enabled 变 false 会自己收掉采集窗口并归还独占标记。
     setState(() => _saving = true);
     try {
       final result =

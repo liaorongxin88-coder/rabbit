@@ -32,6 +32,7 @@ class _NfcWriteSetupScreenState extends ConsumerState<NfcWriteSetupScreen> {
     final pendingSync = ref.watch(nfcPendingSyncControllerProvider);
     return AppPage(
       title: 'NFC标签写入',
+      parentRoute: '/houses/${widget.houseId}/cages',
       actions: [
         IconButton(
           tooltip: '刷新',

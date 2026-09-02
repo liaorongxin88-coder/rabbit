@@ -66,6 +66,106 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('fallback pages use the same labeled back entry as parent pages',
+      (tester) async {
+    // 回退路由以前只渲染一个光箭头的 IconButton，
+    // 现在跟笼位管理页面一样带“返回”文字。
+    final router = GoRouter(
+      initialLocation: '/child',
+      routes: [
+        GoRoute(
+          path: '/parent',
+          builder: (_, __) => const Scaffold(body: Text('父页面')),
+        ),
+        GoRoute(
+          path: '/child',
+          builder: (_, __) => const AppPage(
+            title: '回退路由页面',
+            fallbackBackLocation: '/parent',
+            child: SizedBox.expand(),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp.router(
+        theme: buildAppTheme(),
+        routerConfig: router,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final backButton = find.byKey(const ValueKey('page-back-button'));
+    expect(backButton, findsOneWidget);
+    expect(
+      find.descendant(of: backButton, matching: find.text('返回')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: backButton,
+        matching: find.byIcon(Icons.arrow_back),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.getSize(backButton).height, greaterThanOrEqualTo(48));
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.leadingWidth, isNotNull);
+    expect(appBar.leadingWidth, greaterThan(56));
+  });
+
+  testWidgets('a custom AppBackButton leading still gets back-entry width',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: AppPage(
+          title: '协议详情',
+          leading: AppBackButton(onPressed: () {}),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('返回'), findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.leadingWidth, greaterThan(56));
+  });
+
+  testWidgets('AppBackButton can relabel without losing the shared shape',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              leadingWidth: appBackLeadingWidth(context, label: '退出'),
+              leading: AppBackButton(
+                buttonKey: const ValueKey('nfc-write-exit-button'),
+                icon: Icons.close,
+                label: '退出',
+                tooltip: '退出写入',
+                onPressed: () {},
+              ),
+              title: const Text('连续写标签'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final exit = find.byKey(const ValueKey('nfc-write-exit-button'));
+    expect(exit, findsOneWidget);
+    expect(find.text('退出'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    expect(tester.getSize(exit).height, greaterThanOrEqualTo(48));
+  });
+
   testWidgets('legacy fallback keeps pop-first navigation semantics',
       (tester) async {
     late GoRouter router;

@@ -8,9 +8,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
+import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
+import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/houses/permission.dart';
@@ -21,6 +25,9 @@ import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/entry.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+
+import '../../core/widgets/nfc_harness.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -645,6 +652,303 @@ void main() {
     );
     expect(find.text('繁殖阶段'), findsNothing);
   });
+
+  testWidgets('存栏母兔入轨时碰一下公兔的笼位，配种公兔就填好了', (tester) async {
+    final nfc = NfcHarness();
+    await tester.pumpWidget(_reproEntryNfcTestApp());
+    await _openReproEntrySheet(tester);
+    await _selectStage(
+      tester,
+      const ValueKey('existing-rabbit-repro-stage'),
+      '待摸胎',
+    );
+
+    await _startNfcCapture(tester);
+    await nfc.tap(houseId: 8, cageId: 21);
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选择兔 #21'), findsOneWidget);
+    expect(
+      _selectedMaleId(tester, const ValueKey('existing-rabbit-mating-male')),
+      21,
+    );
+  });
+
+  testWidgets('存栏母兔入轨时碰到没有可选公兔的笼位，会说清楚没选中', (tester) async {
+    final nfc = NfcHarness();
+    await tester.pumpWidget(_reproEntryNfcTestApp());
+    await _openReproEntrySheet(tester);
+    await _selectStage(
+      tester,
+      const ValueKey('existing-rabbit-repro-stage'),
+      '待摸胎',
+    );
+
+    await _startNfcCapture(tester);
+    // 30 号笼里只有一只种母兔，不是可选的配种公兔。
+    await nfc.tap(houseId: 8, cageId: 30);
+    await tester.pumpAndSettle();
+
+    expect(find.text('该笼位没有当前可选的兔只'), findsOneWidget);
+    expect(
+      _selectedMaleId(tester, const ValueKey('existing-rabbit-mating-male')),
+      isNull,
+    );
+    expect(
+      find.byKey(const ValueKey('existing-rabbit-mating-male')),
+      findsOneWidget,
+      reason: '碰不出结果时下拉仍然留着，人还能自己选',
+    );
+  });
+
+  testWidgets('录入母兔时碰一下公兔的笼位，配种公兔同样填得上', (tester) async {
+    final nfc = NfcHarness();
+    await tester.pumpWidget(_createRabbitNfcTestApp());
+    await _openCreateRabbitSheet(tester);
+    await _selectStage(tester, const ValueKey('rabbit-repro-stage'), '待摸胎');
+
+    await _startNfcCapture(tester);
+    await nfc.tap(houseId: 8, cageId: 21);
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选择兔 #21'), findsOneWidget);
+    expect(
+      _selectedMaleId(tester, const ValueKey('rabbit-entry-mating-male')),
+      21,
+    );
+  });
+
+  testWidgets('录入母兔时碰到有两只可选公兔的笼位，会让人回列表里选', (tester) async {
+    final nfc = NfcHarness();
+    await tester.pumpWidget(_createRabbitNfcTestApp());
+    await _openCreateRabbitSheet(tester);
+    await _selectStage(tester, const ValueKey('rabbit-repro-stage'), '待摸胎');
+
+    await _startNfcCapture(tester);
+    // 22 号笼里住着两只可配的种公兔，猜哪一只都是错的。
+    await nfc.tap(houseId: 8, cageId: 22);
+    await tester.pumpAndSettle();
+
+    expect(find.text('该笼位有 2 只可选兔只，请在列表中选择'), findsOneWidget);
+    expect(
+      _selectedMaleId(tester, const ValueKey('rabbit-entry-mating-male')),
+      isNull,
+      reason: '两只都可配时不得替人猜一只',
+    );
+    expect(
+      find.byKey(const ValueKey('rabbit-entry-mating-male')),
+      findsOneWidget,
+      reason: '拒绝后下拉仍然留着，人还能自己选',
+    );
+  });
+
+  testWidgets('读标签失败时表单还在，已经填好的品种、体重、来源都不会丢', (tester) async {
+    final nfc = NfcHarness();
+    await tester.pumpWidget(
+      _createRabbitNfcTestApp(
+        nfcRepository: _StubNfcRepository(
+          failure: const ApiException('标签解析失败，请重试'),
+        ),
+      ),
+    );
+    await _openCreateRabbitSheet(tester);
+    await _fillRequiredDoeProfile(tester);
+    await _selectStage(tester, const ValueKey('rabbit-repro-stage'), '待摸胎');
+
+    await _startNfcCapture(tester);
+    await nfc.tap(houseId: 8, cageId: 21);
+    await tester.pumpAndSettle();
+
+    expect(find.text('标签解析失败，请重试'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rabbit-entry-submit')),
+      findsOneWidget,
+      reason: '读标签失败不能把表单关掉',
+    );
+    expect(find.text('新西兰白'), findsOneWidget);
+    expect(find.text('3.8'), findsOneWidget);
+    expect(find.text('测试供应方'), findsOneWidget);
+    expect(
+      _selectedMaleId(tester, const ValueKey('rabbit-entry-mating-male')),
+      isNull,
+    );
+  });
+}
+
+Widget _reproEntryNfcTestApp({NfcRepository? nfcRepository}) {
+  return _testApp(
+    houseRabbits: _breedingHouseRabbits,
+    nfcRepository: nfcRepository ?? _StubNfcRepository(),
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-repro-entry-sheet'),
+        onPressed: () => showRabbitReproEntrySheet(
+          context: context,
+          houseId: 8,
+          rabbit: _breedingDoe,
+        ),
+        child: const Text('入轨'),
+      ),
+    ),
+  );
+}
+
+Widget _createRabbitNfcTestApp({NfcRepository? nfcRepository}) {
+  return _testApp(
+    refreshedCages: const [_breedingCage],
+    houseRabbits: _breedingHouseRabbits,
+    nfcRepository: nfcRepository ?? _StubNfcRepository(),
+    child: Builder(
+      builder: (context) => FilledButton(
+        key: const ValueKey('open-rabbit-entry-sheet'),
+        onPressed: () => showRabbitPurchaseEntrySheet(
+          context: context,
+          houseId: 8,
+          cage: _breedingCage,
+        ),
+        child: const Text('录入'),
+      ),
+    ),
+  );
+}
+
+Future<void> _openReproEntrySheet(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('open-rabbit-repro-entry-sheet')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openCreateRabbitSheet(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('open-rabbit-entry-sheet')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('确定'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectStage(
+  WidgetTester tester,
+  Key stageKey,
+  String stageLabel,
+) async {
+  final stage = find.byKey(stageKey);
+  await tester.ensureVisible(stage);
+  await tester.tap(stage);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(stageLabel).last);
+  await tester.pumpAndSettle();
+}
+
+/// 打开采集窗口并确认它真的在等标签，避免后面注入的碰一下落空。
+Future<void> _startNfcCapture(WidgetTester tester) async {
+  final button = find.byKey(const ValueKey('nfc-rabbit-picker-button'));
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+  expect(
+    find.text('请靠近种公兔所在笼位的 NFC 标签'),
+    findsWidgets,
+    reason: '按钮点下去要进入等待态，否则注入的标签没人接',
+  );
+}
+
+int? _selectedMaleId(WidgetTester tester, Key dropdownKey) {
+  return tester
+      .widget<DropdownButtonFormField<int>>(find.byKey(dropdownKey))
+      .initialValue;
+}
+
+final _breedingDoe = Rabbit.fromJson({
+  'id': 20,
+  'houseId': 8,
+  'cageId': 11,
+  'type': '0',
+  'gender': '0',
+  'breed': '新西兰白兔',
+  'arrivalMethod': '0',
+  'isActive': true,
+});
+
+/// 21 号笼一只公兔、22 号笼两只公兔、30 号笼只有母兔：
+/// 碰一下的三种结局各有一个笼位对应。
+final _breedingHouseRabbits = <Rabbit>[
+  _breedingDoe,
+  Rabbit.fromJson({
+    'id': 21,
+    'houseId': 8,
+    'cageId': 21,
+    'type': '0',
+    'gender': '1',
+    'breed': '新西兰白兔',
+    'arrivalMethod': '0',
+    'isActive': true,
+  }),
+  Rabbit.fromJson({
+    'id': 22,
+    'houseId': 8,
+    'cageId': 22,
+    'type': '0',
+    'gender': '1',
+    'breed': '加利福尼亚兔',
+    'arrivalMethod': '0',
+    'isActive': true,
+  }),
+  Rabbit.fromJson({
+    'id': 23,
+    'houseId': 8,
+    'cageId': 22,
+    'type': '0',
+    'gender': '1',
+    'breed': '伊拉兔',
+    'arrivalMethod': '0',
+    'isActive': true,
+  }),
+  Rabbit.fromJson({
+    'id': 30,
+    'houseId': 8,
+    'cageId': 30,
+    'type': '0',
+    'gender': '0',
+    'breed': '新西兰白兔',
+    'arrivalMethod': '0',
+    'isActive': true,
+  }),
+];
+
+/// 强制「有 NFC」，让组件测试能走到读标签这一步。
+class _AvailableNfcHardware extends NfcHardwareService {
+  @override
+  Future<bool> isAvailable() async => true;
+}
+
+/// 把标签载荷里的笼位直接当成解析结果，不联网。
+class _StubNfcRepository implements NfcRepository {
+  _StubNfcRepository({this.failure});
+
+  final ApiException? failure;
+
+  @override
+  Future<NfcCageBinding> resolve({
+    required int houseId,
+    required String tagUid,
+    required String payload,
+  }) async {
+    final failure = this.failure;
+    if (failure != null) {
+      throw failure;
+    }
+    final target = NfcPayloadTarget.parse(payload);
+    return NfcCageBinding(
+      houseId: target.houseId,
+      cageId: target.cageId,
+      cageNumber: 'A-${target.cageId}',
+      tagUid: tagUid,
+      bindingStatus: 'BOUND',
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName} 未在测试中实现');
 }
 
 Widget _sourceTestApp({required HousePermission permission}) {
@@ -783,11 +1087,21 @@ Widget _testApp({
   RabbitRepository? repository,
   List<Cage>? refreshedCages,
   List<Batch> batches = const [_activeBatch],
+  List<Rabbit>? houseRabbits,
+  NfcRepository? nfcRepository,
 }) {
   return ProviderScope(
     overrides: [
       if (repository != null)
         rabbitRepositoryProvider.overrideWithValue(repository),
+      if (houseRabbits != null)
+        allActiveHouseRabbitsProvider.overrideWith(
+          (ref, houseId) async => houseRabbits,
+        ),
+      if (nfcRepository != null) ...[
+        nfcRepositoryProvider.overrideWithValue(nfcRepository),
+        nfcHardwareServiceProvider.overrideWithValue(_AvailableNfcHardware()),
+      ],
       houseCagesProvider(8).overrideWith(
         (_) async =>
             refreshedCages ??

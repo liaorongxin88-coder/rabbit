@@ -14,6 +14,7 @@ import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
 import 'package:rabbit_flutter/src/ui/houses/view_models/providers.dart';
@@ -92,10 +93,10 @@ class _AuthorizedOutboundFlow extends ConsumerWidget {
       },
       child: Scaffold(
         appBar: AppBar(
-          leading: IconButton(
+          leadingWidth: appBackLeadingWidth(context),
+          leading: AppBackButton(
             tooltip: isConfirm && !isResult ? '返回选择' : '返回',
             onPressed: () => _handleBack(context, state, controller),
-            icon: const Icon(Icons.arrow_back),
           ),
           title: Text(isResult
               ? '出库结果'
@@ -267,11 +268,11 @@ class _OutboundAccessScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          key: const ValueKey('outbound-access-back'),
+        leadingWidth: appBackLeadingWidth(context),
+        leading: AppBackButton(
+          buttonKey: const ValueKey('outbound-access-back'),
           tooltip: '返回兔舍',
           onPressed: () => _leaveOutbound(context, entry),
-          icon: const Icon(Icons.arrow_back),
         ),
         title: const Text('批量出库'),
       ),

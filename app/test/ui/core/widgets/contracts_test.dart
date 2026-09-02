@@ -11,7 +11,6 @@ void main() {
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    var backCount = 0;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -21,16 +20,15 @@ void main() {
           child: Scaffold(
             body: ListView(
               padding: const EdgeInsets.all(16),
-              children: [
+              children: const [
                 ContextHeaderCard(
                   title: '东区标准化繁育兔舍',
                   subtitle: '跨业务页面共享同一份兔舍上下文展示',
                   expandForLargeText: true,
-                  onBack: () => backCount += 1,
-                  footer: const Text('附加操作区'),
+                  footer: Text('附加操作区'),
                 ),
-                const SizedBox(height: 12),
-                const InfoNotice(
+                SizedBox(height: 12),
+                InfoNotice(
                   icon: Icons.info_outline,
                   text: '这是一条跨业务复用的信息提示。',
                 ),
@@ -46,8 +44,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('返回'));
-    expect(backCount, 1);
+    // 返回入口只留在 AppBar，上下文卡片不再重复一个。
+    expect(find.byTooltip('返回'), findsNothing);
   });
 
   testWidgets('shared modal sheet opens workflow content', (tester) async {

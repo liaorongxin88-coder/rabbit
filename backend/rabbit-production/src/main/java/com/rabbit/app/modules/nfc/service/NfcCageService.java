@@ -61,6 +61,11 @@ public class NfcCageService {
             NfcCageQueueItem item = new NfcCageQueueItem();
             item.setCageId(row.getCageId());
             item.setCageNumber(row.getCageNumber());
+            // 坐标原样透传，缺就是 null：贴签的人站在某一排前面，要按排和层筛队列。
+            // 笼位编号有 `1-1-1` 和 `2(上)1` 两套写法并存，客户端拆不出坐标，只能由这里给。
+            item.setRowCode(row.getRowCode());
+            item.setLayerIndex(row.getLayerIndex());
+            item.setPositionIndex(row.getPositionIndex());
             item.setPayload(payloadCodec.create(houseId, row.getCageId()));
             String genericUid = normalizeUid(row.getGenericTagUid());
             String cageUid = normalizeUid(row.getCageTagUid());

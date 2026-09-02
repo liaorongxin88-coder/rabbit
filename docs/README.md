@@ -4,7 +4,7 @@
 
 ## 阅读顺序
 
-1. [项目级文档](project/README.md)：系统边界、总体架构、本地开发、测试和业务基准。
+1. [项目级文档](project/README.md)：系统边界、总体架构、本地开发、测试、业务基准和演进说明。
 2. [后端](backend/README.md)、[Flutter App](app/README.md) 或 [Admin](admin/README.md)：进入要修改的子项目。
 3. [跨端业务专题](features/README.md)：查阅批量出库、母兔生产流程等跨子项目契约。
 4. [部署与发布](operations/README.md)：处理 Compose、CI/CD、制品、生产部署和回滚。
@@ -34,7 +34,10 @@ docs/
 | 系统边界、身份、租户和数据流 | [project/architecture.md](project/architecture.md) |
 | 本地环境和启动方式 | [project/development.md](project/development.md) |
 | 测试、E2E 和验收 | [project/testing.md](project/testing.md) |
+| 新交互必须证明的性质 | [project/interaction-acceptance-spec.md](project/interaction-acceptance-spec.md) |
+| 关键模型为何被推翻及重建 | [project/evolution.md](project/evolution.md) |
 | 后端模块、API、权限和迁移 | [backend/README.md](backend/README.md) |
+| 写操作追踪、切面顺序和事件流 | [backend/modules/operation-tracking.md](backend/modules/operation-tracking.md) |
 | Flutter 分层、路由和业务流程 | [app/README.md](app/README.md) 与 `../app/.rule` |
 | Admin 工程与交互规则 | [admin/README.md](admin/README.md)、`../admin/.rules` 与 `../admin/DESIGN.md` |
 | 兔只类型、业务状态和批次操作 | [features/rabbit-lifecycle/README.md](features/rabbit-lifecycle/README.md) |
@@ -49,6 +52,8 @@ docs/
 - 同时影响多个子项目的业务契约放入 `features/`，并在专题入口标明文档用途和状态。
 - 部署步骤、运行时配置和发布证据放入 `operations/`。
 - 已废弃但仍需追溯的资料移入 `archive/`，不要继续作为当前实现依据。
+- 本目录只保留结论和演进说明。阶段计划、排期、任务拆分、工时估算、单次验收清单和
+  外部工单状态快照不入库；它们属于项目管理工具。计划完成后，把结论写回对应文档。
 - 已执行的 Flyway 迁移不能为更新文档路径而修改校验和；这类历史引用在原路径保留最小兼容入口。
 - 数据库结构以 Flyway 迁移为准，路由和接口以当前源码为准，状态类文档必须标注核对时间。
 - 移动或新增文档后运行 `node scripts/ci/check-markdown-links.mjs`。

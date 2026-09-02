@@ -6,8 +6,8 @@ import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet_states.dart';
-import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
@@ -245,7 +245,7 @@ class _AddBatchMembersSheetState extends ConsumerState<_AddBatchMembersSheet> {
                               ],
                               const SizedBox(height: 14),
                               if (available.isNotEmpty) ...[
-                                NfcRabbitPickerButton(
+                                NfcRabbitPicker(
                                   key: const ValueKey('batch-add-members-nfc'),
                                   houseId: widget.houseId,
                                   candidates: available,

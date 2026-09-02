@@ -9,6 +9,8 @@ import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
 import 'package:rabbit_flutter/src/data/services/storage/nfc.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 
+import '../../ui/core/widgets/nfc_harness.dart';
+
 void main() {
   test('parses versioned house and cage payload', () {
     final target = NfcPayloadTarget.parse('r1.3f.co.1.ABCDEF');
@@ -23,6 +25,38 @@ void main() {
       () => NfcPayloadTarget.parse('rabbit://cage/1/2'),
       throwsFormatException,
     );
+  });
+
+  test('harness payloads round trip through the parser', () {
+    final target = NfcPayloadTarget.parse(
+      NfcHarness.payload(houseId: 8, cageId: 10),
+    );
+
+    expect(target.payload, 'r1.8.a.1.signature');
+    expect(target.houseId, 8);
+    expect(target.cageId, 10);
+    expect(target.keyId, NfcHarness.defaultKeyId);
+  });
+
+  test('harness encodes larger ids as base36', () {
+    final target = NfcPayloadTarget.parse(
+      NfcHarness.payload(houseId: 123, cageId: 456, keyId: 7),
+    );
+
+    expect(target.payload, 'r1.3f.co.7.signature');
+    expect(target.houseId, 123);
+    expect(target.cageId, 456);
+    expect(target.keyId, 7);
+  });
+
+  test('every harness defect is rejected by the parser', () {
+    for (final defect in NfcPayloadDefect.values) {
+      expect(
+        () => NfcPayloadTarget.parse(NfcHarness.malformedPayload(defect)),
+        throwsFormatException,
+        reason: 'expected $defect to be rejected',
+      );
+    }
   });
 
   test('write session round trips without losing queue order or status', () {

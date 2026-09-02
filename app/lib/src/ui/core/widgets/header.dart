@@ -7,7 +7,6 @@ class ContextHeaderCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
-    this.onBack,
     this.footer,
     this.titleMaxLines = 1,
     this.subtitleMaxLines = 1,
@@ -16,7 +15,6 @@ class ContextHeaderCard extends StatelessWidget {
 
   final String title;
   final String subtitle;
-  final VoidCallback? onBack;
   final Widget? footer;
   final int titleMaxLines;
   final int subtitleMaxLines;
@@ -37,14 +35,6 @@ class ContextHeaderCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (onBack != null) ...[
-                IconButton(
-                  tooltip: '返回',
-                  onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                const SizedBox(width: 6),
-              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

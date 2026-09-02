@@ -8,6 +8,7 @@ import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/cage_target.dart';
@@ -50,10 +51,22 @@ class _RabbitReplacementSheet extends ConsumerStatefulWidget {
 
 class _RabbitReplacementSheetState
     extends ConsumerState<_RabbitReplacementSheet> {
+  /// 碰标签选中的那一行要滚到眼前，所以列表的滚动位置得归本页管。
+  final _listController = ScrollController();
+
+  /// 只挂在当前选中的那一行上，用来做最后一步精确对齐。
+  final _selectedRowKey = GlobalKey();
+
   int? _selectedCageId;
   int? _pendingCageId;
   String? _pendingRequestId;
   var _saving = false;
+
+  @override
+  void dispose() {
+    _listController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,39 +142,158 @@ class _RabbitReplacementSheetState
         ),
       ),
       data: (items) {
-        final targets = items
-            .where((cage) => isReplacementCageTarget(cage, widget.houseId))
-            .toList()
-          ..sort((a, b) => a.cageNumber.compareTo(b.cageNumber));
-        if (targets.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(20),
-            child: Center(
-              child: Text('当前兔舍没有启用、空闲且可接收后备兔的笼位'),
+        final targets = _replacementTargets(items);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: NfcCagePicker(
+                key: const ValueKey('rabbit-replacement-cage-nfc'),
+                houseId: widget.houseId,
+                // 传全部笼位而不是只传候选：候选之外的笼被碰到时，要能说出
+                // 它到底差在哪，而不是回一句「没找到这个笼位」。
+                cages: items,
+                enabled: !_saving,
+                accepts: _acceptsTarget,
+                rejectReason: _rejectReason,
+                cageLabel: _cageLabel,
+                idleLabel: '碰一下后备笼标签',
+                waitingHint: '请将手机靠近目标后备笼的 NFC 标签',
+                unavailableLabel: '设备不支持NFC或NFC未开启，请在下方列表中选择',
+                onSelected: (cage) => _selectFromTag(cage, targets),
+              ),
             ),
-          );
-        }
-        return ListView.separated(
-          key: const ValueKey('rabbit-replacement-cage-list'),
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-          itemCount: targets.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) {
-            final cage = targets[index];
-            return RadioListTile<int>(
-              key: ValueKey('rabbit-replacement-cage-${cage.id}'),
-              value: cage.id,
-              groupValue: _selectedCageId,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _selectedCageId = value),
-              title: Text(_cageLabel(cage)),
-              subtitle: Text(cage.status == '2' ? '后备笼 · 空闲' : '空笼 · 空闲'),
-            );
-          },
+            if (targets.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Center(
+                  child: Text('当前兔舍没有启用、空闲且可接收后备兔的笼位'),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  key: const ValueKey('rabbit-replacement-cage-list'),
+                  controller: _listController,
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                  itemCount: targets.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final cage = targets[index];
+                    final selected = cage.id == _selectedCageId;
+                    final tile = RadioListTile<int>(
+                      key: ValueKey('rabbit-replacement-cage-${cage.id}'),
+                      value: cage.id,
+                      groupValue: _selectedCageId,
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() => _selectedCageId = value),
+                      title: Text(_cageLabel(cage)),
+                      subtitle:
+                          Text(cage.status == '2' ? '后备笼 · 空闲' : '空笼 · 空闲'),
+                      selected: selected,
+                    );
+                    if (!selected) {
+                      return tile;
+                    }
+                    return KeyedSubtree(key: _selectedRowKey, child: tile);
+                  },
+                ),
+              ),
+          ],
         );
       },
     );
+  }
+
+  List<Cage> _replacementTargets(List<Cage> items) {
+    return items
+        .where((cage) => isReplacementCageTarget(cage, widget.houseId))
+        .toList()
+      ..sort((a, b) => a.cageNumber.compareTo(b.cageNumber));
+  }
+
+  /// 碰标签能选中的笼位，和列表里列出来的是同一批。
+  ///
+  /// 复用 [isReplacementCageTarget] 而不是另写一条判断：两条规则一旦分头演化，
+  /// 就会出现「列表里没有、碰一下却选中了」这种谁也解释不清的状态。
+  bool _acceptsTarget(Cage cage) =>
+      isReplacementCageTarget(cage, widget.houseId);
+
+  /// 拒绝时说清是哪个笼、卡在哪一条，而不是笼统一句「不可选」。
+  ///
+  /// 顺序照现场排查的顺序走：先看是不是本舍的，再看停没停用，
+  /// 再看用途对不对，最后才看有没有兔占着。
+  String _rejectReason(Cage cage) {
+    final name = _cageLabel(cage);
+    if (cage.houseId != widget.houseId) {
+      return '$name 不属于当前兔舍，不能作为后备兔笼';
+    }
+    if (!cage.isEnabled) {
+      return '$name 已停用，不能作为后备兔笼';
+    }
+    if (cage.status != '0' && cage.status != '2') {
+      return '$name 是${cage.usageLabel}笼，不能作为后备兔笼';
+    }
+    if (cage.rabbitCount > 0) {
+      return '$name 已有 ${cage.rabbitCount} 只兔，请选空闲笼位';
+    }
+    return '$name ${cage.entryBlockedReason ?? '不能作为后备兔笼'}';
+  }
+
+  /// 碰中的笼位既要选中，也要滚到看得见的地方。
+  ///
+  /// 只打勾不滚动的话，选中的那一行常常在屏外，用户看到的是「碰了没反应」，
+  /// 于是又碰一次。
+  void _selectFromTag(Cage cage, List<Cage> targets) {
+    setState(() => _selectedCageId = cage.id);
+    final index = targets.indexWhere((item) => item.id == cage.id);
+    if (index >= 0) {
+      _revealCage(index, targets.length);
+    }
+  }
+
+  /// 分两步滚：先按平均行高粗滚过去，再按真实行位置精确对齐。
+  ///
+  /// 少了第一步不行——列表是懒加载的，屏外太远的行压根没建出来，
+  /// `ensureVisible` 拿不到 context；少了第二步也不行——平均行高在大字号下会偏，
+  /// 粗滚之后那一行可能只露出半截。
+  void _revealCage(int index, int itemCount) {
+    _afterNextFrame(() {
+      if (_listController.hasClients && itemCount > 0) {
+        final position = _listController.position;
+        final rowExtent =
+            (position.maxScrollExtent + position.viewportDimension) / itemCount;
+        final offset =
+            index * rowExtent - (position.viewportDimension - rowExtent) / 2;
+        _listController.jumpTo(
+          offset.clamp(position.minScrollExtent, position.maxScrollExtent),
+        );
+      }
+      _afterNextFrame(() {
+        final rowContext = _selectedRowKey.currentContext;
+        if (rowContext != null) {
+          Scrollable.ensureVisible(
+            rowContext,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 180),
+          );
+        }
+      });
+    });
+  }
+
+  /// 帧末回调本身不会拉起下一帧，而第二步对齐必须等粗滚后的布局落完。
+  /// 不显式要一帧的话，刚好没有其他改动时回调就永远排在队里不执行。
+  void _afterNextFrame(VoidCallback action) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        action();
+      }
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   Widget _buildActions(BuildContext context) {

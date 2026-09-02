@@ -8,7 +8,8 @@
 2. [API 和权限](modules/api-and-permissions.md)：业务 API、平台 API、鉴权和幂等。
 3. [账号与兔场权限模型](modules/direct-house-access.md)：账号、成员、角色和共同所有者。
 4. [数据库和迁移](modules/data-and-migrations.md)：Flyway、结构约束和兔场隔离。
-5. 根据任务继续阅读认证、缓存、工作空间或数据结构专题。
+5. [操作追踪与事务边界](modules/operation-tracking.md)：`@TrackedOperation`、切面顺序、幂等归属和事件流读接口。
+6. 根据任务继续阅读认证、缓存、工作空间或数据结构专题。
 
 ## 模块与专题
 

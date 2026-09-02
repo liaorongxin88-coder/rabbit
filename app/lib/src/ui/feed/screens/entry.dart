@@ -307,6 +307,7 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
     final rabbits = ref.watch(allActiveHouseRabbitsProvider(widget.houseId));
     return AppPage(
       title: '投喂录入',
+      fallbackBackLocation: '/houses/${widget.houseId}',
       actions: [
         IconButton(
           tooltip: '刷新投喂资料',

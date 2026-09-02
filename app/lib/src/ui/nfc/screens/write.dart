@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/nfc/view_models/writer.dart';
 
 class NfcWriteScreen extends ConsumerWidget {
@@ -74,10 +75,14 @@ class NfcWriteView extends StatelessWidget {
       onPopInvokedWithResult: (_, __) => onPause(),
       child: Scaffold(
         appBar: AppBar(
-          leading: IconButton(
+          // 写卡会话退出不是普通返回，但沿用同一套“图标加文字”入口样式。
+          leadingWidth: appBackLeadingWidth(context, label: '退出'),
+          leading: AppBackButton(
+            buttonKey: const ValueKey('nfc-write-exit-button'),
+            icon: Icons.close,
+            label: '退出',
             tooltip: '退出写入',
             onPressed: onExit,
-            icon: const Icon(Icons.close),
           ),
           title: const Text('连续写标签'),
           actions: [

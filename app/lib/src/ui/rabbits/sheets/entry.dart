@@ -28,6 +28,7 @@ import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/notice.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/cage_target.dart';
@@ -579,6 +580,22 @@ class _ExistingRabbitReproEntrySheetState
                       ),
             ),
             const SizedBox(height: 12),
+            // 人就站在公兔笼前，碰一下笼位标签比在一屏兔号里找那一行自然。
+            // 下拉保持原样：碰不出结果时仍要能手选。
+            Align(
+              alignment: Alignment.centerLeft,
+              child: NfcRabbitPicker(
+                key: const ValueKey('existing-rabbit-mating-male-nfc'),
+                houseId: widget.houseId,
+                candidates: males,
+                idleLabel: '碰一下选择种公兔',
+                waitingLabel: '请靠近种公兔所在笼位的 NFC 标签',
+                enabled: !_saving,
+                onSelected: (matches) =>
+                    setState(() => _maleRabbitId = matches.single.id),
+              ),
+            ),
+            const SizedBox(height: 8),
             DropdownButtonFormField<int>(
               key: const ValueKey('existing-rabbit-mating-male'),
               value: males.any((rabbit) => rabbit.id == _maleRabbitId)
@@ -1801,6 +1818,21 @@ class _CreateRabbitSheetState extends ConsumerState<_CreateRabbitSheet> {
                       ),
             ),
             const SizedBox(height: 12),
+            // 与存栏母兔入轨那份配种字段保持同一条路径：录入路径也能碰一下选公兔。
+            Align(
+              alignment: Alignment.centerLeft,
+              child: NfcRabbitPicker(
+                key: const ValueKey('rabbit-entry-mating-male-nfc'),
+                houseId: widget.houseId,
+                candidates: males,
+                idleLabel: '碰一下选择种公兔',
+                waitingLabel: '请靠近种公兔所在笼位的 NFC 标签',
+                enabled: !_saving,
+                onSelected: (matches) =>
+                    setState(() => _entryMaleRabbitId = matches.single.id),
+              ),
+            ),
+            const SizedBox(height: 8),
             DropdownButtonFormField<int>(
               key: const ValueKey('rabbit-entry-mating-male'),
               value: males.any((rabbit) => rabbit.id == _entryMaleRabbitId)

@@ -7,12 +7,12 @@ import 'package:rabbit_flutter/src/data/repositories/reproduction/repository.dar
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/reproduction/task.dart';
+import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/action_time.dart';
 import 'package:rabbit_flutter/src/ui/reproduction/widgets/context.dart';
-import 'package:rabbit_flutter/src/ui/reproduction/sheets/event.dart';
 
 class _KeptKitsFormError extends StatelessWidget {
   const _KeptKitsFormError({required this.message});
@@ -304,7 +304,7 @@ class _KeptKitsAdjustmentSheetState
                     if (sourceMothers.isEmpty)
                       const Text('当前兔舍没有其他可选种母兔')
                     else ...[
-                      NfcRabbitPickerButton(
+                      NfcRabbitPicker(
                         key: const ValueKey('kept-kits-source-nfc'),
                         houseId: widget.houseId,
                         candidates: sourceMothers,

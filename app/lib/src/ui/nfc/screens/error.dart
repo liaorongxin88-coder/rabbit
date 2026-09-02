@@ -13,6 +13,7 @@ class NfcErrorScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppPage(
       title: 'NFC标签',
+      fallbackBackLocation: '/',
       child: EmptyState(
         icon: Icons.nfc_outlined,
         title: '无法打开笼位',

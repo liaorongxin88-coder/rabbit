@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/houses/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/operation_events/repository.dart';
@@ -21,6 +22,64 @@ import 'package:rabbit_flutter/src/ui/operation_events/screens/list.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 void main() {
+  testWidgets('operation events back entry matches the cage management style',
+      (tester) async {
+    final repository = _FakeOperationEventsRepository(
+      (_) async => _page([_event(id: 1)]),
+    );
+    final router = GoRouter(
+      initialLocation: '/houses/8/operation-events',
+      routes: [
+        GoRoute(
+          path: '/houses/:houseId',
+          builder: (_, __) => const Scaffold(body: Text('兔舍详情页')),
+        ),
+        GoRoute(
+          path: '/houses/:houseId/operation-events',
+          builder: (_, __) => const HouseOperationEventsScreen(houseId: 8),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          operationEventsRepositoryProvider.overrideWithValue(repository),
+          housePermissionProvider(8).overrideWith(
+            (_) async => const HousePermission(
+              perms: 'control',
+              isAdmin: false,
+              role: 'MANAGER',
+              permissions: ['rabbit:audit:list'],
+            ),
+          ),
+        ],
+        child: MaterialApp.router(
+          theme: buildAppTheme(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 跟笼位管理页面一样：箭头配“返回”文字，触摸目标不低于 48。
+    final back = find.byKey(const ValueKey('page-back-button'));
+    expect(back, findsOneWidget);
+    expect(
+        find.descendant(of: back, matching: find.text('返回')), findsOneWidget);
+    expect(
+      find.descendant(of: back, matching: find.byIcon(Icons.arrow_back)),
+      findsOneWidget,
+    );
+    expect(tester.getSize(back).height, greaterThanOrEqualTo(48));
+
+    await tester.tap(back);
+    await tester.pumpAndSettle();
+    expect(find.text('兔舍详情页'), findsOneWidget);
+    expect(router.routeInformationProvider.value.uri.path, '/houses/8');
+  });
+
   testWidgets('operation events show a loading state while the page loads',
       (tester) async {
     final completer = Completer<OperationEventsPage>();

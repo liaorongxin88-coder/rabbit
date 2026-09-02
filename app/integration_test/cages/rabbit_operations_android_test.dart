@@ -366,7 +366,7 @@ void main() {
       );
       await _waitFor(
           tester, find.byKey(const ValueKey('rabbit-move-cage-nfc')));
-      await tester.tap(find.byKey(const ValueKey('rabbit-move-cage-nfc')));
+      await tester.tap(find.byKey(const ValueKey('nfc-cage-picker-button')));
       await _pumpUntilSettled(tester);
       await _takeScreenshot(binding, tester, '14-nfc-waiting');
 
@@ -377,10 +377,10 @@ void main() {
         payload: _foreignHousePayload(signedPayload),
         tagUid: _c5TagUid,
       );
-      await _waitFor(tester, find.textContaining('属于其它兔舍'));
+      await _waitFor(tester, find.textContaining('属于其他兔舍'));
 
       // 再碰真标签：这次要选中 1-5-1。
-      await tester.tap(find.byKey(const ValueKey('rabbit-move-cage-nfc')));
+      await tester.tap(find.byKey(const ValueKey('nfc-cage-picker-button')));
       await _pumpUntilSettled(tester);
       await _tapNfcTag(tester, payload: signedPayload, tagUid: _c5TagUid);
       await _waitFor(tester, find.textContaining('已选中 1-5-1'));

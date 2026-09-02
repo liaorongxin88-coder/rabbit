@@ -37,12 +37,8 @@ class HouseRabbitsScreen extends ConsumerWidget {
 
     return AppPage(
       title: '兔只管理',
+      parentRoute: '/houses/$houseId',
       actions: [
-        IconButton(
-          tooltip: '返回兔舍详情',
-          onPressed: () => context.go('/houses/$houseId'),
-          icon: const Icon(Icons.storefront_outlined),
-        ),
         IconButton(
           tooltip: '刷新',
           onPressed: () {
@@ -176,7 +172,6 @@ class _RabbitListShell extends StatelessWidget {
         ContextHeaderCard(
           title: house.name,
           subtitle: '兔只档案查看与编辑',
-          onBack: () => context.go('/houses/${house.id}'),
         ),
         const SizedBox(height: 12),
         _AddHint(houseId: house.id),
@@ -225,7 +220,6 @@ class _LoadedRabbitList extends StatelessWidget {
             return ContextHeaderCard(
               title: house.name,
               subtitle: '兔只档案查看与编辑',
-              onBack: () => context.go('/houses/${house.id}'),
             );
           case 1:
             return const SizedBox(height: 12);

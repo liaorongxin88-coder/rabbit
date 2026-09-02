@@ -8,5 +8,7 @@
 - [兔舍统一入笼与生产分笼](cage-rabbit-intake/README.md)
 - [批量出库](batch-outbound/README.md)
 - [母兔生产流程 V2](reproduction-v2/README.md)
+- [NFC 标签与碰一下选择](nfc/README.md)
+- [批次统计指标](batch-statistics/README.md)
 
 新专题应建立独立目录和 `README.md`，至少说明业务词汇、状态维度、允许操作、异常边界、当前实现依据和核对日期。若实现中仍有不同口径，应单列待确认项，不要在文档中替业务方选定规则。

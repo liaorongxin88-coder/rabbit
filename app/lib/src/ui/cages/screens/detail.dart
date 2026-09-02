@@ -37,12 +37,8 @@ class CageDetailScreen extends ConsumerWidget {
     final permission = ref.watch(housePermissionProvider(houseId));
     return AppPage(
       title: '笼位管理',
-      leading: IconButton(
-        key: const ValueKey('cage-detail-back-button'),
-        tooltip: '返回笼位地图',
-        onPressed: () => context.go('/houses/$houseId/cages'),
-        icon: const Icon(Icons.arrow_back),
-      ),
+      parentRoute: '/houses/$houseId/cages',
+      backButtonKey: const ValueKey('cage-detail-back-button'),
       actions: [
         if (permission.valueOrNull?.canEdit == true)
           IconButton(

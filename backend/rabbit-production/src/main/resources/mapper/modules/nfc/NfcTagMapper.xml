@@ -55,6 +55,9 @@
     <select id="selectCageQueue" resultType="com.rabbit.app.modules.nfc.dto.NfcCageQueueRow">
         select c.id as cageId,
                c.cage_number as cageNumber,
+               c.row_code as rowCode,
+               c.layer_index as layerIndex,
+               c.position_index as positionIndex,
                n.tag_uid as genericTagUid,
                ct.tag_uid as cageTagUid
         from cages c

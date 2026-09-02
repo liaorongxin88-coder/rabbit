@@ -41,7 +41,7 @@ class _HouseOperationEventsScreenState
 
     return AppPage(
       title: '操作记录',
-      fallbackBackLocation: '/houses/${widget.houseId}',
+      parentRoute: '/houses/${widget.houseId}',
       actions: [
         if (_canViewAudit(permission.valueOrNull))
           IconButton(
