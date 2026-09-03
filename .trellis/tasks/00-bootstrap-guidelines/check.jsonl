@@ -1,0 +1,31 @@
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/backend-conventions.md","reason":"Verify backend specs against the source-backed research"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/admin-conventions.md","reason":"Verify admin specs against the source-backed research"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/flutter-conventions.md","reason":"Verify Flutter specs against the source-backed research"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/cross-application-contracts.md","reason":"Verify shared contract guidance against cross-application research"}
+{"file":".trellis/spec/backend/index.md","reason":"Backend routing and quality checklist"}
+{"file":".trellis/spec/backend/modules.md","reason":"Backend module ownership and dependency rules"}
+{"file":".trellis/spec/backend/http-and-services.md","reason":"Backend HTTP, service, transaction, and mapper conventions"}
+{"file":".trellis/spec/backend/security-and-tenancy.md","reason":"Backend authentication, authorization, tenancy, and idempotency rules"}
+{"file":".trellis/spec/backend/data-and-migrations.md","reason":"Backend MyBatis and Flyway conventions"}
+{"file":".trellis/spec/backend/errors-observability.md","reason":"Backend error, tracing, audit, and tracking conventions"}
+{"file":".trellis/spec/backend/testing.md","reason":"Backend test placement and verification commands"}
+{"file":".trellis/spec/admin/index.md","reason":"Admin routing and quality checklist"}
+{"file":".trellis/spec/admin/architecture.md","reason":"Admin application boundaries and directory ownership"}
+{"file":".trellis/spec/admin/components-and-state.md","reason":"Admin component, form, request lifecycle, and state rules"}
+{"file":".trellis/spec/admin/data-access-and-types.md","reason":"Admin request, session, permission, and type contracts"}
+{"file":".trellis/spec/admin/design-and-accessibility.md","reason":"Admin visual, responsive, interaction, and accessibility rules"}
+{"file":".trellis/spec/admin/testing.md","reason":"Admin unit, build, browser, and visual checks"}
+{"file":".trellis/spec/flutter/index.md","reason":"Flutter routing and quality checklist"}
+{"file":".trellis/spec/flutter/architecture.md","reason":"Flutter layer ownership and dependency rules"}
+{"file":".trellis/spec/flutter/configuration.md","reason":"Flutter startup, environment, package, and secret rules"}
+{"file":".trellis/spec/flutter/data-access.md","reason":"Flutter repository, network, decode, and idempotency conventions"}
+{"file":".trellis/spec/flutter/riverpod.md","reason":"Flutter provider, controller, cancellation, and invalidation patterns"}
+{"file":".trellis/spec/flutter/persistence.md","reason":"Flutter session, preference, draft, and NFC persistence rules"}
+{"file":".trellis/spec/flutter/routing.md","reason":"Flutter GoRouter, redirect, deep link, and back behavior"}
+{"file":".trellis/spec/flutter/ui.md","reason":"Flutter theme, responsive, accessibility, and cage-map rules"}
+{"file":".trellis/spec/flutter/testing.md","reason":"Flutter unit, widget, architecture, and device test conventions"}
+{"file":".trellis/spec/flutter/android.md","reason":"Flutter Android wrapper, flavor, build, signing, and release rules"}
+{"file":".trellis/spec/guides/index.md","reason":"Shared guide routing and quality checks"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Cross-application reuse boundaries"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Cross-layer data flow and verification rules"}
+{"file":".trellis/spec/guides/rabbit-cross-application-contracts.md","reason":"Shared Rabbit security, API, idempotency, pagination, and date contracts"}

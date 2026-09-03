@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/backend-conventions.md","reason":"Source-backed backend module, layering, security, persistence, observability, and testing conventions"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/admin-conventions.md","reason":"Source-backed React admin architecture, data access, state, design, accessibility, and testing conventions"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/flutter-conventions.md","reason":"Source-backed Flutter architecture, data, Riverpod, routing, persistence, UI, Android, and testing conventions"}
+{"file":".trellis/tasks/00-bootstrap-guidelines/research/cross-application-contracts.md","reason":"Shared Rabbit authentication, tenancy, API envelope, idempotency, pagination, and date contracts"}
+{"file":".trellis/spec/guides/index.md","reason":"Shared guide routing and quality checklist already adapted for Rabbit"}
+{"file":".trellis/spec/guides/rabbit-cross-application-contracts.md","reason":"Project-specific cross-application contract guide that layer indexes should reference"}
