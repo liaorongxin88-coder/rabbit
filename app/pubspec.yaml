@@ -41,11 +41,12 @@ dependencies:
   image_picker: ^1.1.2
   intl: ^0.19.0
   nfc_manager: 3.5.1
+  path_provider: 2.1.5
+  share_plus: 10.1.4
   shared_preferences: ^2.3.3
   uuid: ^4.5.1
 
   cupertino_icons: ^1.0.8
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

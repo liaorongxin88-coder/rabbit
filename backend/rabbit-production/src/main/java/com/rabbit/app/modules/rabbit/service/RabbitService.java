@@ -17,11 +17,13 @@ import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
 import com.rabbit.app.modules.batch.mapper.BreedingCycleMapper;
+import com.rabbit.app.modules.batch.support.BatchWritePayloadHasher;
 import com.rabbit.app.modules.cage.entity.Cage;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
 import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.rabbit.dto.CageTransferResult;
+import com.rabbit.app.modules.rabbit.dto.ReplacementBatchAllocationInput;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionItem;
 import com.rabbit.app.modules.rabbit.dto.ReplacementConversionResponse;
 import com.rabbit.app.modules.rabbit.domain.CommodityGrowthStage;
@@ -38,9 +40,11 @@ import com.rabbit.app.modules.rabbit.mapper.ReplacementRecordMapper;
 import com.rabbit.app.modules.setting.entity.GlobalSetting;
 import com.rabbit.app.modules.setting.service.SettingService;
 import com.rabbit.app.util.DateUtil;
+import com.rabbit.app.tracking.OperationContext;
 import com.rabbit.app.tracking.TrackedOperation;
 import java.util.Date;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -75,6 +79,7 @@ public class RabbitService {
     private final RequestDedupService requestDedupService;
     private final WorkTaskWriter workTaskWriter;
     private final HouseService houseService;
+    private final ReplacementBatchAllocationService replacementBatchAllocationService;
     private final int commodityCageCapacity;
 
     @Autowired
@@ -95,6 +100,7 @@ public class RabbitService {
             RequestDedupService requestDedupService,
             WorkTaskWriter workTaskWriter,
             HouseService houseService,
+            ReplacementBatchAllocationService replacementBatchAllocationService,
             @Value("${app.cage.commodity-capacity:10}") int commodityCageCapacity
     ) {
         this.rabbitMapper = rabbitMapper;
@@ -113,6 +119,7 @@ public class RabbitService {
         this.requestDedupService = requestDedupService;
         this.workTaskWriter = workTaskWriter;
         this.houseService = houseService;
+        this.replacementBatchAllocationService = replacementBatchAllocationService;
         this.commodityCageCapacity =
             commodityCageCapacity <= 0 ? 10 : commodityCageCapacity;
     }
@@ -152,6 +159,7 @@ public class RabbitService {
             requestDedupService,
             workTaskWriter,
             houseService,
+            null,
             commodityCageCapacity
         );
     }
@@ -811,18 +819,51 @@ public class RabbitService {
         return new CageTransferResult(mode, moving.getId(), sourceCage.getId(), targetCage.getId(), null);
     }
 
+    public void assertReplacementRequestAllowed(
+        Long userId,
+        Long houseId,
+        String requestId,
+        List<ReplacementBatchAllocationInput> allocations
+    ) {
+        if (requestDedupService.shouldSkipAsDone(
+            houseId, userId, "rabbit.toReplacement", requestId
+        )) {
+            return;
+        }
+        if (replacementBatchAllocationService != null) {
+            replacementBatchAllocationService.assertRequestAllowed(allocations);
+        }
+    }
+
     @TrackedOperation(
         code = "rabbit.toReplacement", eventType = "RABBITS_CONVERTED_TO_REPLACEMENT",
-        targetType = "RABBIT_BATCH"
+        targetType = "RABBIT_BATCH", requestId = "#requestId"
     )
     @Transactional
-    public ReplacementConversionResponse convertToReplacement(Long userId, Long houseId, List<Long> rabbitIds, boolean forceExitBatch, Long targetCageId, String requestId) {
+    public ReplacementConversionResponse convertToReplacement(
+        Long userId,
+        Long houseId,
+        List<Long> rabbitIds,
+        boolean forceExitBatch,
+        Long targetCageId,
+        String requestId,
+        List<ReplacementBatchAllocationInput> allocations
+    ) {
         houseService.assertHousePermission(userId, houseId, "control");
         String api = "rabbit.toReplacement";
-        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, requestId)) {
+        if (requestDedupService.begin(
+            houseId,
+            userId,
+            api,
+            requestId,
+            replacementPayloadHash(rabbitIds, forceExitBatch, targetCageId, allocations)
+        ) == RequestDedupService.BeginResult.DONE) {
+            OperationContext context = OperationContext.current();
+            if (context != null) {
+                context.setDedupReplay(true);
+            }
             return replacementConversionResponse(houseId, requestId);
         }
-        requestDedupService.markProcessing(houseId, userId, api, requestId);
         try {
             if (rabbitIds == null || rabbitIds.isEmpty()) {
                 throw new BizException(400, "rabbitIds不能为空");
@@ -904,20 +945,39 @@ public class RabbitService {
                 }
             }
 
+            Map<Long, List<BatchRabbit>> activeLinksByRabbit = new LinkedHashMap<>();
+            Map<Long, Integer> sourceBatchCounts = new LinkedHashMap<>();
+            for (Rabbit rabbit : lockedRabbits) {
+                List<BatchRabbit> activeLinks = batchRabbitMapper.selectActiveByRabbit(
+                    houseId, rabbit.getId()
+                );
+                activeLinksByRabbit.put(rabbit.getId(), activeLinks);
+                if (!activeLinks.isEmpty() && !forceExitBatch) {
+                    throw new BizException(400, "兔子仍在活跃批次中");
+                }
+                sourceBatchCounts.merge(sourceBatchId(rabbit, activeLinks), 1, Integer::sum);
+            }
+            ReplacementBatchAllocationService.AllocationPlan allocationPlan =
+                replacementBatchAllocationService == null
+                    ? new ReplacementBatchAllocationService.AllocationPlan(List.of())
+                    : replacementBatchAllocationService.prepare(
+                        userId,
+                        houseId,
+                        requestId,
+                        sourceBatchCounts,
+                        allocations
+                    );
+
             GlobalSetting gs = settingService.getEffectiveSetting(userId, houseId);
             Date now = DateUtil.now();
             String operator = String.valueOf(userId);
             List<ReplacementConversionItem> converted = new ArrayList<>();
             for (Long rabbitId : sortedRabbitIds) {
-                List<BatchRabbit> activeBatchLinks = batchRabbitMapper.selectActiveByRabbit(houseId, rabbitId);
-                if (!activeBatchLinks.isEmpty()) {
-                    if (!forceExitBatch) {
-                        throw new BizException(400, "兔子仍在活跃批次中");
-                    }
-                    for (BatchRabbit br : activeBatchLinks) {
-                        // 新口径：成员退完不再自动结束批次，改由批次查询派生“可结束”提示。
-                        batchRabbitMapper.deactivate(houseId, br.getId(), now, "转为后备兔", operator);
-                    }
+                for (BatchRabbit batchRabbit : activeLinksByRabbit.get(rabbitId)) {
+                    // 新口径：成员退完不再自动结束批次，改由批次查询派生“可结束”提示。
+                    batchRabbitMapper.deactivate(
+                        houseId, batchRabbit.getId(), now, "转为后备兔", operator
+                    );
                 }
             }
 
@@ -989,12 +1049,61 @@ public class RabbitService {
                 h.setRelatedRecordTable("replacement_records");
                 rabbitStatusHistoryMapper.insert(h);
             }
+            if (replacementBatchAllocationService != null) {
+                replacementBatchAllocationService.save(allocationPlan);
+            }
             requestDedupService.markDone(houseId, userId, api, requestId);
             return new ReplacementConversionResponse(List.copyOf(converted));
         } catch (RuntimeException e) {
             requestDedupService.markFailed(houseId, userId, api, requestId, e.getMessage());
             throw e;
         }
+    }
+
+    private static Long sourceBatchId(Rabbit rabbit, List<BatchRabbit> activeLinks) {
+        if (rabbit.getBirthBatchId() != null) {
+            return rabbit.getBirthBatchId();
+        }
+        List<Long> activeBatchIds = activeLinks.stream()
+            .filter(link -> "fattening".equalsIgnoreCase(link.getBatchRole()))
+            .map(BatchRabbit::getBatchId)
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .sorted()
+            .toList();
+        if (activeBatchIds.size() > 1) {
+            throw new BizException(
+                409,
+                "兔只存在多个活跃批次，无法确定转后备来源: " + rabbit.getId()
+            );
+        }
+        return activeBatchIds.isEmpty() ? null : activeBatchIds.get(0);
+    }
+
+    private static String replacementPayloadHash(
+        List<Long> rabbitIds,
+        boolean forceExitBatch,
+        Long targetCageId,
+        List<ReplacementBatchAllocationInput> allocations
+    ) {
+        StringBuilder value = new StringBuilder()
+            .append(forceExitBatch)
+            .append('|').append(targetCageId);
+        if (rabbitIds != null) {
+            rabbitIds.stream().filter(java.util.Objects::nonNull).distinct().sorted()
+                .forEach(rabbitId -> value.append("|rabbit:").append(rabbitId));
+        }
+        if (allocations != null) {
+            allocations.stream().sorted(Comparator.comparing(
+                ReplacementBatchAllocationInput::batchId,
+                Comparator.nullsLast(Long::compareTo)
+            )).forEach(allocation -> value.append("|allocation:")
+                .append(allocation.batchId()).append(':').append(allocation.rabbitCount())
+                .append(':').append(BatchWritePayloadHasher.decimal(
+                    allocation.totalWeightKg()
+                )));
+        }
+        return BatchWritePayloadHasher.sha256(value.toString());
     }
 
     private ReplacementConversionResponse replacementConversionResponse(Long houseId, String requestId) {

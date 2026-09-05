@@ -272,6 +272,7 @@ CREATE TABLE IF NOT EXISTS batches (
   KEY idx_batches_house_id (house_id),
   KEY idx_batches_status (status),
   UNIQUE KEY uk_batch_req (house_id, request_id),
+  UNIQUE KEY uk_batches_id_house (id, house_id),
   CONSTRAINT fk_batches_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -504,6 +505,7 @@ CREATE TABLE IF NOT EXISTS feed_logs (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_feed_logs_id_house (id, house_id),
   KEY idx_feed_house (house_id),
   KEY idx_feed_time (feed_time),
   KEY idx_feed_item (item_id),
@@ -523,6 +525,31 @@ CREATE TABLE IF NOT EXISTS feed_log_rabbits (
   CONSTRAINT fk_flr_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_flr_feed FOREIGN KEY (feed_log_id) REFERENCES feed_logs (id),
   CONSTRAINT fk_flr_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS feed_log_batch_allocations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  feed_log_id BIGINT NOT NULL,
+  house_id BIGINT NOT NULL,
+  batch_id BIGINT NULL,
+  batch_scope_id BIGINT GENERATED ALWAYS AS (IFNULL(batch_id, -1)) STORED,
+  phase VARCHAR(16) NOT NULL,
+  amount_kg DECIMAL(10,2) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_feed_batch_allocation (feed_log_id, batch_scope_id, phase),
+  KEY idx_feed_batch_allocation_batch (house_id, batch_id, phase, created_at),
+  KEY idx_feed_batch_allocation_log_fk (feed_log_id, house_id),
+  KEY idx_feed_batch_allocation_batch_fk (batch_id, house_id),
+  CONSTRAINT fk_feed_batch_allocation_log
+    FOREIGN KEY (feed_log_id, house_id) REFERENCES feed_logs (id, house_id),
+  CONSTRAINT fk_feed_batch_allocation_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_feed_batch_allocation_batch
+    FOREIGN KEY (batch_id, house_id) REFERENCES batches (id, house_id),
+  CONSTRAINT chk_feed_batch_allocation_amount CHECK (amount_kg > 0),
+  CONSTRAINT chk_feed_batch_allocation_scope CHECK (
+    (batch_id IS NULL AND phase = 'UNASSIGNED')
+    OR (batch_id IS NOT NULL AND phase IN ('BREEDING', 'FATTENING'))
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS inventory_items (
@@ -665,6 +692,7 @@ CREATE TABLE IF NOT EXISTS sale_orders (
   update_by VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_sale_req (house_id, request_id),
+  UNIQUE KEY uk_sale_orders_id_house (id, house_id),
   KEY idx_sale_house_time (house_id, sale_time),
   CONSTRAINT fk_sale_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -693,9 +721,42 @@ CREATE TABLE IF NOT EXISTS sale_order_items (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_soi_order (sale_order_id),
   KEY idx_soi_rabbit (rabbit_id),
+  KEY idx_soi_batch_snapshot (batch_id_snapshot, sale_order_id, rabbit_id),
   UNIQUE KEY uk_sale_order_rabbit (sale_order_id, rabbit_id),
   CONSTRAINT fk_soi_order FOREIGN KEY (sale_order_id) REFERENCES sale_orders (id),
   CONSTRAINT fk_soi_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sale_order_batch_allocations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  sale_order_id BIGINT NOT NULL,
+  house_id BIGINT NOT NULL,
+  batch_id BIGINT NULL,
+  batch_scope_id BIGINT GENERATED ALWAYS AS (IFNULL(batch_id, -1)) STORED,
+  rabbit_count INT NOT NULL,
+  actual_weight_kg DECIMAL(12,3) NOT NULL,
+  unit_price_per_kg DECIMAL(10,2) NULL,
+  amount DECIMAL(12,2) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sale_batch_allocation (sale_order_id, batch_scope_id),
+  KEY idx_sale_batch_allocation_batch (house_id, batch_id, created_at),
+  KEY idx_sale_batch_allocation_order_fk (sale_order_id, house_id),
+  KEY idx_sale_batch_allocation_batch_fk (batch_id, house_id),
+  CONSTRAINT fk_sale_batch_allocation_order
+    FOREIGN KEY (sale_order_id, house_id) REFERENCES sale_orders (id, house_id),
+  CONSTRAINT fk_sale_batch_allocation_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_sale_batch_allocation_batch
+    FOREIGN KEY (batch_id, house_id) REFERENCES batches (id, house_id),
+  CONSTRAINT chk_sale_batch_allocation_count CHECK (rabbit_count > 0),
+  CONSTRAINT chk_sale_batch_allocation_weight CHECK (actual_weight_kg > 0),
+  CONSTRAINT chk_sale_batch_allocation_price CHECK (
+    unit_price_per_kg IS NULL OR unit_price_per_kg > 0
+  ),
+  CONSTRAINT chk_sale_batch_allocation_amount CHECK (amount IS NULL OR amount >= 0),
+  CONSTRAINT chk_sale_batch_allocation_money_pair CHECK (
+    (unit_price_per_kg IS NULL AND amount IS NULL)
+    OR (unit_price_per_kg IS NOT NULL AND amount IS NOT NULL)
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS outbound_tasks (
@@ -721,6 +782,7 @@ CREATE TABLE IF NOT EXISTS outbound_tasks (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_outbound_task_house_operator (house_id, operator_id, status, update_time),
   KEY idx_outbound_task_sale_order (sale_order_id),
+  UNIQUE KEY uk_outbound_task_id_house (task_id, house_id),
   CONSTRAINT fk_outbound_task_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_outbound_task_operator FOREIGN KEY (operator_id) REFERENCES sys_user (user_id),
   CONSTRAINT fk_outbound_task_sale_order FOREIGN KEY (sale_order_id) REFERENCES sale_orders (id)
@@ -745,6 +807,29 @@ CREATE TABLE IF NOT EXISTS outbound_task_items (
   KEY idx_outbound_item_rabbit (rabbit_id),
   CONSTRAINT fk_outbound_item_task FOREIGN KEY (task_id) REFERENCES outbound_tasks (task_id),
   CONSTRAINT fk_outbound_item_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS outbound_task_batch_allocations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  task_id VARCHAR(36) NOT NULL,
+  house_id BIGINT NOT NULL,
+  batch_id BIGINT NULL,
+  batch_scope_id BIGINT GENERATED ALWAYS AS (IFNULL(batch_id, -1)) STORED,
+  actual_weight_kg DECIMAL(12,3) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_outbound_task_batch_allocation (task_id, house_id, batch_scope_id),
+  KEY idx_outbound_task_allocation_house (house_id, task_id),
+  KEY idx_outbound_task_allocation_batch (house_id, batch_id),
+  KEY idx_outbound_task_allocation_batch_fk (batch_id, house_id),
+  CONSTRAINT fk_outbound_task_allocation_task
+    FOREIGN KEY (task_id, house_id) REFERENCES outbound_tasks (task_id, house_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_outbound_task_allocation_house
+    FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_outbound_task_allocation_batch
+    FOREIGN KEY (batch_id, house_id) REFERENCES batches (id, house_id),
+  CONSTRAINT chk_outbound_task_allocation_weight
+    CHECK (actual_weight_kg > 0 AND actual_weight_kg <= 100000.000)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS outbound_requests (
@@ -792,21 +877,70 @@ CREATE TABLE IF NOT EXISTS replacement_records (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   house_id BIGINT NOT NULL,
   rabbit_id BIGINT NOT NULL,
+  request_id VARCHAR(64),
   original_type VARCHAR(1) NOT NULL DEFAULT '2',
   replacement_date DATETIME NOT NULL,
   expected_mature_date DATETIME NOT NULL,
   is_mature_notified BOOLEAN DEFAULT FALSE,
   mature_notify_date DATETIME,
+  status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  promoted_at DATETIME,
   remark TEXT,
   create_by VARCHAR(64),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_by VARCHAR(64),
+  operator_name VARCHAR(64),
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_rr_house (house_id),
   KEY idx_rr_expected (expected_mature_date),
+  KEY idx_rr_house_status_due (house_id, status, expected_mature_date, id),
   UNIQUE KEY uk_replacement_house_request_rabbit (house_id, request_id, rabbit_id),
   CONSTRAINT fk_rr_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
   CONSTRAINT fk_rr_rabbit FOREIGN KEY (rabbit_id) REFERENCES rabbits (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS replacement_batch_allocations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT NOT NULL,
+  request_id VARCHAR(64) NOT NULL,
+  source_batch_id BIGINT NULL,
+  source_batch_scope_id BIGINT GENERATED ALWAYS AS (IFNULL(source_batch_id, -1)) STORED,
+  rabbit_count INT NOT NULL,
+  total_weight_kg DECIMAL(12,3) NOT NULL,
+  created_by BIGINT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_replacement_batch_allocation (house_id, request_id, source_batch_scope_id),
+  KEY idx_replacement_batch_allocation_batch (house_id, source_batch_id, created_at),
+  KEY idx_replacement_batch_allocation_batch_fk (source_batch_id, house_id),
+  CONSTRAINT fk_replacement_batch_allocation_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_replacement_batch_allocation_batch
+    FOREIGN KEY (source_batch_id, house_id) REFERENCES batches (id, house_id),
+  CONSTRAINT chk_replacement_batch_allocation_count CHECK (rabbit_count > 0),
+  CONSTRAINT chk_replacement_batch_allocation_weight CHECK (total_weight_kg > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS batch_carcass_yield_versions (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  house_id BIGINT NOT NULL,
+  batch_id BIGINT NOT NULL,
+  yield_rate DECIMAL(7,6) NOT NULL,
+  source_unit VARCHAR(100) NOT NULL,
+  measured_date DATE NOT NULL,
+  report_number VARCHAR(100) NULL,
+  evidence_file VARCHAR(64) NULL,
+  remark TEXT NULL,
+  change_reason VARCHAR(300) NOT NULL,
+  request_id VARCHAR(64) NOT NULL,
+  payload_hash CHAR(64) NOT NULL,
+  created_by BIGINT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_carcass_yield_request (house_id, request_id),
+  KEY idx_carcass_yield_latest (house_id, batch_id, created_at, id),
+  KEY idx_carcass_yield_batch_fk (batch_id, house_id),
+  CONSTRAINT fk_carcass_yield_house FOREIGN KEY (house_id) REFERENCES rabbit_houses (id),
+  CONSTRAINT fk_carcass_yield_batch
+    FOREIGN KEY (batch_id, house_id) REFERENCES batches (id, house_id),
+  CONSTRAINT chk_carcass_yield_rate CHECK (yield_rate > 0 AND yield_rate <= 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS event_acks (
@@ -941,7 +1075,9 @@ CREATE TABLE IF NOT EXISTS repro_events (
   KEY idx_re_mother_time (house_id, mother_rabbit_id, occurred_at),
   KEY idx_re_house_time (house_id, occurred_at, id),
   KEY idx_re_target_time (house_id, target_type, target_id, occurred_at, id),
-  KEY idx_re_cage_time (house_id, cage_id, occurred_at, id)
+  KEY idx_re_cage_time (house_id, cage_id, occurred_at, id),
+  KEY idx_re_event_time (event_type, occurred_at, id),
+  KEY idx_re_batch_event (house_id, batch_id, event_type, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS litters (
@@ -964,6 +1100,7 @@ CREATE TABLE IF NOT EXISTS litters (
   weaning_date DATETIME,
   weaned_count INT,
   avg_weaning_weight DOUBLE,
+  weaning_total_weight_kg DECIMAL(12,3),
   nursing_cage_id BIGINT,
   request_id VARCHAR(64),
   remark TEXT,
@@ -973,7 +1110,12 @@ CREATE TABLE IF NOT EXISTS litters (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_lt_cycle (house_id, cycle_id),
   KEY idx_lt_status (house_id, status, birth_date),
-  KEY idx_lt_mother (house_id, mother_rabbit_id, birth_date)
+  KEY idx_lt_mother (house_id, mother_rabbit_id, birth_date),
+  CONSTRAINT chk_litter_weaning_total_weight
+    CHECK (
+      weaning_total_weight_kg IS NULL
+      OR (weaned_count > 0 AND weaning_total_weight_kg > 0)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS work_tasks (

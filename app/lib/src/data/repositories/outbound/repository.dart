@@ -26,6 +26,7 @@ abstract interface class OutboundGateway {
       required DateTime saleTime,
       double? totalWeight,
       double? unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark});
   Future<void> cancel({required int houseId, required String taskId});
@@ -36,7 +37,8 @@ abstract interface class OutboundGateway {
       required String requestId,
       required DateTime saleTime,
       required double totalWeight,
-      double? unitPrice,
+      required double unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark});
   Future<OutboundSubmitResult> status(
@@ -83,6 +85,7 @@ class OutboundRepository implements OutboundGateway {
       required DateTime saleTime,
       double? totalWeight,
       double? unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark}) {
     return _api.put('/api/outbound/tasks/${task.taskId}',
@@ -93,7 +96,9 @@ class OutboundRepository implements OutboundGateway {
           'items': items.map((item) => item.toJson()).toList(),
           'saleTime': DateFormat('yyyy-MM-dd').format(saleTime),
           if (totalWeight != null) 'totalWeight': totalWeight,
-          if (unitPrice != null) 'unitPrice': unitPrice,
+          if (unitPrice != null) 'unitPricePerKg': unitPrice,
+          'batchAllocations':
+              batchAllocations.map((item) => item.toJson()).toList(),
           if (customer?.trim().isNotEmpty == true) 'customer': customer!.trim(),
           if (remark?.trim().isNotEmpty == true) 'remark': remark!.trim(),
         },
@@ -114,7 +119,8 @@ class OutboundRepository implements OutboundGateway {
       required String requestId,
       required DateTime saleTime,
       required double totalWeight,
-      double? unitPrice,
+      required double unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark}) {
     return _api.post('/api/outbound/tasks/${task.taskId}/submit',
@@ -130,7 +136,9 @@ class OutboundRepository implements OutboundGateway {
           },
           'saleTime': DateFormat('yyyy-MM-dd').format(saleTime),
           'totalWeight': totalWeight,
-          if (unitPrice != null) 'unitPrice': unitPrice,
+          'unitPricePerKg': unitPrice,
+          'batchAllocations':
+              batchAllocations.map((item) => item.toJson()).toList(),
           if (customer?.trim().isNotEmpty == true) 'customer': customer!.trim(),
           if (remark?.trim().isNotEmpty == true) 'remark': remark!.trim(),
           'requestId': requestId,

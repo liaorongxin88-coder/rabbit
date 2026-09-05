@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
 import 'package:rabbit_flutter/src/domain/houses/house.dart';
@@ -133,6 +134,12 @@ class DashboardScreen extends ConsumerWidget {
                   selectedBatchId: effectiveBatchId,
                   batches: batches,
                   year: selectedYear,
+                  onViewBatch:
+                      effectiveHouseId == null || effectiveBatchId == null
+                          ? null
+                          : () => context.push(
+                                '/houses/$effectiveHouseId/batches/$effectiveBatchId',
+                              ),
                 ),
                 const SizedBox(height: 12),
                 ...summary.when(
@@ -505,6 +512,7 @@ class _DashboardScopeBanner extends StatelessWidget {
     required this.selectedBatchId,
     required this.batches,
     required this.year,
+    required this.onViewBatch,
   });
 
   final List<RabbitHouse> houses;
@@ -512,6 +520,7 @@ class _DashboardScopeBanner extends StatelessWidget {
   final int? selectedBatchId;
   final AsyncValue<List<Batch>>? batches;
   final int year;
+  final VoidCallback? onViewBatch;
 
   @override
   Widget build(BuildContext context) {
@@ -575,6 +584,18 @@ class _DashboardScopeBanner extends StatelessWidget {
                         color: palette.muted,
                       ),
                 ),
+                if (onViewBatch != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('dashboard-view-batch-statistics'),
+                      onPressed: onViewBatch,
+                      icon: const Icon(Icons.analytics_outlined),
+                      label: const Text('查看完整批次统计'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

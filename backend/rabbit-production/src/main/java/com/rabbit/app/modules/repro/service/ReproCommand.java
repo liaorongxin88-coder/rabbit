@@ -3,6 +3,7 @@ package com.rabbit.app.modules.repro.service;
 import com.rabbit.app.modules.repro.domain.MatingMethod;
 import com.rabbit.app.modules.repro.domain.PalpationResult;
 import com.rabbit.app.modules.repro.domain.ReproAction;
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -44,6 +45,7 @@ public final class ReproCommand {
     private Integer stillbirthCount;
     private Integer weanedCount;
     private Double avgWeaningWeight;
+    private BigDecimal weaningTotalWeightKg;
     private Long nursingCageId;
 
     /** 附件只传 file_id，落到 biz_attachments，事件 payload 不内联文件内容。 */
@@ -139,6 +141,14 @@ public final class ReproCommand {
 
     public Double getAvgWeaningWeight() {
         return avgWeaningWeight;
+    }
+
+    void setAvgWeaningWeight(Double value) {
+        avgWeaningWeight = value;
+    }
+
+    public BigDecimal getWeaningTotalWeightKg() {
+        return weaningTotalWeightKg;
     }
 
     public Long getNursingCageId() {
@@ -263,6 +273,11 @@ public final class ReproCommand {
 
         public Builder avgWeaningWeight(Double value) {
             command.avgWeaningWeight = value;
+            return this;
+        }
+
+        public Builder weaningTotalWeightKg(BigDecimal value) {
+            command.weaningTotalWeightKg = value;
             return this;
         }
 

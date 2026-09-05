@@ -57,7 +57,11 @@ import {
   preferredRabbitTypeForCage,
   rabbitCageValidationMessage,
 } from "@/lib/rabbit-cage";
-import { getOrCreateRabbitReplacementRequest } from "@/lib/rabbit-replacement";
+import {
+  getOrCreateRabbitReplacementRequest,
+  rabbitReplacementSource,
+  rabbitReplacementWeightError,
+} from "@/lib/rabbit-replacement";
 import {
   defaultReproductiveStage,
   growthStageOptions,
@@ -65,6 +69,7 @@ import {
   reproductiveOptions,
 } from "@/lib/rabbits";
 import type {
+  BatchRabbit,
   BatchRabbitEntryResult,
   Cage,
   Rabbit,
@@ -245,7 +250,7 @@ export function RabbitFormDialog({
     }
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (batchEntryResult) {
       onOpenChange(false);
@@ -1069,16 +1074,19 @@ export function RabbitReplacementDialog({
   rabbit,
   cages,
   houseId,
+  batchMemberships,
   onOpenChange,
   onSaved,
 }: {
   rabbit: Rabbit | null;
   cages: Cage[];
   houseId: number | null;
+  batchMemberships: BatchRabbit[] | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
   const [targetCageId, setTargetCageId] = useState("");
+  const [totalWeightKg, setTotalWeightKg] = useState("");
   const [saving, setSaving] = useState(false);
   const pendingRequest = useRef<RabbitReplacementRequest | null>(null);
   const targetCages = useMemo(
@@ -1088,13 +1096,22 @@ export function RabbitReplacementDialog({
         : [],
     [cages, houseId],
   );
+  const source = useMemo(
+    () =>
+      rabbit
+        ? rabbitReplacementSource(rabbit, batchMemberships)
+        : { status: "unavailable" as const, batchId: null },
+    [batchMemberships, rabbit],
+  );
 
   useEffect(() => {
     if (!rabbit) {
       setTargetCageId("");
+      setTotalWeightKg("");
       pendingRequest.current = null;
       return;
     }
+    setTotalWeightKg("");
     setTargetCageId((current) =>
       targetCages.some((cage) => cage.id === Number(current))
         ? current
@@ -1105,12 +1122,33 @@ export function RabbitReplacementDialog({
 
   async function handleSubmit() {
     if (!rabbit || !houseId || !targetCageId || saving) return;
+    if (source.status === "unavailable") {
+      toast.error("来源批次读取失败，请刷新后重试");
+      return;
+    }
+    if (source.status === "ambiguous") {
+      toast.error("兔只存在多个活跃育肥批次，请先核对批次归属");
+      return;
+    }
+    const normalizedWeight = Number(totalWeightKg);
+    const validationMessage = rabbitReplacementWeightError(normalizedWeight);
+    if (validationMessage) {
+      toast.error(validationMessage);
+      return;
+    }
     const request = getOrCreateRabbitReplacementRequest(
       pendingRequest.current,
       {
         rabbitIds: [rabbit.id],
         forceExitBatch: true,
         targetCageId: Number(targetCageId),
+        batchAllocations: [
+          {
+            batchId: source.batchId,
+            rabbitCount: 1,
+            totalWeightKg: normalizedWeight,
+          },
+        ],
       },
       requestId,
     );
@@ -1165,6 +1203,28 @@ export function RabbitReplacementDialog({
             </FieldDescription>
           ) : null}
         </Field>
+        <Field>
+          <FieldLabel htmlFor="replacement-total-weight">
+            转换实测总重（kg）
+          </FieldLabel>
+          <Input
+            id="replacement-total-weight"
+            type="number"
+            min="0.001"
+            step="0.001"
+            value={totalWeightKg}
+            disabled={saving}
+            required
+            onChange={(event) => setTotalWeightKg(event.target.value)}
+          />
+          <FieldDescription>
+            {source.status === "unavailable"
+              ? "来源批次读取失败，请刷新后重试。"
+              : source.status === "ambiguous"
+                ? "兔只存在多个活跃育肥批次，请先核对批次归属。"
+                : `保存${source.batchId == null ? "未归批次" : `批次 #${source.batchId}`}和本次称重快照，统计不会使用后续变化的当前体重。`}
+          </FieldDescription>
+        </Field>
         <DialogFooter>
           <Button
             variant="outline"
@@ -1174,7 +1234,12 @@ export function RabbitReplacementDialog({
             取消
           </Button>
           <Button
-            disabled={saving || !targetCageId}
+            disabled={
+              saving ||
+              !targetCageId ||
+              source.status !== "ready" ||
+              rabbitReplacementWeightError(Number(totalWeightKg)) !== null
+            }
             onClick={() => void handleSubmit()}
           >
             {saving ? (

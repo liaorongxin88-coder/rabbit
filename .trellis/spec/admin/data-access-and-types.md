@@ -25,3 +25,9 @@ Session writes dispatch custom browser events, and `App.tsx` hooks also listen f
 Use explicit unions for stable roles, statuses, and actions. Keep `string` or `Record<string, unknown>` only where the backend contract is intentionally broad. Compatibility normalizers may prefer a current field and retain a legacy fallback. Unknown server enum values must remain visible instead of disappearing or being coerced to a known label; `admin/src/lib/rabbits.ts` demonstrates that approach.
 
 The declared `ApiResponse` type currently models `data` as required even though error envelopes may omit it. The backend also returns `X-Trace-Id`, but the shared response parser currently unwraps only the body and does not expose that header to callers. These are compatibility and diagnostic gaps documented in [Rabbit cross-application contracts](../guides/rabbit-cross-application-contracts.md), not reasons to alter unrelated calls.
+
+## Protected binary downloads
+
+House-scoped reports use `workspaceDownloadBlob` in `admin/src/lib/request.ts`. It is the one approved raw `fetch` boundary: it reads the current business token, sends `Authorization`, `X-House-Id`, and the expected media type, applies the same session-invalidating rules as JSON requests, and parses error envelopes before exposing bytes. Components and pages still must not call `fetch` directly.
+
+Validate the exact response MIME type and reject empty files. Parse the RFC 5987 `filename*` value first, fall back to the ASCII filename, sanitize it, and always revoke object URLs after triggering a browser download. A download failure must leave the last successful page data intact.

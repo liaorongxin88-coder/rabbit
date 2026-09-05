@@ -31,6 +31,7 @@
         <aliyun-dysmsapi.version>4.1.1</aliyun-dysmsapi.version>
         <aliyun-dypnsapi.version>2.0.0</aliyun-dypnsapi.version>
         <archunit.version>1.4.2</archunit.version>
+        <apache-poi.version>5.5.1</apache-poi.version>
         <checkstyle.version>14.0.0</checkstyle.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <spring-boot.maven.skip>true</spring-boot.maven.skip>
@@ -92,6 +93,11 @@
                 <groupId>com.tngtech.archunit</groupId>
                 <artifactId>archunit</artifactId>
                 <version>${archunit.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${apache-poi.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

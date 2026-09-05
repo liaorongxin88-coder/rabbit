@@ -171,7 +171,7 @@ class ReproRepository {
     int? keptKits,
     // 分笼
     int? weanedCount,
-    double? avgWeaningWeight,
+    double? weaningTotalWeightKg,
     int? targetCageId,
     int? maleCount,
     int? femaleCount,
@@ -201,7 +201,8 @@ class ReproRepository {
         if (liveKits != null) 'liveKits': liveKits,
         if (keptKits != null) 'keptKits': keptKits,
         if (weanedCount != null) 'weanedCount': weanedCount,
-        if (avgWeaningWeight != null) 'avgWeaningWeight': avgWeaningWeight,
+        if (weaningTotalWeightKg != null)
+          'weaningTotalWeightKg': weaningTotalWeightKg,
         if (targetCageId != null && targetCageId > 0)
           'targetCageId': targetCageId,
         if (maleCount != null) 'maleCount': maleCount,

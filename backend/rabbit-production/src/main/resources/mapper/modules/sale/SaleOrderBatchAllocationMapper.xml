@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.sale.mapper.SaleOrderBatchAllocationMapper">
+    <insert id="insertBatch">
+        insert into sale_order_batch_allocations (
+            sale_order_id, house_id, batch_id, rabbit_count,
+            actual_weight_kg, unit_price_per_kg, amount
+        ) values
+        <foreach collection="allocations" item="allocation" separator=",">
+            (#{allocation.saleOrderId}, #{allocation.houseId}, #{allocation.batchId},
+             #{allocation.rabbitCount}, #{allocation.actualWeightKg},
+             #{allocation.unitPricePerKg}, #{allocation.amount})
+        </foreach>
+    </insert>
+
+</mapper>

@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.outbound.dto;
 
+import com.rabbit.app.modules.sale.dto.SaleBatchAllocationInput;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -31,13 +32,29 @@ public final class OutboundDtos {
     public record SaveDraftRequest(
             @NotNull(message = "revision不能为空") Long revision,
             @NotBlank(message = "status不能为空") String status,
-            @NotNull(message = "items不能为空") List<@Valid SelectedRabbitInput> items,
+            @NotNull(message = "items不能为空")
+            List<@NotNull(message = "items不能包含空项") @Valid SelectedRabbitInput> items,
+            Date saleTime,
+            Double totalWeight,
+            BigDecimal unitPrice,
+            BigDecimal unitPricePerKg,
+            List<@NotNull(message = "batchAllocations不能包含空项") @Valid SaleBatchAllocationInput> batchAllocations,
+            String customer,
+            String remark
+    ) {
+        public SaveDraftRequest(
+            Long revision,
+            String status,
+            List<SelectedRabbitInput> items,
             Date saleTime,
             Double totalWeight,
             BigDecimal unitPrice,
             String customer,
             String remark
-    ) {}
+        ) {
+            this(revision, status, items, saleTime, totalWeight, unitPrice, null, null, customer, remark);
+        }
+    }
 
     public record SubmitRequest(
             @NotEmpty(message = "rabbitIds不能为空") List<Long> rabbitIds,
@@ -46,10 +63,42 @@ public final class OutboundDtos {
             @NotNull(message = "saleTime不能为空") Date saleTime,
             @NotNull(message = "totalWeight不能为空") @Positive(message = "totalWeight不合法") Double totalWeight,
             BigDecimal unitPrice,
+            BigDecimal unitPricePerKg,
+            List<@NotNull(message = "batchAllocations不能包含空项") @Valid SaleBatchAllocationInput> batchAllocations,
             String customer,
             String remark,
             @NotBlank(message = "requestId不能为空") String requestId
-    ) {}
+    ) {
+        public SubmitRequest(
+            List<Long> rabbitIds,
+            Map<String, Long> stateVersions,
+            Map<String, String> earlySaleReasons,
+            Date saleTime,
+            Double totalWeight,
+            BigDecimal unitPrice,
+            String customer,
+            String remark,
+            String requestId
+        ) {
+            this(
+                rabbitIds,
+                stateVersions,
+                earlySaleReasons,
+                saleTime,
+                totalWeight,
+                unitPrice,
+                null,
+                null,
+                customer,
+                remark,
+                requestId
+            );
+        }
+
+        public BigDecimal effectiveUnitPrice() {
+            return unitPricePerKg == null ? unitPrice : unitPricePerKg;
+        }
+    }
 
     public record EligibilitySummary(int normal, int earlySale, int needsAction, int blocked) {}
 
@@ -92,6 +141,8 @@ public final class OutboundDtos {
             Date saleTime,
             Double totalWeight,
             BigDecimal unitPrice,
+            BigDecimal unitPricePerKg,
+            List<SaleBatchAllocationInput> batchAllocations,
             String customer,
             String remark,
             Long saleOrderId,

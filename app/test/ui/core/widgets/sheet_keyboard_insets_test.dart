@@ -161,7 +161,7 @@ void main() {
           const ValueKey('weaning-count'): '8',
           const ValueKey('weaning-male-count'): '4',
           const ValueKey('weaning-female-count'): '4',
-          const ValueKey('weaning-average-weight'): '2.4',
+          const ValueKey('weaning-total-weight'): '2.4',
           const ValueKey('weaning-remark'): 'Weaning keyboard remark',
         },
         submit: find.byKey(const ValueKey('weaning-submit')),

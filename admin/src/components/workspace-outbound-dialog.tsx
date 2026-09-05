@@ -9,12 +9,23 @@ import { toast } from "sonner";
 import {
   cancelOutboundTask,
   createOutboundTask,
+  getOutboundRequestStatus,
   precheckOutboundTask,
   requestId,
   saveOutboundTask,
   submitOutboundTask,
 } from "@/api/workspace";
-import { formatLocalDate } from "@/lib/date";
+import {
+  farmBusinessDateToTimestamp,
+  formatFarmBusinessDate,
+} from "@/lib/date";
+import {
+  buildOutboundAllocationGroups,
+  getOrCreateOutboundSubmission,
+  normalizeOutboundAllocations,
+  outboundAllocationError,
+  type PendingOutboundSubmission,
+} from "@/lib/outbound-allocation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,31 +89,64 @@ export function WorkspaceOutboundDialog({
   const [selected, setSelected] = useState<
     Record<number, OutboundSelectedItem>
   >({});
-  const [saleDate, setSaleDate] = useState(formatLocalDate());
+  const [saleDate, setSaleDate] = useState(formatFarmBusinessDate());
   const [totalWeight, setTotalWeight] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
+  const [allocationWeights, setAllocationWeights] = useState<
+    Record<string, string>
+  >({});
   const [customer, setCustomer] = useState("");
   const [remark, setRemark] = useState("");
   const [result, setResult] = useState<OutboundSubmitResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const initialized = useRef(false);
+  const initializedHouseId = useRef<number | null>(null);
+  const taskLoadVersion = useRef(0);
+  const pendingSubmission = useRef<PendingOutboundSubmission<
+    Omit<Parameters<typeof submitOutboundTask>[2], "requestId">
+  > | null>(null);
 
   const selectedItems = useMemo(() => Object.values(selected), [selected]);
+  const allocationGroups = useMemo(
+    () => buildOutboundAllocationGroups(selectedItems, task?.rabbits ?? []),
+    [selectedItems, task?.rabbits],
+  );
+  const batchAllocations = useMemo(
+    () => normalizeOutboundAllocations(allocationGroups, allocationWeights),
+    [allocationGroups, allocationWeights],
+  );
 
   const startTask = useCallback(async () => {
-    if (!houseId || initialized.current) return;
-    initialized.current = true;
+    if (!houseId || initializedHouseId.current === houseId) return;
+    const version = ++taskLoadVersion.current;
+    initializedHouseId.current = houseId;
+    if (
+      task &&
+      task.houseId !== houseId &&
+      !["COMPLETED", "CANCELLED"].includes(task.status)
+    ) {
+      void cancelOutboundTask(task.houseId, task.taskId).catch(() => undefined);
+    }
     setBusy(true);
     setPhase("select");
     setTask(null);
     setResult(null);
-    setSaleDate(formatLocalDate());
+    setSaleDate(formatFarmBusinessDate());
     setTotalWeight("");
     setUnitPrice("");
+    setAllocationWeights({});
+    pendingSubmission.current = null;
     setCustomer("");
     setRemark("");
     try {
       const nextTask = await createOutboundTask(houseId);
+      if (version !== taskLoadVersion.current) {
+        if (!["COMPLETED", "CANCELLED"].includes(nextTask.status)) {
+          void cancelOutboundTask(nextTask.houseId, nextTask.taskId).catch(
+            () => undefined,
+          );
+        }
+        return;
+      }
       setTask(nextTask);
       setSelected(
         Object.fromEntries(
@@ -110,22 +154,37 @@ export function WorkspaceOutboundDialog({
         ),
       );
     } catch {
-      initialized.current = false;
-      setOpen(false);
+      if (version === taskLoadVersion.current) {
+        initializedHouseId.current = null;
+        setOpen(false);
+      }
     } finally {
-      setBusy(false);
+      if (version === taskLoadVersion.current) setBusy(false);
     }
-  }, [houseId, setOpen]);
+  }, [houseId, setOpen, task]);
 
   useEffect(() => {
-    if (controlledOpen && houseId) {
+    if (open && houseId) {
       void startTask();
     }
-  }, [controlledOpen, houseId, startTask]);
+  }, [houseId, open, startTask]);
+
+  useEffect(() => {
+    setAllocationWeights((current) => {
+      const next = Object.fromEntries(
+        allocationGroups.map((group) => [group.key, current[group.key] ?? ""]),
+      );
+      if (allocationGroups.length === 1 && Number(totalWeight) > 0) {
+        next[allocationGroups[0].key] = Number(totalWeight).toFixed(3);
+      }
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+  }, [allocationGroups, totalWeight]);
 
   async function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
-      initialized.current = false;
+      taskLoadVersion.current += 1;
+      initializedHouseId.current = null;
       setOpen(false);
       if (
         task &&
@@ -174,18 +233,25 @@ export function WorkspaceOutboundDialog({
   }
 
   function formPayload() {
+    const normalizedPrice = Number(unitPrice);
+    const saleTime = farmBusinessDateToTimestamp(saleDate);
     return {
-      saleTime: new Date(`${saleDate}T00:00:00`).getTime(),
+      saleTime: saleTime ?? Number.NaN,
       totalWeight: Number(totalWeight),
-      unitPrice: unitPrice ? Number(unitPrice) : undefined,
+      unitPricePerKg: normalizedPrice,
+      batchAllocations,
       customer: customer.trim() || undefined,
       remark: remark.trim() || undefined,
     };
   }
 
-  async function freezeSelection(event: React.FormEvent<HTMLFormElement>) {
+  async function freezeSelection(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!task || selectedItems.length === 0 || Number(totalWeight) <= 0) return;
+    if (farmBusinessDateToTimestamp(saleDate) === undefined) {
+      toast.error("请选择有效销售日期");
+      return;
+    }
     const missingReason = selectedItems.some(
       (item) =>
         item.selectionType === "EARLY_SALE" && !item.earlySaleReason?.trim(),
@@ -194,13 +260,28 @@ export function WorkspaceOutboundDialog({
       toast.error("请填写每只提前出售兔的原因");
       return;
     }
+    const allocationMessage = outboundAllocationError(
+      Number(totalWeight),
+      Number(unitPrice),
+      batchAllocations,
+    );
+    if (allocationMessage) {
+      toast.error(allocationMessage);
+      return;
+    }
     setBusy(true);
     try {
+      const payload = formPayload();
       const frozen = await saveOutboundTask(task.houseId, task.taskId, {
         revision: task.revision,
         status: "WAITING_CONFIRMATION",
         items: selectedItems,
-        ...formPayload(),
+        saleTime: payload.saleTime,
+        totalWeight: payload.totalWeight,
+        unitPricePerKg: payload.unitPricePerKg,
+        batchAllocations: payload.batchAllocations,
+        customer: payload.customer,
+        remark: payload.remark,
       });
       setTask(frozen);
       setSelected(
@@ -232,27 +313,55 @@ export function WorkspaceOutboundDialog({
             item.earlySaleReason?.trim() ?? "",
           ]),
       );
-      const nextResult = await submitOutboundTask(task.houseId, task.taskId, {
+      const payload = {
         rabbitIds: task.selectedItems.map((item) => item.rabbitId),
         stateVersions,
         earlySaleReasons,
         ...formPayload(),
-        requestId: requestId(),
+      };
+      const pending = getOrCreateOutboundSubmission(
+        pendingSubmission.current,
+        payload,
+        requestId,
+      );
+      pendingSubmission.current = pending;
+      const nextResult = await submitOutboundTask(task.houseId, task.taskId, {
+        ...pending.payload,
+        requestId: pending.requestId,
       });
-      setResult(nextResult);
-      setPhase("result");
-      if (nextResult.status === "COMPLETED") {
-        toast.success(`出库完成：${nextResult.rabbitCount} 只`);
-        await onSaved();
-      }
+      await acceptResult(nextResult);
     } finally {
       setBusy(false);
     }
   }
 
-  async function adjustConflicts() {
+  async function acceptResult(nextResult: OutboundSubmitResult) {
+    setResult(nextResult);
+    setPhase("result");
+    if (nextResult.status === "COMPLETED") {
+      pendingSubmission.current = null;
+      toast.success(`出库完成：${nextResult.rabbitCount} 只`);
+      await onSaved();
+    }
+  }
+
+  async function checkSubmissionStatus() {
     if (!result || !task) return;
-    const conflictIds = new Set(result.conflicts.map((item) => item.rabbitId));
+    setBusy(true);
+    try {
+      await acceptResult(
+        await getOutboundRequestStatus(task.houseId, result.requestId),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function returnToSelection(removeConflicts: boolean) {
+    if (!result || !task) return;
+    const conflictIds = removeConflicts
+      ? new Set(result.conflicts.map((item) => item.rabbitId))
+      : new Set<number>();
     const remaining = task.selectedItems.filter(
       (item) => !conflictIds.has(item.rabbitId),
     );
@@ -264,6 +373,7 @@ export function WorkspaceOutboundDialog({
         Object.fromEntries(remaining.map((item) => [item.rabbitId, item])),
       );
       setResult(null);
+      pendingSubmission.current = null;
       setPhase("select");
     } finally {
       setBusy(false);
@@ -366,8 +476,9 @@ export function WorkspaceOutboundDialog({
                 <Input
                   id="outbound-weight"
                   type="number"
-                  min="0.01"
-                  step="0.01"
+                  min="0.001"
+                  step="0.001"
+                  max="100000"
                   value={totalWeight}
                   required
                   onChange={(event) => setTotalWeight(event.target.value)}
@@ -378,9 +489,11 @@ export function WorkspaceOutboundDialog({
                 <Input
                   id="outbound-price"
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="0.01"
+                  max="99999999.99"
                   value={unitPrice}
+                  required
                   onChange={(event) => setUnitPrice(event.target.value)}
                 />
               </Field>
@@ -394,6 +507,43 @@ export function WorkspaceOutboundDialog({
                 />
               </Field>
             </div>
+            {allocationGroups.length > 0 ? (
+              <fieldset className="rounded-lg border p-4">
+                <legend className="px-1 text-sm font-medium">
+                  批次实际重量分配
+                </legend>
+                <div className="mt-1 grid gap-4 sm:grid-cols-2">
+                  {allocationGroups.map((group) => (
+                    <Field key={group.key}>
+                      <FieldLabel htmlFor={`outbound-allocation-${group.key}`}>
+                        {group.batchId == null
+                          ? "未归批次"
+                          : `批次 #${group.batchId}`}{" "}
+                        · {group.rabbitCount} 只
+                      </FieldLabel>
+                      <Input
+                        id={`outbound-allocation-${group.key}`}
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        value={allocationWeights[group.key] ?? ""}
+                        required
+                        disabled={allocationGroups.length === 1}
+                        onChange={(event) =>
+                          setAllocationWeights((current) => ({
+                            ...current,
+                            [group.key]: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  混批时按过磅结果填写，各组之和必须等于订单总重量。
+                </p>
+              </fieldset>
+            ) : null}
             <Field>
               <FieldLabel htmlFor="outbound-remark">备注</FieldLabel>
               <Textarea
@@ -414,7 +564,13 @@ export function WorkspaceOutboundDialog({
               <Button
                 type="submit"
                 disabled={
-                  busy || selectedItems.length === 0 || Number(totalWeight) <= 0
+                  busy ||
+                  selectedItems.length === 0 ||
+                  outboundAllocationError(
+                    Number(totalWeight),
+                    Number(unitPrice),
+                    batchAllocations,
+                  ) !== null
                 }
               >
                 {busy ? <Spinner data-icon="inline-start" /> : null}
@@ -445,6 +601,22 @@ export function WorkspaceOutboundDialog({
               />
               <Review label="客户" value={customer || "-"} />
             </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-medium">批次重量快照</p>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                {batchAllocations.map((allocation) => (
+                  <Review
+                    key={allocation.batchId ?? "unassigned"}
+                    label={
+                      allocation.batchId == null
+                        ? "未归批次"
+                        : `批次 #${allocation.batchId}`
+                    }
+                    value={`${allocation.actualWeightKg.toFixed(3)} kg`}
+                  />
+                ))}
+              </dl>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
@@ -471,9 +643,9 @@ export function WorkspaceOutboundDialog({
         ) : result ? (
           <div className="flex flex-col gap-4">
             {result.status === "COMPLETED" ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+              <div className="rounded-md border border-accent/30 bg-accent/5 p-4 text-foreground">
                 <div className="flex items-center gap-2 font-medium">
-                  <CheckCircle2Icon className="size-5" />
+                  <CheckCircle2Icon className="size-5" aria-hidden="true" />
                   出库完成
                 </div>
                 <div className="mt-2 text-sm">
@@ -482,10 +654,30 @@ export function WorkspaceOutboundDialog({
                   kg
                 </div>
               </div>
-            ) : (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
+            ) : result.status === "PROCESSING" ? (
+              <div className="rounded-md border border-warning/40 p-4">
+                <div className="flex items-center gap-2 font-medium text-warning">
+                  <Spinner />
+                  正在确认出库结果
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {result.message || "请等待服务端确认，不要重复创建出库单。"}
+                </p>
+              </div>
+            ) : result.status === "FAILED" ? (
+              <div className="rounded-md border border-destructive/30 p-4">
                 <div className="flex items-center gap-2 font-medium text-destructive">
-                  <AlertTriangleIcon className="size-5" />
+                  <AlertTriangleIcon className="size-5" aria-hidden="true" />
+                  出库未生效
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {result.message || "请返回调整后重新提交。"}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-md border border-destructive/30 p-4">
+                <div className="flex items-center gap-2 font-medium text-destructive">
+                  <AlertTriangleIcon className="size-5" aria-hidden="true" />
                   出库状态冲突
                 </div>
                 <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
@@ -522,14 +714,27 @@ export function WorkspaceOutboundDialog({
                   >
                     取消
                   </Button>
-                  <Button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void adjustConflicts()}
-                  >
-                    {busy ? <Spinner data-icon="inline-start" /> : null}
-                    移除冲突项
-                  </Button>
+                  {result.status === "PROCESSING" ? (
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void checkSubmissionStatus()}
+                    >
+                      {busy ? <Spinner data-icon="inline-start" /> : null}
+                      查询结果
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void returnToSelection(result.status === "CONFLICT")
+                      }
+                    >
+                      {busy ? <Spinner data-icon="inline-start" /> : null}
+                      {result.status === "CONFLICT" ? "移除冲突项" : "返回调整"}
+                    </Button>
+                  )}
                 </>
               )}
             </DialogFooter>

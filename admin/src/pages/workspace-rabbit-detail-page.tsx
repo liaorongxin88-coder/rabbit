@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeftIcon,
@@ -16,6 +16,7 @@ import {
   getRabbit,
   listBatches,
   listCages,
+  listRabbitBatchMemberships,
   listRabbitVaccinations,
   listReproStageActions,
 } from "@/api/workspace";
@@ -66,7 +67,12 @@ import {
   rabbitStageSummary,
   rabbitTypeLabel,
 } from "@/lib/rabbits";
-import type { Cage, ProductionBatch, Rabbit } from "@/types/api";
+import type {
+  BatchRabbit,
+  Cage,
+  ProductionBatch,
+  Rabbit,
+} from "@/types/api";
 import type { VaccinationRecord } from "@/types/rabbit-vaccination";
 
 export function WorkspaceRabbitDetailPage() {
@@ -79,8 +85,15 @@ export function WorkspaceRabbitDetailPage() {
     Record<string, string>
   >({});
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
+  const [batchMemberships, setBatchMemberships] = useState<BatchRabbit[] | null>(
+    null,
+  );
   const [vaccinations, setVaccinations] = useState<VaccinationRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadVersion = useRef(0);
+  const activeHouseId = workspace.selectedHouse?.id ?? null;
+  const activeHouseIdRef = useRef(activeHouseId);
+  activeHouseIdRef.current = activeHouseId;
   const [editOpen, setEditOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [promotionOpen, setPromotionOpen] = useState(false);
@@ -107,8 +120,10 @@ export function WorkspaceRabbitDetailPage() {
   const canReadAudit = hasPermission(workspace.permission, "rabbit:audit:list");
 
   const load = useCallback(async () => {
+    if (activeHouseId !== activeHouseIdRef.current) return;
+    const version = ++loadVersion.current;
     if (
-      !workspace.selectedHouse ||
+      !activeHouseId ||
       !Number.isSafeInteger(rabbitId) ||
       rabbitId <= 0
     ) {
@@ -116,35 +131,67 @@ export function WorkspaceRabbitDetailPage() {
       setCages([]);
       setReproStageLabels({});
       setBatches([]);
+      setBatchMemberships(null);
       setVaccinations([]);
       setLoading(false);
       return;
     }
 
+    const houseId = activeHouseId;
     setLoading(true);
     try {
-      const [nextRabbit, nextCages] = await Promise.all([
-        getRabbit(workspace.selectedHouse.id, rabbitId),
-        listCages(workspace.selectedHouse.id),
+      const [nextRabbit, nextCages, nextBatchMemberships] = await Promise.all([
+        getRabbit(houseId, rabbitId),
+        listCages(houseId),
+        listRabbitBatchMemberships(houseId, rabbitId).catch(() => null),
       ]);
+      if (
+        version !== loadVersion.current ||
+        houseId !== activeHouseIdRef.current
+      ) {
+        return;
+      }
+      if (nextRabbit.houseId !== houseId || nextRabbit.id !== rabbitId) {
+        throw new Error("兔只响应与当前兔场不一致");
+      }
       setRabbit(nextRabbit);
       setCages(nextCages);
+      setBatchMemberships(nextBatchMemberships);
 
       // 单独包 try：接种历史拉失败不该把整个兔只页变成「兔只不存在」。
       try {
-        setVaccinations(
-          await listRabbitVaccinations(workspace.selectedHouse.id, rabbitId),
+        const nextVaccinations = await listRabbitVaccinations(
+          houseId,
+          rabbitId,
         );
+        if (
+          version !== loadVersion.current ||
+          houseId !== activeHouseIdRef.current
+        ) {
+          return;
+        }
+        setVaccinations(nextVaccinations);
       } catch {
-        setVaccinations([]);
+        if (
+          version === loadVersion.current &&
+          houseId === activeHouseIdRef.current
+        ) {
+          setVaccinations([]);
+        }
       }
 
       if (canReadRepro) {
         try {
           const [stages, nextBatches] = await Promise.all([
-            listReproStageActions(workspace.selectedHouse.id),
-            listBatches(workspace.selectedHouse.id),
+            listReproStageActions(houseId),
+            listBatches(houseId),
           ]);
+          if (
+            version !== loadVersion.current ||
+            houseId !== activeHouseIdRef.current
+          ) {
+            return;
+          }
           setReproStageLabels(
             Object.fromEntries(
               stages.map((item) => [item.stage, item.stageLabel]),
@@ -152,6 +199,12 @@ export function WorkspaceRabbitDetailPage() {
           );
           setBatches(nextBatches);
         } catch {
+          if (
+            version !== loadVersion.current ||
+            houseId !== activeHouseIdRef.current
+          ) {
+            return;
+          }
           setReproStageLabels({});
           setBatches([]);
         }
@@ -160,21 +213,41 @@ export function WorkspaceRabbitDetailPage() {
         setBatches([]);
       }
     } catch {
+      if (
+        version !== loadVersion.current ||
+        houseId !== activeHouseIdRef.current
+      ) {
+        return;
+      }
       setRabbit(null);
       setCages([]);
       setReproStageLabels({});
       setBatches([]);
+      setBatchMemberships(null);
       setVaccinations([]);
     } finally {
-      setLoading(false);
+      if (
+        version === loadVersion.current &&
+        houseId === activeHouseIdRef.current
+      ) {
+        setLoading(false);
+      }
     }
-  }, [canReadRepro, rabbitId, workspace.selectedHouse]);
+  }, [activeHouseId, canReadRepro, rabbitId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  if (loading) {
+  if (
+    loading ||
+    Boolean(
+      rabbit &&
+        workspace.selectedHouse &&
+        (rabbit.houseId !== workspace.selectedHouse.id ||
+          rabbit.id !== rabbitId),
+    )
+  ) {
     return (
       <div className="motion-page flex flex-col gap-4">
         <Skeleton className="h-20 w-full" />
@@ -265,10 +338,7 @@ export function WorkspaceRabbitDetailPage() {
               </Button>
             ) : null}
             {canPromoteReplacement ? (
-              <Button
-                variant="outline"
-                onClick={() => setPromotionOpen(true)}
-              >
+              <Button variant="outline" onClick={() => setPromotionOpen(true)}>
                 <ArrowUpRightIcon data-icon="inline-start" />
                 转为种兔
               </Button>
@@ -482,6 +552,7 @@ export function WorkspaceRabbitDetailPage() {
         rabbit={replacementOpen ? rabbit : null}
         cages={cages}
         houseId={workspace.selectedHouse.id}
+        batchMemberships={batchMemberships}
         onOpenChange={setReplacementOpen}
         onSaved={load}
       />

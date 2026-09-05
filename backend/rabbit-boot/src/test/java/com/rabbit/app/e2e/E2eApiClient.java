@@ -102,7 +102,11 @@ public class E2eApiClient {
         HttpHeaders headers = headers(token, houseId);
         ResponseEntity<byte[]> resp = restTemplate.exchange(baseUrl + path, HttpMethod.GET, new HttpEntity<Object>(headers), byte[].class);
         Assertions.assertTrue(resp.getStatusCode().is2xxSuccessful(), "HTTP status for download " + path);
-        return new Download(resp.getHeaders().getContentType(), resp.getBody() == null ? new byte[0] : resp.getBody());
+        return new Download(
+                resp.getHeaders().getContentType(),
+                resp.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION),
+                resp.getBody() == null ? new byte[0] : resp.getBody()
+        );
     }
 
     private ResponseEntity<String> exchange(String path, HttpMethod method, String token, Long houseId, Object body) {
@@ -151,10 +155,12 @@ public class E2eApiClient {
 
     public static class Download {
         public final MediaType contentType;
+        public final String contentDisposition;
         public final byte[] bytes;
 
-        Download(MediaType contentType, byte[] bytes) {
+        Download(MediaType contentType, String contentDisposition, byte[] bytes) {
             this.contentType = contentType;
+            this.contentDisposition = contentDisposition;
             this.bytes = bytes;
         }
 

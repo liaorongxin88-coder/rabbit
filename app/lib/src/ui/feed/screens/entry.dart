@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/feed/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
@@ -14,8 +13,11 @@ import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/feed/log.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
+import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/states.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
@@ -37,37 +39,61 @@ class FeedEntryScreen extends ConsumerStatefulWidget {
 }
 
 class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
-  static const _uuid = Uuid();
-
   final _amountController = TextEditingController();
   final _feedTypeController = TextEditingController(text: '日常投喂');
   final _remarkController = TextEditingController();
   final _selectedCageIds = <int>{};
+  final _writeRequest = BatchWriteRequestController();
+  final _allocationAmounts = <String, String>{};
   StreamSubscription<NfcLaunchEvent>? _nfcSubscription;
   StateController<bool>? _captureFlag;
-  DateTime _feedTime = DateTime.now();
-  String _requestId = _uuid.v4();
+  DateTime _feedTime = farmNow();
+  FeedAllocationPreview? _allocationPreview;
+  String? _previewFingerprint;
   String? _errorMessage;
   String? _successMessage;
   String? _nfcHint;
   var _saving = false;
+  var _previewing = false;
   var _nfcListening = false;
   var _initialSelectionApplied = false;
+  var _viewGeneration = 0;
+  var _previewSequence = 0;
 
   @override
   void didUpdateWidget(covariant FeedEntryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.houseId != widget.houseId ||
-        oldWidget.initialRabbitId != widget.initialRabbitId) {
-      _selectedCageIds.clear();
-      _initialSelectionApplied = false;
-      _nfcHint = null;
-      _errorMessage = null;
+    final houseChanged = oldWidget.houseId != widget.houseId;
+    if (!houseChanged && oldWidget.initialRabbitId == widget.initialRabbitId) {
+      return;
+    }
+    _viewGeneration++;
+    _previewSequence++;
+    _nfcSubscription?.cancel();
+    _nfcSubscription = null;
+    _releaseCaptureFlag();
+    _nfcListening = false;
+    _selectedCageIds.clear();
+    _initialSelectionApplied = false;
+    _nfcHint = null;
+    _errorMessage = null;
+    _successMessage = null;
+    _clearAllocationPreview();
+    _writeRequest.startNewDraft();
+    if (houseChanged) {
+      _amountController.clear();
+      _feedTypeController.text = '日常投喂';
+      _remarkController.clear();
+      _feedTime = farmNow();
+      _saving = false;
+      _previewing = false;
     }
   }
 
   @override
   void dispose() {
+    _viewGeneration++;
+    _previewSequence++;
     _nfcSubscription?.cancel();
     _releaseCaptureFlag();
     _amountController.dispose();
@@ -98,10 +124,12 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
     if (_nfcListening || _saving) {
       return;
     }
+    final generation = _viewGeneration;
+    final houseId = widget.houseId;
     try {
       final service = ref.read(nfcIntentServiceProvider);
       await service.initialize();
-      if (!mounted) {
+      if (!_isCurrent(generation, houseId)) {
         return;
       }
       final flag = ref.read(nfcCaptureActiveProvider.notifier);
@@ -113,7 +141,7 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
       });
       _nfcSubscription = service.events.listen(_onNfcEvent);
     } catch (_) {
-      if (mounted) {
+      if (_isCurrent(generation, houseId)) {
         setState(() {
           _nfcHint = '无法使用 NFC，请检查系统授权后重试';
         });
@@ -122,23 +150,25 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
   }
 
   Future<void> _onNfcEvent(NfcLaunchEvent event) async {
+    final generation = _viewGeneration;
+    final houseId = widget.houseId;
     try {
       final target = NfcPayloadTarget.parse(event.payload);
-      if (target.houseId != widget.houseId) {
+      if (target.houseId != houseId) {
         _stopNfcCapture(hint: '该标签属于其它兔舍，未选中');
         return;
       }
       final binding = await ref.read(nfcRepositoryProvider).resolve(
-            houseId: widget.houseId,
+            houseId: houseId,
             tagUid: event.tagUid,
             payload: event.payload,
           );
-      if (!mounted) {
+      if (!_isCurrent(generation, houseId)) {
         return;
       }
-      final cages = ref.read(houseCagesProvider(widget.houseId)).valueOrNull;
+      final cages = ref.read(houseCagesProvider(houseId)).valueOrNull;
       final rabbits =
-          ref.read(allActiveHouseRabbitsProvider(widget.houseId)).valueOrNull;
+          ref.read(allActiveHouseRabbitsProvider(houseId)).valueOrNull;
       if (cages == null || rabbits == null) {
         _stopNfcCapture(hint: '笼位数据正在加载，请稍后重试');
         return;
@@ -160,9 +190,11 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
       });
       _stopNfcCapture(hint: '已选中 ${_cageLabel(cage)}，包含 $rabbitCount 只');
     } catch (error) {
-      _stopNfcCapture(
-        hint: error is ApiException ? error.message : '读取标签失败，请重试',
-      );
+      if (_isCurrent(generation, houseId)) {
+        _stopNfcCapture(
+          hint: error is ApiException ? error.message : '读取标签失败，请重试',
+        );
+      }
     }
   }
 
@@ -201,13 +233,15 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
     if (_saving) {
       return;
     }
+    final generation = _viewGeneration;
+    final houseId = widget.houseId;
     final selected = await showDatePicker(
       context: context,
       initialDate: _feedTime,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now(),
+      firstDate: farmToday().subtract(const Duration(days: 30)),
+      lastDate: farmToday(),
     );
-    if (selected == null || !mounted) {
+    if (selected == null || !_isCurrent(generation, houseId)) {
       return;
     }
     setState(() {
@@ -218,6 +252,7 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
         _feedTime.hour,
         _feedTime.minute,
       );
+      _clearAllocationPreview();
     });
   }
 
@@ -231,12 +266,19 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
       }
       _errorMessage = null;
       _successMessage = null;
+      _clearAllocationPreview();
     });
   }
 
-  Future<void> _submit(List<Cage> cages, List<Rabbit> rabbits) async {
-    final amount = double.tryParse(_amountController.text.trim());
-    final rabbitIds = rabbits
+  void _clearAllocationPreview() {
+    _previewSequence++;
+    _allocationPreview = null;
+    _previewFingerprint = null;
+    _allocationAmounts.clear();
+  }
+
+  List<int> _selectedRabbitIds(List<Rabbit> rabbits) {
+    return rabbits
         .where(
           (rabbit) =>
               rabbit.isActive && _selectedCageIds.contains(rabbit.cageId),
@@ -245,6 +287,86 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
         .toSet()
         .toList()
       ..sort();
+  }
+
+  String _currentPreviewFingerprint(List<int> rabbitIds) {
+    return canonicalBatchWriteFingerprint({
+      'rabbitIds': rabbitIds,
+      'feedTime': farmDateTimeToIso(_feedTime),
+    });
+  }
+
+  void _amountChanged(String value) {
+    final groups = _allocationPreview?.groups ?? const <FeedAllocationGroup>[];
+    if (groups.length == 1 && _canAutoAllocate(groups.single)) {
+      _allocationAmounts[groups.single.key] = value;
+    }
+    setState(() {
+      _errorMessage = null;
+      _successMessage = null;
+    });
+  }
+
+  Future<FeedAllocationPreview?> _previewAllocations(
+    List<int> rabbitIds,
+  ) async {
+    if (_previewing || rabbitIds.isEmpty) return _allocationPreview;
+    final generation = _viewGeneration;
+    final houseId = widget.houseId;
+    final fingerprint = _currentPreviewFingerprint(rabbitIds);
+    final sequence = ++_previewSequence;
+    setState(() {
+      _previewing = true;
+      _errorMessage = null;
+    });
+    try {
+      final preview = await ref.read(feedRepositoryProvider).previewAllocations(
+            houseId: houseId,
+            rabbitIds: rabbitIds,
+            feedTime: _feedTime,
+          );
+      if (!_isCurrent(generation, houseId) ||
+          sequence != _previewSequence ||
+          fingerprint != _currentPreviewFingerprint(rabbitIds)) {
+        return null;
+      }
+      setState(() {
+        _allocationPreview = preview;
+        _previewFingerprint = fingerprint;
+        _allocationAmounts
+          ..clear()
+          ..addEntries(
+            preview.groups.map(
+              (group) => MapEntry(
+                group.key,
+                preview.groups.length == 1 && _canAutoAllocate(group)
+                    ? _amountController.text.trim()
+                    : '',
+              ),
+            ),
+          );
+      });
+      return preview;
+    } catch (error) {
+      if (_isCurrent(generation, houseId) && sequence == _previewSequence) {
+        setState(() {
+          _errorMessage =
+              error is ApiException ? error.message : '批次与阶段归属预览失败，请检查网络后重试';
+        });
+      }
+      return null;
+    } finally {
+      if (_isCurrent(generation, houseId) && sequence == _previewSequence) {
+        setState(() => _previewing = false);
+      }
+    }
+  }
+
+  Future<void> _submit(List<Cage> cages, List<Rabbit> rabbits) async {
+    final generation = _viewGeneration;
+    final houseId = widget.houseId;
+    final amount = double.tryParse(_amountController.text.trim());
+    final rabbitIds = _selectedRabbitIds(rabbits);
     if (rabbitIds.isEmpty) {
       setState(() => _errorMessage = '请选择至少一个有在栏兔只的笼位');
       return;
@@ -253,6 +375,35 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
       setState(() => _errorMessage = '请输入大于 0 的投喂数量');
       return;
     }
+    final previewFingerprint = _currentPreviewFingerprint(rabbitIds);
+    var preview = _allocationPreview;
+    if (preview == null || _previewFingerprint != previewFingerprint) {
+      preview = await _previewAllocations(rabbitIds);
+      if (preview == null) return;
+    }
+    final allocations = preview.groups.map((group) {
+      return FeedBatchAllocation(
+        batchId: group.batchId,
+        phase: group.phase,
+        amountKg: double.tryParse(_allocationAmounts[group.key] ?? '') ?? 0,
+      );
+    }).toList(growable: false);
+    final allocationError = validateFeedAllocations(amount, allocations);
+    if (allocationError != null) {
+      setState(() => _errorMessage = allocationError);
+      return;
+    }
+    final requestId = _writeRequest.requestIdFor(
+      canonicalBatchWriteFingerprint({
+        'houseId': houseId,
+        'rabbitIds': rabbitIds,
+        'feedTime': farmDateTimeToIso(_feedTime),
+        'amount': amount,
+        'feedType': _feedTypeController.text,
+        'allocations': allocations.map((item) => item.toJson()).toList(),
+        'remark': _remarkController.text,
+      }),
+    );
     setState(() {
       _saving = true;
       _errorMessage = null;
@@ -260,44 +411,72 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
     });
     try {
       await ref.read(feedRepositoryProvider).addFeedLog(
-            houseId: widget.houseId,
+            houseId: houseId,
             draft: FeedLogDraft(
               rabbitIds: rabbitIds,
               feedTime: _feedTime,
-              requestId: _requestId,
+              requestId: requestId,
               amount: amount,
+              allocations: allocations,
               feedType: _feedTypeController.text,
               unit: 'kg',
               remark: _remarkController.text,
             ),
           );
-      if (!mounted) {
+      if (!_isCurrent(generation, houseId)) {
         return;
       }
       setState(() {
         _selectedCageIds.clear();
         _amountController.clear();
         _remarkController.clear();
-        _requestId = _uuid.v4();
+        _clearAllocationPreview();
+        _writeRequest.startNewDraft();
         _successMessage = '已录入 ${rabbitIds.length} 只兔的投喂记录';
       });
-      ref.invalidate(houseCagesProvider(widget.houseId));
+      ref.invalidate(houseCagesProvider(houseId));
       ref.invalidate(homeEventsProvider);
+      ref.invalidate(dashboardSummaryProvider);
+      for (final batchId in allocations.map((item) => item.batchId).nonNulls) {
+        ref.invalidate(
+          batchStatisticsProvider(
+            BatchDetailRequest(houseId: houseId, batchId: batchId),
+          ),
+        );
+      }
     } on ApiException catch (error) {
-      if (mounted) {
+      if (_isCurrent(generation, houseId) &&
+          (error.businessCode == 409 || error.statusCode == 409)) {
+        setState(_clearAllocationPreview);
+        await _previewAllocations(rabbitIds);
+        if (_isCurrent(generation, houseId)) {
+          setState(() {
+            _errorMessage = '${error.message}，归属已刷新，请核对分组用量后重试';
+          });
+        }
+      } else if (_isCurrent(generation, houseId)) {
         setState(
           () => _errorMessage = '${error.message}，投喂信息已保留，可重新提交',
         );
       }
     } catch (_) {
-      if (mounted) {
+      if (_isCurrent(generation, houseId)) {
         setState(() => _errorMessage = '网络异常，投喂信息已保留，可重新提交');
       }
     } finally {
-      if (mounted) {
+      if (_isCurrent(generation, houseId)) {
         setState(() => _saving = false);
       }
     }
+  }
+
+  bool _canAutoAllocate(FeedAllocationGroup group) =>
+      group.batchId != null && group.phase != FeedAllocationPhase.unassigned;
+
+  bool _isCurrent(int generation, int houseId) {
+    return mounted &&
+        generation == _viewGeneration &&
+        houseId == widget.houseId;
   }
 
   @override
@@ -342,12 +521,25 @@ class _FeedEntryScreenState extends ConsumerState<FeedEntryScreen> {
                   remarkController: _remarkController,
                   feedTime: _feedTime,
                   saving: _saving,
+                  previewing: _previewing,
+                  allocationPreview: _allocationPreview,
+                  allocationAmounts: _allocationAmounts,
                   nfcListening: _nfcListening,
                   nfcHint: _nfcHint,
                   errorMessage: _errorMessage,
                   successMessage: _successMessage,
                   onToggleCage: _toggleCage,
                   onPickFeedDate: _pickFeedDate,
+                  onAmountChanged: _amountChanged,
+                  onAllocationChanged: (key, value) {
+                    setState(() {
+                      _allocationAmounts[key] = value;
+                      _errorMessage = null;
+                    });
+                  },
+                  onPreview: () => _previewAllocations(
+                    _selectedRabbitIds(rabbitItems),
+                  ),
                   onStartNfc: _startNfcCapture,
                   onStopNfc: () => _stopNfcCapture(hint: '已停止读取 NFC 标签'),
                   onSubmit: () => _submit(cageItems, rabbitItems),
@@ -388,12 +580,18 @@ class _FeedEntryForm extends StatelessWidget {
     required this.remarkController,
     required this.feedTime,
     required this.saving,
+    required this.previewing,
+    required this.allocationPreview,
+    required this.allocationAmounts,
     required this.nfcListening,
     required this.nfcHint,
     required this.errorMessage,
     required this.successMessage,
     required this.onToggleCage,
     required this.onPickFeedDate,
+    required this.onAmountChanged,
+    required this.onAllocationChanged,
+    required this.onPreview,
     required this.onStartNfc,
     required this.onStopNfc,
     required this.onSubmit,
@@ -407,12 +605,18 @@ class _FeedEntryForm extends StatelessWidget {
   final TextEditingController remarkController;
   final DateTime feedTime;
   final bool saving;
+  final bool previewing;
+  final FeedAllocationPreview? allocationPreview;
+  final Map<String, String> allocationAmounts;
   final bool nfcListening;
   final String? nfcHint;
   final String? errorMessage;
   final String? successMessage;
   final ValueChanged<int> onToggleCage;
   final VoidCallback onPickFeedDate;
+  final ValueChanged<String> onAmountChanged;
+  final void Function(String key, String value) onAllocationChanged;
+  final VoidCallback onPreview;
   final VoidCallback onStartNfc;
   final VoidCallback onStopNfc;
   final VoidCallback onSubmit;
@@ -480,7 +684,9 @@ class _FeedEntryForm extends StatelessWidget {
                 child: CheckboxListTile(
                   key: ValueKey('feed-cage-${cage.id}'),
                   value: selectedCageIds.contains(cage.id),
-                  onChanged: saving ? null : (_) => onToggleCage(cage.id),
+                  onChanged: saving || previewing
+                      ? null
+                      : (_) => onToggleCage(cage.id),
                   controlAffinity: ListTileControlAffinity.trailing,
                   title: Text(
                     cage.cageNumber.isEmpty ? '#${cage.id}' : cage.cageNumber,
@@ -503,6 +709,7 @@ class _FeedEntryForm extends StatelessWidget {
             labelText: '投喂数量（kg）*',
             prefixIcon: Icon(Icons.scale_outlined),
           ),
+          onChanged: onAmountChanged,
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -517,13 +724,55 @@ class _FeedEntryForm extends StatelessWidget {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          enabled: !saving,
+          enabled: !saving && !previewing,
           leading: const Icon(Icons.calendar_today_outlined),
           title: const Text('投喂日期'),
           subtitle: Text(DateFormat('yyyy-MM-dd HH:mm').format(feedTime)),
           trailing: const Icon(Icons.chevron_right),
-          onTap: saving ? null : onPickFeedDate,
+          onTap: saving || previewing ? null : onPickFeedDate,
         ),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            key: const ValueKey('feed-allocation-preview'),
+            onPressed: saving || previewing || selectedRabbitCount == 0
+                ? null
+                : onPreview,
+            icon: previewing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.account_tree_outlined),
+            label: Text(
+              previewing
+                  ? '正在预览归属'
+                  : allocationPreview == null
+                      ? '预览批次与阶段归属'
+                      : '重新预览归属',
+            ),
+          ),
+        ),
+        if (allocationPreview != null) ...[
+          const SizedBox(height: 12),
+          Text('批次与阶段用量', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final group in allocationPreview!.groups) ...[
+            TextFormField(
+              key: ValueKey('feed-allocation-${group.key}'),
+              initialValue: allocationAmounts[group.key] ?? '',
+              enabled: !saving && !previewing,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText:
+                    '${group.batchId == null ? '未归属批次' : '批次 #${group.batchId}'} · ${group.phase.label} · ${group.rabbitCount} 只（kg）*',
+              ),
+              onChanged: (value) => onAllocationChanged(group.key, value),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
         const SizedBox(height: 4),
         TextFormField(
           key: const ValueKey('feed-remark'),
@@ -556,8 +805,10 @@ class _FeedEntryForm extends StatelessWidget {
           width: double.infinity,
           child: FilledButton.icon(
             key: const ValueKey('feed-submit'),
-            onPressed: saving || selectedRabbitCount == 0 ? null : onSubmit,
-            icon: saving
+            onPressed: saving || previewing || selectedRabbitCount == 0
+                ? null
+                : onSubmit,
+            icon: saving || previewing
                 ? const SizedBox.square(
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
@@ -566,9 +817,11 @@ class _FeedEntryForm extends StatelessWidget {
             label: Text(
               saving
                   ? '正在录入'
-                  : selectedRabbitCount == 0
-                      ? '请选择投喂笼位'
-                      : '投喂完成 $selectedRabbitCount 只',
+                  : previewing
+                      ? '正在确认归属'
+                      : selectedRabbitCount == 0
+                          ? '请选择投喂笼位'
+                          : '投喂完成 $selectedRabbitCount 只',
             ),
           ),
         ),

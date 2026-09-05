@@ -117,6 +117,10 @@ void main() {
     expect(batchSelector.value, 0);
     expect(batchSelector.onChanged, isNotNull);
     expect(find.textContaining('一号兔舍 / 全部批次'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('dashboard-view-batch-statistics')),
+      findsNothing,
+    );
   });
 
   testWidgets('switching houses clears batch before requesting the new scope',
@@ -137,6 +141,11 @@ void main() {
     await _select(tester, 'dashboard-house-selector', '一号兔舍');
     await _select(tester, 'dashboard-batch-selector', '一号批次');
     expect(queries.last, (houseId: 8, batchId: 81, year: _year));
+    expect(
+      find.byKey(const ValueKey('dashboard-view-batch-statistics')),
+      findsOneWidget,
+    );
+    expect(find.text('查看完整批次统计'), findsOneWidget);
 
     await _select(tester, 'dashboard-house-selector', '二号兔舍');
 

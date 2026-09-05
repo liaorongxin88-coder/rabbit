@@ -1,5 +1,6 @@
 import {
   workspaceDeleteJson,
+  workspaceDownloadBlob,
   workspaceGetJson,
   workspacePostJson,
   workspacePutJson,
@@ -12,6 +13,9 @@ import {
 } from "@/lib/batch-workflow";
 import { rabbitReplacementPath } from "@/lib/rabbit-replacement";
 import type {
+  BatchCarcassYieldInput,
+  BatchCarcassYieldPage,
+  BatchCarcassYieldRecord,
   BatchRabbit,
   BatchRabbitEntryResult,
   BatchStatistics,
@@ -23,6 +27,7 @@ import type {
   HouseMember,
   HousePermission,
   OperationEventPage,
+  OutboundBatchAllocation,
   OutboundSelectedItem,
   OutboundSubmitResult,
   OutboundTask,
@@ -44,7 +49,12 @@ import type {
   ImageCaptcha,
   SmsCodeDelivery,
 } from "@/types/api";
-import type { RabbitSaleRequest } from "@/types/rabbit-sale";
+import type { RabbitSaleRequest, RabbitSaleResult } from "@/types/rabbit-sale";
+import type {
+  FeedAllocationPreview,
+  FeedAllocationPreviewRequest,
+  FeedLogRequest,
+} from "@/types/feed";
 import type { VaccinationRecord } from "@/types/rabbit-vaccination";
 
 export function requestId() {
@@ -207,7 +217,7 @@ export function retainRabbitsAsReplacement(
 }
 
 export function createRabbitSale(houseId: number, data: RabbitSaleRequest) {
-  return workspacePostJson<void>("/api/sales", data, { houseId });
+  return workspacePostJson<RabbitSaleResult>("/api/sales", data, { houseId });
 }
 
 export function promoteReplacementRabbit(
@@ -349,11 +359,64 @@ export function listBatches(houseId: number) {
   return workspaceGetJson<ProductionBatch[]>("/api/batches", { houseId });
 }
 
+export function getBatch(houseId: number, batchId: number) {
+  return workspaceGetJson<ProductionBatch>(`/api/batches/${batchId}`, {
+    houseId,
+  });
+}
+
 export function getBatchStatistics(houseId: number, batchId: number) {
   return workspaceGetJson<BatchStatistics>(
     `/api/batches/${batchId}/statistics`,
     { houseId },
   );
+}
+
+export function createBatchCarcassYield(
+  houseId: number,
+  batchId: number,
+  data: BatchCarcassYieldInput,
+) {
+  return workspacePostJson<BatchCarcassYieldRecord>(
+    `/api/batches/${batchId}/carcass-yields`,
+    data,
+    { houseId },
+  );
+}
+
+export function listBatchCarcassYields(
+  houseId: number,
+  batchId: number,
+  page = 1,
+  pageSize = 20,
+) {
+  return workspaceGetJson<BatchCarcassYieldPage>(
+    `/api/batches/${batchId}/carcass-yields`,
+    { houseId, params: { page, pageSize } },
+  );
+}
+
+export function downloadBatchStatistics(houseId: number, batchId: number) {
+  return workspaceDownloadBlob(
+    `/api/reports/batches/${batchId}/statistics.xlsx`,
+    houseId,
+    `batch-${batchId}-statistics.xlsx`,
+  );
+}
+
+export function previewFeedAllocations(
+  houseId: number,
+  data: FeedAllocationPreviewRequest,
+) {
+  return workspacePostJson<FeedAllocationPreview>(
+    "/api/feed-logs/allocation-preview",
+    data,
+    { houseId },
+  );
+}
+
+export function createFeedLog(houseId: number, data: FeedLogRequest) {
+  return workspacePostJson<void>("/api/feed-logs", data, { houseId });
 }
 
 export function createBatch(
@@ -386,6 +449,13 @@ export function listBatchRabbits(houseId: number, batchId: number) {
     {
       houseId,
     },
+  );
+}
+
+export function listRabbitBatchMemberships(houseId: number, rabbitId: number) {
+  return workspaceGetJson<BatchRabbit[]>(
+    `/api/rabbits/${rabbitId}/batch-memberships?active=true`,
+    { houseId },
   );
 }
 
@@ -568,7 +638,8 @@ export function saveOutboundTask(
     items: OutboundSelectedItem[];
     saleTime: number;
     totalWeight: number;
-    unitPrice?: number;
+    unitPricePerKg?: number;
+    batchAllocations?: OutboundBatchAllocation[];
     customer?: string;
     remark?: string;
   },
@@ -587,7 +658,8 @@ export function submitOutboundTask(
     earlySaleReasons: Record<string, string>;
     saleTime: number;
     totalWeight: number;
-    unitPrice?: number;
+    unitPricePerKg: number;
+    batchAllocations: OutboundBatchAllocation[];
     customer?: string;
     remark?: string;
     requestId: string;
@@ -596,6 +668,16 @@ export function submitOutboundTask(
   return workspacePostJson<OutboundSubmitResult>(
     `/api/outbound/tasks/${taskId}/submit`,
     data,
+    { houseId },
+  );
+}
+
+export function getOutboundRequestStatus(
+  houseId: number,
+  outboundRequestId: string,
+) {
+  return workspaceGetJson<OutboundSubmitResult>(
+    `/api/outbound/requests/${encodeURIComponent(outboundRequestId)}`,
     { houseId },
   );
 }

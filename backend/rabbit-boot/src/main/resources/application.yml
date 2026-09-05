@@ -128,6 +128,8 @@ app:
   breeding-performance:
     recalc:
       enabled: false
+  batch-statistics:
+    legacy-write-enabled: ${APP_BATCH_STATISTICS_LEGACY_WRITE_ENABLED:true}
   cage:
     commodity-capacity: 10
   nfc:

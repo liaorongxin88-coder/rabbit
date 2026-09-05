@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/nfc.dart';
@@ -13,6 +15,16 @@ import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
 import 'package:rabbit_flutter/src/ui/home/view_models/events.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/cage_target.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
+
+class _ReplacementSource {
+  const _ReplacementSource({
+    required this.batchId,
+    this.isAmbiguous = false,
+  });
+
+  final int? batchId;
+  final bool isAmbiguous;
+}
 
 Future<bool> showRabbitReplacementSheet({
   required BuildContext context,
@@ -56,21 +68,39 @@ class _RabbitReplacementSheetState
 
   /// 只挂在当前选中的那一行上，用来做最后一步精确对齐。
   final _selectedRowKey = GlobalKey();
+  final _totalWeightController = TextEditingController();
 
   int? _selectedCageId;
-  int? _pendingCageId;
+  String? _pendingFingerprint;
   String? _pendingRequestId;
+  String? _sourceKey;
+  var _sourceInitialized = false;
   var _saving = false;
 
   @override
   void dispose() {
     _listController.dispose();
+    _totalWeightController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final cages = ref.watch(houseCagesProvider(widget.houseId));
+    final membershipProvider = rabbitBatchMembershipsProvider(
+      RabbitBatchMembershipRequest(
+        houseId: widget.houseId,
+        rabbitId: widget.rabbit.id,
+      ),
+    );
+    ref.listen<AsyncValue<List<RabbitBatchMembership>>>(
+      membershipProvider,
+      (_, next) => _handleSourceChange(next.valueOrNull),
+    );
+    final memberships = ref.watch(membershipProvider);
+    if (!_sourceInitialized) {
+      _handleSourceChange(memberships.valueOrNull);
+    }
     final mediaQuery = MediaQuery.of(context);
 
     return SafeArea(
@@ -82,7 +112,7 @@ class _RabbitReplacementSheetState
           children: [
             _buildHeader(context),
             Flexible(child: _buildBody(cages)),
-            _buildActions(context),
+            _buildActions(context, memberships),
           ],
         ),
       ),
@@ -296,7 +326,16 @@ class _RabbitReplacementSheetState
     WidgetsBinding.instance.scheduleFrame();
   }
 
-  Widget _buildActions(BuildContext context) {
+  Widget _buildActions(
+    BuildContext context,
+    AsyncValue<List<RabbitBatchMembership>> memberships,
+  ) {
+    final source = _replacementSource(memberships.valueOrNull ?? const []);
+    final sourceError = memberships.hasError
+        ? '无法确认来源批次，请重试'
+        : source.isAmbiguous
+            ? '兔只存在多个活跃育肥批次，无法确定来源'
+            : null;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppPalette.of(context).surface,
@@ -308,6 +347,31 @@ class _RabbitReplacementSheetState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text(
+              source.batchId == null
+                  ? '来源：未归属批次 · 1 只'
+                  : '来源批次 #${source.batchId} · 1 只',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('rabbit-replacement-total-weight'),
+              controller: _totalWeightController,
+              enabled: !_saving && !memberships.isLoading,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: '转换时实测总重（kg）*',
+                prefixIcon: Icon(Icons.scale_outlined),
+              ),
+            ),
+            if (sourceError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                sourceError,
+                style: TextStyle(color: AppPalette.of(context).danger),
+              ),
+            ],
+            const SizedBox(height: 8),
             const Text('确认后将退出当前批次，并转为在栏后备兔。'),
             const SizedBox(height: 10),
             Row(
@@ -323,8 +387,12 @@ class _RabbitReplacementSheetState
                 Expanded(
                   child: ElevatedButton(
                     key: const ValueKey('rabbit-replacement-submit'),
-                    onPressed:
-                        _saving || _selectedCageId == null ? null : _submit,
+                    onPressed: _saving ||
+                            memberships.isLoading ||
+                            sourceError != null ||
+                            _selectedCageId == null
+                        ? null
+                        : () => _submit(source.batchId),
                     child: _saving
                         ? const SizedBox.square(
                             dimension: 20,
@@ -344,12 +412,43 @@ class _RabbitReplacementSheetState
     );
   }
 
-  Future<void> _submit() async {
+  void _handleSourceChange(List<RabbitBatchMembership>? memberships) {
+    if (memberships == null) return;
+    final source = _replacementSource(memberships);
+    final nextKey = source.isAmbiguous
+        ? 'AMBIGUOUS'
+        : source.batchId?.toString() ?? 'UNASSIGNED';
+    if (!_sourceInitialized) {
+      _sourceInitialized = true;
+      _sourceKey = nextKey;
+      return;
+    }
+    if (_sourceKey == nextKey) return;
+    _sourceKey = nextKey;
+    _pendingFingerprint = null;
+    _pendingRequestId = null;
+    final hadWeight = _totalWeightController.text.isNotEmpty;
+    _totalWeightController.clear();
+    if (mounted) {
+      setState(() {});
+      if (hadWeight) _showMessage('来源批次已变化，请重新填写实测总重');
+    }
+  }
+
+  Future<void> _submit(int? sourceBatchId) async {
     if (_saving) {
       return;
     }
     final cageId = _selectedCageId;
     if (cageId == null) {
+      return;
+    }
+    final totalWeight = double.tryParse(_totalWeightController.text.trim());
+    if (totalWeight == null ||
+        !totalWeight.isFinite ||
+        totalWeight <= 0 ||
+        ((totalWeight * 1000).round() - totalWeight * 1000).abs() >= 0.000001) {
+      _showMessage('请输入大于 0 且最多三位小数的实测总重');
       return;
     }
     setState(() => _saving = true);
@@ -370,14 +469,25 @@ class _RabbitReplacementSheetState
         return;
       }
 
-      if (_pendingCageId != cageId || _pendingRequestId == null) {
-        _pendingCageId = cageId;
+      final expectedSourceKey = sourceBatchId?.toString() ?? 'UNASSIGNED';
+      final currentWeight = double.tryParse(_totalWeightController.text.trim());
+      if (_sourceKey != expectedSourceKey || currentWeight != totalWeight) {
+        _showMessage('来源批次已变化，请重新填写实测总重');
+        return;
+      }
+
+      final fingerprint =
+          '$cageId|$sourceBatchId|${totalWeight.toStringAsFixed(3)}';
+      if (_pendingFingerprint != fingerprint || _pendingRequestId == null) {
+        _pendingFingerprint = fingerprint;
         _pendingRequestId = const Uuid().v4();
       }
       final conversions =
           await ref.read(rabbitRepositoryProvider).convertToReplacement(
                 houseId: widget.houseId,
-                rabbitIds: [widget.rabbit.id],
+                rabbitId: widget.rabbit.id,
+                sourceBatchId: sourceBatchId,
+                measuredTotalWeightKg: totalWeight,
                 targetCageId: cageId,
                 forceExitBatch: true,
                 requestId: _pendingRequestId,
@@ -385,9 +495,9 @@ class _RabbitReplacementSheetState
       if (conversions.isEmpty) {
         throw StateError('留种转后备未返回处理结果');
       }
-      _pendingCageId = null;
+      _pendingFingerprint = null;
       _pendingRequestId = null;
-      _invalidateAfterConversion();
+      _invalidateAfterConversion(sourceBatchId);
       if (!mounted) {
         return;
       }
@@ -412,6 +522,29 @@ class _RabbitReplacementSheetState
     }
   }
 
+  _ReplacementSource _replacementSource(
+    List<RabbitBatchMembership> memberships,
+  ) {
+    final birthBatchId = widget.rabbit.birthBatchId;
+    if (birthBatchId != null) {
+      return _ReplacementSource(batchId: birthBatchId);
+    }
+    final activeBatchIds = memberships
+        .where(
+          (membership) =>
+              membership.isActive &&
+              membership.batchRole.toLowerCase() == 'fattening',
+        )
+        .map((membership) => membership.batchId)
+        .toSet()
+        .toList()
+      ..sort();
+    return _ReplacementSource(
+      batchId: activeBatchIds.length == 1 ? activeBatchIds.single : null,
+      isAmbiguous: activeBatchIds.length > 1,
+    );
+  }
+
   Future<List<Cage>?> _refreshCages() async {
     try {
       return await ref.refresh(houseCagesProvider(widget.houseId).future);
@@ -423,7 +556,7 @@ class _RabbitReplacementSheetState
     }
   }
 
-  void _invalidateAfterConversion() {
+  void _invalidateAfterConversion(int? sourceBatchId) {
     final activeRequest = RabbitBatchMembershipRequest(
       houseId: widget.houseId,
       rabbitId: widget.rabbit.id,
@@ -450,6 +583,16 @@ class _RabbitReplacementSheetState
       ),
     );
     ref.invalidate(homeEventsProvider);
+    if (sourceBatchId != null && sourceBatchId > 0) {
+      ref.invalidate(
+        batchStatisticsProvider(
+          BatchDetailRequest(
+            houseId: widget.houseId,
+            batchId: sourceBatchId,
+          ),
+        ),
+      );
+    }
   }
 
   void _showMessage(String message) {

@@ -34,6 +34,9 @@ class HousePermission {
 
   bool get canViewAudit => hasPermission('rabbit:audit:list') || isAdmin;
 
+  bool get canExportReports =>
+      hasPermission('rabbit:reports:export') || isAdmin;
+
   String get roleLabel {
     if (isAdmin) {
       return '所有者';

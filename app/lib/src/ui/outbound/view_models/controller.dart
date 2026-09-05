@@ -7,6 +7,7 @@ import 'package:rabbit_flutter/src/data/repositories/outbound/repository.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/storage/outbound.dart';
 import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
+import 'package:rabbit_flutter/src/domain/reproduction/date_policy.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/dashboard/view_models/providers.dart';
@@ -56,6 +57,7 @@ final outboundControllerProvider = StateNotifierProvider.autoDispose
       ref.invalidate(allActiveHouseRabbitsProvider(entry.houseId));
       ref.invalidate(houseCagesProvider(entry.houseId));
       ref.invalidate(houseBatchesProvider(entry.houseId));
+      ref.invalidate(batchStatisticsProvider);
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseReportProvider(entry.houseId));
     },
@@ -90,6 +92,7 @@ class OutboundState {
     this.saleTime,
     this.totalWeight = '',
     this.unitPrice = '',
+    this.batchAllocationWeights = const {},
     this.customer = '',
     this.remark = '',
     this.requestId,
@@ -111,6 +114,7 @@ class OutboundState {
   final DateTime? saleTime;
   final String totalWeight;
   final String unitPrice;
+  final Map<String, String> batchAllocationWeights;
   final String customer;
   final String remark;
   final String? requestId;
@@ -152,6 +156,29 @@ class OutboundState {
   double? get parsedWeight => double.tryParse(totalWeight.trim());
   double? get parsedUnitPrice =>
       unitPrice.trim().isEmpty ? null : double.tryParse(unitPrice.trim());
+  List<OutboundAllocationGroup> get allocationGroups =>
+      buildOutboundAllocationGroups(selectedItems, rabbits);
+  String allocationWeight(OutboundAllocationGroup group) {
+    return batchAllocationWeights[group.key] ??
+        (allocationGroups.length == 1 ? totalWeight : '');
+  }
+
+  List<OutboundBatchAllocation> get batchAllocations => allocationGroups
+      .map(
+        (group) => OutboundBatchAllocation(
+          batchId: group.batchId,
+          actualWeightKg: double.tryParse(allocationWeight(group)) ?? 0,
+        ),
+      )
+      .toList(growable: false);
+
+  List<OutboundBatchAllocation> get draftBatchAllocations =>
+      _validDraftAllocations(
+        groups: allocationGroups,
+        weights: batchAllocationWeights,
+        totalWeight: totalWeight,
+      );
+
   double? get estimatedAmount => parsedWeight == null || parsedUnitPrice == null
       ? null
       : parsedWeight! * parsedUnitPrice!;
@@ -186,6 +213,7 @@ class OutboundState {
     DateTime? saleTime,
     String? totalWeight,
     String? unitPrice,
+    Map<String, String>? batchAllocationWeights,
     String? customer,
     String? remark,
     String? requestId,
@@ -211,6 +239,8 @@ class OutboundState {
       saleTime: saleTime ?? this.saleTime,
       totalWeight: totalWeight ?? this.totalWeight,
       unitPrice: unitPrice ?? this.unitPrice,
+      batchAllocationWeights:
+          batchAllocationWeights ?? this.batchAllocationWeights,
       customer: customer ?? this.customer,
       remark: remark ?? this.remark,
       requestId: clearRequestId ? null : requestId ?? this.requestId,
@@ -232,7 +262,7 @@ class OutboundController extends StateNotifier<OutboundState> {
         _store = store,
         _onCompleted = onCompleted,
         super(OutboundState(
-          saleTime: DateTime.now(),
+          saleTime: farmNow(),
           mode: _selectionModeForEntry(entry.entryType),
         )) {
     initialize();
@@ -458,12 +488,55 @@ class OutboundController extends StateNotifier<OutboundState> {
       String? customer,
       String? remark}) {
     if (_editingLocked) return;
+    final payloadChanged = _formPayloadChanged(
+      state,
+      saleTime: saleTime,
+      totalWeight: totalWeight,
+      unitPrice: unitPrice,
+      customer: customer,
+      remark: remark,
+    );
+    final staysOffline = state.syncStatus == OutboundSyncStatus.offline;
     _emit(state.copyWith(
         saleTime: saleTime,
         totalWeight: totalWeight,
         unitPrice: unitPrice,
         customer: customer,
-        remark: remark));
+        remark: remark,
+        syncStatus: staysOffline
+            ? OutboundSyncStatus.offline
+            : OutboundSyncStatus.saving,
+        clearRequestId: payloadChanged));
+    if (payloadChanged) unawaited(_clearPendingRequestForEdit());
+    unawaited(_enqueueLocalSnapshot());
+    _scheduleSave();
+  }
+
+  void updateBatchAllocation(String key, String value) {
+    if (_editingLocked ||
+        !state.allocationGroups.any((group) => group.key == key)) {
+      return;
+    }
+    if (state.batchAllocationWeights[key] == value) return;
+    final before = state.draftBatchAllocations;
+    final weights = {
+      ...state.batchAllocationWeights,
+      key: value,
+    };
+    final after = _validDraftAllocations(
+      groups: state.allocationGroups,
+      weights: weights,
+      totalWeight: state.totalWeight,
+    );
+    final payloadChanged = !_sameAllocations(before, after);
+    final staysOffline = state.syncStatus == OutboundSyncStatus.offline;
+    _emit(state.copyWith(
+      batchAllocationWeights: weights,
+      syncStatus:
+          staysOffline ? OutboundSyncStatus.offline : OutboundSyncStatus.saving,
+      clearRequestId: payloadChanged,
+    ));
+    if (payloadChanged) unawaited(_clearPendingRequestForEdit());
     unawaited(_enqueueLocalSnapshot());
     _scheduleSave();
   }
@@ -510,13 +583,20 @@ class OutboundController extends StateNotifier<OutboundState> {
   Future<void> backToSelection() async {
     _refreshSequence++;
     _saveTimer?.cancel();
+    final task = state.task;
     _emit(state.copyWith(
-        submitStatus: OutboundSubmitStatus.idle,
-        conflicts: const [],
-        clearResult: true,
-        clearRequestId: true,
-        clearError: true));
-    await _save('SELECTING');
+      task: task?.copyWith(status: 'SELECTING'),
+      submitStatus: OutboundSubmitStatus.idle,
+      conflicts: const [],
+      clearResult: true,
+      clearError: true,
+    ));
+    try {
+      await _save('SELECTING');
+    } catch (_) {
+      // The stale server draft may be unsavable. Keep the local selection
+      // editable so the user can refresh or remove invalid rabbits.
+    }
   }
 
   Future<void> submit() {
@@ -528,15 +608,16 @@ class OutboundController extends StateNotifier<OutboundState> {
     if (task == null || state.selectedItems.isEmpty) {
       return Future<void>.value();
     }
-    if (weight == null || weight <= 0) {
+    final validation = validateOutboundAllocations(
+      totalWeight: weight,
+      unitPricePerKg: state.parsedUnitPrice,
+      allocations: state.batchAllocations,
+    );
+    if (validation != null) {
       _emit(state.copyWith(
-          submitStatus: OutboundSubmitStatus.failed,
-          errorMessage: '请输入大于0的总重量'));
-      return Future<void>.value();
-    }
-    if (state.unitPrice.trim().isNotEmpty && state.parsedUnitPrice == null) {
-      _emit(state.copyWith(
-          submitStatus: OutboundSubmitStatus.failed, errorMessage: '请输入有效单价'));
+        submitStatus: OutboundSubmitStatus.failed,
+        errorMessage: validation,
+      ));
       return Future<void>.value();
     }
     _emit(state.copyWith(
@@ -555,10 +636,40 @@ class OutboundController extends StateNotifier<OutboundState> {
     var requestMayHaveReachedServer = false;
     try {
       _saveTimer?.cancel();
+      _saveTimer = null;
+      final acknowledged = await _save(
+        'WAITING_CONFIRMATION',
+        restoreAcknowledged: true,
+      );
+      if (!_isActive(generation) || acknowledged == null) return;
+
       final current = state.task;
-      if (current == null) return;
+      final items = state.selectedItems;
       final weight = state.parsedWeight;
-      if (weight == null || weight <= 0) return;
+      final unitPrice = state.parsedUnitPrice;
+      final allocations = state.batchAllocations;
+      if (current == null ||
+          current.status != 'WAITING_CONFIRMATION' ||
+          items.isEmpty) {
+        _emit(state.copyWith(
+          submitStatus: OutboundSubmitStatus.failed,
+          errorMessage: '服务端确认草稿后没有可提交的兔只，请返回重新选择',
+        ));
+        return;
+      }
+      final validation = validateOutboundAllocations(
+        totalWeight: weight,
+        unitPricePerKg: unitPrice,
+        allocations: allocations,
+      );
+      if (validation != null || weight == null || unitPrice == null) {
+        _emit(state.copyWith(
+          submitStatus: OutboundSubmitStatus.failed,
+          errorMessage: validation ?? '服务端确认的出库草稿不完整，请核对后重试',
+        ));
+        return;
+      }
+
       requestId = state.requestId ?? _uuid.v4();
       await _store.savePendingRequest(entry.userId, entry.houseId, requestId);
       if (!_isActive(generation)) return;
@@ -568,11 +679,12 @@ class OutboundController extends StateNotifier<OutboundState> {
       final result = await _repository.submit(
           houseId: entry.houseId,
           task: current,
-          items: state.selectedItems,
+          items: items,
           requestId: requestId,
-          saleTime: state.saleTime ?? DateTime.now(),
+          saleTime: state.saleTime ?? farmNow(),
           totalWeight: weight,
-          unitPrice: state.parsedUnitPrice,
+          unitPrice: unitPrice,
+          batchAllocations: allocations,
           customer: state.customer,
           remark: state.remark);
       if (!_isActive(generation)) return;
@@ -589,7 +701,7 @@ class OutboundController extends StateNotifier<OutboundState> {
           submitStatus: safeFailure
               ? OutboundSubmitStatus.failed
               : OutboundSubmitStatus.unknown,
-          clearRequestId: safeFailure,
+          requestId: requestId,
           errorMessage: error.message));
     } catch (error) {
       if (!_isActive(generation)) return;
@@ -597,7 +709,7 @@ class OutboundController extends StateNotifier<OutboundState> {
           submitStatus: requestMayHaveReachedServer
               ? OutboundSubmitStatus.unknown
               : OutboundSubmitStatus.failed,
-          clearRequestId: !requestMayHaveReachedServer,
+          requestId: requestId,
           errorMessage: _message(error)));
     }
   }
@@ -688,13 +800,25 @@ class OutboundController extends StateNotifier<OutboundState> {
 
   void _selectionChanged(Set<int> selected, Map<int, String> reasons) {
     final staysOffline = state.syncStatus == OutboundSyncStatus.offline;
+    final reconciled = _reconcileMeasuredWeights(
+      previousRabbits: state.rabbits,
+      previousSelection: state.selectedRabbitIds,
+      nextRabbits: state.rabbits,
+      nextSelection: selected,
+      weights: state.batchAllocationWeights,
+      currentTotalWeight: state.totalWeight,
+    );
     _emit(state.copyWith(
         selectedRabbitIds: selected,
         earlySaleReasons: reasons,
+        totalWeight: reconciled.totalWeight,
+        batchAllocationWeights: reconciled.weights,
         syncStatus: staysOffline
             ? OutboundSyncStatus.offline
             : OutboundSyncStatus.saving,
+        clearRequestId: true,
         clearBanner: true));
+    unawaited(_clearPendingRequestForEdit());
     unawaited(_enqueueLocalSnapshot());
     _scheduleSave();
   }
@@ -707,24 +831,40 @@ class OutboundController extends StateNotifier<OutboundState> {
     }
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 750), () {
-      unawaited(_save(state.isConfirming ? 'WAITING_CONFIRMATION' : 'SELECTING')
-          .catchError((_) {}));
+      unawaited(
+        _save(state.isConfirming ? 'WAITING_CONFIRMATION' : 'SELECTING')
+            .then<void>((_) {}, onError: (_) {}),
+      );
     });
   }
 
-  Future<void> _save(String status) {
+  Future<OutboundTask?> _save(
+    String status, {
+    bool restoreAcknowledged = false,
+  }) {
     final generation = _lifecycleGeneration;
     final sequence = ++_saveSequence;
-    final operation =
-        _saveQueue.then((_) => _performSave(status, generation, sequence));
+    final operation = _saveQueue.then(
+      (_) => _performSave(
+        status,
+        generation,
+        sequence,
+        restoreAcknowledged: restoreAcknowledged,
+      ),
+    );
     _saveQueue = operation.then<void>((_) {}, onError: (_) {});
     return operation;
   }
 
-  Future<void> _performSave(String status, int generation, int sequence) async {
-    if (!_isActive(generation)) return;
+  Future<OutboundTask?> _performSave(
+    String status,
+    int generation,
+    int sequence, {
+    required bool restoreAcknowledged,
+  }) async {
+    if (!_isActive(generation)) return null;
     final task = state.task;
-    if (task == null) return;
+    if (task == null) return null;
     _emit(state.copyWith(syncStatus: OutboundSyncStatus.saving));
     try {
       final saved = await _repository.saveDraft(
@@ -732,34 +872,84 @@ class OutboundController extends StateNotifier<OutboundState> {
           task: task,
           status: status,
           items: state.selectedItems,
-          saleTime: state.saleTime ?? DateTime.now(),
+          saleTime: state.saleTime ?? farmNow(),
           totalWeight: state.parsedWeight,
           unitPrice: state.parsedUnitPrice,
+          batchAllocations: state.draftBatchAllocations,
           customer: state.customer,
           remark: state.remark);
-      if (!_isActive(generation)) return;
+      if (!_isActive(generation)) return null;
       final current = state;
-      final currentTask = current.task;
-      final responseTask = currentTask != null &&
-              currentTask.taskId == saved.taskId &&
-              currentTask.revision > saved.revision
-          ? currentTask
-          : saved;
-      final merged = responseTask.copyWith(
-          status: status,
-          saleTime: current.saleTime,
-          totalWeight: current.parsedWeight,
-          unitPrice: current.parsedUnitPrice,
-          customer: current.customer,
-          remark: current.remark,
-          selectedItems: current.selectedItems);
-      _emit(current.copyWith(
-          task: merged,
-          syncStatus: sequence == _saveSequence
-              ? OutboundSyncStatus.saved
-              : OutboundSyncStatus.saving,
-          clearError: true));
+      if (restoreAcknowledged && sequence == _saveSequence) {
+        final validRabbitIds =
+            saved.rabbits.map((rabbit) => rabbit.rabbitId).toSet();
+        final selectedItems = saved.selectedItems
+            .where((item) => validRabbitIds.contains(item.rabbitId))
+            .toList(growable: false);
+        final selectedRabbitIds =
+            selectedItems.map((item) => item.rabbitId).toSet();
+        final earlySaleReasons = {
+          for (final item in selectedItems.where(
+              (item) => item.isEarlySale && item.earlySaleReason != null))
+            item.rabbitId: item.earlySaleReason!,
+        };
+        final serverPayloadChanged =
+            !_sameSelectedItems(current.selectedItems, selectedItems) ||
+                !_sameSaleDate(current.saleTime, saved.saleTime) ||
+                current.parsedWeight != saved.totalWeight ||
+                current.parsedUnitPrice != saved.unitPrice ||
+                !_sameAllocations(
+                  current.draftBatchAllocations,
+                  saved.batchAllocations,
+                ) ||
+                current.customer.trim() != (saved.customer ?? '').trim() ||
+                current.remark.trim() != (saved.remark ?? '').trim();
+        if (serverPayloadChanged && current.requestId != null) {
+          await _store.clearPendingRequest(entry.userId, entry.houseId);
+          if (!_isActive(generation)) return null;
+        }
+        _emit(current.copyWith(
+          task: saved,
+          selectedRabbitIds: selectedRabbitIds,
+          earlySaleReasons: earlySaleReasons,
+          saleTime: saved.saleTime,
+          totalWeight: saved.totalWeight?.toString() ?? '',
+          unitPrice: saved.unitPrice?.toString() ?? '',
+          batchAllocationWeights: {
+            for (final allocation in saved.batchAllocations)
+              allocation.key: allocation.actualWeightKg.toString(),
+          },
+          customer: saved.customer ?? '',
+          remark: saved.remark ?? '',
+          syncStatus: OutboundSyncStatus.saved,
+          clearRequestId: serverPayloadChanged,
+          clearError: true,
+        ));
+      } else {
+        final currentTask = current.task;
+        final responseTask = currentTask != null &&
+                currentTask.taskId == saved.taskId &&
+                currentTask.revision > saved.revision
+            ? currentTask
+            : saved;
+        final merged = responseTask.copyWith(
+            status: status,
+            saleTime: current.saleTime,
+            totalWeight: current.parsedWeight,
+            unitPrice: current.parsedUnitPrice,
+            batchAllocations: current.draftBatchAllocations,
+            customer: current.customer,
+            remark: current.remark,
+            selectedItems: current.selectedItems);
+        _emit(current.copyWith(
+            task: merged,
+            syncStatus: sequence == _saveSequence
+                ? OutboundSyncStatus.saved
+                : OutboundSyncStatus.saving,
+            clearError: true));
+      }
       unawaited(_enqueueLocalSnapshot());
+      return saved;
     } catch (error) {
       if (_isActive(generation) && sequence == _saveSequence) {
         _emit(state.copyWith(
@@ -786,6 +976,32 @@ class OutboundController extends StateNotifier<OutboundState> {
     final status = task.rabbits.isEmpty
         ? OutboundLoadStatus.empty
         : OutboundLoadStatus.ready;
+    final taskWeights = {
+      for (final allocation in task.batchAllocations)
+        allocation.key: allocation.actualWeightKg.toString(),
+    };
+    final restoredWeights = localSnapshot?.hasBatchAllocationWeights == true
+        ? localSnapshot!.batchAllocationWeights
+        : taskWeights.isNotEmpty
+            ? taskWeights
+            : state.batchAllocationWeights;
+    final reconciled = preserveLocalForm
+        ? _reconcileMeasuredWeights(
+            previousRabbits: state.rabbits,
+            previousSelection: state.selectedRabbitIds,
+            nextRabbits: task.rabbits,
+            nextSelection: selected,
+            weights: state.batchAllocationWeights,
+            currentTotalWeight: state.totalWeight,
+          )
+        : _pruneMeasuredWeights(
+            rabbits: task.rabbits,
+            selection: selected,
+            weights: restoredWeights,
+            totalWeight: localSnapshot?.totalWeight ??
+                task.totalWeight?.toString() ??
+                state.totalWeight,
+          );
     _emit(state.copyWith(
         loadStatus: status,
         syncStatus: syncStatus,
@@ -806,9 +1022,9 @@ class OutboundController extends StateNotifier<OutboundState> {
             : localSnapshot?.saleTime ??
                 task.saleTime ??
                 state.saleTime ??
-                DateTime.now(),
+                farmNow(),
         totalWeight: preserveLocalForm
-            ? state.totalWeight
+            ? reconciled.totalWeight
             : localSnapshot?.totalWeight ??
                 task.totalWeight?.toString() ??
                 state.totalWeight,
@@ -817,6 +1033,7 @@ class OutboundController extends StateNotifier<OutboundState> {
             : localSnapshot?.unitPrice ??
                 task.unitPrice?.toString() ??
                 state.unitPrice,
+        batchAllocationWeights: reconciled.weights,
         customer: preserveLocalForm
             ? state.customer
             : localSnapshot?.customer ?? task.customer ?? state.customer,
@@ -853,8 +1070,18 @@ class OutboundController extends StateNotifier<OutboundState> {
             selectionType: 'NORMAL'));
       }
     }
+    final submitPayloadChanged =
+        !_sameSelectedItems(currentSelection, selected);
     _applyTask(task.copyWith(resumed: false, selectedItems: selected),
         preserveLocalForm: true);
+    if (submitPayloadChanged &&
+        state.requestId != null &&
+        state.submitStatus != OutboundSubmitStatus.unknown &&
+        state.submitStatus != OutboundSubmitStatus.requesting &&
+        state.submitStatus != OutboundSubmitStatus.validating) {
+      _emit(state.copyWith(clearRequestId: true));
+      unawaited(_clearPendingRequestForEdit());
+    }
   }
 
   Future<void> _handleResult(
@@ -879,7 +1106,6 @@ class OutboundController extends StateNotifier<OutboundState> {
       _emit(state.copyWith(
           submitStatus: OutboundSubmitStatus.failed,
           result: result,
-          clearRequestId: true,
           errorMessage: result.message));
       await _store.clearPendingRequest(entry.userId, entry.houseId);
     } else {
@@ -901,18 +1127,24 @@ class OutboundController extends StateNotifier<OutboundState> {
           saleTime: state.saleTime,
           totalWeight: state.parsedWeight,
           unitPrice: state.parsedUnitPrice,
+          batchAllocations: state.draftBatchAllocations,
           customer: state.customer,
           remark: state.remark,
           selectedItems: state.selectedItems),
       saleTime: state.saleTime,
       totalWeight: state.totalWeight,
       unitPrice: state.unitPrice,
+      batchAllocationWeights: state.batchAllocationWeights,
       customer: state.customer,
       remark: state.remark,
       selectionMode: state.mode.name,
       selectedOnly: state.selectedOnly,
     );
     return _store.saveSnapshot(entry.userId, snapshot);
+  }
+
+  Future<void> _clearPendingRequestForEdit() {
+    return _store.clearPendingRequest(entry.userId, entry.houseId);
   }
 
   String _message(Object error) =>
@@ -983,3 +1215,202 @@ OutboundSelectionMode _selectionModeFromSnapshot(
   }
   return fallback;
 }
+
+({Map<String, String> weights, String totalWeight}) _reconcileMeasuredWeights({
+  required List<OutboundRabbit> previousRabbits,
+  required Set<int> previousSelection,
+  required List<OutboundRabbit> nextRabbits,
+  required Set<int> nextSelection,
+  required Map<String, String> weights,
+  required String currentTotalWeight,
+}) {
+  final previousGroups = _selectedRabbitIdsByGroup(
+    previousRabbits,
+    previousSelection,
+  );
+  final nextGroups = _selectedRabbitIdsByGroup(nextRabbits, nextSelection);
+  if (_sameIntSet(previousSelection, nextSelection) &&
+      _sameGroupedSelection(previousGroups, nextGroups)) {
+    return (
+      weights: Map.unmodifiable(weights),
+      totalWeight: currentTotalWeight
+    );
+  }
+  final retained = <String, String>{};
+  for (final entry in weights.entries) {
+    final before = previousGroups[entry.key];
+    final after = nextGroups[entry.key];
+    if (before != null && after != null && _sameIntSet(before, after)) {
+      retained[entry.key] = entry.value;
+    }
+  }
+  return _pruneMeasuredWeights(
+    rabbits: nextRabbits,
+    selection: nextSelection,
+    weights: retained,
+    totalWeight: '',
+    recomputeTotal: true,
+  );
+}
+
+({Map<String, String> weights, String totalWeight}) _pruneMeasuredWeights({
+  required List<OutboundRabbit> rabbits,
+  required Set<int> selection,
+  required Map<String, String> weights,
+  required String totalWeight,
+  bool recomputeTotal = false,
+}) {
+  final groupKeys = _selectedRabbitIdsByGroup(rabbits, selection).keys.toSet();
+  final retained = <String, String>{
+    for (final entry in weights.entries)
+      if (groupKeys.contains(entry.key)) entry.key: entry.value,
+  };
+  if (!recomputeTotal) {
+    return (weights: Map.unmodifiable(retained), totalWeight: totalWeight);
+  }
+  if (groupKeys.isEmpty) {
+    return (weights: const {}, totalWeight: '');
+  }
+  var sum = 0.0;
+  for (final key in groupKeys) {
+    final value = double.tryParse(retained[key] ?? '');
+    if (value == null || !value.isFinite || value <= 0) {
+      return (weights: Map.unmodifiable(retained), totalWeight: '');
+    }
+    sum += value;
+  }
+  return (
+    weights: Map.unmodifiable(retained),
+    totalWeight: sum.toStringAsFixed(3),
+  );
+}
+
+Map<String, Set<int>> _selectedRabbitIdsByGroup(
+  List<OutboundRabbit> rabbits,
+  Set<int> selected,
+) {
+  final groups = <String, Set<int>>{};
+  for (final rabbit in rabbits) {
+    if (!selected.contains(rabbit.rabbitId)) continue;
+    final key = rabbit.batchId?.toString() ?? 'unassigned';
+    groups.putIfAbsent(key, () => <int>{}).add(rabbit.rabbitId);
+  }
+  return groups;
+}
+
+bool _sameGroupedSelection(
+  Map<String, Set<int>> left,
+  Map<String, Set<int>> right,
+) {
+  if (left.length != right.length) return false;
+  for (final entry in left.entries) {
+    final other = right[entry.key];
+    if (other == null || !_sameIntSet(entry.value, other)) return false;
+  }
+  return true;
+}
+
+bool _sameIntSet(Set<int> left, Set<int> right) =>
+    left.length == right.length && left.containsAll(right);
+
+bool _sameSaleDate(DateTime? left, DateTime? right) {
+  if (left == null || right == null) return left == right;
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+}
+
+List<OutboundBatchAllocation> _validDraftAllocations({
+  required List<OutboundAllocationGroup> groups,
+  required Map<String, String> weights,
+  required String totalWeight,
+}) {
+  if (groups.isEmpty) return const [];
+  final allocations = <OutboundBatchAllocation>[];
+  for (final group in groups) {
+    final raw = weights[group.key] ?? (groups.length == 1 ? totalWeight : '');
+    final value = double.tryParse(raw.trim());
+    if (value == null ||
+        !value.isFinite ||
+        value <= 0 ||
+        !_atMostThreeDecimals(value)) {
+      continue;
+    }
+    allocations.add(
+      OutboundBatchAllocation(
+        batchId: group.batchId,
+        actualWeightKg: value,
+      ),
+    );
+  }
+  return List.unmodifiable(allocations);
+}
+
+bool _sameAllocations(
+  List<OutboundBatchAllocation> left,
+  List<OutboundBatchAllocation> right,
+) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index].batchId != right[index].batchId ||
+        left[index].actualWeightKg != right[index].actualWeightKg) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _sameSelectedItems(
+  List<OutboundSelectedItem> left,
+  List<OutboundSelectedItem> right,
+) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    final before = left[index];
+    final after = right[index];
+    if (before.rabbitId != after.rabbitId ||
+        before.stateVersion != after.stateVersion ||
+        before.selectionType != after.selectionType ||
+        before.earlySaleReason != after.earlySaleReason) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _formPayloadChanged(
+  OutboundState state, {
+  DateTime? saleTime,
+  String? totalWeight,
+  String? unitPrice,
+  String? customer,
+  String? remark,
+}) {
+  final nextSaleTime = saleTime ?? state.saleTime;
+  final currentDate = state.saleTime;
+  if (nextSaleTime != null &&
+      (currentDate == null ||
+          nextSaleTime.year != currentDate.year ||
+          nextSaleTime.month != currentDate.month ||
+          nextSaleTime.day != currentDate.day)) {
+    return true;
+  }
+  if (totalWeight != null &&
+      double.tryParse(totalWeight.trim()) != state.parsedWeight) {
+    return true;
+  }
+  if (unitPrice != null &&
+      double.tryParse(unitPrice.trim()) != state.parsedUnitPrice) {
+    return true;
+  }
+  if (customer != null && customer.trim() != state.customer.trim()) {
+    return true;
+  }
+  if (remark != null && remark.trim() != state.remark.trim()) {
+    return true;
+  }
+  return false;
+}
+
+bool _atMostThreeDecimals(double value) =>
+    ((value * 1000).round() - value * 1000).abs() < 0.000001;

@@ -23,6 +23,7 @@
         <result column="weaning_date" property="weaningDate"/>
         <result column="weaned_count" property="weanedCount"/>
         <result column="avg_weaning_weight" property="avgWeaningWeight"/>
+        <result column="weaning_total_weight_kg" property="weaningTotalWeightKg"/>
         <result column="nursing_cage_id" property="nursingCageId"/>
         <result column="request_id" property="requestId"/>
         <result column="remark" property="remark"/>
@@ -37,13 +38,13 @@
             tenant_id, house_id, cycle_id, mother_rabbit_id, sire_rabbit_id, batch_id,
             birth_date, total_kits, live_kits, kept_kits, foster_in, foster_out,
             loss_count, current_nursing, status, weaning_date, weaned_count,
-            avg_weaning_weight, nursing_cage_id, request_id, remark,
+            avg_weaning_weight, weaning_total_weight_kg, nursing_cage_id, request_id, remark,
             create_by, create_time, update_by, update_time
         ) values (
             #{tenantId}, #{houseId}, #{cycleId}, #{motherRabbitId}, #{sireRabbitId}, #{batchId},
             #{birthDate}, #{totalKits}, #{liveKits}, #{keptKits}, #{fosterIn}, #{fosterOut},
             #{lossCount}, #{currentNursing}, #{status}, #{weaningDate}, #{weanedCount},
-            #{avgWeaningWeight}, #{nursingCageId}, #{requestId}, #{remark},
+            #{avgWeaningWeight}, #{weaningTotalWeightKg}, #{nursingCageId}, #{requestId}, #{remark},
             #{createBy}, now(), #{updateBy}, now()
         )
     </insert>
@@ -77,6 +78,7 @@
             weaning_date = #{weaningDate},
             weaned_count = #{weanedCount},
             avg_weaning_weight = #{avgWeaningWeight},
+            weaning_total_weight_kg = coalesce(weaning_total_weight_kg, #{weaningTotalWeightKg}),
             nursing_cage_id = #{nursingCageId},
             remark = #{remark},
             update_by = #{updateBy},

@@ -183,7 +183,7 @@ class RabbitServiceTest {
 
         BizException error = assertThrows(BizException.class,
                 () -> service.convertToReplacement(
-                        7L, 8L, List.of(1L), false, null, "request-1"
+                        7L, 8L, List.of(1L), false, null, "request-1", null
                 ));
 
         assertEquals(403, error.getCode());

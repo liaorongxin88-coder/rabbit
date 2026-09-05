@@ -1,5 +1,6 @@
 package com.rabbit.app.modules.repro.entity;
 
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -30,6 +31,7 @@ public class Litter {
     private Date weaningDate;
     private Integer weanedCount;
     private Double avgWeaningWeight;
+    private BigDecimal weaningTotalWeightKg;
     private Long nursingCageId;
     private String requestId;
     private String remark;
@@ -188,6 +190,14 @@ public class Litter {
 
     public void setAvgWeaningWeight(Double avgWeaningWeight) {
         this.avgWeaningWeight = avgWeaningWeight;
+    }
+
+    public BigDecimal getWeaningTotalWeightKg() {
+        return weaningTotalWeightKg;
+    }
+
+    public void setWeaningTotalWeightKg(BigDecimal weaningTotalWeightKg) {
+        this.weaningTotalWeightKg = weaningTotalWeightKg;
     }
 
     public Long getNursingCageId() {

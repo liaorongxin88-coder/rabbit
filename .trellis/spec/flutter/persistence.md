@@ -18,6 +18,10 @@ Network data such as houses, rabbits, batches, and reports remains server-owned.
 
 Preserve the stored request ID across an unknown result. Clearing or rotating it too early can turn one logical write into two server operations.
 
+The local outbound snapshot includes `batchAllocationWeights` and a marker that distinguishes a current snapshot from a legacy snapshot that never stored the field. The server task remains authoritative for frozen rabbit membership, sale fields, `unitPricePerKg`, and batch allocations. While the confirmation form is editable, persist every meaningful change to both local and server drafts. Before final submit, cancel any debounce, force-save the latest draft, recapture the acknowledged task revision and values, then assign or reuse the submission request ID. An immediate tap after editing must not race an older server snapshot.
+
+When selected rabbits or their source groups change, clear incompatible weights and the derived total. Do not silently reuse a measured group weight for a different membership set. Empty or partial allocations may be saved in `WAITING_CONFIRMATION`; completeness, exact totals, positive common price, and membership drift are enforced atomically at final submit.
+
 ## NFC queues
 
 `app/lib/src/data/services/storage/nfc.dart` stores a write session, a list of pending bindings, and one pending launch event. Failed bindings remain queued. Business code `4606` becomes a conflict that can be retried or force-replaced with a new UUID. The app retries binding synchronization every 30 seconds and on resume.

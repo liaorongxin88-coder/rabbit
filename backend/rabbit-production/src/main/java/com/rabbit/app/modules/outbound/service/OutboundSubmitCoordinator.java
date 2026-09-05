@@ -9,6 +9,7 @@ import com.rabbit.app.modules.outbound.mapper.OutboundTaskMapper;
 import com.rabbit.app.modules.sale.mapper.SaleOrderMapper;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -37,20 +38,23 @@ public class OutboundSubmitCoordinator {
         OutboundRequest existing = requestLifecycle.find(houseId, input.requestId());
         if (existing != null) {
             assertMatchingRequest(existing, taskId, prepared.payloadHash());
-            return resultForExisting(userId, houseId, existing);
+            OutboundDtos.SubmitResult existingResult = resultForExisting(userId, houseId, existing);
+            if (!"FAILED".equals(existingResult.status())) {
+                return existingResult;
+            }
         }
 
         // Keep validation and authorization failures that are known to happen before processing
-        // outside the durable claim. The transactional business operation repeats authorization.
+        // outside the durable claim. The transactional business operation repeats both checks.
         businessService.assertRequestPermission(userId, houseId, taskId);
+        businessService.assertCompatibility(userId, houseId, taskId, input);
 
-        OutboundRequest request = new OutboundRequest();
-        request.setRequestId(input.requestId());
-        request.setHouseId(houseId);
-        request.setTaskId(taskId);
-        request.setPayloadHash(prepared.payloadHash());
-        request.setStatus("PROCESSING");
-        OutboundRequestLifecycleService.ClaimResult claim = requestLifecycle.claim(request);
+        OutboundRequest request = existing == null
+            ? newRequest(houseId, taskId, input.requestId(), prepared.payloadHash())
+            : existing;
+        OutboundRequestLifecycleService.ClaimResult claim = existing == null
+            ? requestLifecycle.claim(request)
+            : requestLifecycle.reclaimFailed(request);
         if (!claim.claimed()) {
             assertMatchingRequest(claim.request(), taskId, prepared.payloadHash());
             return resultForExisting(userId, houseId, claim.request());
@@ -64,6 +68,24 @@ public class OutboundSubmitCoordinator {
             String errorMessage = deterministicErrorMessage(error.getMessage());
             requestLifecycle.markFailed(houseId, input.requestId(), errorCode, errorMessage);
             return failedResult(input.requestId(), taskId, errorCode, errorMessage);
+        } catch (RuntimeException error) {
+            OutboundDtos.SubmitResult completed = recoverCompletedAfterUnexpectedFailure(
+                userId, houseId, request, error
+            );
+            if (completed != null) {
+                return completed;
+            }
+            try {
+                requestLifecycle.markFailed(
+                    houseId,
+                    input.requestId(),
+                    "INTERNAL_ERROR",
+                    "本次出库未生效，请使用相同请求重试"
+                );
+            } catch (RuntimeException lifecycleError) {
+                error.addSuppressed(lifecycleError);
+            }
+            throw error;
         }
 
         if ("COMPLETED".equals(result.status()) && result.saleOrderId() != null) {
@@ -76,6 +98,21 @@ public class OutboundSubmitCoordinator {
             return result;
         }
         throw new BizException(500, "出库业务事务返回了未知状态");
+    }
+
+    private OutboundRequest newRequest(
+        Long houseId,
+        String taskId,
+        String requestId,
+        String payloadHash
+    ) {
+        OutboundRequest request = new OutboundRequest();
+        request.setRequestId(requestId);
+        request.setHouseId(houseId);
+        request.setTaskId(taskId);
+        request.setPayloadHash(payloadHash);
+        request.setStatus("PROCESSING");
+        return request;
     }
 
     public OutboundDtos.SubmitResult status(Long userId, Long houseId, String requestId) {
@@ -93,7 +130,7 @@ public class OutboundSubmitCoordinator {
             throw new BizException(404, "OUTBOUND_TASK_NOT_FOUND");
         }
 
-        if ("PROCESSING".equals(request.getStatus())
+        if (Set.of("PROCESSING", "FAILED").contains(request.getStatus())
                 && "COMPLETED".equals(task.getStatus())
                 && task.getSaleOrderId() != null
                 && Objects.equals(request.getRequestId(), task.getRequestId())) {
@@ -119,6 +156,21 @@ public class OutboundSubmitCoordinator {
         return new OutboundDtos.SubmitResult("PROCESSING", request.getRequestId(), task.getTaskId(),
                 null, null, null, 0, 0, 0, null, null, null,
                 "正在确认提交结果，请勿重复操作", List.of());
+    }
+
+    private OutboundDtos.SubmitResult recoverCompletedAfterUnexpectedFailure(
+        Long userId,
+        Long houseId,
+        OutboundRequest request,
+        RuntimeException originalError
+    ) {
+        try {
+            OutboundDtos.SubmitResult result = resultForExisting(userId, houseId, request);
+            return "COMPLETED".equals(result.status()) ? result : null;
+        } catch (RuntimeException recoveryError) {
+            originalError.addSuppressed(recoveryError);
+            return null;
+        }
     }
 
     private void assertMatchingRequest(OutboundRequest request, String taskId, String payloadHash) {

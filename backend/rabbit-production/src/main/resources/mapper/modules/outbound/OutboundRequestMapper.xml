@@ -38,9 +38,17 @@
         where house_id = #{houseId} and request_id = #{requestId} and status = 'PROCESSING'
     </update>
 
+    <update id="reclaimFailed">
+        update outbound_requests set status = 'PROCESSING', sale_order_id = null,
+            error_code = null, error_message = null, conflicts_json = null, update_time = now()
+        where house_id = #{houseId} and request_id = #{requestId}
+          and task_id = #{taskId} and payload_hash = #{payloadHash} and status = 'FAILED'
+    </update>
+
     <update id="markCompleted">
         update outbound_requests set status = 'COMPLETED', sale_order_id = #{saleOrderId}, error_code = null,
             error_message = null, conflicts_json = null, update_time = now()
-        where house_id = #{houseId} and request_id = #{requestId} and status = 'PROCESSING'
+        where house_id = #{houseId} and request_id = #{requestId}
+          and status in ('PROCESSING', 'FAILED')
     </update>
 </mapper>

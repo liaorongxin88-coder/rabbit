@@ -59,24 +59,29 @@ void main() {
     });
   });
 
-  test('replacement accepts a stable requestId and canonical rabbit ids',
+  test('replacement binds one rabbit to one measured source-batch group',
       () async {
     final adapter = _CapturingAdapter();
     final repository = _repository(adapter);
 
     final result = await repository.convertToReplacement(
       houseId: 8,
-      rabbitIds: const [803, 801, 803, 802],
+      rabbitId: 801,
+      sourceBatchId: 101,
+      measuredTotalWeightKg: 2.25,
       targetCageId: 19,
       requestId: 'replacement-request-1',
     );
 
     expect(adapter.requests.single.path, '/api/rabbits/replacement');
     expect(adapter.requests.single.body, {
-      'rabbitIds': [801, 802, 803],
+      'rabbitIds': [801],
       'forceExitBatch': true,
       'requestId': 'replacement-request-1',
       'targetCageId': 19,
+      'batchAllocations': [
+        {'batchId': 101, 'rabbitCount': 1, 'totalWeightKg': 2.25},
+      ],
     });
     expect(result.single.replacementRecordId, 901);
   });
@@ -346,7 +351,11 @@ Future<void> _dragUntilBuilt(
 RabbitRepository _repository(_CapturingAdapter adapter) {
   final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
     ..httpClientAdapter = adapter;
-  final client = ApiClient(SessionStore(), dio: dio);
+  final client = ApiClient(
+    SessionStore(),
+    dio: dio,
+    appBuildLoader: () async => '4020',
+  );
   addTearDown(client.dispose);
   return RabbitRepository(client);
 }

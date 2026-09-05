@@ -255,6 +255,8 @@ class ReproLitter {
     required this.currentNursing,
     required this.status,
     this.batchId,
+    this.avgWeaningWeight,
+    this.weaningTotalWeightKg,
   });
 
   final int id;
@@ -264,6 +266,8 @@ class ReproLitter {
   final int keptKits;
   final int currentNursing;
   final String status;
+  final double? avgWeaningWeight;
+  final double? weaningTotalWeightKg;
 
   factory ReproLitter.fromJson(Map<String, dynamic> json) => ReproLitter(
         id: _int(json['id']) ?? 0,
@@ -273,6 +277,8 @@ class ReproLitter {
         keptKits: _int(json['keptKits']) ?? 0,
         currentNursing: _int(json['currentNursing']) ?? 0,
         status: _str(json['status']),
+        avgWeaningWeight: _doubleValue(json['avgWeaningWeight']),
+        weaningTotalWeightKg: _doubleValue(json['weaningTotalWeightKg']),
       );
 }
 
@@ -385,6 +391,12 @@ int? _int(Object? value) {
   if (value is String && value.isNotEmpty) {
     return int.tryParse(value);
   }
+  return null;
+}
+
+double? _doubleValue(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String && value.isNotEmpty) return double.tryParse(value);
   return null;
 }
 

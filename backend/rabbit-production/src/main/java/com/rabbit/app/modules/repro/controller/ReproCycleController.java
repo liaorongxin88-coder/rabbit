@@ -139,13 +139,21 @@ public class ReproCycleController {
         featureFlags.assertV2Enabled();
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
+        ReproAction action = ReproAction.parse(request.getAction());
+        stateMachine.assertLegacyWeaningAllowed(
+            houseId,
+            request.getRequestId(),
+            action,
+            request.getWeanedCount(),
+            request.getWeaningTotalWeightKg()
+        );
 
         ReproCommand command = ReproCommand.builder()
             .houseId(houseId)
             .userId(userId)
             .operatorName(operatorNames.resolve(userId))
             .cycleId(cycleId)
-            .action(ReproAction.parse(request.getAction()))
+            .action(action)
             .outcome(request.getOutcome())
             .occurredAt(request.getOccurredAt())
             .requestId(request.getRequestId())
@@ -162,6 +170,7 @@ public class ReproCycleController {
             .stillbirthCount(request.getStillbirthCount())
             .weanedCount(request.getWeanedCount())
             .avgWeaningWeight(request.getAvgWeaningWeight())
+            .weaningTotalWeightKg(request.getWeaningTotalWeightKg())
             .nursingCageId(request.getNursingCageId())
             .attachmentFileIds(request.getAttachmentFileIds())
             .build();

@@ -12,6 +12,7 @@ The source of truth is current code and enforcement tests. Start with `AGENTS.md
 - Read [Data and migrations](./data-and-migrations.md) before changing mapper XML, entities, schema, or Flyway history.
 - Read [Errors and observability](./errors-observability.md) before adding an error code, log, trace field, audit behavior, or tracked operation.
 - Read [Testing](./testing.md) before placing tests or choosing a Maven command.
+- Read [Batch statistics](./batch-statistics.md) before changing the versioned 28-metric contract, immutable batch snapshots, outbound draft authority, or XLSX export.
 - For shared API contracts, also read [Rabbit cross-application contracts](../guides/rabbit-cross-application-contracts.md).
 
 ## File index
@@ -24,6 +25,7 @@ The source of truth is current code and enforcement tests. Start with `AGENTS.md
 | [Data and migrations](./data-and-migrations.md) | MyBatis XML, operation stamping, Flyway, and schema changes |
 | [Errors and observability](./errors-observability.md) | API errors, trace IDs, audit logs, and operation tracking |
 | [Testing](./testing.md) | Unit, architecture, integration, and build checks |
+| [Batch statistics](./batch-statistics.md) | Versioned metrics, immutable snapshots, compatibility events, outbound authority, and XLSX export |
 
 ## Quality Check
 

@@ -2,6 +2,8 @@ package com.rabbit.app.modules.feed.controller;
 
 import com.rabbit.app.common.ApiResponse;
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.feed.dto.FeedAllocationPreview;
+import com.rabbit.app.modules.feed.dto.FeedAllocationPreviewRequest;
 import com.rabbit.app.modules.feed.dto.FeedLogRequest;
 import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.modules.feed.service.FeedService;
@@ -39,6 +41,15 @@ public class FeedController {
     public ApiResponse<Void> add(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody FeedLogRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
+        feedService.assertRequestAllowed(
+            userId,
+            houseId,
+            req.getRequestId(),
+            req.getRabbitIds(),
+            req.getFeedTime(),
+            req.getUnit(),
+            req.getAllocations()
+        );
 
         FeedLog log = new FeedLog();
         log.setFeedTime(req.getFeedTime());
@@ -48,8 +59,21 @@ public class FeedController {
         log.setRequestId(req.getRequestId());
         log.setAmount(req.getAmount());
         log.setRemark(req.getRemark());
-        feedService.addFeedLog(userId, houseId, log, req.getRabbitIds());
+        feedService.addFeedLog(userId, houseId, log, req.getRabbitIds(), req.getAllocations());
         return ApiResponse.ok(null);
+    }
+
+    @PostMapping("/feed-logs/allocation-preview")
+    @RequiresPermission(PermissionCode.RABBIT_FEED_ADD)
+    public ApiResponse<FeedAllocationPreview> previewAllocations(
+        @RequestHeader("X-House-Id") Long houseId,
+        @Valid @RequestBody FeedAllocationPreviewRequest request
+    ) {
+        Long userId = requireLogin();
+        houseService.assertHousePermission(userId, houseId, "edit");
+        return ApiResponse.ok(feedService.previewAllocations(
+            houseId, request.rabbitIds(), request.feedTime()
+        ));
     }
 
     @GetMapping("/feed-logs")

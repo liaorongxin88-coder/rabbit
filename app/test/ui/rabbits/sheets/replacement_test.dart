@@ -16,12 +16,18 @@ import 'package:rabbit_flutter/src/data/services/network/client.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
 import 'package:rabbit_flutter/src/domain/cages/cage.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
+import 'package:rabbit_flutter/src/domain/rabbits/batch_membership.dart';
 import 'package:rabbit_flutter/src/domain/rabbits/rabbit.dart';
 import 'package:rabbit_flutter/src/ui/cages/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/rabbits/sheets/replacement.dart';
+import 'package:rabbit_flutter/src/ui/rabbits/view_models/providers.dart';
 
 import '../../core/widgets/nfc_harness.dart';
+
+final _sourceMembershipsProvider = StateProvider<List<RabbitBatchMembership>>(
+  (_) => const [_sourceMembership101],
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +94,10 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('rabbit-replacement-cage-21')),
     );
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+      '2.350',
+    );
     await tester.pump();
     final submit = find.byKey(const ValueKey('rabbit-replacement-submit'));
     await tester.tap(submit);
@@ -102,11 +112,268 @@ void main() {
     expect(adapter.requests.single.body['rabbitIds'], [31]);
     expect(adapter.requests.single.body['targetCageId'], 21);
     expect(adapter.requests.single.body['forceExitBatch'], isTrue);
+    expect(adapter.requests.single.body['batchAllocations'], [
+      {'batchId': 101, 'rabbitCount': 1, 'totalWeightKg': 2.35},
+    ]);
     expect(adapter.requests.single.body['requestId'], isNotEmpty);
 
     adapter.completeSuccess();
     await tester.pumpAndSettle();
     expect(find.text('商品兔 #31 已转入 B-01'), findsOneWidget);
+  });
+
+  testWidgets('replacement retry keeps requestId until measured weight changes',
+      (tester) async {
+    final adapter = _RetryAdapter();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rabbitRepositoryProvider.overrideWithValue(_repository(adapter)),
+          houseCagesProvider(8).overrideWith((_) async => const [_targetCage]),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                key: const ValueKey('open-rabbit-replacement-sheet'),
+                onPressed: () => showRabbitReplacementSheet(
+                  context: context,
+                  houseId: 8,
+                  rabbit: _commodityRabbit,
+                ),
+                child: const Text('留种'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('open-rabbit-replacement-sheet')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('rabbit-replacement-cage-21')),
+    );
+    final weight =
+        find.byKey(const ValueKey('rabbit-replacement-total-weight'));
+    final submit = find.byKey(const ValueKey('rabbit-replacement-submit'));
+    await tester.enterText(weight, '2.350');
+
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('留种转后备暂不可用'), findsOneWidget);
+    final firstRequestId = adapter.requests.single.body['requestId'];
+
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(adapter.requests[1].body['requestId'], firstRequestId);
+
+    await tester.enterText(weight, '2.400');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(adapter.requests, hasLength(3));
+    expect(adapter.requests.last.body['requestId'], isNot(firstRequestId));
+    expect(adapter.requests.last.body['batchAllocations'], [
+      {'batchId': 101, 'rabbitCount': 1, 'totalWeightKg': 2.4},
+    ]);
+    expect(weight, findsNothing);
+  });
+
+  testWidgets('cached source membership is applied when the sheet opens',
+      (tester) async {
+    const request = RabbitBatchMembershipRequest(houseId: 8, rabbitId: 32);
+    final adapter = _DelayedAdapter();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rabbitRepositoryProvider.overrideWithValue(_repository(adapter)),
+          houseCagesProvider(8).overrideWith((_) async => const [_targetCage]),
+          rabbitBatchMembershipsProvider(request).overrideWith(
+            (_) async => const [_sourceMembership101],
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                ref.watch(rabbitBatchMembershipsProvider(request));
+                return FilledButton(
+                  key: const ValueKey('open-rabbit-replacement-sheet'),
+                  onPressed: () => showRabbitReplacementSheet(
+                    context: context,
+                    houseId: 8,
+                    rabbit: _membershipRabbit,
+                  ),
+                  child: const Text('留种'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('open-rabbit-replacement-sheet')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('rabbit-replacement-cage-21')));
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+      '2.350',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('rabbit-replacement-submit')),
+    );
+    for (var attempt = 0; attempt < 20 && adapter.requests.isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(adapter.requests.single.body['batchAllocations'], [
+      {'batchId': 101, 'rabbitCount': 1, 'totalWeightKg': 2.35},
+    ]);
+    adapter.completeSuccess();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('source batch changes clear the measured total', (tester) async {
+    const request = RabbitBatchMembershipRequest(houseId: 8, rabbitId: 32);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          houseCagesProvider(8).overrideWith((_) async => const [_targetCage]),
+          rabbitBatchMembershipsProvider(request).overrideWith(
+            (ref) async => ref.watch(_sourceMembershipsProvider),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                key: const ValueKey('open-rabbit-replacement-sheet'),
+                onPressed: () => showRabbitReplacementSheet(
+                  context: context,
+                  houseId: 8,
+                  rabbit: _membershipRabbit,
+                ),
+                child: const Text('留种'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('open-rabbit-replacement-sheet')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('来源批次 #101 · 1 只'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+      '2.350',
+    );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('rabbit-replacement-submit'))),
+    );
+    container.read(_sourceMembershipsProvider.notifier).state = const [
+      _sourceMembership102,
+    ];
+    await tester.pumpAndSettle();
+
+    expect(find.text('来源批次 #102 · 1 只'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+          )
+          .controller
+          ?.text,
+      isEmpty,
+    );
+    expect(find.textContaining('来源批次已变化'), findsOneWidget);
+  });
+
+  testWidgets('source change during cage refresh prevents stale conversion',
+      (tester) async {
+    const request = RabbitBatchMembershipRequest(houseId: 8, rabbitId: 32);
+    final cageRefresh = Completer<List<Cage>>();
+    var cageReads = 0;
+    final adapter = _DelayedAdapter();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          rabbitRepositoryProvider.overrideWithValue(_repository(adapter)),
+          houseCagesProvider(8).overrideWith((_) {
+            cageReads++;
+            return cageReads == 1
+                ? Future<List<Cage>>.value(const [_targetCage])
+                : cageRefresh.future;
+          }),
+          rabbitBatchMembershipsProvider(request).overrideWith(
+            (ref) async => ref.watch(_sourceMembershipsProvider),
+          ),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => FilledButton(
+                key: const ValueKey('open-rabbit-replacement-sheet'),
+                onPressed: () => showRabbitReplacementSheet(
+                  context: context,
+                  houseId: 8,
+                  rabbit: _membershipRabbit,
+                ),
+                child: const Text('留种'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('open-rabbit-replacement-sheet')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('rabbit-replacement-cage-21')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+      '2.350',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('rabbit-replacement-submit')),
+    );
+    await tester.pump();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('rabbit-replacement-submit'))),
+    );
+    container.read(_sourceMembershipsProvider.notifier).state = const [
+      _sourceMembership102,
+    ];
+    await tester.pump();
+    cageRefresh.complete(const [_targetCage]);
+    await tester.pumpAndSettle();
+
+    expect(adapter.requests, isEmpty);
+    expect(find.textContaining('来源批次已变化'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('rabbit-replacement-total-weight')),
+          )
+          .controller
+          ?.text,
+      isEmpty,
+    );
   });
 
   group('留种转后备时碰笼位标签', () {
@@ -353,10 +620,14 @@ class _TagResolvingRepository implements NfcRepository {
   }
 }
 
-RabbitRepository _repository(_DelayedAdapter adapter) {
+RabbitRepository _repository(HttpClientAdapter adapter) {
   final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
     ..httpClientAdapter = adapter;
-  final client = ApiClient(SessionStore(), dio: dio);
+  final client = ApiClient(
+    SessionStore(),
+    dio: dio,
+    appBuildLoader: () async => '4020',
+  );
   addTearDown(client.dispose);
   return RabbitRepository(client);
 }
@@ -366,6 +637,61 @@ class _CapturedRequest {
 
   final String path;
   final Map<String, dynamic> body;
+}
+
+class _RetryAdapter implements HttpClientAdapter {
+  final requests = <_CapturedRequest>[];
+  var _calls = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    _calls++;
+    requests.add(
+      _CapturedRequest(
+        path: options.path,
+        body: Map<String, dynamic>.from(options.data as Map),
+      ),
+    );
+    if (_calls <= 2) {
+      return ResponseBody.fromString(
+        jsonEncode({
+          'code': 500,
+          'message': '留种转后备暂不可用',
+          'data': null,
+        }),
+        200,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    }
+    return ResponseBody.fromString(
+      jsonEncode({
+        'code': 0,
+        'message': 'ok',
+        'data': {
+          'items': [
+            {
+              'rabbitId': 31,
+              'replacementRecordId': 901,
+              'targetCageId': 21,
+            },
+          ],
+        },
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _DelayedAdapter implements HttpClientAdapter {
@@ -427,6 +753,35 @@ const _commodityRabbit = Rabbit(
   arrivalDate: null,
   weight: 2.5,
   isActive: true,
+  birthBatchId: 101,
+);
+
+const _membershipRabbit = Rabbit(
+  id: 32,
+  houseId: 8,
+  cageId: 12,
+  motherId: null,
+  type: '2',
+  gender: '0',
+  breed: '新西兰白兔',
+  arrivalMethod: '0',
+  arrivalDate: null,
+  weight: 2.5,
+  isActive: true,
+);
+
+const _sourceMembership101 = RabbitBatchMembership(
+  batchId: 101,
+  rabbitId: 32,
+  isActive: true,
+  batchRole: 'FATTENING',
+);
+
+const _sourceMembership102 = RabbitBatchMembership(
+  batchId: 102,
+  rabbitId: 32,
+  isActive: true,
+  batchRole: 'FATTENING',
 );
 
 const _targetCage = Cage(

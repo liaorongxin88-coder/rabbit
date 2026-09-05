@@ -435,7 +435,7 @@ public class BatchOutboundIT extends E2eTestSupport {
         BizException directDenied = Assertions.assertThrows(BizException.class,
                 () -> rabbitService.convertToReplacement(member.userId, houseId,
                         List.of(replacementRabbit), false, null,
-                        replacementRequestId));
+                        replacementRequestId, null));
         Assertions.assertEquals(403, directDenied.getCode());
         api.expectError("/api/rabbits/replacement", HttpMethod.POST, member.token, houseId,
                 replacement, 403, "权限不足");

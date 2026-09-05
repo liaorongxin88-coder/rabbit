@@ -185,6 +185,7 @@ export interface Rabbit {
  id: number;
  houseId: number;
  cageId: number;
+ birthBatchId?: number | null;
  motherId?: number | null;
  sourceSeller?: string | null;
  type: string;
@@ -246,7 +247,14 @@ export interface RabbitReplacementRequest {
  rabbitIds: number[];
  forceExitBatch: boolean;
  targetCageId: number;
+ batchAllocations: ReplacementBatchAllocation[];
  requestId: string;
+}
+
+export interface ReplacementBatchAllocation {
+ batchId: number | null;
+ rabbitCount: number;
+ totalWeightKg: number;
 }
 
 export interface RabbitReplacementItem {
@@ -291,11 +299,107 @@ export interface ProductionBatch {
  createTime?: string | null;
 }
 
+export type BatchMetricStatus =
+ | "AVAILABLE"
+ | "NOT_APPLICABLE"
+ | "NOT_RECORDED"
+ | "DATA_MISSING";
+
+export type BatchMetricValueType = "NUMBER" | "DATE_RANGE";
+
+export type BatchMetricStage =
+ | "MATING"
+ | "PREGNANCY"
+ | "BIRTH"
+ | "SELECTION"
+ | "WEANING"
+ | "OUTBOUND"
+ | "SALES"
+ | "FEED_CONVERSION";
+
+export interface BatchMetricOperand {
+ code: string;
+ label: string;
+ value: number | null;
+ unit: string;
+}
+
+export interface BatchMetricMissingCause {
+ code: string;
+ message: string;
+}
+
+export interface BatchMetricDateCount {
+ date: string;
+ cycleCount: number;
+}
+
+export interface BatchMetricDateValue {
+ firstDate: string;
+ lastDate: string;
+ dateCount: number;
+ dailyCycleCounts: BatchMetricDateCount[];
+}
+
+export interface BatchStatisticMetric {
+ code: string;
+ name: string;
+ stage: BatchMetricStage;
+ stageName: string;
+ order: number;
+ excelColumnName: string;
+ valueType: BatchMetricValueType;
+ unit: string;
+ format: string;
+ formula: string;
+ status: BatchMetricStatus;
+ numericValue: number | null;
+ displayValue: string | null;
+ dateValue: BatchMetricDateValue | null;
+ numerator: BatchMetricOperand | null;
+ denominator: BatchMetricOperand | null;
+ components: BatchMetricOperand[];
+ missingCauses: BatchMetricMissingCause[];
+}
+
 export interface BatchStatistics {
+ schemaVersion: number;
+ batchId: number;
+ houseName: string;
+ batchCode: string;
+ calculatedAt: string;
  totalLitters: number;
  totalKits: number;
  totalLiveKits: number;
  totalWeaned: number;
+ metrics: BatchStatisticMetric[];
+}
+
+export interface BatchCarcassYieldInput {
+ yieldRate: number;
+ sourceUnit: string;
+ measuredDate: string;
+ reportNumber?: string;
+ evidenceFileId?: string;
+ remark?: string;
+ changeReason: string;
+ requestId: string;
+}
+
+export interface BatchCarcassYieldRecord extends BatchCarcassYieldInput {
+ id: number;
+ houseId: number;
+ batchId: number;
+ createdBy: number;
+ createdByName?: string | null;
+ createdAt: string;
+}
+
+export interface BatchCarcassYieldPage {
+ items: BatchCarcassYieldRecord[];
+ total: number;
+ page: number;
+ pageSize: number;
 }
 
 /**
@@ -306,22 +410,22 @@ export interface BatchStatistics {
  * `payload` 与 `requestId` 不对外暴露，沿用 ReproEventView 既有边界。
  */
 export interface OperationEvent {
-  id: number;
-  occurredAt: string;
-  operationCode: string;
-  eventType: string;
-  eventLabel: string;
-  targetType: string;
-  targetId: number | null;
-  cageId: number | null;
-  batchId: number | null;
-  rabbitId: number | null;
-  cycleId: number | null;
-  litterId: number | null;
-  fromStage: string | null;
-  toStage: string | null;
-  operatorId: number | null;
-  operatorName: string | null;
+ id: number;
+ occurredAt: string;
+ operationCode: string;
+ eventType: string;
+ eventLabel: string;
+ targetType: string;
+ targetId: number | null;
+ cageId: number | null;
+ batchId: number | null;
+ rabbitId: number | null;
+ cycleId: number | null;
+ litterId: number | null;
+ fromStage: string | null;
+ toStage: string | null;
+ operatorId: number | null;
+ operatorName: string | null;
 }
 
 /**
@@ -331,9 +435,9 @@ export interface OperationEvent {
  * 翻页靠 nextCursor，它对客户端不透明，不要解析或拼接。
  */
 export interface OperationEventPage {
-  items: OperationEvent[];
-  nextCursor: string | null;
-  hasMore: boolean;
+ items: OperationEvent[];
+ nextCursor: string | null;
+ hasMore: boolean;
 }
 
 export interface PendingWeaningRecord {
@@ -526,10 +630,18 @@ export interface OutboundSelectedItem {
  earlySaleReason?: string | null;
 }
 
+export interface OutboundBatchAllocation {
+ batchId: number | null;
+ actualWeightKg: number;
+}
+
 export interface OutboundTask {
  taskId: string;
  houseId: number;
  entryType: "RABBIT" | "CAGE" | "ROW" | "HOUSE";
+ sourceRabbitId?: number | null;
+ sourceCageId?: number | null;
+ sourceRowCode?: string | null;
  status: "SELECTING" | "WAITING_CONFIRMATION" | "COMPLETED" | "CANCELLED";
  revision: number;
  saleTime?: string | null;

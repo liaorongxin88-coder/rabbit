@@ -21,9 +21,14 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.outbound.dto.OutboundDtos;
 import com.rabbit.app.modules.outbound.entity.OutboundCandidateRow;
 import com.rabbit.app.modules.outbound.entity.OutboundTask;
+import com.rabbit.app.modules.outbound.entity.OutboundTaskBatchAllocation;
 import com.rabbit.app.modules.outbound.entity.OutboundTaskItem;
+import com.rabbit.app.modules.outbound.mapper.OutboundTaskBatchAllocationMapper;
 import com.rabbit.app.modules.outbound.mapper.OutboundTaskItemMapper;
 import com.rabbit.app.modules.outbound.mapper.OutboundTaskMapper;
+import com.rabbit.app.modules.sale.dto.SaleBatchAllocationInput;
+import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +51,7 @@ class OutboundTaskServiceTest {
 
     private OutboundTaskMapper taskMapper;
     private OutboundTaskItemMapper itemMapper;
+    private OutboundTaskBatchAllocationMapper allocationMapper;
     private OutboundEligibilityService eligibilityService;
     private HouseService houseService;
     private OutboundTaskService service;
@@ -54,9 +60,12 @@ class OutboundTaskServiceTest {
     void setUp() {
         taskMapper = mock(OutboundTaskMapper.class);
         itemMapper = mock(OutboundTaskItemMapper.class);
+        allocationMapper = mock(OutboundTaskBatchAllocationMapper.class);
         eligibilityService = mock(OutboundEligibilityService.class);
         houseService = mock(HouseService.class);
-        service = new OutboundTaskService(taskMapper, itemMapper, eligibilityService, houseService);
+        service = new OutboundTaskService(
+            taskMapper, itemMapper, allocationMapper, eligibilityService, houseService
+        );
     }
 
     // ---------- 建任务的入参 ----------
@@ -237,6 +246,26 @@ class OutboundTaskServiceTest {
      * 勾选的兔子在候选集里查不到，说明它在编辑期间离场或被转走了。
      */
     @Test
+    void aNullDraftItemIsRejectedBeforeServiceDereference() {
+        stubEditableTask();
+        OutboundDtos.SaveDraftRequest request = saveRequest(
+            0L,
+            "SELECTING",
+            Collections.singletonList(null)
+        );
+
+        BizException error = assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, request));
+
+        assertEquals(400, error.getCode());
+        assertEquals("items不能包含空项", error.getMessage());
+        verify(taskMapper, never()).updateDraft(
+            anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+            any(), any(), any(), any(), any()
+        );
+    }
+
+    @Test
     void aRabbitThatLeftDuringEditingIsReportedAsNotPresent() {
         stubEditableTask();
         when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList())).thenReturn(List.of());
@@ -353,6 +382,312 @@ class OutboundTaskServiceTest {
 
         verify(itemMapper, never()).deleteByTaskLimited(anyString(), anyInt());
         verify(itemMapper, never()).insertBatch(anyList());
+        verify(allocationMapper, never()).deleteByTaskLimited(anyLong(), anyString(), anyInt());
+        verify(allocationMapper, never()).insertBatch(anyList());
+    }
+
+    @Test
+    void omittedAllocationsArePreservedForAnExactlyEquivalentItemSnapshot() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "NORMAL", null)),
+            List.of(new DraftRabbit(7L, 101L, 1L, "NORMAL", null)),
+            true
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenASameGroupMemberIsAdded() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "NORMAL", null)),
+            List.of(
+                new DraftRabbit(7L, 101L, 1L, "NORMAL", null),
+                new DraftRabbit(8L, 101L, 1L, "NORMAL", null)
+            ),
+            false
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenASameGroupMemberIsRemoved() {
+        assertOmittedAllocationBehavior(
+            List.of(
+                snapshotItem(7L, 101L, 1L, "NORMAL", null),
+                snapshotItem(8L, 101L, 1L, "NORMAL", null)
+            ),
+            List.of(new DraftRabbit(7L, 101L, 1L, "NORMAL", null)),
+            false
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenTheBatchSnapshotChanges() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "NORMAL", null)),
+            List.of(new DraftRabbit(7L, 102L, 1L, "NORMAL", null)),
+            false
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenTheStateVersionChanges() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "NORMAL", null)),
+            List.of(new DraftRabbit(7L, 101L, 2L, "NORMAL", null)),
+            false
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenTheSelectionTypeChanges() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "NORMAL", null)),
+            List.of(new DraftRabbit(7L, 101L, 1L, "EARLY_SALE", "提前出售")),
+            false
+        );
+    }
+
+    @Test
+    void omittedAllocationsAreClearedWhenTheEarlySaleReasonChanges() {
+        assertOmittedAllocationBehavior(
+            List.of(snapshotItem(7L, 101L, 1L, "EARLY_SALE", "旧原因")),
+            List.of(new DraftRabbit(7L, 101L, 1L, "EARLY_SALE", "新原因")),
+            false
+        );
+    }
+
+    @Test
+    void legacyDraftWithoutAllocationsKeepsItsExistingPriceCompatibility() {
+        stubEditableTask();
+        when(taskMapper.updateDraft(anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+                any(), any(), any(), any(), any())).thenReturn(1);
+        stubViewFor("HOUSE");
+        OutboundDtos.SaveDraftRequest request = new OutboundDtos.SaveDraftRequest(
+            0L,
+            "SELECTING",
+            List.of(),
+            null,
+            null,
+            new BigDecimal("12.345"),
+            null,
+            null
+        );
+
+        service.save(USER_ID, HOUSE_ID, TASK_ID, request);
+
+        verify(taskMapper).updateDraft(
+            HOUSE_ID,
+            USER_ID,
+            TASK_ID,
+            0L,
+            "SELECTING",
+            null,
+            null,
+            new BigDecimal("12.345"),
+            null,
+            null
+        );
+        verify(allocationMapper, never()).deleteByTaskLimited(anyLong(), anyString(), anyInt());
+    }
+
+    @Test
+    void draftAllocationsAndCommonPriceRoundTrip() {
+        stubEditableTask();
+        OutboundCandidateRow assigned = candidate(7L, 101L);
+        OutboundCandidateRow unassigned = candidate(8L, null);
+        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList()))
+            .thenReturn(List.of(assigned, unassigned));
+        when(eligibilityService.evaluate(assigned)).thenReturn(
+            eligibilityView(7L, OutboundEligibilityService.NORMAL, 1L, 101L)
+        );
+        when(eligibilityService.evaluate(unassigned)).thenReturn(
+            eligibilityView(8L, OutboundEligibilityService.NORMAL, 1L, null)
+        );
+        when(taskMapper.updateDraft(anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+                any(), any(), any(), any(), any())).thenReturn(1);
+        OutboundTask saved = task("WAITING_CONFIRMATION", 1L);
+        saved.setTotalWeight(4.0);
+        saved.setUnitPrice(new BigDecimal("12.00"));
+        when(taskMapper.selectById(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(saved);
+        when(eligibilityService.scopeRows(eq(HOUSE_ID), eq("HOUSE"), any(), any(), any()))
+            .thenReturn(List.of());
+        when(eligibilityService.evaluate(anyList())).thenReturn(List.of());
+        OutboundTaskBatchAllocation assignedRow = allocation(101L, "2.500");
+        OutboundTaskBatchAllocation unassignedRow = allocation(null, "1.500");
+        when(allocationMapper.selectByTask(HOUSE_ID, TASK_ID))
+            .thenReturn(List.of(assignedRow, unassignedRow));
+
+        OutboundDtos.TaskView view = service.save(
+            USER_ID,
+            HOUSE_ID,
+            TASK_ID,
+            allocationRequest(
+                "WAITING_CONFIRMATION",
+                List.of(
+                    input(7L, 1L, "NORMAL", null),
+                    input(8L, 1L, "NORMAL", null)
+                ),
+                List.of(
+                    new SaleBatchAllocationInput(101L, new BigDecimal("2.5")),
+                    new SaleBatchAllocationInput(null, new BigDecimal("1.500"))
+                )
+            )
+        );
+
+        ArgumentCaptor<List<OutboundTaskBatchAllocation>> rows = ArgumentCaptor.forClass(List.class);
+        verify(allocationMapper).insertBatch(rows.capture());
+        assertEquals(new BigDecimal("2.500"), rows.getValue().get(0).getActualWeightKg());
+        assertEquals(new BigDecimal("1.500"), rows.getValue().get(1).getActualWeightKg());
+        assertEquals(new BigDecimal("12.00"), view.unitPrice());
+        assertEquals(view.unitPrice(), view.unitPricePerKg());
+        assertEquals(2, view.batchAllocations().size());
+        assertEquals(101L, view.batchAllocations().get(0).batchId());
+        assertEquals(null, view.batchAllocations().get(1).batchId());
+    }
+
+    @Test
+    void draftAllocationsRejectMalformedDuplicateAndUnknownGroups() {
+        stubEditableTask();
+        stubCandidate(7L, OutboundEligibilityService.NORMAL, 1L);
+
+        assertEquals("batchAllocations不能包含空项", assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, allocationRequest(
+                "SELECTING", List.of(input(7L, 1L, "NORMAL", null)), Collections.singletonList(null)
+            ))).getMessage());
+        assertEquals("同一销售批次不能重复分配", assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, allocationRequest(
+                "SELECTING",
+                List.of(input(7L, 1L, "NORMAL", null)),
+                List.of(
+                    new SaleBatchAllocationInput(null, BigDecimal.ONE),
+                    new SaleBatchAllocationInput(null, BigDecimal.TWO)
+                )
+            ))).getMessage());
+        assertEquals("销售批次分配包含未选择的批次", assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, allocationRequest(
+                "SELECTING",
+                List.of(input(7L, 1L, "NORMAL", null)),
+                List.of(new SaleBatchAllocationInput(101L, BigDecimal.ONE))
+            ))).getMessage());
+    }
+
+    @Test
+    void draftAllocationsRejectInvalidScaleAndRange() {
+        stubEditableTask();
+        OutboundCandidateRow first = candidate(7L, 101L);
+        OutboundCandidateRow second = candidate(8L, null);
+        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList()))
+            .thenReturn(List.of(first, second));
+        when(eligibilityService.evaluate(first)).thenReturn(
+            eligibilityView(7L, OutboundEligibilityService.NORMAL, 1L, 101L)
+        );
+        when(eligibilityService.evaluate(second)).thenReturn(
+            eligibilityView(8L, OutboundEligibilityService.NORMAL, 1L, null)
+        );
+        List<OutboundDtos.SelectedRabbitInput> items = List.of(
+            input(7L, 1L, "NORMAL", null),
+            input(8L, 1L, "NORMAL", null)
+        );
+
+        assertEquals("销售重量最多保留三位小数", assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, allocationRequest(
+                "SELECTING", items,
+                List.of(new SaleBatchAllocationInput(101L, new BigDecimal("1.0001")))
+            ))).getMessage());
+        assertEquals("actualWeightKg不能超过100000", assertThrows(BizException.class,
+            () -> service.save(USER_ID, HOUSE_ID, TASK_ID, allocationRequest(
+                "SELECTING", items,
+                List.of(new SaleBatchAllocationInput(101L, new BigDecimal("100000.001")))
+            ))).getMessage());
+    }
+
+    @Test
+    void waitingConfirmationPersistsAndRestoresPartialAllocations() {
+        stubEditableTask();
+        OutboundCandidateRow first = candidate(7L, 101L);
+        OutboundCandidateRow second = candidate(8L, null);
+        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList()))
+            .thenReturn(List.of(first, second));
+        when(eligibilityService.evaluate(first)).thenReturn(
+            eligibilityView(7L, OutboundEligibilityService.NORMAL, 1L, 101L)
+        );
+        when(eligibilityService.evaluate(second)).thenReturn(
+            eligibilityView(8L, OutboundEligibilityService.NORMAL, 1L, null)
+        );
+        when(taskMapper.updateDraft(anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+                any(), any(), any(), any(), any())).thenReturn(1);
+        OutboundTask saved = task("WAITING_CONFIRMATION", 1L);
+        saved.setTotalWeight(4.0);
+        saved.setUnitPrice(new BigDecimal("12.00"));
+        when(taskMapper.selectById(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(saved);
+        when(eligibilityService.scopeRows(eq(HOUSE_ID), eq("HOUSE"), any(), any(), any()))
+            .thenReturn(List.of());
+        when(eligibilityService.evaluate(anyList())).thenReturn(List.of());
+        when(allocationMapper.selectByTask(HOUSE_ID, TASK_ID))
+            .thenReturn(List.of(allocation(101L, "2.500")));
+
+        OutboundDtos.TaskView view = service.save(
+            USER_ID,
+            HOUSE_ID,
+            TASK_ID,
+            allocationRequest(
+                "WAITING_CONFIRMATION",
+                List.of(
+                    input(7L, 1L, "NORMAL", null),
+                    input(8L, 1L, "NORMAL", null)
+                ),
+                List.of(new SaleBatchAllocationInput(101L, new BigDecimal("2.500")))
+            )
+        );
+
+        assertEquals(1, view.batchAllocations().size());
+        assertEquals(101L, view.batchAllocations().getFirst().batchId());
+    }
+
+    @Test
+    void waitingConfirmationAcceptsAnExplicitEmptyAllocationListAndClearsStaleRows() {
+        stubEditableTask();
+        stubCandidate(7L, OutboundEligibilityService.NORMAL, 1L);
+        when(taskMapper.updateDraft(anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+                any(), any(), any(), any(), any())).thenReturn(1);
+        OutboundTask saved = task("WAITING_CONFIRMATION", 1L);
+        saved.setTotalWeight(4.0);
+        saved.setUnitPrice(new BigDecimal("12.00"));
+        when(taskMapper.selectById(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(saved);
+        when(eligibilityService.scopeRows(eq(HOUSE_ID), eq("HOUSE"), any(), any(), any()))
+            .thenReturn(List.of());
+        when(eligibilityService.evaluate(anyList())).thenReturn(List.of());
+        when(allocationMapper.selectByTask(HOUSE_ID, TASK_ID)).thenReturn(List.of());
+
+        OutboundDtos.TaskView view = service.save(
+            USER_ID,
+            HOUSE_ID,
+            TASK_ID,
+            allocationRequest(
+                "WAITING_CONFIRMATION",
+                List.of(input(7L, 1L, "NORMAL", null)),
+                List.of()
+            )
+        );
+
+        assertTrue(view.batchAllocations().isEmpty());
+        verify(allocationMapper).deleteByTaskLimited(HOUSE_ID, TASK_ID, 1_000);
+        verify(allocationMapper, never()).insertBatch(anyList());
+    }
+
+    @Test
+    void legacyDraftWithoutAllocationsReturnsAnEmptyList() {
+        OutboundTask task = task("SELECTING", 1L);
+        task.setUnitPrice(new BigDecimal("10.00"));
+        when(taskMapper.selectById(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(task);
+        when(eligibilityService.scopeRows(eq(HOUSE_ID), eq("HOUSE"), any(), any(), any()))
+            .thenReturn(List.of());
+        when(eligibilityService.evaluate(anyList())).thenReturn(List.of());
+        when(allocationMapper.selectByTask(HOUSE_ID, TASK_ID)).thenReturn(List.of());
+
+        OutboundDtos.TaskView view = service.get(USER_ID, HOUSE_ID, TASK_ID);
+
+        assertEquals(new BigDecimal("10.00"), view.unitPricePerKg());
+        assertTrue(view.batchAllocations().isEmpty());
     }
 
     @Test
@@ -426,17 +761,120 @@ class OutboundTaskServiceTest {
 
     // ---------- 夹具 ----------
 
+    private void assertOmittedAllocationBehavior(
+        List<OutboundTaskItem> existingItems,
+        List<DraftRabbit> draftRabbits,
+        boolean expectPreserved
+    ) {
+        stubEditableTask();
+        List<OutboundCandidateRow> candidates = draftRabbits.stream()
+            .map(item -> candidate(item.rabbitId(), item.batchId()))
+            .toList();
+        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList())).thenReturn(candidates);
+        for (int index = 0; index < candidates.size(); index++) {
+            DraftRabbit input = draftRabbits.get(index);
+            OutboundCandidateRow candidate = candidates.get(index);
+            String eligibility = "EARLY_SALE".equals(input.selectionType())
+                ? OutboundEligibilityService.EARLY_SALE
+                : OutboundEligibilityService.NORMAL;
+            when(eligibilityService.evaluate(candidate)).thenReturn(
+                eligibilityView(input.rabbitId(), eligibility, input.stateVersion(), input.batchId())
+            );
+        }
+        when(itemMapper.selectByTask(TASK_ID)).thenReturn(existingItems);
+        when(taskMapper.updateDraft(anyLong(), anyLong(), anyString(), anyLong(), anyString(),
+                any(), any(), any(), any(), any())).thenReturn(1);
+        OutboundTask saved = task("WAITING_CONFIRMATION", 1L);
+        saved.setTotalWeight(2.0);
+        saved.setUnitPrice(new BigDecimal("12.00"));
+        when(taskMapper.selectById(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(saved);
+        when(eligibilityService.scopeRows(eq(HOUSE_ID), eq("HOUSE"), any(), any(), any()))
+            .thenReturn(List.of());
+        when(eligibilityService.evaluate(anyList())).thenReturn(List.of());
+        when(allocationMapper.selectByTask(HOUSE_ID, TASK_ID)).thenReturn(
+            expectPreserved ? List.of(allocation(101L, "2.000")) : List.of()
+        );
+        List<OutboundDtos.SelectedRabbitInput> inputs = draftRabbits.stream()
+            .map(item -> input(
+                item.rabbitId(),
+                item.stateVersion(),
+                item.selectionType(),
+                item.earlySaleReason()
+            ))
+            .toList();
+        OutboundDtos.SaveDraftRequest request = new OutboundDtos.SaveDraftRequest(
+            0L,
+            "WAITING_CONFIRMATION",
+            inputs,
+            null,
+            2.0,
+            null,
+            new BigDecimal("12.00"),
+            null,
+            null,
+            null
+        );
+
+        OutboundDtos.TaskView view = service.save(
+            USER_ID, HOUSE_ID, TASK_ID, request
+        );
+
+        assertEquals(expectPreserved ? 1 : 0, view.batchAllocations().size());
+        if (expectPreserved) {
+            verify(allocationMapper, never()).deleteByTaskLimited(
+                anyLong(), anyString(), anyInt()
+            );
+        } else {
+            verify(allocationMapper).deleteByTaskLimited(
+                HOUSE_ID, TASK_ID, 1_000
+            );
+        }
+    }
+
+    private OutboundTaskItem snapshotItem(
+        Long rabbitId,
+        Long batchId,
+        Long stateVersion,
+        String selectionType,
+        String earlySaleReason
+    ) {
+        OutboundTaskItem item = new OutboundTaskItem();
+        item.setTaskId(TASK_ID);
+        item.setRabbitId(rabbitId);
+        item.setBatchIdSnapshot(batchId);
+        item.setStateVersion(stateVersion);
+        item.setSelectionType(selectionType);
+        item.setEarlySaleReason(earlySaleReason);
+        return item;
+    }
+
+    private record DraftRabbit(
+        Long rabbitId,
+        Long batchId,
+        Long stateVersion,
+        String selectionType,
+        String earlySaleReason
+    ) {}
+
     private void stubEditableTask() {
         when(taskMapper.selectByIdForUpdate(HOUSE_ID, USER_ID, TASK_ID)).thenReturn(task("SELECTING", 0L));
     }
 
     private void stubCandidate(Long rabbitId, String eligibility, Long stateVersion) {
+        OutboundCandidateRow row = candidate(rabbitId, null);
+        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList())).thenReturn(List.of(row));
+        when(eligibilityService.evaluate(row)).thenReturn(
+            eligibilityView(rabbitId, eligibility, stateVersion, null)
+        );
+    }
+
+    private OutboundCandidateRow candidate(Long rabbitId, Long batchId) {
         OutboundCandidateRow row = new OutboundCandidateRow();
         row.setRabbitId(rabbitId);
         row.setHouseId(HOUSE_ID);
         row.setCageId(3L);
-        when(eligibilityService.rowsByIds(eq(HOUSE_ID), anyList())).thenReturn(List.of(row));
-        when(eligibilityService.evaluate(row)).thenReturn(eligibilityView(rabbitId, eligibility, stateVersion));
+        row.setBatchId(batchId);
+        return row;
     }
 
     /** view() 会再扫一次候选并做汇总，这里给出足以让它跑完的空结果。 */
@@ -448,10 +886,20 @@ class OutboundTaskServiceTest {
         when(itemMapper.selectByTask(anyString())).thenReturn(List.of());
     }
 
-    private OutboundDtos.RabbitEligibilityView eligibilityView(Long rabbitId, String eligibility, Long stateVersion) {
+    private OutboundDtos.RabbitEligibilityView eligibilityView(
+            Long rabbitId, String eligibility, Long stateVersion, Long batchId) {
         return new OutboundDtos.RabbitEligibilityView(
-                rabbitId, 3L, "R1-1-1", "R1", 1, 1, "2", "0", 2.5, "可出售", null,
+                rabbitId, 3L, "R1-1-1", "R1", 1, 1, "2", "0", 2.5, "可出售", batchId,
                 stateVersion, eligibility, null, null, null, true);
+    }
+
+    private OutboundTaskBatchAllocation allocation(Long batchId, String weight) {
+        OutboundTaskBatchAllocation allocation = new OutboundTaskBatchAllocation();
+        allocation.setTaskId(TASK_ID);
+        allocation.setHouseId(HOUSE_ID);
+        allocation.setBatchId(batchId);
+        allocation.setActualWeightKg(new BigDecimal(weight));
+        return allocation;
     }
 
     private OutboundTask task(String status, Long revision) {
@@ -473,6 +921,24 @@ class OutboundTaskServiceTest {
     private OutboundDtos.SaveDraftRequest saveRequest(
             Long revision, String status, List<OutboundDtos.SelectedRabbitInput> items) {
         return new OutboundDtos.SaveDraftRequest(revision, status, items, null, null, null, null, null);
+    }
+
+    private OutboundDtos.SaveDraftRequest allocationRequest(
+            String status,
+            List<OutboundDtos.SelectedRabbitInput> items,
+            List<SaleBatchAllocationInput> allocations) {
+        return new OutboundDtos.SaveDraftRequest(
+            0L,
+            status,
+            items,
+            null,
+            4.0,
+            null,
+            new BigDecimal("12.00"),
+            allocations,
+            null,
+            null
+        );
     }
 
     private OutboundDtos.SelectedRabbitInput input(

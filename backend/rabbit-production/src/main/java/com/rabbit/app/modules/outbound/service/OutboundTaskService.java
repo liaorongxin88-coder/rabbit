@@ -5,15 +5,21 @@ import com.rabbit.app.modules.house.service.HouseService;
 import com.rabbit.app.modules.outbound.dto.OutboundDtos;
 import com.rabbit.app.modules.outbound.entity.OutboundCandidateRow;
 import com.rabbit.app.modules.outbound.entity.OutboundTask;
+import com.rabbit.app.modules.outbound.entity.OutboundTaskBatchAllocation;
 import com.rabbit.app.modules.outbound.entity.OutboundTaskItem;
+import com.rabbit.app.modules.outbound.mapper.OutboundTaskBatchAllocationMapper;
 import com.rabbit.app.modules.outbound.mapper.OutboundTaskItemMapper;
 import com.rabbit.app.modules.outbound.mapper.OutboundTaskMapper;
+import com.rabbit.app.modules.sale.dto.SaleBatchAllocationInput;
+import com.rabbit.app.modules.sale.service.SaleBatchAllocationService;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -25,13 +31,16 @@ public class OutboundTaskService {
 
     private final OutboundTaskMapper taskMapper;
     private final OutboundTaskItemMapper itemMapper;
+    private final OutboundTaskBatchAllocationMapper allocationMapper;
     private final OutboundEligibilityService eligibilityService;
     private final HouseService houseService;
 
     public OutboundTaskService(OutboundTaskMapper taskMapper, OutboundTaskItemMapper itemMapper,
+                               OutboundTaskBatchAllocationMapper allocationMapper,
                                OutboundEligibilityService eligibilityService, HouseService houseService) {
         this.taskMapper = taskMapper;
         this.itemMapper = itemMapper;
+        this.allocationMapper = allocationMapper;
         this.eligibilityService = eligibilityService;
         this.houseService = houseService;
     }
@@ -91,6 +100,9 @@ public class OutboundTaskService {
         if (task == null) throw new BizException(404, "OUTBOUND_TASK_NOT_FOUND");
         String status = normalizeDraftStatus(request.status());
         List<OutboundDtos.SelectedRabbitInput> inputs = request.items() == null ? List.of() : request.items();
+        if (inputs.stream().anyMatch(Objects::isNull)) {
+            throw new BizException(400, "items不能包含空项");
+        }
         if (inputs.stream().anyMatch(input -> "EARLY_SALE".equalsIgnoreCase(trim(input.selectionType())))) {
             houseService.assertHousePermission(userId, houseId, "control");
         }
@@ -122,12 +134,34 @@ public class OutboundTaskService {
             items.add(toItem(taskId, candidate, selectionType, trim(input.earlySaleReason()), input.stateVersion()));
         }
 
+        BigDecimal unitPrice = draftUnitPrice(request);
+        BigDecimal totalWeight = draftTotalWeight(request.totalWeight());
+        List<SaleBatchAllocationInput> allocations = request.batchAllocations() == null
+            ? null
+            : SaleBatchAllocationService.normalizeDraftAllocations(
+                batchGroupCounts(items),
+                totalWeight,
+                unitPrice,
+                request.batchAllocations(),
+                false
+            );
+        List<OutboundTaskItem> existingItems = allocations == null
+            ? itemMapper.selectByTask(taskId)
+            : List.of();
+        boolean preserveExistingAllocations = allocations == null
+            && hasEquivalentAllocationSnapshot(existingItems, items);
+
         int updated = taskMapper.updateDraft(houseId, userId, taskId, request.revision(), status,
-                request.saleTime(), request.totalWeight(), request.unitPrice(), trim(request.customer()), trim(request.remark()));
+                request.saleTime(), request.totalWeight(), unitPrice, trim(request.customer()), trim(request.remark()));
         if (updated == 0) {
             throw new BizException(409, "OUTBOUND_REVISION_CONFLICT");
         }
         replaceTaskItems(taskId, items);
+        if (allocations != null) {
+            replaceTaskAllocations(houseId, taskId, allocations);
+        } else if (!preserveExistingAllocations) {
+            replaceTaskAllocations(houseId, taskId, List.of());
+        }
         return view(taskMapper.selectById(houseId, userId, taskId), false);
     }
 
@@ -165,6 +199,72 @@ public class OutboundTaskService {
         }
     }
 
+    private void replaceTaskAllocations(
+        Long houseId,
+        String taskId,
+        List<SaleBatchAllocationInput> allocations
+    ) {
+        int deleted;
+        do {
+            deleted = allocationMapper.deleteByTaskLimited(
+                houseId, taskId, TASK_ITEM_WRITE_CHUNK_SIZE
+            );
+        } while (deleted == TASK_ITEM_WRITE_CHUNK_SIZE);
+        for (int start = 0; start < allocations.size(); start += TASK_ITEM_WRITE_CHUNK_SIZE) {
+            int end = Math.min(start + TASK_ITEM_WRITE_CHUNK_SIZE, allocations.size());
+            List<OutboundTaskBatchAllocation> rows = allocations.subList(start, end).stream()
+                .map(allocation -> toAllocation(houseId, taskId, allocation))
+                .toList();
+            allocationMapper.insertBatch(rows);
+        }
+    }
+
+    private boolean hasEquivalentAllocationSnapshot(
+        List<OutboundTaskItem> existingItems,
+        List<OutboundTaskItem> newItems
+    ) {
+        if (existingItems.size() != newItems.size()) {
+            return false;
+        }
+        Map<Long, OutboundTaskItem> existingByRabbit = new LinkedHashMap<>();
+        for (OutboundTaskItem item : existingItems) {
+            if (item == null || existingByRabbit.put(item.getRabbitId(), item) != null) {
+                return false;
+            }
+        }
+        for (OutboundTaskItem item : newItems) {
+            OutboundTaskItem existing = existingByRabbit.remove(item.getRabbitId());
+            if (existing == null
+                    || !Objects.equals(existing.getBatchIdSnapshot(), item.getBatchIdSnapshot())
+                    || !Objects.equals(existing.getStateVersion(), item.getStateVersion())
+                    || !Objects.equals(comparableSelectionType(existing.getSelectionType()),
+                        comparableSelectionType(item.getSelectionType()))
+                    || !Objects.equals(trim(existing.getEarlySaleReason()),
+                        trim(item.getEarlySaleReason()))) {
+                return false;
+            }
+        }
+        return existingByRabbit.isEmpty();
+    }
+
+    private String comparableSelectionType(String value) {
+        String normalized = trim(value);
+        return normalized == null ? "NORMAL" : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private OutboundTaskBatchAllocation toAllocation(
+        Long houseId,
+        String taskId,
+        SaleBatchAllocationInput input
+    ) {
+        OutboundTaskBatchAllocation allocation = new OutboundTaskBatchAllocation();
+        allocation.setTaskId(taskId);
+        allocation.setHouseId(houseId);
+        allocation.setBatchId(input.batchId());
+        allocation.setActualWeightKg(input.actualWeightKg());
+        return allocation;
+    }
+
     private OutboundDtos.TaskView view(OutboundTask task, boolean resumed) {
         List<OutboundCandidateRow> rows = eligibilityService.scopeRows(task.getHouseId(), task.getEntryType(),
                 task.getSourceRabbitId(), task.getSourceCageId(), task.getSourceRowCode());
@@ -173,11 +273,16 @@ public class OutboundTaskService {
                 .map(item -> new OutboundDtos.TaskItemView(item.getRabbitId(), item.getStateVersion(),
                         item.getSelectionType(), item.getEarlySaleReason()))
                 .toList();
+        List<SaleBatchAllocationInput> allocations = allocationMapper.selectByTask(
+                task.getHouseId(), task.getTaskId()).stream()
+                .map(allocation -> new SaleBatchAllocationInput(
+                    allocation.getBatchId(), allocation.getActualWeightKg()))
+                .toList();
         return new OutboundDtos.TaskView(task.getTaskId(), task.getHouseId(), task.getEntryType(),
                 task.getSourceRabbitId(), task.getSourceCageId(), task.getSourceRowCode(), task.getStatus(),
                 task.getRevision(), task.getSaleTime(), task.getTotalWeight(), task.getUnitPrice(),
-                task.getCustomer(), task.getRemark(), task.getSaleOrderId(), resumed,
-                eligibilityService.summary(rabbits), rabbits, selected);
+                task.getUnitPrice(), allocations, task.getCustomer(), task.getRemark(),
+                task.getSaleOrderId(), resumed, eligibilityService.summary(rabbits), rabbits, selected);
     }
 
     private OutboundTaskItem toItem(String taskId, OutboundCandidateRow row, String selectionType,
@@ -202,6 +307,42 @@ public class OutboundTaskService {
         Map<Long, OutboundCandidateRow> result = new LinkedHashMap<>();
         for (OutboundCandidateRow row : rows) result.put(row.getRabbitId(), row);
         return result;
+    }
+
+    private Map<Long, Integer> batchGroupCounts(List<OutboundTaskItem> items) {
+        Map<Long, Integer> counts = new LinkedHashMap<>();
+        for (OutboundTaskItem item : items) {
+            counts.merge(item.getBatchIdSnapshot(), 1, Integer::sum);
+        }
+        return counts;
+    }
+
+    private BigDecimal draftUnitPrice(OutboundDtos.SaveDraftRequest request) {
+        BigDecimal legacy = request.unitPrice();
+        BigDecimal current = request.unitPricePerKg();
+        if (legacy != null && current != null && legacy.compareTo(current) != 0) {
+            throw new BizException(400, "unitPrice与unitPricePerKg不一致");
+        }
+        BigDecimal value = current == null ? legacy : current;
+        if (value == null) {
+            return null;
+        }
+        boolean snapshotContract = current != null || request.batchAllocations() != null;
+        if (snapshotContract) {
+            return SaleBatchAllocationService.normalizeSnapshotPrice(value);
+        }
+        SaleBatchAllocationService.orderAmount(BigDecimal.ONE, value);
+        return value;
+    }
+
+    private BigDecimal draftTotalWeight(Double value) {
+        if (value == null) {
+            return null;
+        }
+        if (!Double.isFinite(value) || value <= 0 || value > 100000) {
+            throw new BizException(400, "totalWeight不合法");
+        }
+        return BigDecimal.valueOf(value);
     }
 
     private List<Long> uniqueIds(List<OutboundDtos.SelectedRabbitInput> inputs) {

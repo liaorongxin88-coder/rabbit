@@ -73,7 +73,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
   final _countController = TextEditingController();
   final _maleController = TextEditingController();
   final _femaleController = TextEditingController();
-  final _weightController = TextEditingController();
+  final _totalWeightController = TextEditingController();
   final _remarkController = TextEditingController();
 
   late DateTime _weaningDate;
@@ -97,7 +97,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     _countController.dispose();
     _maleController.dispose();
     _femaleController.dispose();
-    _weightController.dispose();
+    _totalWeightController.dispose();
     _remarkController.dispose();
     super.dispose();
   }
@@ -239,6 +239,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
     ref.invalidate(batchDetailProvider(detailRequest));
     ref.invalidate(batchMembersProvider(detailRequest));
     ref.invalidate(pendingWeaningRecordsProvider(detailRequest));
+    ref.invalidate(batchStatisticsProvider(detailRequest));
   }
 
   Future<void> _submit() async {
@@ -322,9 +323,26 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
       return;
     }
 
+    final totalWeight = _parseOptionalDouble(_totalWeightController);
+    if (count > 0 &&
+        (totalWeight == null || !totalWeight.isFinite || totalWeight <= 0)) {
+      _showMessage('断奶数量大于 0 时，请填写大于 0 的断奶总重');
+      return;
+    }
+    if (count == 0 &&
+        totalWeight != null &&
+        (!totalWeight.isFinite || totalWeight != 0)) {
+      _showMessage('断奶数量为 0 时，断奶总重只能留空或填写 0');
+      return;
+    }
+    if (totalWeight != null &&
+        ((totalWeight * 1000).round() - totalWeight * 1000).abs() >= 0.000001) {
+      _showMessage('断奶总重最多保留三位小数');
+      return;
+    }
+
     setState(() => _saving = true);
     try {
-      final avgWeight = _parseOptionalDouble(_weightController);
       final remark = _remarkController.text.trim();
       final nextRemindAt = _ordinaryNextRemindAt;
       final requestId = _writeRequest.requestIdFor(
@@ -338,7 +356,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
           'weaningCount': count,
           'maleCount': male,
           'femaleCount': female,
-          'avgWeight': avgWeight,
+          'weaningTotalWeightKg': totalWeight,
           'remark': remark,
           if (nextRemindAt != null)
             'nextRemindAt': formatBatchWriteDate(nextRemindAt),
@@ -359,7 +377,7 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
             weanedCount: count,
             maleCount: male,
             femaleCount: female,
-            avgWeaningWeight: avgWeight,
+            weaningTotalWeightKg: totalWeight,
             remark: remark,
             requestId: requestId,
           );
@@ -367,15 +385,32 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
         return;
       }
 
+      ReproLitter? savedLitter;
+      try {
+        savedLitter = await ref.read(reproRepositoryProvider).getCycleLitter(
+              houseId: widget.houseId,
+              cycleId: cycleId,
+            );
+      } catch (_) {
+        // The write is complete; a failed confirmation read must not report
+        // the operation itself as failed.
+      }
+      if (!mounted) return;
       ref.invalidate(homeEventsProvider);
       ref.invalidate(houseRabbitsProvider(widget.houseId));
       _invalidateBatchProviders();
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop(result);
+      final confirmedTotalWeight = savedLitter?.weaningTotalWeightKg;
+      final confirmedAverage = count > 0 && confirmedTotalWeight != null
+          ? confirmedTotalWeight / count
+          : null;
       messenger?.showSnackBar(
         SnackBar(
           content: Text(
-            '母兔 #${widget.rabbitId} 断奶完成（$count 只待分笼），请前往笼位详情选择场内生产。',
+            confirmedAverage == null
+                ? '母兔 #${widget.rabbitId} 断奶完成（$count 只待分笼），服务端总重暂未刷新。'
+                : '母兔 #${widget.rabbitId} 断奶完成，服务端断奶均重 ${confirmedAverage.toStringAsFixed(3)} kg/只。',
           ),
         ),
       );
@@ -639,16 +674,33 @@ class _WeaningSheetState extends ConsumerState<_WeaningSheet> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      key: const ValueKey('weaning-average-weight'),
-                      controller: _weightController,
+                      key: const ValueKey('weaning-total-weight'),
+                      controller: _totalWeightController,
                       enabled: !_saving,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: '平均体重 kg（可选）',
+                      decoration: InputDecoration(
+                        labelText:
+                            (int.tryParse(_countController.text.trim()) ?? 0) >
+                                    0
+                                ? '断奶总重（kg）*'
+                                : '断奶总重（kg）',
                       ),
+                      onChanged: (_) => setState(() {}),
                     ),
+                    if ((int.tryParse(_countController.text.trim()) ?? 0) > 0 &&
+                        _parseOptionalDouble(_totalWeightController) != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '服务端将按总重计算断奶均重：${(_parseOptionalDouble(_totalWeightController)! / int.parse(_countController.text.trim())).toStringAsFixed(3)} kg/只',
+                            key: const ValueKey('weaning-derived-average'),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 12),
                     TextField(
                       key: const ValueKey('weaning-remark'),

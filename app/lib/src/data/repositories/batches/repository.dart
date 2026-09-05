@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/services/network/client.dart';
+import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/network/response.dart';
 import 'package:rabbit_flutter/src/domain/batches/batch.dart';
+import 'package:rabbit_flutter/src/domain/batches/carcass_yield.dart';
 import 'package:rabbit_flutter/src/domain/batches/rabbit.dart';
 import 'package:rabbit_flutter/src/domain/batches/statistics.dart';
 import 'package:rabbit_flutter/src/domain/batches/tracking.dart';
@@ -132,6 +137,80 @@ class BatchRepository {
       cancelToken: cancelToken,
       decode: (data) => BatchStatistics.fromJson(
         requireJsonObject(data, message: '批次统计格式不正确'),
+      ),
+    );
+  }
+
+  Future<File> downloadBatchStatistics({
+    required int houseId,
+    required int batchId,
+    Directory? directory,
+  }) async {
+    final targetDirectory = directory ?? await getTemporaryDirectory();
+    await targetDirectory.create(recursive: true);
+    final separator = Platform.pathSeparator;
+    final fallbackName = 'batch-$batchId-statistics.xlsx';
+    final partial = File(
+      '${targetDirectory.path}$separator.$fallbackName-${_uuid.v4()}.part',
+    );
+    try {
+      final result = await _api.downloadProtected(
+        '/api/reports/batches/$batchId/statistics.xlsx',
+        partial.path,
+        houseId: houseId,
+      );
+      if (!_isSpreadsheetContentType(result.contentType)) {
+        throw const ApiException('批次统计导出文件类型不正确');
+      }
+      if (!await partial.exists() || await partial.length() == 0) {
+        throw const ApiException('批次统计导出文件为空');
+      }
+      final filename = _batchStatisticsFilename(
+        result.contentDisposition,
+        fallbackName,
+      );
+      final target = File('${targetDirectory.path}$separator$filename');
+      if (await target.exists()) await target.delete();
+      return partial.rename(target.path);
+    } catch (_) {
+      await _deleteFileBestEffort(partial);
+      rethrow;
+    }
+  }
+
+  Future<BatchCarcassYieldRecord> createCarcassYield({
+    required int houseId,
+    required int batchId,
+    required BatchCarcassYieldDraft draft,
+  }) {
+    final validation = draft.validate();
+    if (validation != null) {
+      throw ArgumentError(validation);
+    }
+    return _api.post<BatchCarcassYieldRecord>(
+      '/api/batches/$batchId/carcass-yields',
+      houseId: houseId,
+      body: draft.toJson(),
+      decode: (data) => BatchCarcassYieldRecord.fromJson(
+        requireJsonObject(data, message: '出肉率保存结果格式不正确'),
+      ),
+    );
+  }
+
+  Future<BatchCarcassYieldPage> listCarcassYields({
+    required int houseId,
+    required int batchId,
+    int page = 1,
+    int pageSize = 20,
+    CancelToken? cancelToken,
+  }) {
+    return _api.get<BatchCarcassYieldPage>(
+      '/api/batches/$batchId/carcass-yields',
+      houseId: houseId,
+      query: {'page': page, 'pageSize': pageSize},
+      cancelToken: cancelToken,
+      decode: (data) => BatchCarcassYieldPage.fromJson(
+        requireJsonObject(data, message: '出肉率历史格式不正确'),
       ),
     );
   }
@@ -325,6 +404,51 @@ String formatBatchWriteDate(DateTime date) {
 }
 
 String formatBatchWriteDateTime(DateTime date) => farmDateTimeToIso(date);
+
+const _spreadsheetContentType =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+bool _isSpreadsheetContentType(String? contentType) =>
+    contentType?.split(';').first.trim().toLowerCase() ==
+    _spreadsheetContentType;
+
+Future<void> _deleteFileBestEffort(File file) async {
+  try {
+    if (await file.exists()) await file.delete();
+  } catch (_) {
+    // Cleanup must not replace the download validation or transport error.
+  }
+}
+
+String _batchStatisticsFilename(String? contentDisposition, String fallback) {
+  final encoded = RegExp(
+    r'''filename\*\s*=\s*(?:UTF-8'')?([^;]+)''',
+    caseSensitive: false,
+  ).firstMatch(contentDisposition ?? '');
+  final regular = RegExp(
+    r'''filename\s*=\s*(?:"([^"]*)"|([^;]+))''',
+    caseSensitive: false,
+  ).firstMatch(contentDisposition ?? '');
+  final raw = encoded?.group(1) ?? regular?.group(1) ?? regular?.group(2);
+  if (raw == null) return fallback;
+  String decoded;
+  try {
+    decoded = Uri.decodeComponent(raw.trim().replaceAll('"', ''));
+  } on FormatException {
+    return fallback;
+  }
+  final basename = decoded.replaceAll('\\', '/').split('/').last;
+  var safe = basename
+      .replaceAll(RegExp(r'[\x00-\x1f\x7f<>:"/\\|?*]'), '_')
+      .replaceAll(RegExp(r'^[ .]+|[ .]+$'), '');
+  if (safe.isEmpty || !safe.toLowerCase().endsWith('.xlsx')) {
+    return fallback;
+  }
+  if (safe.length > 180) {
+    safe = '${safe.substring(0, 175)}.xlsx';
+  }
+  return safe;
+}
 
 List<int> _sortedUniqueIds(Iterable<int> ids) {
   return ids.toSet().toList()..sort();

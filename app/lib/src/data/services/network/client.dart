@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rabbit_flutter/src/config/app.dart';
+import 'package:rabbit_flutter/src/data/services/app_update/installer.dart';
 import 'package:rabbit_flutter/src/data/services/network/exception.dart';
 import 'package:rabbit_flutter/src/data/services/auth/session.dart';
 
@@ -19,15 +22,29 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return client;
 });
 
+class ProtectedDownloadResult {
+  const ProtectedDownloadResult({
+    required this.contentType,
+    required this.contentDisposition,
+  });
+
+  final String? contentType;
+  final String? contentDisposition;
+}
+
 class ApiClient {
   ApiClient(
     this._sessionStore, {
     Dio? dio,
     String? baseUrl,
-  }) : _dio = dio ?? _buildDio(baseUrl ?? AppConfig.defaultBaseUrl);
+    Future<String?> Function()? appBuildLoader,
+  })  : _dio = dio ?? _buildDio(baseUrl ?? AppConfig.defaultBaseUrl),
+        _appBuildLoader = appBuildLoader ?? _installedAppBuild;
 
   final SessionStore _sessionStore;
   final Dio _dio;
+  final Future<String?> Function() _appBuildLoader;
+  Future<String?>? _appBuild;
   final _unauthorizedController = StreamController<void>.broadcast(sync: true);
 
   Stream<void> get unauthorizedEvents => _unauthorizedController.stream;
@@ -91,6 +108,64 @@ class ApiClient {
         _dioMessage(error),
         statusCode: error.response?.statusCode,
       );
+    }
+  }
+
+  Future<ProtectedDownloadResult> downloadProtected(
+    String path,
+    String savePath, {
+    required int houseId,
+    void Function(int received, int total)? onReceiveProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final target = File(savePath);
+    try {
+      final options = await _options(houseId: houseId);
+      final response = await _dio.download(
+        path,
+        savePath,
+        options: options,
+        onReceiveProgress: onReceiveProgress,
+        cancelToken: cancelToken,
+      );
+      final result = ProtectedDownloadResult(
+        contentType: response.headers.value(Headers.contentTypeHeader),
+        contentDisposition: response.headers.value('content-disposition'),
+      );
+      if (_isJsonContentType(result.contentType)) {
+        final body = await target.readAsString();
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final code = _intValue(decoded['code']);
+          if (code != null && code != 0) {
+            final exception = ApiException(
+              _messageFrom(decoded),
+              businessCode: code,
+            );
+            if (exception.invalidatesSession) {
+              _unauthorizedController.add(null);
+            }
+            throw exception;
+          }
+        }
+      }
+      return result;
+    } on ApiException {
+      await _deleteDownload(target);
+      rethrow;
+    } on DioException catch (error) {
+      await _deleteDownload(target);
+      final exception = ApiException(
+        _dioMessage(error),
+        statusCode: error.response?.statusCode,
+      );
+      if (exception.invalidatesSession) {
+        _unauthorizedController.add(null);
+      }
+      throw exception;
+    } on FormatException {
+      await _deleteDownload(target);
+      throw const ApiException('服务返回的下载结果格式不正确');
     }
   }
 
@@ -216,7 +291,34 @@ class ApiClient {
     if (houseId != null && houseId > 0) {
       headers['X-House-Id'] = '$houseId';
     }
+    final pendingAppBuild = _appBuild ??= _loadAppBuild();
+    final appBuild = await pendingAppBuild;
+    if ((appBuild == null || appBuild.trim().isEmpty) &&
+        identical(_appBuild, pendingAppBuild)) {
+      _appBuild = null;
+    }
+    headers['X-App-Build'] =
+        appBuild?.trim().isNotEmpty == true ? appBuild!.trim() : 'UNKNOWN';
     return Options(headers: headers);
+  }
+
+  Future<String?> _loadAppBuild() async {
+    try {
+      return await _appBuildLoader();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> _installedAppBuild() async {
+    if (Platform.environment['FLUTTER_TEST'] == 'true') return null;
+    try {
+      final version =
+          await const MethodChannelAppUpdateInstaller().currentVersion();
+      return '${version.buildNumber}';
+    } catch (_) {
+      return null;
+    }
   }
 
   static int? _intValue(Object? value) {
@@ -238,6 +340,17 @@ class ApiClient {
       return message.trim();
     }
     return '请求未完成，请稍后重试';
+  }
+
+  static bool _isJsonContentType(String? contentType) =>
+      contentType?.toLowerCase().contains('application/json') == true;
+
+  static Future<void> _deleteDownload(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Preserve the original transport or contract failure.
+    }
   }
 
   static String _dioMessage(DioException error) {

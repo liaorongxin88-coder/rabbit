@@ -8,6 +8,8 @@ import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
+import com.rabbit.app.modules.batch.service.BatchStatisticsLegacyWriteService;
+import com.rabbit.app.modules.batch.support.BatchWritePayloadHasher;
 import com.rabbit.app.modules.file.service.BusinessFileService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.entity.RabbitStatusHistory;
@@ -42,10 +44,13 @@ import com.rabbit.app.modules.repro.mapper.RabbitStageProjectionMapper;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
 import com.rabbit.app.modules.repro.mapper.ReproEventMapper;
 import com.rabbit.app.util.DateUtil;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,6 +86,7 @@ public class ReproStateMachineService {
     private final BreedingEligibilityValidator eligibilityValidator;
     private final ObjectMapper objectMapper;
     private final BusinessFileService businessFileService;
+    private final BatchStatisticsLegacyWriteService legacyWriteService;
 
     public ReproStateMachineService(
         ReproCycleMapper reproCycleMapper,
@@ -98,6 +104,43 @@ public class ReproStateMachineService {
         ObjectMapper objectMapper,
         BusinessFileService businessFileService
     ) {
+        this(
+            reproCycleMapper,
+            reproEventMapper,
+            litterMapper,
+            bizAttachmentMapper,
+            rabbitStageProjectionMapper,
+            rabbitMapper,
+            batchMapper,
+            batchRabbitMapper,
+            rabbitStatusHistoryMapper,
+            workTaskWriter,
+            settingResolver,
+            eligibilityValidator,
+            objectMapper,
+            businessFileService,
+            null
+        );
+    }
+
+    @Autowired
+    public ReproStateMachineService(
+        ReproCycleMapper reproCycleMapper,
+        ReproEventMapper reproEventMapper,
+        LitterMapper litterMapper,
+        BizAttachmentMapper bizAttachmentMapper,
+        RabbitStageProjectionMapper rabbitStageProjectionMapper,
+        RabbitMapper rabbitMapper,
+        BatchMapper batchMapper,
+        BatchRabbitMapper batchRabbitMapper,
+        RabbitStatusHistoryMapper rabbitStatusHistoryMapper,
+        WorkTaskWriter workTaskWriter,
+        ReproSettingResolver settingResolver,
+        BreedingEligibilityValidator eligibilityValidator,
+        ObjectMapper objectMapper,
+        BusinessFileService businessFileService,
+        BatchStatisticsLegacyWriteService legacyWriteService
+    ) {
         this.eligibilityValidator = eligibilityValidator;
         this.reproCycleMapper = reproCycleMapper;
         this.reproEventMapper = reproEventMapper;
@@ -112,6 +155,7 @@ public class ReproStateMachineService {
         this.settingResolver = settingResolver;
         this.objectMapper = objectMapper;
         this.businessFileService = businessFileService;
+        this.legacyWriteService = legacyWriteService;
     }
 
     /**
@@ -119,6 +163,23 @@ public class ReproStateMachineService {
      *
      * @throws BizException 404 周期不存在；409 阶段不允许该动作 / 并发冲突；400 缺必要事实
      */
+    public void assertLegacyWeaningAllowed(
+        Long houseId,
+        String requestId,
+        ReproAction action,
+        Integer weanedCount,
+        BigDecimal totalWeight
+    ) {
+        if (action == ReproAction.WEANING
+            && weanedCount != null
+            && weanedCount > 0
+            && totalWeight == null
+            && legacyWriteService != null
+            && reproEventMapper.selectStateMachineByRequestId(houseId, requestId) == null) {
+            legacyWriteService.requireLegacyWriteEnabled();
+        }
+    }
+
     @Transactional
     public ReproResult apply(ReproCommand command) {
         requireNotNull(command.getHouseId(), "兔舍");
@@ -128,6 +189,7 @@ public class ReproStateMachineService {
         // 步骤 0：幂等回放。命中即原样返回首次结果，不做任何状态变更。
         ReproEvent replay = findReplay(command.getHouseId(), command.getRequestId());
         if (replay != null) {
+            assertReplayPayload(replay, command);
             return replayResult(replay);
         }
 
@@ -642,7 +704,7 @@ public class ReproStateMachineService {
         if (requestId == null || requestId.isBlank()) {
             return null;
         }
-        return reproEventMapper.selectByRequestId(houseId, requestId);
+        return reproEventMapper.selectStateMachineByRequestId(houseId, requestId);
     }
 
     private ReproResult replayResult(ReproEvent event) {
@@ -885,7 +947,27 @@ public class ReproStateMachineService {
             litter.setStatus(LitterStatus.WEANED.name());
             litter.setWeaningDate(occurredAt);
             litter.setWeanedCount(command.getWeanedCount());
-            litter.setAvgWeaningWeight(command.getAvgWeaningWeight());
+            BigDecimal totalWeight = normalizeWeaningTotalWeight(command.getWeaningTotalWeightKg());
+            if (totalWeight != null) {
+                litter.setWeaningTotalWeightKg(totalWeight);
+                litter.setAvgWeaningWeight(command.getWeanedCount() == 0
+                    ? null
+                    : totalWeight.divide(
+                        BigDecimal.valueOf(command.getWeanedCount()), 6, RoundingMode.HALF_UP
+                    ).doubleValue());
+            } else {
+                litter.setAvgWeaningWeight(command.getAvgWeaningWeight());
+                if (command.getWeanedCount() > 0 && legacyWriteService != null) {
+                    legacyWriteService.recordGap(
+                        command.getUserId(),
+                        command.getHouseId(),
+                        cycle.getBatchId(),
+                        command.getRequestId(),
+                        "repro:state-machine",
+                        BatchStatisticsLegacyWriteService.LEGACY_WEANING_WEIGHT_GAP
+                    );
+                }
+            }
             litter.setCurrentNursing(0);
             litter.setNursingCageId(command.getNursingCageId() != null
                 ? command.getNursingCageId()
@@ -1310,6 +1392,32 @@ public class ReproStateMachineService {
                 if (command.getWeanedCount() < 0) {
                     throw new BizException(400, "断奶只数不能为负数");
                 }
+                BigDecimal totalWeight = normalizeWeaningTotalWeight(
+                    command.getWeaningTotalWeightKg()
+                );
+                if (command.getWeanedCount() > 0 && totalWeight == null) {
+                    if (legacyWriteService != null) {
+                        legacyWriteService.requireLegacyWriteEnabled();
+                    }
+                }
+                if (command.getWeanedCount() == 0
+                    && totalWeight != null
+                    && totalWeight.compareTo(BigDecimal.ZERO) != 0) {
+                    throw new BizException(400, "断奶只数为0时不能填写断奶总重");
+                }
+                if (totalWeight != null && command.getWeanedCount() > 0) {
+                    BigDecimal derived = totalWeight.divide(
+                        BigDecimal.valueOf(command.getWeanedCount()), 6, RoundingMode.HALF_UP
+                    );
+                    if (command.getAvgWeaningWeight() != null) {
+                        BigDecimal submitted = BigDecimal.valueOf(command.getAvgWeaningWeight())
+                            .setScale(3, RoundingMode.HALF_UP);
+                        if (derived.setScale(3, RoundingMode.HALF_UP).compareTo(submitted) != 0) {
+                            throw new BizException(400, "断奶均重必须由断奶总重和只数计算");
+                        }
+                    }
+                    command.setAvgWeaningWeight(derived.doubleValue());
+                }
             }
             case ABORTION -> {
                 requireText(command.getRemark(), "流产详情");
@@ -1403,6 +1511,20 @@ public class ReproStateMachineService {
         }
     }
 
+    private static BigDecimal normalizeWeaningTotalWeight(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+        if (value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(400, "断奶总重必须大于0");
+        }
+        try {
+            return value.setScale(3, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException error) {
+            throw new BizException(400, "断奶总重最多保留三位小数");
+        }
+    }
+
     private static int orZero(Integer value) {
         return value == null ? 0 : value;
     }
@@ -1433,12 +1555,63 @@ public class ReproStateMachineService {
         return userId != null ? String.valueOf(userId) : "system";
     }
 
+    private void assertReplayPayload(ReproEvent event, ReproCommand command) {
+        if (event.getPayload() == null || event.getPayload().isBlank()) {
+            return;
+        }
+        try {
+            JsonNode payload = objectMapper.readTree(event.getPayload());
+            JsonNode hash = payload.get("requestPayloadHash");
+            if (hash != null && !hash.isNull()
+                && !requestPayloadHash(command).equals(hash.asText())) {
+                throw new BizException(409, "requestId已用于不同的请求载荷");
+            }
+        } catch (JsonProcessingException error) {
+            throw new BizException(500, "生产事件幂等载荷解析失败");
+        }
+    }
+
+    private static String requestPayloadHash(ReproCommand command) {
+        StringBuilder value = new StringBuilder()
+            .append(command.getCycleId())
+            .append('|').append(command.getAction())
+            .append('|').append(command.getOutcome())
+            .append('|').append(command.getOccurredAt() == null
+                ? null : command.getOccurredAt().getTime())
+            .append('|').append(command.getBatchId())
+            .append('|').append(command.getMaleRabbitId())
+            .append('|').append(command.getMatingMethod())
+            .append('|').append(command.getPalpationResult())
+            .append('|').append(command.getNextRemindAt() == null
+                ? null : command.getNextRemindAt().getTime())
+            .append('|').append(command.getTotalKits())
+            .append('|').append(command.getLiveKits())
+            .append('|').append(command.getKeptKits())
+            .append('|').append(command.getStillbirthCount())
+            .append('|').append(command.getWeanedCount())
+            .append('|').append(command.getWeaningTotalWeightKg() == null
+                ? command.getAvgWeaningWeight() : null)
+            .append('|').append(BatchWritePayloadHasher.decimal(
+                command.getWeaningTotalWeightKg()
+            ))
+            .append('|').append(command.getNursingCageId())
+            .append('|').append(command.getReason())
+            .append('|').append(command.getRemark());
+        if (command.getAttachmentFileIds() != null) {
+            command.getAttachmentFileIds().forEach(fileId ->
+                value.append("|attachment:").append(fileId)
+            );
+        }
+        return BatchWritePayloadHasher.sha256(value.toString());
+    }
+
     private Map<String, Object> payloadOf(
         ReproCommand command,
         boolean hasNextTask,
         Date nextDueTime
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("requestPayloadHash", requestPayloadHash(command));
         payload.put("resultHasNextTask", hasNextTask);
         putIfPresent(payload, "resultNextDueTime", hasNextTask ? nextDueTime : null);
         putIfPresent(payload, "maleRabbitId", command.getMaleRabbitId());
@@ -1454,6 +1627,7 @@ public class ReproStateMachineService {
         putIfPresent(payload, "stillbirthCount", command.getStillbirthCount());
         putIfPresent(payload, "weanedCount", command.getWeanedCount());
         putIfPresent(payload, "avgWeaningWeight", command.getAvgWeaningWeight());
+        putIfPresent(payload, "weaningTotalWeightKg", command.getWeaningTotalWeightKg());
         putIfPresent(payload, "nursingCageId", command.getNursingCageId());
         putIfPresent(payload, "nextRemindAt", command.getNextRemindAt());
         putIfPresent(payload, "reason", command.getReason());

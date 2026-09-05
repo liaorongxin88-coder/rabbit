@@ -204,6 +204,7 @@ void main() {
       key: const ValueKey('weaning-next-reminder-stage-label'),
       expected: '催情提醒日期',
     );
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -240,6 +241,25 @@ void main() {
     expect(harness.adapter.requests, isEmpty);
   });
 
+  testWidgets('weaning rejects an omitted total weight', (tester) async {
+    final harness = _RepositoryHarness(currentNursing: 8);
+    addTearDown(harness.dispose);
+
+    await tester.pumpWidget(
+      _productionApp(repository: harness.repository, task: _weaningTask),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-repro-task')));
+    await tester.pumpAndSettle();
+
+    final submit = find.byKey(const ValueKey('weaning-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(find.textContaining('请填写大于 0 的断奶总重'), findsOneWidget);
+    expect(harness.adapter.requests, isEmpty);
+  });
+
   testWidgets(
       'batched weaning records pending inventory without opening separation',
       (tester) async {
@@ -258,18 +278,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-repro-task')));
     await tester.pumpAndSettle();
 
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(pendingHarness.adapter.loads, 0);
+    expect(reproHarness.adapter.requests.single['weaningTotalWeightKg'], 4.0);
     expect(find.text('确认断奶'), findsNothing);
     expect(find.byKey(const ValueKey('production-cage')), findsNothing);
-    expect(
-      find.textContaining('请前往笼位详情选择场内生产'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('weaning does not query pending inventory after success',
@@ -289,18 +307,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-repro-task')));
     await tester.pumpAndSettle();
 
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(reproHarness.adapter.requests, hasLength(1));
+    expect(reproHarness.adapter.requests.single['weaningTotalWeightKg'], 4.0);
     expect(pendingHarness.adapter.loads, 0);
     expect(find.text('确认断奶'), findsNothing);
-    expect(
-      find.textContaining('请前往笼位详情选择场内生产'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('weaning custom reminder sends postpartum suggestion',
@@ -325,6 +341,7 @@ void main() {
       findsOneWidget,
     );
 
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -415,6 +432,7 @@ void main() {
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -463,6 +481,7 @@ void main() {
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -504,6 +523,7 @@ void main() {
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -548,6 +568,7 @@ void main() {
       find.byKey(const ValueKey('rabbit-repro-task-action-804')),
     );
     await tester.pumpAndSettle();
+    await _enterWeaningTotalWeight(tester);
     final submit = find.byKey(const ValueKey('weaning-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -770,6 +791,17 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+}
+
+Future<void> _enterWeaningTotalWeight(WidgetTester tester) async {
+  final field = find.byKey(const ValueKey('weaning-total-weight'));
+  final list = find.byKey(const ValueKey('weaning-form-list'));
+  for (var attempt = 0; attempt < 8 && field.evaluate().isEmpty; attempt++) {
+    await tester.drag(list, const Offset(0, -220));
+    await tester.pump();
+  }
+  expect(field, findsOneWidget);
+  await tester.enterText(field, '4.000');
 }
 
 Future<void> _expectReminderLabel(

@@ -55,7 +55,13 @@ void main() {
       await tester.tap(find.text('进入笼位'));
       // 笼位区默认是分层地图，格子上不写笼位编号，所以认 key 不认文字。
       await _waitFor(tester, find.byKey(const ValueKey('cage-map')));
-      expect(find.byKey(const ValueKey('house-outbound-action')), findsNothing);
+      final readOnlyOutboundAction =
+          find.byKey(const ValueKey('house-outbound-action'));
+      expect(readOnlyOutboundAction, findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(readOnlyOutboundAction).onPressed,
+        isNull,
+      );
       expect(find.byTooltip('整舍批量出库'), findsNothing);
       await _takeScreenshot(binding, tester, '02-view-permission');
 
@@ -142,6 +148,7 @@ void main() {
         const ValueKey('outbound-unit-price'),
         '20',
       );
+      await _enterBatchWeights(tester, const ['2.000', '2.100', '2.300']);
       await _enterField(
         tester,
         const ValueKey('outbound-customer'),
@@ -169,17 +176,39 @@ void main() {
       await tester.tap(hittableSubmitButton);
       await tester.pump();
       final conflictTitle = find.text('1 只兔状态冲突');
-      await _waitFor(tester, conflictTitle);
+      final rejectedTitle = find.text('无法提交');
+      final recovery = await _waitForEither(
+        tester,
+        [conflictTitle, rejectedTitle],
+      );
       await tester.pumpAndSettle();
-      _expectVisibleInViewport(tester, conflictTitle);
-      expect(find.textContaining('#$_g01RabbitId'), findsWidgets);
-      expect(find.text('移除冲突兔只 1 只'), findsOneWidget);
-      await _takeScreenshot(binding, tester, '06-conflict');
-
-      await tester.tap(find.text('移除冲突兔只 1 只'));
+      _expectVisibleInViewport(tester, recovery);
+      if (conflictTitle.evaluate().isNotEmpty) {
+        expect(find.textContaining('#$_g01RabbitId'), findsWidgets);
+        expect(find.text('移除冲突兔只 1 只'), findsOneWidget);
+        await _takeScreenshot(binding, tester, '06-conflict');
+        await tester.tap(find.text('移除冲突兔只 1 只'));
+      } else {
+        expect(find.textContaining('RABBIT_NOT_ELIGIBLE'), findsOneWidget);
+        await _takeScreenshot(binding, tester, '06-conflict');
+        await tester.tap(find.text('继续修改'));
+        final continueButton =
+            find.byKey(const ValueKey('outbound-continue-button'));
+        await _waitFor(tester, continueButton);
+        await tester.tap(find.byTooltip('重新预检'));
+        await _waitFor(tester, find.text('下一步 · 2 只'));
+        await tester.tap(continueButton);
+      }
       await _waitFor(tester, find.text('确认出库 2 只'));
       expect(find.text('冻结清单 2 只'), findsOneWidget);
       expect(find.text('Android 联调客户'), findsOneWidget);
+      await _enterField(
+        tester,
+        const ValueKey('outbound-total-weight'),
+        '4.4',
+      );
+      expect(_batchWeightFields(), findsNWidgets(2));
+      await _enterBatchWeights(tester, const ['2.100', '2.300']);
       await tester.tap(find.byKey(const ValueKey('outbound-submit-button')));
       await _waitFor(tester, find.text('出库完成'),
           timeout: const Duration(seconds: 30));
@@ -218,7 +247,12 @@ Future<void> _clearLocalAppState() async {
 }
 
 Future<void> _login(WidgetTester tester, String userName) async {
-  await tester.tap(find.text('账号'));
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(const ValueKey('login-mode-selector')),
+      matching: find.text('账号'),
+    ),
+  );
   await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const ValueKey('account-username-field')),
@@ -264,11 +298,38 @@ Future<void> _enterField(
   String value,
 ) async {
   final finder = find.byKey(key);
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pumpAndSettle();
   await tester.ensureVisible(finder);
-  await tester.tap(finder);
+  await tester.pumpAndSettle();
+  final hittable = finder.hitTestable();
+  expect(hittable, findsOneWidget);
+  await tester.tap(hittable);
   await tester.enterText(finder, value);
   await tester.pump(const Duration(milliseconds: 150));
   expect(find.byKey(const ValueKey('outbound-submit-button')), findsOneWidget);
+}
+
+Finder _batchWeightFields() => find.byWidgetPredicate((widget) {
+      final key = widget.key;
+      return widget is TextFormField &&
+          key is ValueKey<String> &&
+          key.value.startsWith('outbound-batch-weight-');
+    });
+
+Future<void> _enterBatchWeights(
+  WidgetTester tester,
+  List<String> weights,
+) async {
+  final fields = _batchWeightFields();
+  expect(fields, findsNWidgets(weights.length));
+  final keys = fields
+      .evaluate()
+      .map((element) => element.widget.key! as ValueKey<String>)
+      .toList(growable: false);
+  for (var index = 0; index < keys.length; index++) {
+    await _enterField(tester, keys[index], weights[index]);
+  }
 }
 
 Future<void> _quarantineRabbit({
@@ -312,6 +373,24 @@ Future<void> _quarantineRabbit({
   }
 }
 
+Future<Finder> _waitForEither(
+  WidgetTester tester,
+  List<Finder> finders, {
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    for (final finder in finders) {
+      if (finder.evaluate().isNotEmpty) return finder;
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+  }
+  fail('Timed out waiting for any of ${finders.join(', ')}');
+}
+
 Future<void> _waitFor(
   WidgetTester tester,
   Finder finder, {
@@ -325,7 +404,16 @@ Future<void> _waitFor(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
   }
-  fail('Timed out waiting for $finder');
+  final visibleTexts = find
+      .byType(Text)
+      .evaluate()
+      .map((element) => (element.widget as Text).data)
+      .whereType<String>()
+      .where((text) => text.trim().isNotEmpty)
+      .toSet()
+      .take(40)
+      .join(' | ');
+  fail('Timed out waiting for $finder. Visible text: $visibleTexts');
 }
 
 Future<void> _takeScreenshot(

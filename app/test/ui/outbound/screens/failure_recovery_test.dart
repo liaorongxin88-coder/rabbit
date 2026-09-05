@@ -50,6 +50,13 @@ void main() {
       '6.5',
     );
     await tester.ensureVisible(
+      find.byKey(const ValueKey('outbound-unit-price')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('outbound-unit-price')),
+      '18',
+    );
+    await tester.ensureVisible(
       find.byKey(const ValueKey('outbound-submit-button')),
     );
     tester.testTextInput.hide();

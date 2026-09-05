@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:rabbit_flutter/src/data/repositories/nfc/repository.dart';
 import 'package:rabbit_flutter/src/data/repositories/rabbits/repository.dart';
@@ -13,6 +14,7 @@ import 'package:rabbit_flutter/src/data/services/nfc/hardware.dart';
 import 'package:rabbit_flutter/src/data/services/nfc/intents.dart';
 import 'package:rabbit_flutter/src/domain/nfc/workflow.dart';
 import 'package:rabbit_flutter/src/domain/outbound/workflow.dart';
+import 'package:rabbit_flutter/src/ui/batches/view_models/providers.dart';
 import 'package:rabbit_flutter/src/ui/core/theme.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/page.dart';
 import 'package:rabbit_flutter/src/ui/core/widgets/sheet.dart';
@@ -1128,6 +1130,37 @@ class _ConfirmViewState extends ConsumerState<_ConfirmView> {
                         onChanged: (value) =>
                             controller.updateForm(totalWeight: value)),
                     const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '批次实际重量',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final group in state.allocationGroups) ...[
+                      TextFormField(
+                        key: ValueKey(
+                          'outbound-batch-weight-${group.key}-${state.allocationGroups.length == 1 ? state.totalWeight : ''}',
+                        ),
+                        initialValue: state.allocationWeight(group),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        enabled: editable && state.allocationGroups.length > 1,
+                        decoration: InputDecoration(
+                          labelText:
+                              '${group.batchId == null ? '未归属批次' : '批次 #${group.batchId}'} · ${group.rabbitCount} 只（kg）*',
+                          prefixIcon: const Icon(Icons.inventory_2_outlined),
+                          helperText: state.allocationGroups.length == 1
+                              ? '单一分组自动使用订单总重量'
+                              : null,
+                        ),
+                        onChanged: (value) =>
+                            controller.updateBatchAllocation(group.key, value),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextFormField(
                         key: const ValueKey('outbound-unit-price'),
                         initialValue: state.unitPrice,
@@ -1135,7 +1168,7 @@ class _ConfirmViewState extends ConsumerState<_ConfirmView> {
                             decimal: true),
                         enabled: editable,
                         decoration: const InputDecoration(
-                            labelText: '单价（元/kg）',
+                            labelText: '统一重量单价（元/kg）*',
                             prefixIcon: Icon(Icons.payments_outlined)),
                         onChanged: (value) =>
                             controller.updateForm(unitPrice: value)),
@@ -1704,43 +1737,169 @@ Future<void> _earlySale(BuildContext context, OutboundController controller,
 
 Future<void> _markBreeding(BuildContext context, WidgetRef ref,
     OutboundEntry entry, OutboundRabbit rabbit) async {
-  final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-              title: Text('兔 #${rabbit.rabbitId} 标记留种？'),
-              content: const Text('确认后将立即转入后备管理，并从当前出库任务移除。'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('取消')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('确认留种'))
-              ]));
-  if (confirmed != true) return;
-  try {
-    final conversions = await ref
-        .read(rabbitRepositoryProvider)
-        .convertToReplacement(
-            houseId: entry.houseId, rabbitIds: [rabbit.rabbitId]);
-    ref
-        .read(outboundControllerProvider(entry).notifier)
-        .removeRabbit(rabbit.rabbitId);
-    await ref.read(outboundControllerProvider(entry).notifier).refresh();
-    if (context.mounted && conversions.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+  await showDialog<void>(
+    context: context,
+    builder: (context) => _OutboundReplacementDialog(
+      entry: entry,
+      rabbit: rabbit,
+    ),
+  );
+}
+
+class _OutboundReplacementDialog extends ConsumerStatefulWidget {
+  const _OutboundReplacementDialog({
+    required this.entry,
+    required this.rabbit,
+  });
+
+  final OutboundEntry entry;
+  final OutboundRabbit rabbit;
+
+  @override
+  ConsumerState<_OutboundReplacementDialog> createState() =>
+      _OutboundReplacementDialogState();
+}
+
+class _OutboundReplacementDialogState
+    extends ConsumerState<_OutboundReplacementDialog> {
+  final _weightController = TextEditingController();
+  String? _requestId;
+  String? _requestFingerprint;
+  String? _errorMessage;
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+    final weight = double.tryParse(_weightController.text.trim());
+    if (weight == null ||
+        !weight.isFinite ||
+        weight <= 0 ||
+        ((weight * 1000).round() - weight * 1000).abs() >= 0.000001) {
+      setState(() => _errorMessage = '请输入大于 0 且最多三位小数的实测总重');
+      return;
+    }
+    final fingerprint = '${widget.rabbit.batchId}|${weight.toStringAsFixed(3)}';
+    if (_requestFingerprint != fingerprint || _requestId == null) {
+      _requestFingerprint = fingerprint;
+      _requestId = const Uuid().v4();
+    }
+    setState(() {
+      _saving = true;
+      _errorMessage = null;
+    });
+    try {
+      final conversions =
+          await ref.read(rabbitRepositoryProvider).convertToReplacement(
+                houseId: widget.entry.houseId,
+                rabbitId: widget.rabbit.rabbitId,
+                sourceBatchId: widget.rabbit.batchId,
+                measuredTotalWeightKg: weight,
+                requestId: _requestId,
+              );
+      if (!mounted) return;
+      if (conversions.isEmpty) {
+        throw StateError('留种转后备未返回处理结果');
+      }
+      final sourceBatchId = widget.rabbit.batchId;
+      if (sourceBatchId != null && sourceBatchId > 0) {
+        ref.invalidate(
+          batchStatisticsProvider(
+            BatchDetailRequest(
+              houseId: widget.entry.houseId,
+              batchId: sourceBatchId,
+            ),
+          ),
+        );
+      }
+      ref
+          .read(outboundControllerProvider(widget.entry).notifier)
+          .removeRabbit(widget.rabbit.rabbitId);
+      await ref
+          .read(outboundControllerProvider(widget.entry).notifier)
+          .refresh();
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             '已留种，后备记录 #${conversions.first.replacementRecordId}',
           ),
         ),
       );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              error is ApiException ? error.message : '留种转后备失败，请检查网络后重试';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
-    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('兔 #${widget.rabbit.rabbitId} 标记留种'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.rabbit.batchId == null
+                  ? '来源：未归属批次 · 1 只'
+                  : '来源批次 #${widget.rabbit.batchId} · 1 只',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('outbound-replacement-total-weight'),
+              controller: _weightController,
+              enabled: !_saving,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: '转换时实测总重（kg）*',
+              ),
+              onChanged: (_) => setState(() => _errorMessage = null),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: AppPalette.of(context).danger),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text('确认后将立即转入后备管理，并从当前出库任务移除。'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('outbound-replacement-confirm'),
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('确认留种'),
+        ),
+      ],
+    );
   }
 }
 

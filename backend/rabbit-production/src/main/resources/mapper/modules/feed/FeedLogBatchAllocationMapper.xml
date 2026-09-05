@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.feed.mapper.FeedLogBatchAllocationMapper">
+    <insert id="insertBatch">
+        insert into feed_log_batch_allocations (
+            feed_log_id, house_id, batch_id, phase, amount_kg
+        ) values
+        <foreach collection="allocations" item="allocation" separator=",">
+            (#{allocation.feedLogId}, #{allocation.houseId}, #{allocation.batchId},
+             #{allocation.phase}, #{allocation.amountKg})
+        </foreach>
+    </insert>
+
+    <select id="selectCandidates" resultType="com.rabbit.app.modules.feed.entity.FeedAllocationCandidateRow">
+        select distinct candidate.rabbit_id as rabbitId,
+               candidate.batch_id as batchId,
+               candidate.phase as phase
+        from (
+            select r.id as rabbit_id, r.birth_batch_id as batch_id, 'FATTENING' as phase
+            from rabbits r
+            inner join batches b on b.id = r.birth_batch_id and b.house_id = r.house_id
+            where r.house_id = #{houseId}
+              and r.type = '2'
+              and r.birth_batch_id is not null
+              and r.arrival_date is not null
+              and r.arrival_date &lt;= #{feedTime}
+              and r.id in
+              <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
+                  #{rabbitId}
+              </foreach>
+            union all
+            select br.rabbit_id, br.batch_id, 'FATTENING' as phase
+            from batch_rabbits br
+            inner join batches b on b.id = br.batch_id and b.house_id = #{houseId}
+            inner join rabbits r
+              on r.id = br.rabbit_id
+             and r.house_id = b.house_id
+             and r.type = '2'
+            where br.batch_role = 'fattening'
+              and br.join_date &lt;= #{feedTime}
+              and (br.exit_date is null or br.exit_date &gt;= #{feedTime})
+              and br.rabbit_id in
+              <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
+                  #{rabbitId}
+              </foreach>
+            union all
+            select br.rabbit_id, br.batch_id, 'BREEDING' as phase
+            from batch_rabbits br
+            inner join batches b on b.id = br.batch_id and b.house_id = #{houseId}
+            where br.batch_role = 'breeding'
+              and br.join_date &lt;= #{feedTime}
+              and (br.exit_date is null or br.exit_date &gt;= #{feedTime})
+              and br.rabbit_id in
+              <foreach collection="rabbitIds" item="rabbitId" open="(" separator="," close=")">
+                  #{rabbitId}
+              </foreach>
+              and exists (
+                  select 1
+                  from breeding_cycles bc
+                  where bc.house_id = #{houseId}
+                    and bc.batch_id = br.batch_id
+                    and bc.mother_rabbit_id = br.rabbit_id
+                    and bc.mating_date &lt;= #{feedTime}
+              )
+        ) candidate
+        order by candidate.rabbit_id, candidate.batch_id, candidate.phase
+    </select>
+</mapper>

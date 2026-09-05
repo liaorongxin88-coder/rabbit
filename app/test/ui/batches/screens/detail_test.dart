@@ -813,6 +813,12 @@ void main() {
           batchMembersProvider(request).overrideWith(
             (_) async => const <BatchRabbitItem>[],
           ),
+          batchStatisticsProvider(request).overrideWith(
+            (_) => BatchStatisticsController(
+              enabled: false,
+              load: (_) async => throw StateError('statistics not under test'),
+            ),
+          ),
           housePermissionProvider(8).overrideWith(
             (_) async => const HousePermission(perms: 'control', isAdmin: true),
           ),

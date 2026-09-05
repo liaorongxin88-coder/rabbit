@@ -69,6 +69,29 @@ void main() {
     );
   });
 
+  test('weaning sends immutable total weight without client average', () async {
+    final adapter = _FormContractAdapter();
+    final repository = _repository(adapter);
+
+    await repository.applyAction(
+      houseId: 8,
+      cycleId: 9,
+      action: ReproAction.weaning,
+      occurredAt: DateTime(2026, 9, 5, 8),
+      weanedCount: 6,
+      maleCount: 3,
+      femaleCount: 3,
+      weaningTotalWeightKg: 4.41,
+      requestId: 'weaning-total-1',
+    );
+
+    final request = adapter.jsonRequests.single;
+    expect(request.body['weaningTotalWeightKg'], 4.41);
+    expect(request.body.containsKey('avgWeaningWeight'), isFalse);
+    expect(request.body['weanedCount'], 6);
+    expect(request.body['requestId'], 'weaning-total-1');
+  });
+
   test('open cycle sends its selected batch and stable request id', () async {
     final adapter = _FormContractAdapter();
     final repository = _repository(adapter);
@@ -123,7 +146,11 @@ void main() {
 ReproRepository _repository(_FormContractAdapter adapter) {
   final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
     ..httpClientAdapter = adapter;
-  final client = ApiClient(SessionStore(), dio: dio);
+  final client = ApiClient(
+    SessionStore(),
+    dio: dio,
+    appBuildLoader: () async => '4020',
+  );
   addTearDown(client.dispose);
   return ReproRepository(client);
 }

@@ -25,6 +25,11 @@ public interface ReproEventMapper {
         @Param("requestId") String requestId
     );
 
+    ReproEvent selectStateMachineByRequestId(
+        @Param("houseId") Long houseId,
+        @Param("requestId") String requestId
+    );
+
     /** 单周期完整事件流，供追溯页按时间正序展示。 */
     List<ReproEvent> selectByCycle(@Param("houseId") Long houseId, @Param("cycleId") Long cycleId);
 

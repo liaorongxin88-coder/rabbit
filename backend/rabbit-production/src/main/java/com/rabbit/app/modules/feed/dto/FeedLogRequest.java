@@ -1,8 +1,10 @@
 package com.rabbit.app.modules.feed.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
@@ -21,12 +23,15 @@ public class FeedLogRequest {
     private String unit;
 
     @NotBlank(message = "requestId不能为空")
+    @Size(max = 64, message = "requestId不能超过64个字符")
     private String requestId;
 
     @NotNull(message = "amount不能为空")
     private BigDecimal amount;
 
     private String remark;
+
+    private List<@NotNull(message = "allocations不能包含空项") @Valid FeedBatchAllocationInput> allocations;
 
     public List<Long> getRabbitIds() {
         return rabbitIds;
@@ -90,5 +95,13 @@ public class FeedLogRequest {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public List<FeedBatchAllocationInput> getAllocations() {
+        return allocations;
+    }
+
+    public void setAllocations(List<FeedBatchAllocationInput> allocations) {
+        this.allocations = allocations;
     }
 }

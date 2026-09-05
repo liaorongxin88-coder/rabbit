@@ -159,8 +159,20 @@ public class RabbitController {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "control");
         boolean force = req.getForceExitBatch() != null && req.getForceExitBatch();
+        rabbitService.assertReplacementRequestAllowed(
+            userId,
+            houseId,
+            req.getRequestId(),
+            req.getBatchAllocations()
+        );
         return ApiResponse.ok(rabbitService.convertToReplacement(
-            userId, houseId, req.getRabbitIds(), force, req.getTargetCageId(), req.getRequestId()
+            userId,
+            houseId,
+            req.getRabbitIds(),
+            force,
+            req.getTargetCageId(),
+            req.getRequestId(),
+            req.getBatchAllocations()
         ));
     }
 

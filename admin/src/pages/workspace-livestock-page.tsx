@@ -105,6 +105,7 @@ export function WorkspaceLivestockPage() {
   const [cages, setCages] = useState<Cage[]>([]);
   const [rabbits, setRabbits] = useState<Rabbit[]>([]);
   const [loading, setLoading] = useState(false);
+  const dataLoadVersion = useRef(0);
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [breedingCageFilter, setBreedingCageFilter] =
@@ -141,6 +142,7 @@ export function WorkspaceLivestockPage() {
     useState<number | null>(null);
   const reproLoadVersion = useRef(0);
   const batchStatisticsLoadVersion = useRef(0);
+  const batchStatisticsBatchId = useRef<number | null>(null);
   const canEdit = hasPermission(workspace.permission, "rabbit:rabbits:edit");
   const canControl = hasPermission(workspace.permission, "rabbit:cages:edit");
   const canReadRepro = hasPermission(
@@ -149,9 +151,11 @@ export function WorkspaceLivestockPage() {
   );
 
   const load = useCallback(async () => {
+    const loadVersion = ++dataLoadVersion.current;
     if (!workspace.selectedHouse) {
       setCages([]);
       setRabbits([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -160,13 +164,15 @@ export function WorkspaceLivestockPage() {
         listCages(workspace.selectedHouse.id),
         listRabbits(workspace.selectedHouse.id),
       ]);
+      if (loadVersion !== dataLoadVersion.current) return;
       setCages(nextCages);
       setRabbits(nextRabbits);
     } catch {
+      if (loadVersion !== dataLoadVersion.current) return;
       setCages([]);
       setRabbits([]);
     } finally {
-      setLoading(false);
+      if (loadVersion === dataLoadVersion.current) setLoading(false);
     }
   }, [workspace.selectedHouse]);
 
@@ -178,6 +184,7 @@ export function WorkspaceLivestockPage() {
     setBatches([]);
     setReproLoadFailed(false);
     setBatchStatistics(null);
+    batchStatisticsBatchId.current = null;
     setBatchStatisticsStatus("idle");
     setPendingCommodityAllocationCount(null);
     if (!workspace.selectedHouse || !canReadRepro) {
@@ -261,16 +268,18 @@ export function WorkspaceLivestockPage() {
       setBatchStatisticsStatus("idle");
       return;
     }
-    setBatchStatistics(null);
+    if (batchStatisticsBatchId.current !== currentBatch.id) {
+      setBatchStatistics(null);
+    }
     setBatchStatisticsStatus("loading");
     try {
       const nextStatistics = await getBatchStatistics(houseId, currentBatch.id);
       if (loadVersion !== batchStatisticsLoadVersion.current) return;
+      batchStatisticsBatchId.current = currentBatch.id;
       setBatchStatistics(nextStatistics);
       setBatchStatisticsStatus("ready");
     } catch {
       if (loadVersion !== batchStatisticsLoadVersion.current) return;
-      setBatchStatistics(null);
       setBatchStatisticsStatus("error");
     }
   }, [canReadRepro, currentBatch, workspace.selectedHouse]);
@@ -366,26 +375,38 @@ export function WorkspaceLivestockPage() {
               </p>
             </div>
             {!reproLoading && currentBatches.length > 0 ? (
-              <Select
-                value={selectedBatchId}
-                onValueChange={setSelectedBatchId}
-              >
-                <SelectTrigger
-                  className="w-full sm:w-52"
-                  aria-label="选择当前生产批次"
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Select
+                  value={selectedBatchId}
+                  onValueChange={setSelectedBatchId}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {currentBatches.map((batch) => (
-                      <SelectItem key={batch.id} value={String(batch.id)}>
-                        {batch.batchCode}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    className="w-full sm:w-52"
+                    aria-label="选择当前生产批次"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {currentBatches.map((batch) => (
+                        <SelectItem key={batch.id} value={String(batch.id)}>
+                          {batch.batchCode}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {currentBatch ? (
+                  <Button variant="outline" asChild>
+                    <Link
+                      to={`/workspace/production/batches/${currentBatch.id}`}
+                    >
+                      <EyeIcon data-icon="inline-start" />
+                      查看完整批次统计
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </div>
           <div className="mt-4">
@@ -836,7 +857,7 @@ function CageDialog({
     setEnabled(state.cage?.isEnabled ?? true);
   }, [state.cage, state.open]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!houseId) return;
     setSaving(true);

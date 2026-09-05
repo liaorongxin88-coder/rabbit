@@ -1,40 +1,69 @@
 package com.rabbit.app.modules.batch.dto;
 
-public class BatchStatistics {
-    private Integer totalLitters;
-    private Integer totalKits;
-    private Integer totalLiveKits;
-    private Integer totalWeaned;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 
-    public Integer getTotalLitters() {
-        return totalLitters;
+public record BatchStatistics(
+    int schemaVersion,
+    Long batchId,
+    String houseName,
+    String batchCode,
+    Instant calculatedAt,
+    Integer totalLitters,
+    Integer totalKits,
+    Integer totalLiveKits,
+    Integer totalWeaned,
+    List<Metric> metrics
+) {
+    public BatchStatistics {
+        metrics = List.copyOf(metrics);
     }
 
-    public void setTotalLitters(Integer totalLitters) {
-        this.totalLitters = totalLitters;
+    public record Metric(
+        String code,
+        String name,
+        String stage,
+        String stageName,
+        int order,
+        String excelColumnName,
+        String valueType,
+        String unit,
+        String format,
+        String formula,
+        String status,
+        BigDecimal numericValue,
+        String displayValue,
+        DateRangeValue dateValue,
+        Operand numerator,
+        Operand denominator,
+        List<Operand> components,
+        List<MissingCause> missingCauses
+    ) {
+        public Metric {
+            components = List.copyOf(components);
+            missingCauses = List.copyOf(missingCauses);
+        }
     }
 
-    public Integer getTotalKits() {
-        return totalKits;
+    public record DateRangeValue(
+        LocalDate firstDate,
+        LocalDate lastDate,
+        int dateCount,
+        List<DailyCycleCount> dailyCycleCounts
+    ) {
+        public DateRangeValue {
+            dailyCycleCounts = List.copyOf(dailyCycleCounts);
+        }
     }
 
-    public void setTotalKits(Integer totalKits) {
-        this.totalKits = totalKits;
+    public record DailyCycleCount(LocalDate date, int cycleCount) {
     }
 
-    public Integer getTotalLiveKits() {
-        return totalLiveKits;
+    public record Operand(String code, String label, BigDecimal value, String unit) {
     }
 
-    public void setTotalLiveKits(Integer totalLiveKits) {
-        this.totalLiveKits = totalLiveKits;
-    }
-
-    public Integer getTotalWeaned() {
-        return totalWeaned;
-    }
-
-    public void setTotalWeaned(Integer totalWeaned) {
-        this.totalWeaned = totalWeaned;
+    public record MissingCause(String code, String message) {
     }
 }

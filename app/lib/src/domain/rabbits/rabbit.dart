@@ -12,6 +12,7 @@ class Rabbit {
     required this.arrivalDate,
     required this.weight,
     required this.isActive,
+    this.birthBatchId,
     this.growthStage,
     this.reproductiveStage,
     this.currentStage,
@@ -31,6 +32,7 @@ class Rabbit {
   final DateTime? arrivalDate;
   final double? weight;
   final bool isActive;
+  final int? birthBatchId;
   final String? growthStage;
   final String? reproductiveStage;
 
@@ -92,6 +94,7 @@ class Rabbit {
       arrivalDate: _dateTimeValue(json['arrivalDate']),
       weight: _doubleValue(json['weight']),
       isActive: _boolValue(json['isActive'], fallback: true),
+      birthBatchId: _nullableIntValue(json['birthBatchId']),
       growthStage: _growthStageValue(json['growthStage']),
       reproductiveStage: _optionalString(json['reproductiveStage']),
       currentStage: _optionalString(json['currentStage']),

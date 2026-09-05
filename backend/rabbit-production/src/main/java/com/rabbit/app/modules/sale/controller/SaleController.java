@@ -40,7 +40,8 @@ public class SaleController {
     public ApiResponse<SaleOrder> create(@RequestHeader("X-House-Id") Long houseId, @Valid @RequestBody CreateSaleOrderRequest req) {
         Long userId = requireLogin();
         houseService.assertHousePermission(userId, houseId, "edit");
-        return ApiResponse.ok(saleService.create(userId, houseId, req.getRabbitIds(), req.getSaleTime(), req.getTotalWeight(), req.getUnitPrice(), req.getCustomer(), req.getRemark(), req.getRequestId()));
+        saleService.assertRequestAllowed(userId, houseId, req);
+        return ApiResponse.ok(saleService.create(userId, houseId, req));
     }
 
     @GetMapping("/sales")

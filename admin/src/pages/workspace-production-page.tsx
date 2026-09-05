@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   CalendarClockIcon,
   ChevronLeftIcon,
+  EyeIcon,
   PencilIcon,
   ChevronRightIcon,
   PlusIcon,
@@ -28,6 +29,7 @@ import {
   submitReproAction,
   type ReproActionName,
 } from "@/api/workspace";
+import { BatchFeedDialog } from "@/components/batch-feed-dialog";
 import { PageHeader } from "@/components/page-header";
 import { WorkspaceOutboundDialog } from "@/components/workspace-outbound-dialog";
 import { HousePermissionBadge } from "@/components/permission-badge";
@@ -157,6 +159,10 @@ export function WorkspaceProductionPage() {
   const [rabbits, setRabbits] = useState<Rabbit[]>([]);
   const [cages, setCages] = useState<Cage[]>([]);
   const [loading, setLoading] = useState(false);
+  const dataLoadVersion = useRef(0);
+  const activeHouseId = workspace.selectedHouse?.id ?? null;
+  const activeHouseIdRef = useRef(activeHouseId);
+  activeHouseIdRef.current = activeHouseId;
   const [createOpen, setCreateOpen] = useState(false);
   const [actionBatch, setActionBatch] = useState<ProductionBatch | null>(null);
   const [renamingBatch, setRenamingBatch] = useState<ProductionBatch | null>(
@@ -171,6 +177,7 @@ export function WorkspaceProductionPage() {
     workspace.permission,
     "rabbit:outbound:edit",
   );
+  const canAddFeed = hasPermission(workspace.permission, "rabbit:feed:add");
   const canControl = hasPermission(
     workspace.permission,
     "rabbit:rabbits:control",
@@ -193,21 +200,31 @@ export function WorkspaceProductionPage() {
   );
 
   const load = useCallback(async () => {
-    if (!workspace.selectedHouse) {
+    const houseId = activeHouseId;
+    if (houseId !== activeHouseIdRef.current) return;
+    const version = ++dataLoadVersion.current;
+    if (!houseId) {
       setBatches([]);
       setBatchMotherCounts({});
       setBatchOpenCycleCounts({});
       setRabbits([]);
       setCages([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
     try {
       const [nextBatches, nextRabbits, nextCages] = await Promise.all([
-        listBatches(workspace.selectedHouse.id),
-        listRabbits(workspace.selectedHouse.id),
-        listCages(workspace.selectedHouse.id),
+        listBatches(houseId),
+        listRabbits(houseId),
+        listCages(houseId),
       ]);
+      if (
+        version !== dataLoadVersion.current ||
+        houseId !== activeHouseIdRef.current
+      ) {
+        return;
+      }
       setBatches(nextBatches);
       setBatchMotherCounts({});
       setBatchOpenCycleCounts({});
@@ -216,16 +233,18 @@ export function WorkspaceProductionPage() {
 
       const [batchRabbitResults, batchCycleResults] = await Promise.all([
         Promise.allSettled(
-          nextBatches.map((batch) =>
-            listBatchRabbits(workspace.selectedHouse!.id, batch.id),
-          ),
+          nextBatches.map((batch) => listBatchRabbits(houseId, batch.id)),
         ),
         Promise.allSettled(
-          nextBatches.map((batch) =>
-            listBreedingCycles(workspace.selectedHouse!.id, batch.id),
-          ),
+          nextBatches.map((batch) => listBreedingCycles(houseId, batch.id)),
         ),
       ]);
+      if (
+        version !== dataLoadVersion.current ||
+        houseId !== activeHouseIdRef.current
+      ) {
+        return;
+      }
       setBatchMotherCounts(
         Object.fromEntries(
           batchRabbitResults.map((result, index) => [
@@ -250,15 +269,26 @@ export function WorkspaceProductionPage() {
         ),
       );
     } catch {
+      if (
+        version !== dataLoadVersion.current ||
+        houseId !== activeHouseIdRef.current
+      ) {
+        return;
+      }
       setBatches([]);
       setBatchMotherCounts({});
       setBatchOpenCycleCounts({});
       setRabbits([]);
       setCages([]);
     } finally {
-      setLoading(false);
+      if (
+        version === dataLoadVersion.current &&
+        houseId === activeHouseIdRef.current
+      ) {
+        setLoading(false);
+      }
     }
-  }, [workspace.selectedHouse]);
+  }, [activeHouseId]);
 
   useEffect(() => {
     void load();
@@ -280,14 +310,25 @@ export function WorkspaceProductionPage() {
               <RefreshCwIcon data-icon="inline-start" />
               刷新
             </Button>
-            <WorkspaceOutboundDialog
-              houseId={workspace.selectedHouse?.id ?? null}
-              disabled={!canOutboundEdit}
-              canControl={canControl}
-              onOpenChange={setOutboundOpen}
-              onSaved={load}
-              open={outboundOpen}
-            />
+            {canAddFeed ? (
+              <BatchFeedDialog
+                houseId={activeHouseId}
+                rabbits={rabbits}
+                batches={batches}
+                disabled={false}
+                onSaved={load}
+              />
+            ) : null}
+            {canOutboundEdit ? (
+              <WorkspaceOutboundDialog
+                houseId={activeHouseId}
+                disabled={false}
+                canControl={canControl}
+                onOpenChange={setOutboundOpen}
+                onSaved={load}
+                open={outboundOpen}
+              />
+            ) : null}
             <CreateBatchDialog
               open={createOpen}
               onOpenChange={setCreateOpen}
@@ -398,6 +439,12 @@ export function WorkspaceProductionPage() {
                   </dl>
 
                   <div className="mt-4 flex flex-col gap-2">
+                    <Button className="w-full" variant="outline" asChild>
+                      <Link to={`/workspace/production/batches/${batch.id}`}>
+                        <EyeIcon data-icon="inline-start" />
+                        查看批次详情
+                      </Link>
+                    </Button>
                     {isCompletedBatchStatus(batch.status) ? (
                       <p className="text-right text-xs text-muted-foreground">
                         已闭环
@@ -484,6 +531,14 @@ export function WorkspaceProductionPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Button variant="outline" size="sm" asChild>
+                            <Link
+                              to={`/workspace/production/batches/${batch.id}`}
+                            >
+                              <EyeIcon data-icon="inline-start" />
+                              详情
+                            </Link>
+                          </Button>
                           {isCompletedBatchStatus(batch.status) ? (
                             <span className="text-xs text-muted-foreground">
                               已闭环
@@ -565,7 +620,7 @@ function RenameBatchDialog({
     if (batch) setCode(batch.batchCode);
   }, [batch]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const next = code.trim();
     if (!houseId || !batch || !next) return;
@@ -696,7 +751,7 @@ function CreateBatchDialog({
     });
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!houseId) return;
     setSaving(true);
@@ -922,7 +977,7 @@ function BatchActionDialog({
   const [weaningRecordId, setWeaningRecordId] = useState("");
   const [separationCageId, setSeparationCageId] = useState("");
   const [separationCount, setSeparationCount] = useState("1");
-  const [avgWeight, setAvgWeight] = useState("");
+  const [weaningTotalWeightKg, setWeaningTotalWeightKg] = useState("");
   const [force, setForce] = useState(false);
   const [departureType, setDepartureType] =
     useState<RabbitDepartureType>("cull");
@@ -960,7 +1015,7 @@ function BatchActionDialog({
     setWeaningRecordId("");
     setSeparationCageId("");
     setSeparationCount("1");
-    setAvgWeight("");
+    setWeaningTotalWeightKg("");
     setForce(false);
     setDepartureType("cull");
     setDepartureReason("");
@@ -1132,7 +1187,7 @@ function BatchActionDialog({
     }
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!batch || !houseId || isCompletedBatchStatus(batch.status)) return;
     const timestamp = farmBusinessDateToTimestamp(date);
@@ -1295,17 +1350,29 @@ function BatchActionDialog({
           };
           break;
         }
-        case "weaning":
+        case "weaning": {
+          const normalizedWeaningCount = Number(weaningCount);
+          const normalizedTotalWeight = Number(weaningTotalWeightKg);
+          if (
+            normalizedWeaningCount > 0 &&
+            (!Number.isFinite(normalizedTotalWeight) ||
+              normalizedTotalWeight <= 0)
+          ) {
+            toast.error("断奶数量大于 0 时必须填写实测总重");
+            return;
+          }
           data = {
             action: reproAction,
             occurredAt: timestamp,
-            weanedCount: Number(weaningCount),
+            weanedCount: normalizedWeaningCount,
             maleCount: Number(maleCount),
             femaleCount: Number(femaleCount),
-            avgWeaningWeight: avgWeight ? Number(avgWeight) : undefined,
+            weaningTotalWeightKg:
+              normalizedWeaningCount > 0 ? normalizedTotalWeight : undefined,
             remark: remark.trim(),
           };
           break;
+        }
         default:
           return;
       }
@@ -1846,17 +1913,30 @@ function BatchActionDialog({
                   />
                 </div>
                 <Field>
-                  <FieldLabel htmlFor="average-weight">
-                    平均体重（kg）
+                  <FieldLabel htmlFor="weaning-total-weight">
+                    断奶实测总重（kg）
                   </FieldLabel>
                   <Input
-                    id="average-weight"
+                    id="weaning-total-weight"
                     type="number"
-                    min={0}
-                    step="0.01"
-                    value={avgWeight}
-                    onChange={(event) => setAvgWeight(event.target.value)}
+                    min={Number(weaningCount) > 0 ? 0.001 : 0}
+                    step="0.001"
+                    value={weaningTotalWeightKg}
+                    required={Number(weaningCount) > 0}
+                    onChange={(event) =>
+                      setWeaningTotalWeightKg(event.target.value)
+                    }
                   />
+                  {Number(weaningCount) > 0 &&
+                  Number(weaningTotalWeightKg) > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      后端将派生断奶均重约为{" "}
+                      {(
+                        Number(weaningTotalWeightKg) / Number(weaningCount)
+                      ).toFixed(3)}{" "}
+                      kg/只。
+                    </p>
+                  ) : null}
                 </Field>
                 <p className="text-xs text-muted-foreground">
                   断奶后只登记待分笼数量，不会立即创建商品兔或占用笼位。

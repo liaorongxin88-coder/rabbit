@@ -69,6 +69,17 @@
     <select id="selectByRequestId" resultMap="Map">
         select * from repro_events
         where house_id = #{houseId} and request_id = #{requestId}
+        order by id
+        limit 1
+    </select>
+
+    <select id="selectStateMachineByRequestId" resultMap="Map">
+        select * from repro_events
+        where house_id = #{houseId}
+          and request_id = #{requestId}
+          and operation_code = 'repro:state-machine'
+          and cycle_id is not null
+        order by id
         limit 1
     </select>
 

@@ -3,6 +3,7 @@ package com.rabbit.app.modules.repro.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -28,6 +29,7 @@ public class CycleActionRequest {
     private Date occurredAt;
 
     @NotBlank(message = "requestId不能为空")
+    @Size(max = 64, message = "requestId不能超过64个字符")
     private String requestId;
 
     private String remark;
@@ -59,6 +61,8 @@ public class CycleActionRequest {
     private Integer weanedCount;
 
     private Double avgWeaningWeight;
+
+    private BigDecimal weaningTotalWeightKg;
 
     private Long nursingCageId;
 
@@ -209,6 +213,14 @@ public class CycleActionRequest {
 
     public void setAvgWeaningWeight(Double avgWeaningWeight) {
         this.avgWeaningWeight = avgWeaningWeight;
+    }
+
+    public BigDecimal getWeaningTotalWeightKg() {
+        return weaningTotalWeightKg;
+    }
+
+    public void setWeaningTotalWeightKg(BigDecimal weaningTotalWeightKg) {
+        this.weaningTotalWeightKg = weaningTotalWeightKg;
     }
 
     public Long getNursingCageId() {

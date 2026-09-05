@@ -84,7 +84,8 @@ class SaleServiceTest {
     @Test
     void aReplayedOrderIsReadBackRatherThanReissued() {
         SaleOrder stored = new SaleOrder();
-        when(dedupService.shouldSkipAsDone(HOUSE_ID, USER_ID, API, REQ)).thenReturn(true);
+        when(dedupService.begin(eq(HOUSE_ID), eq(USER_ID), eq(API), eq(REQ), anyString()))
+            .thenReturn(RequestDedupService.BeginResult.DONE);
         when(orderMapper.selectByReq(HOUSE_ID, REQ)).thenReturn(stored);
 
         assertSame(stored, service.create(USER_ID, HOUSE_ID, List.of(7L), null, 3.0,
@@ -96,11 +97,25 @@ class SaleServiceTest {
 
     @Test
     void aReplayWithNoStoredOrderYieldsNothingRatherThanANewOrder() {
-        when(dedupService.shouldSkipAsDone(HOUSE_ID, USER_ID, API, REQ)).thenReturn(true);
+        when(dedupService.begin(eq(HOUSE_ID), eq(USER_ID), eq(API), eq(REQ), anyString()))
+            .thenReturn(RequestDedupService.BeginResult.DONE);
         when(orderMapper.selectByReq(HOUSE_ID, REQ)).thenReturn(null);
 
         assertNull(service.create(USER_ID, HOUSE_ID, List.of(7L), null, 3.0, BigDecimal.TEN, null, null, REQ));
         verify(orderMapper, never()).insert(any());
+    }
+
+    @Test
+    void payloadHashKeepsDelimiterBearingTextFieldsDistinct() {
+        service.create(USER_ID, HOUSE_ID, List.of(7L), null, 3.0,
+                BigDecimal.TEN, "a|b", "c", "req-a");
+        service.create(USER_ID, HOUSE_ID, List.of(7L), null, 3.0,
+                BigDecimal.TEN, "a", "b|c", "req-b");
+
+        ArgumentCaptor<String> hashes = ArgumentCaptor.forClass(String.class);
+        verify(dedupService, times(2)).begin(
+                eq(HOUSE_ID), eq(USER_ID), eq(API), anyString(), hashes.capture());
+        assertNotEquals(hashes.getAllValues().get(0), hashes.getAllValues().get(1));
     }
 
     // ---------- 入参 ----------
@@ -301,7 +316,7 @@ class SaleServiceTest {
         assertThrows(BizException.class, () -> service.create(
                 USER_ID, HOUSE_ID, List.of(7L), null, 0.0, BigDecimal.TEN, null, null, REQ));
 
-        verify(dedupService).markProcessing(HOUSE_ID, USER_ID, API, REQ);
+        verify(dedupService).begin(eq(HOUSE_ID), eq(USER_ID), eq(API), eq(REQ), anyString());
         verify(dedupService).markFailed(HOUSE_ID, USER_ID, API, REQ, "totalWeight不合法");
         verify(dedupService, never()).markDone(anyLong(), anyLong(), anyString(), anyString());
     }

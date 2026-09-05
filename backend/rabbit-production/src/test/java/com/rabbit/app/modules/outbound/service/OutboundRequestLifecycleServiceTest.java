@@ -73,6 +73,35 @@ class OutboundRequestLifecycleServiceTest {
         assertSame(existing, result.request());
     }
 
+    @Test
+    void failedRequestIsAtomicallyReclaimedForTheSameTaskAndPayload() {
+        OutboundRequest failed = request("FAILED");
+        when(requestMapper.reclaimFailed(1L, "req-1", "task-1", "payload-hash"))
+            .thenReturn(1);
+
+        OutboundRequestLifecycleService.ClaimResult result = service.reclaimFailed(failed);
+
+        assertTrue(result.claimed());
+        assertSame(failed, result.request());
+        assertEquals("PROCESSING", failed.getStatus());
+        assertEquals(null, failed.getErrorCode());
+        verify(requestMapper, never()).selectById(anyLong(), anyString());
+    }
+
+    @Test
+    void concurrentFailedReclaimHasOnlyOneOwner() {
+        OutboundRequest failed = request("FAILED");
+        OutboundRequest processing = request("PROCESSING");
+        when(requestMapper.reclaimFailed(1L, "req-1", "task-1", "payload-hash"))
+            .thenReturn(0);
+        when(requestMapper.selectById(1L, "req-1")).thenReturn(processing);
+
+        OutboundRequestLifecycleService.ClaimResult result = service.reclaimFailed(failed);
+
+        assertFalse(result.claimed());
+        assertSame(processing, result.request());
+    }
+
     /**
      * 插入被唯一键挡下，却在本兔场查不到这一行 —— 说明这个 requestId 属于别的兔场。
      * 当成幂等命中会把另一个兔场的结果返回给调用方，所以必须报冲突。
@@ -139,9 +168,16 @@ class OutboundRequestLifecycleServiceTest {
     }
 
     @Test
-    void markCompletedRejectsARowStuckInAnotherStatus() {
+    void markCompletedCanRecoverAFailedLifecycleRow() {
+        when(requestMapper.markCompleted(1L, "req-1", 99L)).thenReturn(1);
+
+        assertDoesNotThrow(() -> service.markCompleted(1L, "req-1", 99L));
+    }
+
+    @Test
+    void markCompletedRejectsARowStuckInAnotherTerminalStatus() {
         when(requestMapper.markCompleted(1L, "req-1", 99L)).thenReturn(0);
-        when(requestMapper.selectById(1L, "req-1")).thenReturn(request("FAILED"));
+        when(requestMapper.selectById(1L, "req-1")).thenReturn(request("CONFLICT"));
 
         assertEquals(500, assertThrows(BizException.class,
                 () -> service.markCompleted(1L, "req-1", 99L)).getCode());
@@ -236,6 +272,8 @@ class OutboundRequestLifecycleServiceTest {
         OutboundRequest request = new OutboundRequest();
         request.setHouseId(1L);
         request.setRequestId("req-1");
+        request.setTaskId("task-1");
+        request.setPayloadHash("payload-hash");
         request.setStatus(status);
         return request;
     }

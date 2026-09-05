@@ -26,7 +26,11 @@ class LitterRepositoryHarness {
         motherRabbitId: motherRabbitId,
         currentNursing: currentNursing,
       );
-    client = ApiClient(SessionStore(), dio: dio);
+    client = ApiClient(
+      SessionStore(),
+      dio: dio,
+      appBuildLoader: () async => '4020',
+    );
     repository = ReproRepository(client);
   }
 

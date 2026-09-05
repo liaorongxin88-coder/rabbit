@@ -13,6 +13,8 @@ public interface OutboundRequestMapper {
                      @Param("errorMessage") String errorMessage, @Param("conflictsJson") String conflictsJson);
     int markFailed(@Param("houseId") Long houseId, @Param("requestId") String requestId,
                    @Param("errorCode") String errorCode, @Param("errorMessage") String errorMessage);
+    int reclaimFailed(@Param("houseId") Long houseId, @Param("requestId") String requestId,
+                      @Param("taskId") String taskId, @Param("payloadHash") String payloadHash);
     int markCompleted(@Param("houseId") Long houseId, @Param("requestId") String requestId,
                       @Param("saleOrderId") Long saleOrderId);
 }

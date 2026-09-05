@@ -1,8 +1,10 @@
 package com.rabbit.app.modules.sale.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
@@ -18,10 +20,13 @@ public class CreateSaleOrderRequest {
     private Double totalWeight;
 
     private BigDecimal unitPrice;
+    private BigDecimal unitPricePerKg;
+    private List<@NotNull(message = "batchAllocations不能包含空项") @Valid SaleBatchAllocationInput> batchAllocations;
     private String customer;
     private String remark;
 
     @NotBlank(message = "requestId不能为空")
+    @Size(max = 64, message = "requestId不能超过64个字符")
     private String requestId;
 
     public List<Long> getRabbitIds() {
@@ -54,6 +59,22 @@ public class CreateSaleOrderRequest {
 
     public void setUnitPrice(BigDecimal unitPrice) {
         this.unitPrice = unitPrice;
+    }
+
+    public BigDecimal getUnitPricePerKg() {
+        return unitPricePerKg;
+    }
+
+    public void setUnitPricePerKg(BigDecimal unitPricePerKg) {
+        this.unitPricePerKg = unitPricePerKg;
+    }
+
+    public List<SaleBatchAllocationInput> getBatchAllocations() {
+        return batchAllocations;
+    }
+
+    public void setBatchAllocations(List<SaleBatchAllocationInput> batchAllocations) {
+        this.batchAllocations = batchAllocations;
     }
 
     public String getCustomer() {

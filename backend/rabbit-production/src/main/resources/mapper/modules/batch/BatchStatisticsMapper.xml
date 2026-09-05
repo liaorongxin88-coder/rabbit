@@ -3,14 +3,343 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.rabbit.app.modules.batch.mapper.BatchStatisticsMapper">
-    <select id="selectByBatch" resultType="com.rabbit.app.modules.batch.dto.BatchStatistics">
-        select count(l.id) as totalLitters,
-               ifnull(sum(l.total_kits), 0) as totalKits,
-               ifnull(sum(l.live_kits), 0) as totalLiveKits,
-               ifnull(sum(l.weaned_count), 0) as totalWeaned
+    <select id="selectBatch" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select b.id as batchId,
+               h.name as houseName,
+               b.batch_code as batchCode,
+               b.end_date as endDate
         from batches b
-        left join litters l on l.house_id = b.house_id and l.batch_id = b.id
-        where b.house_id = #{houseId} and b.id = #{batchId}
-        group by b.id
+        inner join rabbit_houses h on h.id = b.house_id
+        where b.house_id = #{houseId}
+          and b.id = #{batchId}
+        limit 1
+    </select>
+
+    <select id="selectMatingAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select count(distinct bc.id) as matedCycleCount,
+               count(distinct bc.mother_rabbit_id) as matedDoeCount,
+               count(distinct case when bc.pregnancy_result = '怀孕' then bc.id end)
+                   as pregnantCycleCount,
+               count(distinct case when bc.pregnancy_result = '怀孕'
+                   then bc.mother_rabbit_id end) as pregnantDoeCount,
+               count(distinct bc.male_rabbit_id) as matedBuckCount,
+               coalesce(max(case when bc.mating_method = 'NATURAL'
+                   and bc.male_rabbit_id is null then 1 else 0 end), 0) as missingNaturalMale
+        from breeding_cycles bc
+        where bc.house_id = #{houseId}
+          and bc.batch_id = #{batchId}
+          and bc.mating_date is not null
+    </select>
+
+    <select id="selectMatingDates" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsMatingDateRow">
+        select date(bc.mating_date) as date,
+               count(distinct bc.id) as cycleCount
+        from breeding_cycles bc
+        where bc.house_id = #{houseId}
+          and bc.batch_id = #{batchId}
+          and bc.mating_date is not null
+        group by date(bc.mating_date)
+        order by date(bc.mating_date)
+    </select>
+
+    <select id="selectAbortionAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select count(distinct case when bc.batch_id = #{batchId}
+                   and bc.pregnancy_result = '怀孕' then e.cycle_id end)
+                   as abortedPregnantCycleCount,
+               coalesce(max(case when bc.id is null
+                   or bc.batch_id &lt;&gt; #{batchId}
+                   or bc.pregnancy_result is null
+                   or bc.pregnancy_result &lt;&gt; '怀孕' then 1 else 0 end), 0)
+                   as missingPregnancyEvidence
+        from repro_events e
+        left join breeding_cycles bc
+          on bc.id = e.cycle_id
+         and bc.house_id = e.house_id
+        where e.house_id = #{houseId}
+          and e.event_type = 'ABORTION'
+          and (e.batch_id = #{batchId} or bc.batch_id = #{batchId})
+    </select>
+
+    <select id="selectLitterAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select count(l.id) as totalLitters,
+               coalesce(sum(l.total_kits), 0) as totalKits,
+               coalesce(sum(l.live_kits), 0) as totalLiveKits,
+               coalesce(sum(case when l.kept_kits &gt; 0 then 1 else 0 end), 0) as keptLitterCount,
+               coalesce(sum(l.kept_kits), 0) as totalKept,
+               coalesce(sum(l.weaned_count), 0) as totalWeaned,
+               coalesce(sum(l.weaning_total_weight_kg), 0) as totalWeaningWeightKg,
+               coalesce(max(case when l.weaned_count &gt; 0
+                   and l.weaning_total_weight_kg is null then 1 else 0 end), 0)
+                   as missingWeaningWeight
+        from litters l
+        where l.house_id = #{houseId}
+          and l.batch_id = #{batchId}
+    </select>
+
+    <select id="selectSalesCountAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select count(distinct case when i.batch_id_snapshot = #{batchId} then i.rabbit_id end)
+                   as soldRabbitCount,
+               coalesce(max(case when i.batch_id_snapshot is null
+                   and (r.birth_batch_id = #{batchId}
+                        or exists (
+                            select 1
+                            from batch_rabbits historical_br
+                            inner join batches historical_b
+                              on historical_b.id = historical_br.batch_id
+                             and historical_b.house_id = o.house_id
+                            where historical_br.rabbit_id = i.rabbit_id
+                              and historical_br.batch_id = #{batchId}
+                              and historical_br.batch_role = 'fattening'
+                        )) then 1 else 0 end), 0)
+                   as missingBatchAttribution
+        from sale_orders o
+        left join sale_order_items i on i.sale_order_id = o.id
+        left join rabbits r
+          on r.id = i.rabbit_id
+         and r.house_id = o.house_id
+        where o.house_id = #{houseId}
+    </select>
+
+    <select id="selectSalesValueAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        with target_orders as (
+            select distinct o.id
+            from sale_orders o
+            inner join sale_order_items i on i.sale_order_id = o.id
+            left join rabbits r
+              on r.id = i.rabbit_id
+             and r.house_id = o.house_id
+            where o.house_id = #{houseId}
+              and (i.batch_id_snapshot = #{batchId}
+                   or (i.batch_id_snapshot is null
+                       and (r.birth_batch_id = #{batchId}
+                            or exists (
+                                select 1
+                                from batch_rabbits historical_br
+                                inner join batches historical_b
+                                  on historical_b.id = historical_br.batch_id
+                                 and historical_b.house_id = o.house_id
+                                where historical_br.rabbit_id = i.rabbit_id
+                                  and historical_br.batch_id = #{batchId}
+                                  and historical_br.batch_role = 'fattening'
+                            ))))
+            union
+            select distinct a0.sale_order_id
+            from sale_order_batch_allocations a0
+            where a0.house_id = #{houseId}
+              and a0.batch_id = #{batchId}
+        )
+        select coalesce(sum(a.actual_weight_kg), 0) as soldWeightKg,
+               coalesce(sum(a.amount), 0) as totalSalesAmount,
+               case when coalesce(max(case when a.sale_order_id is null then 1 else 0 end), 0) = 1
+                   or exists (
+                       select 1
+                       from repro_events gap
+                       where gap.house_id = #{houseId}
+                         and gap.batch_id = #{batchId}
+                         and gap.target_type = 'BATCH'
+                         and gap.target_id = #{batchId}
+                         and gap.event_type = 'LEGACY_SALE_ALLOCATION_GAP'
+                   ) then 1 else 0 end as missingBatchSaleAllocation,
+               case when coalesce(max(case when a.sale_order_id is not null
+                   and (a.unit_price_per_kg is null or a.amount is null) then 1 else 0 end), 0) = 1
+                   or exists (
+                       select 1
+                       from repro_events gap
+                       where gap.house_id = #{houseId}
+                         and gap.batch_id = #{batchId}
+                         and gap.target_type = 'BATCH'
+                         and gap.target_id = #{batchId}
+                         and gap.event_type = 'LEGACY_SALE_PRICE_GAP'
+                   ) then 1 else 0 end as missingSaleUnitPrice
+        from target_orders target
+        left join sale_order_batch_allocations a
+          on a.sale_order_id = target.id
+         and a.house_id = #{houseId}
+         and a.batch_id = #{batchId}
+    </select>
+
+    <select id="selectFeedAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        with batch_window as (
+            select b.id as batch_id,
+                   b.house_id,
+                   b.end_date,
+                   min(bc.mating_date) as first_mating_at
+            from batches b
+            left join breeding_cycles bc
+              on bc.house_id = b.house_id
+             and bc.batch_id = b.id
+             and bc.mating_date is not null
+            where b.house_id = #{houseId}
+              and b.id = #{batchId}
+            group by b.id, b.house_id, b.end_date
+        ),
+        relevant_feed_logs as (
+            select distinct fl.id, fl.unit
+            from batch_window bw
+            inner join feed_logs fl on fl.house_id = bw.house_id
+            inner join feed_log_rabbits flr
+              on flr.feed_log_id = fl.id
+             and flr.house_id = fl.house_id
+            inner join rabbits r
+              on r.id = flr.rabbit_id
+             and r.house_id = fl.house_id
+            where bw.first_mating_at is not null
+              and fl.feed_time &gt;= date(bw.first_mating_at)
+              and ((bw.end_date is not null
+                    and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                   or (bw.end_date is null and fl.feed_time &lt;= now()))
+              and (
+                  (r.type = '2'
+                   and r.birth_batch_id = bw.batch_id
+                   and r.arrival_date is not null
+                   and r.arrival_date &lt;= fl.feed_time)
+                  or exists (
+                      select 1
+                      from batch_rabbits br
+                      where br.batch_id = bw.batch_id
+                        and br.rabbit_id = r.id
+                        and br.batch_role = 'fattening'
+                        and br.join_date &lt;= fl.feed_time
+                        and (br.exit_date is null or br.exit_date &gt;= fl.feed_time)
+                  )
+                  or exists (
+                      select 1
+                      from batch_rabbits br
+                      where br.batch_id = bw.batch_id
+                        and br.rabbit_id = r.id
+                        and br.batch_role = 'breeding'
+                        and br.join_date &lt;= fl.feed_time
+                        and (br.exit_date is null or br.exit_date &gt;= fl.feed_time)
+                        and exists (
+                            select 1
+                            from breeding_cycles bc
+                            where bc.house_id = bw.house_id
+                              and bc.batch_id = br.batch_id
+                              and bc.mother_rabbit_id = br.rabbit_id
+                              and bc.mating_date &lt;= fl.feed_time
+                        )
+                  )
+              )
+            union
+            select distinct fl.id, fl.unit
+            from batch_window bw
+            inner join feed_log_batch_allocations a
+              on a.house_id = bw.house_id
+             and a.batch_id = bw.batch_id
+            inner join feed_logs fl
+              on fl.id = a.feed_log_id
+             and fl.house_id = a.house_id
+            where bw.first_mating_at is not null
+              and fl.feed_time &gt;= date(bw.first_mating_at)
+              and ((bw.end_date is not null
+                    and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                   or (bw.end_date is null and fl.feed_time &lt;= now()))
+        )
+        select coalesce((
+                   select sum(a.amount_kg)
+                   from feed_log_batch_allocations a
+                   inner join feed_logs fl
+                     on fl.id = a.feed_log_id
+                    and fl.house_id = a.house_id
+                   where a.house_id = bw.house_id
+                     and a.batch_id = bw.batch_id
+                     and a.phase = 'BREEDING'
+                     and bw.first_mating_at is not null
+                     and fl.feed_time &gt;= date(bw.first_mating_at)
+                     and ((bw.end_date is not null
+                           and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                          or (bw.end_date is null and fl.feed_time &lt;= now()))
+               ), 0) as breedingFeedAmountKg,
+               coalesce((
+                   select sum(a.amount_kg)
+                   from feed_log_batch_allocations a
+                   inner join feed_logs fl
+                     on fl.id = a.feed_log_id
+                    and fl.house_id = a.house_id
+                   where a.house_id = bw.house_id
+                     and a.batch_id = bw.batch_id
+                     and a.phase = 'FATTENING'
+                     and bw.first_mating_at is not null
+                     and fl.feed_time &gt;= date(bw.first_mating_at)
+                     and ((bw.end_date is not null
+                           and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                          or (bw.end_date is null and fl.feed_time &lt;= now()))
+               ), 0) as fatteningFeedAmountKg,
+               case when exists (
+                   select 1
+                   from relevant_feed_logs relevant
+                   where not exists (
+                       select 1
+                       from feed_log_batch_allocations existing
+                       where existing.house_id = bw.house_id
+                         and existing.batch_id = bw.batch_id
+                         and existing.feed_log_id = relevant.id
+                   )
+               ) then 1 else 0 end as missingFeedAllocation,
+               case when exists (
+                   select 1
+                   from relevant_feed_logs relevant
+                   where relevant.unit is null
+                      or lower(trim(relevant.unit)) &lt;&gt; 'kg'
+               ) then 1 else 0 end as missingFeedUnit
+        from batch_window bw
+    </select>
+
+    <select id="selectReplacementAggregate" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select coalesce((
+                   select sum(a.total_weight_kg)
+                   from replacement_batch_allocations a
+                   where a.house_id = b.house_id
+                     and a.source_batch_id = b.id
+               ), 0) as replacementWeightKg,
+               case when exists (
+                   select 1
+                   from replacement_records rr
+                   inner join rabbits r
+                     on r.id = rr.rabbit_id
+                    and r.house_id = rr.house_id
+                   where rr.house_id = b.house_id
+                     and (r.birth_batch_id = b.id
+                          or exists (
+                              select 1
+                              from batch_rabbits historical_br
+                              inner join batches historical_b
+                                on historical_b.id = historical_br.batch_id
+                               and historical_b.house_id = rr.house_id
+                              where historical_br.rabbit_id = rr.rabbit_id
+                                and historical_br.batch_id = b.id
+                                and historical_br.batch_role = 'fattening'
+                                and historical_br.join_date &lt;= rr.replacement_date
+                                and (historical_br.exit_date is null
+                                     or historical_br.exit_date &gt;= rr.replacement_date)
+                          ))
+                     and not exists (
+                         select 1
+                         from replacement_batch_allocations existing
+                         where existing.house_id = b.house_id
+                           and existing.source_batch_id = b.id
+                           and existing.request_id = rr.request_id
+                     )
+               ) or exists (
+                   select 1
+                   from repro_events gap
+                   where gap.house_id = b.house_id
+                     and gap.batch_id = b.id
+                     and gap.target_type = 'BATCH'
+                     and gap.target_id = b.id
+                     and gap.event_type = 'LEGACY_REPLACEMENT_WEIGHT_GAP'
+               ) then 1 else 0 end as missingReplacementWeight
+        from batches b
+        where b.house_id = #{houseId}
+          and b.id = #{batchId}
+    </select>
+
+    <select id="selectLatestCarcassYield" resultType="com.rabbit.app.modules.batch.dto.BatchStatisticsRawSnapshot">
+        select cy.yield_rate as carcassYieldRate
+        from batch_carcass_yield_versions cy
+        where cy.house_id = #{houseId}
+          and cy.batch_id = #{batchId}
+        order by cy.created_at desc, cy.id desc
+        limit 1
     </select>
 </mapper>

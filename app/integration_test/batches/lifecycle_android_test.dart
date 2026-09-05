@@ -577,7 +577,7 @@ Future<void> _createBatch(WidgetTester tester) async {
   await _waitFor(tester, createButton);
   await tester.ensureVisible(createButton);
   await tester.tap(createButton);
-  await _waitFor(tester, find.text('选择种母兔（已选 0 只）'));
+  await _waitFor(tester, find.text('可选种母兔（已选 0 只）'));
   final codeField = find.byKey(const ValueKey('batch-code-field'));
   final remarkField = find.byKey(const ValueKey('batch-remark-field'));
   final motherSearch = find.byKey(const ValueKey('batch-mother-search'));
@@ -591,7 +591,7 @@ Future<void> _createBatch(WidgetTester tester) async {
   );
   await tester.tap(find.textContaining('兔 #$_motherAId'));
   await tester.tap(find.textContaining('兔 #$_motherBId'));
-  await _waitFor(tester, find.text('选择种母兔（已选 2 只）'));
+  await _waitFor(tester, find.text('可选种母兔（已选 2 只）'));
   // 按 key 而不是按文案：列表空态的 CTA 与表单提交都叫「创建批次」，
   // 表单开着时两个按钮同时在树上，按文案找会匹配到两个。
   final submit = find.byKey(const ValueKey('create-batch-submit'));
@@ -956,8 +956,8 @@ Future<void> _submitWeaning(
   await _enterFormField(
     tester,
     listKey: const ValueKey('weaning-form-list'),
-    field: find.byKey(const ValueKey('weaning-average-weight')),
-    value: '1.2',
+    field: find.byKey(const ValueKey('weaning-total-weight')),
+    value: (count * 1.2).toStringAsFixed(3),
   );
   await _enterFormField(
     tester,

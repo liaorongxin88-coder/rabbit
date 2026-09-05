@@ -1,0 +1,41 @@
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/analysis.md","reason":"核对实现是否保持飞书主记录范围和已确认口径"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/source-gap-analysis.md","reason":"核对 28 项无漏项、所有差异有依据且确认粒度一致"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/metric-catalog.md","reason":"逐项核对 28 项指标编码、公式、来源、状态和格式"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/acceptance-fixture.md","reason":"核对附件真实行期望值和所有边界场景"}
+{"file":".trellis/spec/backend/index.md","reason":"后端质量检查入口"}
+{"file":".trellis/spec/backend/modules.md","reason":"检查模块边界和依赖方向"}
+{"file":".trellis/spec/backend/http-and-services.md","reason":"检查控制器、事务、验证和服务职责"}
+{"file":".trellis/spec/backend/security-and-tenancy.md","reason":"检查权限、兔舍隔离、SQL 条件和 requestId"}
+{"file":".trellis/spec/backend/data-and-migrations.md","reason":"检查 Flyway、MyBatis、约束和历史兼容"}
+{"file":".trellis/spec/backend/errors-observability.md","reason":"检查错误码、操作追踪和追加历史"}
+{"file":".trellis/spec/backend/testing.md","reason":"检查测试落位及 Maven 验证范围"}
+{"file":"admin/.rules","reason":"检查 Admin 工程和业务工作区边界"}
+{"file":"admin/DESIGN.md","reason":"检查 Admin 视觉、状态、响应式和无障碍行为"}
+{"file":".trellis/spec/admin/index.md","reason":"Admin 质量检查入口"}
+{"file":".trellis/spec/admin/architecture.md","reason":"检查路由、页面和组件归属"}
+{"file":".trellis/spec/admin/components-and-state.md","reason":"检查加载、局部重试、请求竞态、表单和幂等"}
+{"file":".trellis/spec/admin/data-access-and-types.md","reason":"检查 API、受保护下载、权限、响应和 TypeScript 类型"}
+{"file":".trellis/spec/admin/design-and-accessibility.md","reason":"检查桌面、窄屏、状态语义和可访问性"}
+{"file":".trellis/spec/admin/testing.md","reason":"检查 lint、test、build 和浏览器覆盖"}
+{"file":"app/.rule","reason":"检查 Flutter 分层、命名、业务文案和 Android 边界"}
+{"file":".trellis/spec/flutter/index.md","reason":"Flutter 质量检查入口"}
+{"file":".trellis/spec/flutter/architecture.md","reason":"检查源码和测试归属"}
+{"file":".trellis/spec/flutter/data-access.md","reason":"检查 Dio、受保护下载、X-App-Build、解析和写入重试"}
+{"file":".trellis/spec/flutter/riverpod.md","reason":"检查取消、缓存、刷新和跨功能失效"}
+{"file":".trellis/spec/flutter/persistence.md","reason":"检查离线与服务端出库草稿、强制保存和分配失效"}
+{"file":".trellis/spec/flutter/routing.md","reason":"检查批次详情和数据看板导航"}
+{"file":".trellis/spec/flutter/ui.md","reason":"检查 360x800、200% 字号、状态和表单行为"}
+{"file":".trellis/spec/flutter/testing.md","reason":"检查模型、仓库、Widget、架构和真机测试"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"检查跨页面重复逻辑和抽象边界"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"核对数据库、服务、接口和两端 UI 数据流"}
+{"file":".trellis/spec/guides/rabbit-cross-application-contracts.md","reason":"核对共享权限、租户、响应、幂等、日期和小数契约"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/prd.md","reason":"核对交付勾选与生产发布剩余门禁"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/design.md","reason":"核对稳定后的 V55/V56、统计、客户端和发布设计"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/implement.md","reason":"核对实施状态、验证命令和未完成步骤"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/verification.md","reason":"核对测试、浏览器、APK、真机与限制证据"}
+{"file":".trellis/spec/backend/batch-statistics.md","reason":"核对可执行批次统计 code-spec 与实现一致"}
+{"file":"docs/features/batch-statistics/README.md","reason":"核对长期功能范围和权限"}
+{"file":"docs/features/batch-statistics/design.md","reason":"核对长期计算、持久化、兼容和 Excel 设计"}
+{"file":"docs/features/batch-statistics/interaction.md","reason":"核对两端 16 行响应式交互"}
+{"file":"backend/rabbit-boot/src/main/resources/db/migration/V55__batch_statistics_write_snapshots.sql","reason":"检查不可变快照和复合租户外键"}
+{"file":"backend/rabbit-boot/src/main/resources/db/migration/V56__outbound_draft_batch_allocations.sql","reason":"检查出库草稿批次分配约束"}

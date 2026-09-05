@@ -1,6 +1,7 @@
 package com.rabbit.app.e2e;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -43,6 +44,53 @@ public class ReproWeaningPlacementIT extends E2eTestSupport {
         Assertions.assertEquals(0, count("select count(*) from batch_rabbits where batch_id = ? and batch_role = 'fattening'", scenario.batchId()));
         Assertions.assertEquals(0, count("select count(*) from work_tasks where batch_id = ? and task_type = 'SALE_READY'", scenario.batchId()));
         Assertions.assertEquals(beforeCageCount, count("select rabbit_count from cages where id = ?", targetCage));
+    }
+
+    @Test
+    void weaningStoresMeasuredTotalAndDerivesTheLegacyAverage() {
+        Scenario scenario = nursingScenario("measured", 1, 6);
+        long cycleId = scenario.cycleIds().get(0);
+        String requestId = requestId("measured_wean");
+
+        api.postOk(
+            "/api/repro/cycles/" + cycleId + "/actions",
+            scenario.owner().token,
+            scenario.houseId(),
+            obj(
+                "action", "WEANING",
+                "occurredAt", now(),
+                "weanedCount", 6,
+                "maleCount", 3,
+                "femaleCount", 3,
+                "weaningTotalWeightKg", new BigDecimal("4.410"),
+                "requestId", requestId
+            )
+        );
+
+        Assertions.assertEquals(new BigDecimal("4.410"), jdbc.queryForObject(
+            "select weaning_total_weight_kg from litters where house_id = ? and cycle_id = ?",
+            BigDecimal.class,
+            scenario.houseId(),
+            cycleId
+        ));
+        Assertions.assertEquals(0.735D, jdbc.queryForObject(
+            "select avg_weaning_weight from litters where house_id = ? and cycle_id = ?",
+            Double.class,
+            scenario.houseId(),
+            cycleId
+        ));
+        Assertions.assertEquals(0.735D, jdbc.queryForObject(
+            "select avg_weight from weaning_records where house_id = ? and breeding_cycle_id = ?",
+            Double.class,
+            scenario.houseId(),
+            cycleId
+        ));
+        Assertions.assertEquals(0, count(
+            "select count(*) from repro_events where house_id = ? and request_id = ? "
+                + "and event_type = 'LEGACY_WEANING_WEIGHT_GAP'",
+            scenario.houseId(),
+            requestId
+        ));
     }
 
     @Test

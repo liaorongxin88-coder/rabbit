@@ -1,0 +1,41 @@
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/analysis.md","reason":"飞书主记录、附件差异、当前代码能力和已确认业务口径"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/source-gap-analysis.md","reason":"原始 28 项与最终规划的逐项差异、范围扩展和确认粒度"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/metric-catalog.md","reason":"28 项指标编码、公式、来源、时间边界和数据状态契约"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/research/acceptance-fixture.md","reason":"附件真实行、补充测试输入、28 项期望值和边界场景"}
+{"file":".trellis/spec/backend/index.md","reason":"后端开发前检查入口"}
+{"file":".trellis/spec/backend/modules.md","reason":"rabbit-production 模块归属和跨域依赖约束"}
+{"file":".trellis/spec/backend/http-and-services.md","reason":"控制器、服务、事务、DTO 和 Mapper 职责"}
+{"file":".trellis/spec/backend/security-and-tenancy.md","reason":"权限、X-House-Id、租户 SQL 和写入幂等约束"}
+{"file":".trellis/spec/backend/data-and-migrations.md","reason":"MyBatis、Flyway、不可变迁移和数据约束"}
+{"file":".trellis/spec/backend/errors-observability.md","reason":"错误码、操作追踪和审计历史约束"}
+{"file":".trellis/spec/backend/testing.md","reason":"后端单元、架构和 MySQL 集成测试规范"}
+{"file":"admin/.rules","reason":"Admin 工程边界、业务 API 和组件约束"}
+{"file":"admin/DESIGN.md","reason":"Admin 统计详情、表单、状态和响应式设计规范"}
+{"file":".trellis/spec/admin/index.md","reason":"Admin 开发前检查入口"}
+{"file":".trellis/spec/admin/architecture.md","reason":"Admin 路由、页面和业务工作区边界"}
+{"file":".trellis/spec/admin/components-and-state.md","reason":"Admin 加载、重试、表单、并发请求和 requestId 规则"}
+{"file":".trellis/spec/admin/data-access-and-types.md","reason":"Admin Alova API、受保护下载、X-House-Id、权限和类型契约"}
+{"file":".trellis/spec/admin/design-and-accessibility.md","reason":"Admin 指标分组、状态、窄屏和无障碍要求"}
+{"file":".trellis/spec/admin/testing.md","reason":"Admin 单元、构建和浏览器验证规范"}
+{"file":"app/.rule","reason":"Flutter 分层、命名、API、UI 和 Android 端边界"}
+{"file":".trellis/spec/flutter/index.md","reason":"Flutter 开发前检查入口"}
+{"file":".trellis/spec/flutter/architecture.md","reason":"Flutter domain、repository、UI 和测试归属"}
+{"file":".trellis/spec/flutter/data-access.md","reason":"Dio、受保护下载、X-App-Build、响应解析和幂等写入规则"}
+{"file":".trellis/spec/flutter/riverpod.md","reason":"Provider family、取消、刷新和缓存一致性"}
+{"file":".trellis/spec/flutter/persistence.md","reason":"出库草稿分配、强制保存及网络权威约束"}
+{"file":".trellis/spec/flutter/routing.md","reason":"批次详情与数据看板导航约束"}
+{"file":".trellis/spec/flutter/ui.md","reason":"Flutter 指标、表单、状态、窄屏和 200% 字号要求"}
+{"file":".trellis/spec/flutter/testing.md","reason":"Flutter 模型、仓库、Widget 和真机测试规范"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"避免重复指标格式化、状态映射和请求辅助逻辑"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"从数据库到两端 UI 的完整数据流检查"}
+{"file":".trellis/spec/guides/rabbit-cross-application-contracts.md","reason":"共享响应、权限、租户、幂等、日期和小数契约"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/prd.md","reason":"已批准需求、交付标准和生产发布剩余门禁"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/design.md","reason":"稳定后的 V55/V56、统计、客户端和发布设计"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/implement.md","reason":"实施状态、验证命令和未完成发布步骤"}
+{"file":".trellis/tasks/09-04-feishu-batch-statistics/verification.md","reason":"本地测试、浏览器、APK、真机和外部门禁证据"}
+{"file":".trellis/spec/backend/batch-statistics.md","reason":"可执行的批次统计与不可变快照 code-spec"}
+{"file":"docs/features/batch-statistics/README.md","reason":"长期功能范围、接口和权限说明"}
+{"file":"docs/features/batch-statistics/design.md","reason":"长期计算、持久化、兼容和 Excel 设计"}
+{"file":"docs/features/batch-statistics/interaction.md","reason":"Admin 与 Flutter 的 16 行响应式交互契约"}
+{"file":"backend/rabbit-boot/src/main/resources/db/migration/V55__batch_statistics_write_snapshots.sql","reason":"业务统计不可变快照与复合租户外键"}
+{"file":"backend/rabbit-boot/src/main/resources/db/migration/V56__outbound_draft_batch_allocations.sql","reason":"服务端出库草稿批次分配快照"}

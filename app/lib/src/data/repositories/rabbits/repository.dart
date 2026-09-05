@@ -499,17 +499,30 @@ class RabbitRepository {
 
   Future<List<ReplacementConversion>> convertToReplacement({
     required int houseId,
-    required List<int> rabbitIds,
+    required int rabbitId,
+    required int? sourceBatchId,
+    required double measuredTotalWeightKg,
     int? targetCageId,
     bool forceExitBatch = true,
     String? requestId,
   }) {
+    if (rabbitId <= 0 || (sourceBatchId != null && sourceBatchId <= 0)) {
+      throw ArgumentError('留后备兔来源信息不正确');
+    }
+    final allocation = ReplacementBatchAllocation(
+      batchId: sourceBatchId,
+      rabbitCount: 1,
+      totalWeightKg: measuredTotalWeightKg,
+    );
+    final validation = allocation.validate();
+    if (validation != null) throw ArgumentError(validation);
     return _api.post<List<ReplacementConversion>>(
       '/api/rabbits/replacement',
       houseId: houseId,
       body: {
-        'rabbitIds': _sortedUniqueIds(rabbitIds),
+        'rabbitIds': [rabbitId],
         'forceExitBatch': forceExitBatch,
+        'batchAllocations': [allocation.toJson()],
         'requestId': requestId ?? _uuid.v4(),
         if (targetCageId != null && targetCageId > 0)
           'targetCageId': targetCageId,
@@ -602,8 +615,4 @@ class RabbitRepository {
       decode: (_) {},
     );
   }
-}
-
-List<int> _sortedUniqueIds(Iterable<int> ids) {
-  return ids.toSet().toList()..sort();
 }

@@ -16,6 +16,8 @@ class OutboundLocalSnapshot {
     required this.unitPrice,
     required this.customer,
     required this.remark,
+    this.batchAllocationWeights = const {},
+    this.hasBatchAllocationWeights = true,
     this.selectionMode = 'cage',
     this.selectedOnly = false,
   });
@@ -24,6 +26,8 @@ class OutboundLocalSnapshot {
   final DateTime? saleTime;
   final String totalWeight;
   final String unitPrice;
+  final Map<String, String> batchAllocationWeights;
+  final bool hasBatchAllocationWeights;
   final String customer;
   final String remark;
   final String selectionMode;
@@ -34,6 +38,7 @@ class OutboundLocalSnapshot {
         'saleTime': saleTime?.toIso8601String(),
         'totalWeight': totalWeight,
         'unitPrice': unitPrice,
+        'batchAllocationWeights': batchAllocationWeights,
         'customer': customer,
         'remark': remark,
         'selectionMode': selectionMode,
@@ -47,6 +52,11 @@ class OutboundLocalSnapshot {
       saleTime: DateTime.tryParse(json['saleTime'] as String? ?? ''),
       totalWeight: json['totalWeight'] as String? ?? '',
       unitPrice: json['unitPrice'] as String? ?? '',
+      batchAllocationWeights: (json['batchAllocationWeights'] as Map?)?.map(
+            (key, value) => MapEntry('$key', '$value'),
+          ) ??
+          const <String, String>{},
+      hasBatchAllocationWeights: json.containsKey('batchAllocationWeights'),
       customer: json['customer'] as String? ?? '',
       remark: json['remark'] as String? ?? '',
       selectionMode: json['selectionMode'] as String? ?? 'cage',

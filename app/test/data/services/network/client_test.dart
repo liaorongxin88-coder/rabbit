@@ -153,6 +153,33 @@ void main() {
     client.dispose();
   });
 
+  test('retries app build lookup after a transient failure', () async {
+    final adapter = _JsonResponseAdapter(
+      statusCode: 200,
+      body: {'code': 0, 'message': 'ok', 'data': null},
+    );
+    final dio = Dio(BaseOptions(baseUrl: 'https://rabbit.test'))
+      ..httpClientAdapter = adapter;
+    var buildLoads = 0;
+    final client = ApiClient(
+      SessionStore(),
+      dio: dio,
+      appBuildLoader: () async {
+        buildLoads++;
+        if (buildLoads == 1) throw StateError('platform channel unavailable');
+        return '4020';
+      },
+    );
+
+    await client.get<void>('/first', decode: (_) {});
+    await client.get<void>('/second', decode: (_) {});
+
+    expect(buildLoads, 2);
+    expect(adapter.requests.first.headers['X-App-Build'], 'UNKNOWN');
+    expect(adapter.requests.last.headers['X-App-Build'], '4020');
+    client.dispose();
+  });
+
   test('GET forwards cancellation to Dio', () async {
     final client = _clientFor(
       statusCode: 200,
@@ -186,13 +213,14 @@ ApiClient _clientFor({
 }
 
 class _JsonResponseAdapter implements HttpClientAdapter {
-  const _JsonResponseAdapter({
+  _JsonResponseAdapter({
     required this.statusCode,
     required this.body,
   });
 
   final int statusCode;
   final Map<String, Object?> body;
+  final requests = <RequestOptions>[];
 
   @override
   Future<ResponseBody> fetch(
@@ -200,6 +228,7 @@ class _JsonResponseAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    requests.add(options);
     return ResponseBody.fromString(
       jsonEncode(body),
       statusCode,

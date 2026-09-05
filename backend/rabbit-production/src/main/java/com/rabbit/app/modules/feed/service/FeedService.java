@@ -1,8 +1,11 @@
 package com.rabbit.app.modules.feed.service;
 
 import com.rabbit.app.common.BizException;
+import com.rabbit.app.modules.batch.support.BatchWritePayloadHasher;
 import com.rabbit.app.modules.cage.mapper.CageMapper;
 import com.rabbit.app.modules.dedup.service.RequestDedupService;
+import com.rabbit.app.modules.feed.dto.FeedAllocationPreview;
+import com.rabbit.app.modules.feed.dto.FeedBatchAllocationInput;
 import com.rabbit.app.modules.feed.entity.FeedLog;
 import com.rabbit.app.modules.feed.entity.FeedLogRabbit;
 import com.rabbit.app.modules.feed.mapper.FeedLogMapper;
@@ -19,12 +22,15 @@ import com.rabbit.app.tracking.OperationEvent;
 import com.rabbit.app.tracking.TrackedOperation;
 import com.rabbit.app.util.DateUtil;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +45,7 @@ public class FeedService {
     private final InventoryTxMapper inventoryTxMapper;
     private final RequestDedupService requestDedupService;
     private final WorkTaskWriter workTaskWriter;
+    private final FeedBatchAllocationService batchAllocationService;
     private final boolean forbidNegative;
     private final int casRetryTimes;
 
@@ -51,6 +58,35 @@ public class FeedService {
             InventoryTxMapper inventoryTxMapper,
             RequestDedupService requestDedupService,
             WorkTaskWriter workTaskWriter,
+            boolean forbidNegative,
+            int casRetryTimes
+    ) {
+        this(
+            feedLogMapper,
+            feedLogRabbitMapper,
+            rabbitMapper,
+            cageMapper,
+            inventoryItemMapper,
+            inventoryTxMapper,
+            requestDedupService,
+            workTaskWriter,
+            null,
+            forbidNegative,
+            casRetryTimes
+        );
+    }
+
+    @Autowired
+    public FeedService(
+            FeedLogMapper feedLogMapper,
+            FeedLogRabbitMapper feedLogRabbitMapper,
+            RabbitMapper rabbitMapper,
+            CageMapper cageMapper,
+            InventoryItemMapper inventoryItemMapper,
+            InventoryTxMapper inventoryTxMapper,
+            RequestDedupService requestDedupService,
+            WorkTaskWriter workTaskWriter,
+            FeedBatchAllocationService batchAllocationService,
             @Value("${app.inventory.forbid-negative:false}") boolean forbidNegative,
             @Value("${app.inventory.cas-retry-times:5}") int casRetryTimes
     ) {
@@ -62,18 +98,54 @@ public class FeedService {
         this.inventoryTxMapper = inventoryTxMapper;
         this.requestDedupService = requestDedupService;
         this.workTaskWriter = workTaskWriter;
+        this.batchAllocationService = batchAllocationService;
         this.forbidNegative = forbidNegative;
         this.casRetryTimes = casRetryTimes <= 0 ? 5 : casRetryTimes;
     }
 
-    @TrackedOperation(code = "feed:add", eventType = "FEED_RECORDED")
-    @Transactional
-    public void addFeedLog(Long userId, Long houseId, FeedLog log, List<Long> rabbitIds) {
-        String api = "feed:add";
-        if (requestDedupService.shouldSkipAsDone(houseId, userId, api, log == null ? null : log.getRequestId())) {
+    public void assertRequestAllowed(
+        Long userId,
+        Long houseId,
+        String requestId,
+        List<Long> rabbitIds,
+        Date feedTime,
+        String unit,
+        List<FeedBatchAllocationInput> allocations
+    ) {
+        if (requestDedupService.shouldSkipAsDone(
+            houseId, userId, "feed:add", requestId
+        )) {
             return;
         }
-        requestDedupService.markProcessing(houseId, userId, api, log == null ? null : log.getRequestId());
+        if (batchAllocationService != null) {
+            batchAllocationService.assertRequestAllowed(
+                houseId, rabbitIds, feedTime, unit, allocations
+            );
+        }
+    }
+
+    @TrackedOperation(
+        code = "feed:add", eventType = "FEED_RECORDED", requestId = "#log.requestId"
+    )
+    @Transactional
+    public void addFeedLog(
+        Long userId,
+        Long houseId,
+        FeedLog log,
+        List<Long> rabbitIds,
+        List<FeedBatchAllocationInput> allocations
+    ) {
+        String api = "feed:add";
+        String requestId = log == null ? null : log.getRequestId();
+        if (requestDedupService.begin(
+            houseId, userId, api, requestId, payloadHash(log, rabbitIds, allocations)
+        ) == RequestDedupService.BeginResult.DONE) {
+            OperationContext context = OperationContext.current();
+            if (context != null) {
+                context.setDedupReplay(true);
+            }
+            return;
+        }
         try {
         if (rabbitIds == null || rabbitIds.isEmpty()) {
             throw new BizException(400, "rabbitIds不能为空");
@@ -89,6 +161,11 @@ public class FeedService {
         }
         if (log.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BizException(400, "amount必须大于0");
+        }
+        try {
+            log.setAmount(log.getAmount().setScale(2, RoundingMode.UNNECESSARY));
+        } catch (ArithmeticException error) {
+            throw new BizException(400, "amount最多保留两位小数");
         }
 
         StringBuilder sb = new StringBuilder();
@@ -124,9 +201,25 @@ public class FeedService {
             i++;
         }
 
+        FeedBatchAllocationService.AllocationPlan allocationPlan = batchAllocationService == null
+            ? new FeedBatchAllocationService.AllocationPlan(List.of())
+            : batchAllocationService.prepare(
+                userId,
+                houseId,
+                List.copyOf(uniqueRabbitIds),
+                log.getFeedTime(),
+                log.getUnit(),
+                log.getAmount(),
+                log.getRequestId(),
+                allocations
+            );
+
         log.setHouseId(houseId);
         log.setFeedingRabbits(sb.toString());
         feedLogMapper.insert(log);
+        if (batchAllocationService != null) {
+            batchAllocationService.save(log.getId(), allocationPlan);
+        }
 
         for (FeedLogRabbit rel : rels) {
             rel.setFeedLogId(log.getId());
@@ -167,6 +260,57 @@ public class FeedService {
             requestDedupService.markFailed(houseId, userId, api, log == null ? null : log.getRequestId(), e.getMessage());
             throw e;
         }
+    }
+
+    public FeedAllocationPreview previewAllocations(
+        Long houseId,
+        List<Long> rabbitIds,
+        Date feedTime
+    ) {
+        for (Long rabbitId : new LinkedHashSet<>(rabbitIds)) {
+            Rabbit rabbit = rabbitMapper.selectById(houseId, rabbitId);
+            if (rabbit == null || !Boolean.TRUE.equals(rabbit.getIsActive())) {
+                throw new BizException(400, "兔子不存在或不在场");
+            }
+        }
+        if (batchAllocationService == null) {
+            return new FeedAllocationPreview(List.of());
+        }
+        return batchAllocationService.preview(houseId, rabbitIds, feedTime);
+    }
+
+    private static String payloadHash(
+        FeedLog log,
+        List<Long> rabbitIds,
+        List<FeedBatchAllocationInput> allocations
+    ) {
+        StringBuilder value = new StringBuilder();
+        if (log != null) {
+            value.append(log.getFeedTime() == null ? null : log.getFeedTime().getTime())
+                .append('|').append(BatchWritePayloadHasher.text(log.getFeedType()))
+                .append('|').append(log.getItemId())
+                .append('|').append(BatchWritePayloadHasher.text(log.getUnit() == null
+                    ? null : log.getUnit().trim().toLowerCase(java.util.Locale.ROOT)))
+                .append('|').append(BatchWritePayloadHasher.decimal(log.getAmount()))
+                .append('|').append(BatchWritePayloadHasher.text(
+                    log.getRemark() == null ? null : log.getRemark().trim()
+                ));
+        }
+        if (rabbitIds != null) {
+            rabbitIds.stream().filter(java.util.Objects::nonNull).distinct().sorted()
+                .forEach(id -> value.append("|rabbit:").append(id));
+        }
+        if (allocations != null) {
+            allocations.stream().sorted(Comparator
+                .comparing(FeedBatchAllocationInput::batchId, Comparator.nullsLast(Long::compareTo))
+                .thenComparing(input -> String.valueOf(input.phase())))
+                .forEach(input -> value.append("|allocation:")
+                    .append(input.batchId()).append(':')
+                    .append(input.phase() == null
+                        ? null : input.phase().trim().toUpperCase(java.util.Locale.ROOT))
+                    .append(':').append(BatchWritePayloadHasher.decimal(input.amountKg())));
+        }
+        return BatchWritePayloadHasher.sha256(value.toString());
     }
 
     private void recordEvents(List<FeedLogRabbit> rows) {

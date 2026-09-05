@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rabbit.app.modules.outbound.mapper.OutboundTaskBatchAllocationMapper">
+    <resultMap id="Map" type="com.rabbit.app.modules.outbound.entity.OutboundTaskBatchAllocation">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="actual_weight_kg" property="actualWeightKg"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <delete id="deleteByTaskLimited">
+        delete from outbound_task_batch_allocations
+        where house_id = #{houseId} and task_id = #{taskId}
+        limit #{limit}
+    </delete>
+
+    <insert id="insertBatch">
+        insert into outbound_task_batch_allocations (
+            task_id, house_id, batch_id, actual_weight_kg
+        ) values
+        <foreach collection="allocations" item="allocation" separator=",">
+            (#{allocation.taskId}, #{allocation.houseId}, #{allocation.batchId},
+             #{allocation.actualWeightKg})
+        </foreach>
+    </insert>
+
+    <select id="selectByTask" resultMap="Map">
+        select id, task_id, house_id, batch_id, actual_weight_kg, created_at
+        from outbound_task_batch_allocations
+        where house_id = #{houseId} and task_id = #{taskId}
+        order by batch_id is null, batch_id
+    </select>
+</mapper>

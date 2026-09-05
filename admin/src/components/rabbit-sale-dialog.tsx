@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { ShoppingCartIcon } from "lucide-react";
 import { toast } from "sonner";
 import { createRabbitSale } from "@/api/workspace";
-import { getOrCreateRabbitSaleRequest } from "@/lib/rabbit-sale";
-import { formatLocalDate } from "@/lib/date";
+import {
+  getOrCreateRabbitSaleRequest,
+  rabbitSaleValidationError,
+} from "@/lib/rabbit-sale";
+import {
+  farmBusinessDateToTimestamp,
+  formatFarmBusinessDate,
+} from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,8 +48,8 @@ export function RabbitSaleDialog({
 
   useEffect(() => {
     if (!rabbit) return;
-    setSaleDate(formatLocalDate());
-    setTotalWeight(rabbit.weight == null ? "" : rabbit.weight.toFixed(2));
+    setSaleDate(formatFarmBusinessDate());
+    setTotalWeight("");
     setUnitPrice("");
     setCustomer("");
     setRemark("");
@@ -54,21 +60,18 @@ export function RabbitSaleDialog({
   async function handleSubmit() {
     if (!rabbit || !houseId) return;
     const normalizedWeight = Number(totalWeight);
-    const normalizedPrice = unitPrice.trim() ? Number(unitPrice) : undefined;
-    const saleTime = new Date(`${saleDate}T12:00:00`).getTime();
-    if (!Number.isFinite(saleTime)) {
+    const normalizedPrice = Number(unitPrice);
+    const saleTime = farmBusinessDateToTimestamp(saleDate);
+    if (saleTime === undefined) {
       toast.error("请选择出售日期");
       return;
     }
-    if (!Number.isFinite(normalizedWeight) || normalizedWeight <= 0) {
-      toast.error("请填写大于 0 的销售重量");
-      return;
-    }
-    if (
-      normalizedPrice != null &&
-      (!Number.isFinite(normalizedPrice) || normalizedPrice < 0)
-    ) {
-      toast.error("单价不能小于 0");
+    const validationMessage = rabbitSaleValidationError(
+      normalizedWeight,
+      normalizedPrice,
+    );
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
     if (!confirmed) {
@@ -83,6 +86,10 @@ export function RabbitSaleDialog({
         saleTime,
         totalWeight: normalizedWeight,
         unitPrice: normalizedPrice,
+        unitPricePerKg: normalizedPrice,
+        // The locked backend snapshot owns attribution for a single-rabbit sale.
+        // A client-guessed null batch can reject older rabbits with an active link.
+        batchAllocations: [],
         customer: customer.trim() || undefined,
         remark: remark.trim() || undefined,
       },
@@ -96,10 +103,9 @@ export function RabbitSaleDialog({
       toast.success(`兔 #${rabbit.id} 已出售出栏`);
       onOpenChange(false);
       await onSaved();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "出售失败，请稍后重试",
-      );
+    } catch {
+      // The shared request layer reports the failure. Keep the request ID for
+      // an unchanged retry because the server may have completed the write.
     } finally {
       setSaving(false);
     }
@@ -130,9 +136,10 @@ export function RabbitSaleDialog({
             <Input
               id="rabbit-sale-weight"
               type="number"
-              min="0"
-              step="0.01"
+              min="0.001"
+              step="0.001"
               value={totalWeight}
+              disabled={saving}
               onChange={(event) => setTotalWeight(event.target.value)}
             />
           </Field>
@@ -141,9 +148,12 @@ export function RabbitSaleDialog({
             <Input
               id="rabbit-sale-price"
               type="number"
-              min="0"
+              min="0.01"
               step="0.01"
+              max="99999999.99"
               value={unitPrice}
+              disabled={saving}
+              required
               onChange={(event) => setUnitPrice(event.target.value)}
             />
           </Field>
@@ -153,6 +163,7 @@ export function RabbitSaleDialog({
               id="rabbit-sale-customer"
               maxLength={100}
               value={customer}
+              disabled={saving}
               onChange={(event) => setCustomer(event.target.value)}
             />
           </Field>
@@ -161,6 +172,7 @@ export function RabbitSaleDialog({
             <Textarea
               id="rabbit-sale-remark"
               value={remark}
+              disabled={saving}
               onChange={(event) => setRemark(event.target.value)}
             />
           </Field>
@@ -174,6 +186,7 @@ export function RabbitSaleDialog({
                 type="checkbox"
                 className="mt-1"
                 checked={confirmed}
+                disabled={saving}
                 onChange={(event) => setConfirmed(event.target.checked)}
               />
               <span>
@@ -187,7 +200,11 @@ export function RabbitSaleDialog({
           </Field>
         </FieldGroup>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => onOpenChange(false)}
+          >
             取消
           </Button>
           <Button disabled={saving} onClick={() => void handleSubmit()}>

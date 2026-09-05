@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,11 +38,16 @@ void main() {
     await controller.continueToConfirm();
     expect(controller.state.isConfirming, isTrue);
     expect(gateway.lastSaveStatus, 'WAITING_CONFIRMATION');
+    expect(gateway.lastDraftBatchAllocations.single.batchId, 20);
+    expect(gateway.lastDraftBatchAllocations.single.actualWeightKg, 6.5);
 
     await controller.submit();
     expect(controller.state.submitStatus, OutboundSubmitStatus.success);
     expect(controller.state.result?.rabbitCount, 2);
     expect(gateway.lastRequestId, isNotEmpty);
+    expect(gateway.lastUnitPrice, 18);
+    expect(gateway.lastBatchAllocations.single.batchId, 20);
+    expect(gateway.lastBatchAllocations.single.actualWeightKg, 6.5);
     expect(gateway.submitCalls, 1);
     expect(await store.readSnapshot(101, 8), isNull);
     expect(await store.readPendingRequest(101, 8), isNull);
@@ -177,25 +183,373 @@ void main() {
     addTearDown(controller.dispose);
     await _ready(controller);
     controller.selectEarlySale(controller.state.rabbits[1], '提前采购');
-    controller.updateForm(totalWeight: '6.5', customer: '测试客户');
+    controller.updateForm(
+      totalWeight: '6.5',
+      unitPrice: '18',
+      customer: '测试客户',
+    );
     await controller.continueToConfirm();
     final frozenSaveCalls = gateway.saveCalls;
     await controller.submit();
 
     expect(controller.state.submitStatus, OutboundSubmitStatus.conflict);
-    expect(gateway.saveCalls, frozenSaveCalls, reason: '正式提交应使用已冻结快照，不应再次保存草稿');
+    expect(
+      gateway.saveCalls,
+      frozenSaveCalls + 1,
+      reason: '正式提交前必须强制保存一次最新确认草稿',
+    );
     expect(controller.state.customer, '测试客户');
     final conflictRequestId = gateway.lastRequestId;
     await controller.removeConflicts();
     expect(controller.state.selectedRabbitIds, {2});
     expect(controller.state.customer, '测试客户');
+    expect(controller.state.totalWeight, isEmpty);
+    expect(controller.state.batchAllocationWeights, isEmpty);
     expect(controller.state.submitStatus, OutboundSubmitStatus.idle);
 
     gateway.returnConflict = false;
+    controller.updateForm(totalWeight: '3.0');
     await controller.submit();
     expect(controller.state.submitStatus, OutboundSubmitStatus.success);
     expect(gateway.lastRequestId, isNot(conflictRequestId));
     expect(gateway.requestIds.toSet().length, 2);
+  });
+
+  test('same-batch removal invalidates measured group and order weights',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 111, houseId: 8, entryType: 'HOUSE'),
+      repository: FakeOutboundGateway(),
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    controller.selectEarlySale(controller.state.rabbits[1], '客户提前采购');
+    controller.updateForm(totalWeight: '6.200', unitPrice: '18');
+    controller.updateBatchAllocation('20', '6.200');
+    controller.removeRabbit(2);
+
+    expect(controller.state.selectedRabbitIds, {1});
+    expect(controller.state.batchAllocationWeights, isEmpty);
+    expect(controller.state.totalWeight, isEmpty);
+  });
+
+  test('same-batch addition invalidates measured group and order weights',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 112, houseId: 8, entryType: 'HOUSE'),
+      repository: FakeOutboundGateway(),
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    controller.updateForm(totalWeight: '3.200', unitPrice: '18');
+    controller.updateBatchAllocation('20', '3.200');
+    controller.selectEarlySale(controller.state.rabbits[1], '客户提前采购');
+
+    expect(controller.state.selectedRabbitIds, {1, 2});
+    expect(controller.state.batchAllocationWeights, isEmpty);
+    expect(controller.state.totalWeight, isEmpty);
+  });
+
+  test('whole-group removal retains other measured group and recomputes total',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()..task = _mixedTask();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 113, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    controller.selectEarlySale(controller.state.rabbits[1], '客户提前采购');
+    controller.updateForm(totalWeight: '6.500', unitPrice: '18');
+    controller.updateBatchAllocation('20', '3.200');
+    controller.updateBatchAllocation('21', '3.300');
+    controller.removeRabbit(2);
+
+    expect(controller.state.selectedRabbitIds, {1});
+    expect(controller.state.batchAllocationWeights, {'20': '3.200'});
+    expect(controller.state.totalWeight, '3.200');
+  });
+
+  test(
+      'allocation-only edits save empty, partial, complete, and cleared drafts',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()..task = _mixedTask();
+    final store = OutboundLocalStore();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 115, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: store,
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.selectEarlySale(controller.state.rabbits[1], '客户提前采购');
+    await controller.continueToConfirm();
+    expect(gateway.lastDraftBatchAllocations, isEmpty);
+
+    var previousSaveCalls = gateway.saveCalls;
+    controller.updateBatchAllocation('20', '3.200');
+    expect(controller.state.syncStatus, OutboundSyncStatus.saving);
+    await store.flush();
+    expect(
+      (await store.readSnapshot(115, 8))!.batchAllocationWeights,
+      {'20': '3.200'},
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await _waitFor(() => gateway.saveCalls > previousSaveCalls);
+    expect(gateway.lastDraftBatchAllocations, hasLength(1));
+    expect(gateway.lastDraftBatchAllocations.single.batchId, 20);
+    expect(controller.state.syncStatus, OutboundSyncStatus.saved);
+
+    previousSaveCalls = gateway.saveCalls;
+    controller.updateBatchAllocation('21', '3.300');
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await _waitFor(() => gateway.saveCalls > previousSaveCalls);
+    expect(
+      gateway.lastDraftBatchAllocations.map((item) => item.batchId),
+      [20, 21],
+    );
+
+    previousSaveCalls = gateway.saveCalls;
+    controller.updateBatchAllocation('20', '');
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await _waitFor(() => gateway.saveCalls > previousSaveCalls);
+    expect(gateway.lastDraftBatchAllocations, hasLength(1));
+    expect(gateway.lastDraftBatchAllocations.single.batchId, 21);
+
+    gateway.saveError = const ApiException('草稿保存失败');
+    controller.updateBatchAllocation('21', '3.400');
+    expect(controller.state.syncStatus, OutboundSyncStatus.saving);
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await _waitFor(
+      () => controller.state.syncStatus == OutboundSyncStatus.failed,
+    );
+    expect(controller.state.errorMessage, '草稿保存失败');
+  });
+
+  test('immediate allocation edit is force-saved before final submit',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()..task = _mixedTask();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 117, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.selectEarlySale(controller.state.rabbits[1], '客户提前采购');
+    controller.updateForm(totalWeight: '6.500', unitPrice: '18');
+    controller.updateBatchAllocation('21', '3.300');
+    await controller.continueToConfirm();
+    final saveCallsBeforeEdit = gateway.saveCalls;
+
+    controller.updateBatchAllocation('20', '3.200');
+    await controller.submit();
+
+    expect(gateway.saveCalls, saveCallsBeforeEdit + 1);
+    expect(
+      gateway.lastDraftBatchAllocations.map((item) => item.actualWeightKg),
+      [3.2, 3.3],
+    );
+    expect(
+      gateway.lastBatchAllocations.map((item) => item.actualWeightKg),
+      [3.2, 3.3],
+    );
+    expect(gateway.submitCalls, 1);
+  });
+
+  test('immediate price edit is force-saved before final submit', () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 118, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+
+    controller.updateForm(unitPrice: '19');
+    await controller.submit();
+
+    expect(gateway.lastDraftUnitPrice, 19);
+    expect(gateway.lastUnitPrice, 19);
+    expect(gateway.submitCalls, 1);
+  });
+
+  test('failed forced save never sends or persists a final submit', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = OutboundLocalStore();
+    final gateway = FakeOutboundGateway();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 119, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: store,
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+    gateway.saveError = const ApiException('草稿保存失败');
+
+    controller.updateForm(unitPrice: '19');
+    await controller.submit();
+
+    expect(controller.state.submitStatus, OutboundSubmitStatus.failed);
+    expect(controller.state.errorMessage, '草稿保存失败');
+    expect(controller.state.requestId, isNull);
+    expect(gateway.submitCalls, 0);
+    expect(await store.readPendingRequest(119, 8), isNull);
+  });
+
+  test('final submit uses the forced-save response as its source', () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway();
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 120, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+    gateway.saveResponse = gateway.task.copyWith(
+      revision: gateway.task.revision + 1,
+      totalWeight: 3.4,
+      unitPrice: 19,
+      batchAllocations: const [
+        OutboundBatchAllocation(batchId: 20, actualWeightKg: 3.4),
+      ],
+    );
+
+    await controller.submit();
+
+    expect(controller.state.totalWeight, '3.4');
+    expect(controller.state.unitPrice, '19.0');
+    expect(gateway.lastBatchAllocations.single.actualWeightKg, 3.4);
+    expect(gateway.lastUnitPrice, 19);
+  });
+
+  test('server-normalized forced save rotates an existing requestId', () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..submitError = const ApiException('校验失败', statusCode: 400);
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 123, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+    await controller.submit();
+    final firstRequestId = gateway.lastRequestId;
+
+    gateway
+      ..submitError = null
+      ..saveResponse = gateway.task.copyWith(
+        status: 'WAITING_CONFIRMATION',
+        revision: gateway.task.revision + 1,
+        totalWeight: 3.4,
+        unitPrice: 19,
+        batchAllocations: const [
+          OutboundBatchAllocation(batchId: 20, actualWeightKg: 3.4),
+        ],
+      );
+    await controller.submit();
+
+    expect(gateway.requestIds, hasLength(2));
+    expect(gateway.requestIds.last, isNot(firstRequestId));
+    expect(gateway.lastBatchAllocations.single.actualWeightKg, 3.4);
+    expect(gateway.lastUnitPrice, 19);
+  });
+
+  test('server-resumed draft restores batch allocation weights', () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..task = _task().copyWith(
+        resumed: true,
+        totalWeight: 3.2,
+        unitPrice: 18,
+        batchAllocations: const [
+          OutboundBatchAllocation(batchId: 20, actualWeightKg: 3.2),
+        ],
+      );
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 114, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+
+    expect(controller.state.totalWeight, '3.2');
+    expect(controller.state.unitPrice, '18.0');
+    expect(controller.state.batchAllocationWeights, {'20': '3.2'});
+  });
+
+  test('offline draft field presence migrates legacy and explicit empty data',
+      () async {
+    final serverTask = _task().copyWith(
+      resumed: true,
+      totalWeight: 3.2,
+      unitPrice: 18,
+      batchAllocations: const [
+        OutboundBatchAllocation(batchId: 20, actualWeightKg: 3.2),
+      ],
+    );
+    final legacy = _snapshot(customer: '', totalWeight: '3.2').toJson()
+      ..remove('batchAllocationWeights');
+    SharedPreferences.setMockInitialValues({
+      'outbound.task.121.8': jsonEncode(legacy),
+    });
+    final legacyController = OutboundController(
+      entry: const OutboundEntry(userId: 121, houseId: 8, entryType: 'HOUSE'),
+      repository: FakeOutboundGateway()..task = serverTask,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    await _ready(legacyController);
+    expect(legacyController.state.batchAllocationWeights, {'20': '3.2'});
+    legacyController.dispose();
+
+    final explicitEmpty = _snapshot(customer: '', totalWeight: '3.2').toJson();
+    SharedPreferences.setMockInitialValues({
+      'outbound.task.122.8': jsonEncode(explicitEmpty),
+    });
+    final currentController = OutboundController(
+      entry: const OutboundEntry(userId: 122, houseId: 8, entryType: 'HOUSE'),
+      repository: FakeOutboundGateway()..task = serverTask,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(currentController.dispose);
+    await _ready(currentController);
+    expect(currentController.state.batchAllocationWeights, isEmpty);
   });
 
   test('failed submit returns to editable selection state', () async {
@@ -211,7 +565,7 @@ void main() {
     addTearDown(controller.dispose);
     await _ready(controller);
 
-    controller.updateForm(totalWeight: '6.5');
+    controller.updateForm(totalWeight: '6.5', unitPrice: '18');
     await controller.continueToConfirm();
     await controller.submit();
 
@@ -225,6 +579,35 @@ void main() {
     expect(controller.state.errorMessage, isNull);
     expect(controller.state.task?.status, 'SELECTING');
     expect(gateway.lastSaveStatus, 'SELECTING');
+  });
+
+  test('rejected back-to-selection save still leaves the draft editable',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..submitError = const ApiException(
+        'RABBIT_NOT_ELIGIBLE: 1',
+        statusCode: 400,
+      );
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 124, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+    await controller.submit();
+    gateway.saveError = const ApiException('RABBIT_NOT_ELIGIBLE: 1');
+
+    await expectLater(controller.backToSelection(), completes);
+
+    expect(controller.state.isConfirming, isFalse);
+    expect(controller.state.submitStatus, OutboundSubmitStatus.idle);
+    expect(controller.state.syncStatus, OutboundSyncStatus.failed);
+    expect(controller.state.errorMessage, 'RABBIT_NOT_ELIGIBLE: 1');
   });
 
   test('discarding a resumed draft cancels it before creating a new task',
@@ -395,6 +778,104 @@ void main() {
     expect(recreated.state.syncStatus, OutboundSyncStatus.offline);
   });
 
+  test('mixed batch weights and common price survive immediate recreation',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()..task = _mixedTask();
+    final first = OutboundController(
+      entry: const OutboundEntry(userId: 101, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    await _ready(first);
+    first.selectEarlySale(first.state.rabbits[1], '客户提前采购');
+    first.updateForm(totalWeight: '6.500', unitPrice: '18.25');
+    first.updateBatchAllocation('20', '3.200');
+    first.updateBatchAllocation('21', '3.300');
+    first.dispose();
+    gateway.createError = const ApiException('网络中断');
+
+    final recreated = OutboundController(
+      entry: const OutboundEntry(userId: 101, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(recreated.dispose);
+    await _ready(recreated);
+
+    expect(recreated.state.totalWeight, '6.500');
+    expect(recreated.state.unitPrice, '18.25');
+    expect(recreated.state.batchAllocationWeights, {
+      '20': '3.200',
+      '21': '3.300',
+    });
+    expect(recreated.state.batchAllocations.map((item) => item.actualWeightKg),
+        [3.2, 3.3]);
+    expect(recreated.state.syncStatus, OutboundSyncStatus.offline);
+  });
+
+  test('unchanged retry reuses requestId and meaningful edit rotates it',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..submitError = const ApiException('校验失败', statusCode: 400);
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 101, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+
+    await controller.submit();
+    final firstRequestId = gateway.lastRequestId;
+    controller.updateForm(totalWeight: '3.20', customer: '  ');
+    await controller.submit();
+    expect(gateway.lastRequestId, firstRequestId);
+
+    controller.updateForm(customer: '新客户');
+    await controller.submit();
+    expect(gateway.lastRequestId, isNot(firstRequestId));
+  });
+
+  test('refresh rotates a failed request when selected state versions change',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final gateway = FakeOutboundGateway()
+      ..submitError = const ApiException('校验失败', statusCode: 400);
+    final controller = OutboundController(
+      entry: const OutboundEntry(userId: 116, houseId: 8, entryType: 'HOUSE'),
+      repository: gateway,
+      store: OutboundLocalStore(),
+      onCompleted: () {},
+    );
+    addTearDown(controller.dispose);
+    await _ready(controller);
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
+    await controller.continueToConfirm();
+    await controller.submit();
+    final firstRequestId = gateway.lastRequestId;
+    expect(controller.state.requestId, firstRequestId);
+
+    final taskJson = gateway.task.toJson();
+    final rabbits = (taskJson['rabbits']! as List<dynamic>)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    rabbits.first['stateVersion'] = 4;
+    taskJson['rabbits'] = rabbits;
+    gateway.task = OutboundTask.fromJson(taskJson);
+
+    await controller.refresh();
+    expect(controller.state.requestId, isNull);
+    await controller.submit();
+    expect(gateway.lastRequestId, isNot(firstRequestId));
+  });
+
   test('newer initialize response wins over an older response', () async {
     SharedPreferences.setMockInitialValues({});
     final first = Completer<OutboundTask>();
@@ -549,7 +1030,7 @@ void main() {
     );
     addTearDown(controller.dispose);
     await _ready(controller);
-    controller.updateForm(totalWeight: '3.2');
+    controller.updateForm(totalWeight: '3.2', unitPrice: '18');
     await controller.continueToConfirm();
     final response = Completer<OutboundSubmitResult>();
     gateway.submitWaiter = response;
@@ -585,7 +1066,7 @@ void main() {
       );
       addTearDown(controller.dispose);
       await _ready(controller);
-      controller.updateForm(totalWeight: '3.2');
+      controller.updateForm(totalWeight: '3.2', unitPrice: '18');
       await controller.continueToConfirm();
 
       await controller.submit();
@@ -639,6 +1120,10 @@ class FakeOutboundGateway implements OutboundGateway {
   bool returnConflict = false;
   String? lastSaveStatus;
   String? lastRequestId;
+  double? lastUnitPrice;
+  double? lastDraftUnitPrice;
+  List<OutboundBatchAllocation> lastBatchAllocations = const [];
+  List<OutboundBatchAllocation> lastDraftBatchAllocations = const [];
   int submitCalls = 0;
   int cancelCalls = 0;
   int createCalls = 0;
@@ -649,6 +1134,8 @@ class FakeOutboundGateway implements OutboundGateway {
   OutboundSubmitResult? statusResult;
   ApiException? createError;
   ApiException? submitError;
+  Object? saveError;
+  OutboundTask? saveResponse;
   Completer<OutboundSubmitResult>? submitWaiter;
   final requestIds = <String>[];
   final createWaiters = <Completer<OutboundTask>>[];
@@ -692,12 +1179,21 @@ class FakeOutboundGateway implements OutboundGateway {
       required DateTime saleTime,
       double? totalWeight,
       double? unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark}) async {
     saveCalls++;
     lastSaveStatus = status;
+    lastDraftUnitPrice = unitPrice;
+    lastDraftBatchAllocations = batchAllocations;
+    if (saveError != null) throw saveError!;
     if (saveWaiters.isNotEmpty) {
       return saveWaiters.removeAt(0).future;
+    }
+    final response = saveResponse;
+    if (response != null) {
+      this.task = response;
+      return response;
     }
     this.task = task.copyWith(
         status: status,
@@ -707,7 +1203,8 @@ class FakeOutboundGateway implements OutboundGateway {
         unitPrice: unitPrice,
         customer: customer,
         remark: remark,
-        selectedItems: items);
+        selectedItems: items,
+        batchAllocations: batchAllocations);
     return this.task;
   }
 
@@ -719,11 +1216,14 @@ class FakeOutboundGateway implements OutboundGateway {
       required String requestId,
       required DateTime saleTime,
       required double totalWeight,
-      double? unitPrice,
+      required double unitPrice,
+      required List<OutboundBatchAllocation> batchAllocations,
       String? customer,
       String? remark}) async {
     submitCalls++;
     lastRequestId = requestId;
+    lastUnitPrice = unitPrice;
+    lastBatchAllocations = batchAllocations;
     requestIds.add(requestId);
     if (submitError != null) throw submitError!;
     if (submitWaiter != null) return submitWaiter!.future;
@@ -757,7 +1257,7 @@ class FakeOutboundGateway implements OutboundGateway {
       cageCount: 1,
       rowCount: 1,
       totalWeight: totalWeight,
-      totalAmount: unitPrice == null ? null : totalWeight * unitPrice,
+      totalAmount: totalWeight * unitPrice,
       message: '完成',
       conflicts: const [],
     );
@@ -823,6 +1323,16 @@ extension on OutboundRabbit {
       defaultSelected: false,
     );
   }
+}
+
+OutboundTask _mixedTask() {
+  final json = _task().toJson();
+  final rabbits = (json['rabbits']! as List<dynamic>)
+      .map((item) => Map<String, dynamic>.from(item as Map))
+      .toList();
+  rabbits[1]['batchId'] = 21;
+  json['rabbits'] = rabbits;
+  return OutboundTask.fromJson(json);
 }
 
 OutboundTask _task() {

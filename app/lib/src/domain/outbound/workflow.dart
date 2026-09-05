@@ -2,6 +2,113 @@ enum OutboundEligibility { normal, earlySale, needsAction, blocked }
 
 enum OutboundSelectionMode { cage, row, house }
 
+class OutboundBatchAllocation {
+  const OutboundBatchAllocation({
+    required this.batchId,
+    required this.actualWeightKg,
+  });
+
+  final int? batchId;
+  final double actualWeightKg;
+
+  String get key => batchId?.toString() ?? 'unassigned';
+
+  Map<String, Object?> toJson() => {
+        'batchId': batchId,
+        'actualWeightKg': actualWeightKg,
+      };
+
+  factory OutboundBatchAllocation.fromJson(Map<String, dynamic> json) {
+    final rawBatchId = json['batchId'];
+    final batchId = rawBatchId == null ? null : _nullableInt(rawBatchId);
+    final actualWeightKg = _double(json['actualWeightKg']);
+    if ((rawBatchId != null && batchId == null) ||
+        actualWeightKg == null ||
+        !actualWeightKg.isFinite ||
+        actualWeightKg <= 0) {
+      throw const FormatException('出库草稿批次重量格式不正确');
+    }
+    return OutboundBatchAllocation(
+      batchId: batchId,
+      actualWeightKg: actualWeightKg,
+    );
+  }
+}
+
+class OutboundAllocationGroup {
+  const OutboundAllocationGroup({
+    required this.batchId,
+    required this.rabbitCount,
+  });
+
+  final int? batchId;
+  final int rabbitCount;
+
+  String get key => batchId?.toString() ?? 'unassigned';
+  String get label => batchId == null ? '未归属批次' : '批次 #$batchId';
+}
+
+List<OutboundAllocationGroup> buildOutboundAllocationGroups(
+  List<OutboundSelectedItem> selectedItems,
+  List<OutboundRabbit> rabbits,
+) {
+  final rabbitById = {for (final rabbit in rabbits) rabbit.rabbitId: rabbit};
+  final counts = <int?, int>{};
+  for (final item in selectedItems) {
+    final rabbit = rabbitById[item.rabbitId];
+    if (rabbit != null) {
+      counts.update(rabbit.batchId, (value) => value + 1, ifAbsent: () => 1);
+    }
+  }
+  final groups = counts.entries
+      .map((entry) => OutboundAllocationGroup(
+            batchId: entry.key,
+            rabbitCount: entry.value,
+          ))
+      .toList();
+  groups.sort((left, right) {
+    if (left.batchId == null) return 1;
+    if (right.batchId == null) return -1;
+    return left.batchId!.compareTo(right.batchId!);
+  });
+  return groups;
+}
+
+String? validateOutboundAllocations({
+  required double? totalWeight,
+  required double? unitPricePerKg,
+  required List<OutboundBatchAllocation> allocations,
+}) {
+  if (totalWeight == null || !totalWeight.isFinite || totalWeight <= 0) {
+    return '请输入大于 0 的总重量';
+  }
+  if (totalWeight > 100000 || !_atMostDecimals(totalWeight, 3)) {
+    return '总重量不能超过 100000 kg，且最多保留三位小数';
+  }
+  if (unitPricePerKg == null ||
+      !unitPricePerKg.isFinite ||
+      unitPricePerKg <= 0) {
+    return '请输入大于 0 的统一重量单价';
+  }
+  if (unitPricePerKg > 99999999.99 || !_atMostDecimals(unitPricePerKg, 2)) {
+    return '统一重量单价最多保留两位小数';
+  }
+  if (allocations.isEmpty ||
+      allocations.any(
+        (item) => !item.actualWeightKg.isFinite || item.actualWeightKg <= 0,
+      )) {
+    return '请填写每个批次分组的实际重量';
+  }
+  if (allocations.any((item) => !_atMostDecimals(item.actualWeightKg, 3))) {
+    return '批次分组重量最多保留三位小数';
+  }
+  final allocated = allocations.fold<int>(
+    0,
+    (sum, item) => sum + (item.actualWeightKg * 1000).round(),
+  );
+  return allocated == (totalWeight * 1000).round() ? null : '批次分组重量合计必须等于订单总重量';
+}
+
 class OutboundSummary {
   const OutboundSummary({
     required this.normal,
@@ -169,6 +276,7 @@ class OutboundTask {
     required this.summary,
     required this.rabbits,
     required this.selectedItems,
+    this.batchAllocations = const [],
   });
 
   final String taskId;
@@ -189,6 +297,7 @@ class OutboundTask {
   final OutboundSummary summary;
   final List<OutboundRabbit> rabbits;
   final List<OutboundSelectedItem> selectedItems;
+  final List<OutboundBatchAllocation> batchAllocations;
 
   OutboundTask copyWith({
     String? status,
@@ -202,6 +311,7 @@ class OutboundTask {
     OutboundSummary? summary,
     List<OutboundRabbit>? rabbits,
     List<OutboundSelectedItem>? selectedItems,
+    List<OutboundBatchAllocation>? batchAllocations,
   }) {
     return OutboundTask(
       taskId: taskId,
@@ -222,6 +332,7 @@ class OutboundTask {
       summary: summary ?? this.summary,
       rabbits: rabbits ?? this.rabbits,
       selectedItems: selectedItems ?? this.selectedItems,
+      batchAllocations: batchAllocations ?? this.batchAllocations,
     );
   }
 
@@ -237,7 +348,7 @@ class OutboundTask {
       revision: _int(json['revision']),
       saleTime: _date(json['saleTime']),
       totalWeight: _double(json['totalWeight']),
-      unitPrice: _double(json['unitPrice']),
+      unitPrice: _double(json['unitPricePerKg'] ?? json['unitPrice']),
       customer: json['customer'] as String?,
       remark: json['remark'] as String?,
       saleOrderId: _nullableInt(json['saleOrderId']),
@@ -248,6 +359,10 @@ class OutboundTask {
       rabbits: _mapList(json['rabbits'], OutboundRabbit.fromJson),
       selectedItems:
           _mapList(json['selectedItems'], OutboundSelectedItem.fromJson),
+      batchAllocations: _mapList(
+        json['batchAllocations'],
+        OutboundBatchAllocation.fromJson,
+      ),
     );
   }
 
@@ -270,6 +385,8 @@ class OutboundTask {
         'summary': summary.toJson(),
         'rabbits': rabbits.map((item) => item.toJson()).toList(),
         'selectedItems': selectedItems.map((item) => item.toJson()).toList(),
+        'batchAllocations':
+            batchAllocations.map((item) => item.toJson()).toList(),
       };
 }
 
@@ -408,4 +525,9 @@ DateTime? _date(Object? value) {
   if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
   if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
   return null;
+}
+
+bool _atMostDecimals(double value, int places) {
+  final scale = places == 3 ? 1000 : 100;
+  return ((value * scale).round() - value * scale).abs() < 0.000001;
 }

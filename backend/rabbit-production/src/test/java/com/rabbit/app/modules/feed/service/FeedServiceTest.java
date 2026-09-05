@@ -48,7 +48,7 @@ class FeedServiceTest {
         log.setAmount(BigDecimal.ONE);
         log.setRequestId("feed-1");
 
-        service.addFeedLog(7L, 8L, log, List.of(81L, 82L, 81L));
+        service.addFeedLog(7L, 8L, log, List.of(81L, 82L, 81L), null);
 
         Mockito.verify(workTaskWriter).completeCommodityDailyCareForRabbitOnDate(
             8L, 81L, feedTime, "7"
@@ -66,8 +66,13 @@ class FeedServiceTest {
     void idempotentReplayDoesNotCompleteCareAgain() {
         RequestDedupService requestDedupService = Mockito.mock(RequestDedupService.class);
         WorkTaskWriter workTaskWriter = Mockito.mock(WorkTaskWriter.class);
-        Mockito.when(requestDedupService.shouldSkipAsDone(8L, 7L, "feed:add", "feed-1"))
-            .thenReturn(true);
+        Mockito.when(requestDedupService.begin(
+            Mockito.eq(8L),
+            Mockito.eq(7L),
+            Mockito.eq("feed:add"),
+            Mockito.eq("feed-1"),
+            Mockito.anyString()
+        )).thenReturn(RequestDedupService.BeginResult.DONE);
         FeedService service = new FeedService(
             Mockito.mock(FeedLogMapper.class),
             Mockito.mock(FeedLogRabbitMapper.class),
@@ -83,7 +88,7 @@ class FeedServiceTest {
         FeedLog log = new FeedLog();
         log.setRequestId("feed-1");
 
-        service.addFeedLog(7L, 8L, log, List.of(81L));
+        service.addFeedLog(7L, 8L, log, List.of(81L), null);
 
         Mockito.verifyNoInteractions(workTaskWriter);
     }

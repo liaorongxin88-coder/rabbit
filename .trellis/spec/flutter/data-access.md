@@ -4,7 +4,7 @@ Repositories are concrete classes grouped under `app/lib/src/data/repositories/<
 
 ## Network contract
 
-`app/lib/src/data/services/network/client.dart` owns base URL, timeouts, headers, envelope handling, and Dio error translation. Connect timeout is 10 seconds; send and receive timeouts are 30 seconds. Its API `get`, `post`, `postMultipart`, `put`, and `delete` methods read the current session, send a bearer token when authenticated, and add `X-House-Id` for house-scoped calls. The `download` method calls `downloadUri` without those session or house headers, so do not use it for an authenticated download without first changing and testing that contract.
+`app/lib/src/data/services/network/client.dart` owns base URL, timeouts, headers, envelope handling, and Dio error translation. Connect timeout is 10 seconds; send and receive timeouts are 30 seconds. Its API `get`, `post`, `postMultipart`, `put`, and `delete` methods read the current session, send a bearer token when authenticated, and add `X-House-Id` for house-scoped calls. `downloadProtected` is the authenticated binary path: it sends the same bearer and house headers, preserves `Content-Type` and `Content-Disposition`, converts JSON error envelopes into `ApiException`, and removes partial files on failure. The older public `download` path remains appropriate only for unauthenticated artifacts such as OTA packages.
 
 An API response must be a map. A nonzero business `code` becomes `ApiException`, even with HTTP success. HTTP or business 401 invalidates the session. A 403 invalidates it only when the trimmed message equals `账号已停用`. Timeout, connectivity, cancellation, and HTTP status failures have project-owned Chinese messages. Bad-certificate and unknown Dio failures return Dio's `error.message` when it is present, so do not claim every network failure is normalized or user-safe.
 
@@ -21,5 +21,7 @@ Follow each endpoint's pagination shape. `app/lib/src/data/repositories/rabbits/
 ## Writes
 
 Writes needing idempotency create a UUID request ID. Keep the same ID for an unchanged retry. Repository methods that generate an ID when none is supplied are convenient for one attempt; retrying UI must pass and retain its own stable ID. Multi-step outbound submission persists its request ID before sending and distinguishes confirmed failure from an unknown result that may have reached the server. Read [Persistence](./persistence.md) before changing that lifecycle.
+
+Every request sends `X-App-Build`. If the platform version lookup fails, send the literal `UNKNOWN`; omitting the header makes legacy-write telemetry ambiguous. The header is diagnostic metadata, never an authorization signal.
 
 Repository contract tests use custom Dio adapters to assert URL, headers, query parameters, bodies, pagination, and decoding. Add those assertions when changing a wire contract.

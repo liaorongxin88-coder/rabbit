@@ -37,6 +37,31 @@ public class OutboundRequestLifecycleService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ClaimResult reclaimFailed(OutboundRequest request) {
+        if (requestMapper.reclaimFailed(
+                request.getHouseId(),
+                request.getRequestId(),
+                request.getTaskId(),
+                request.getPayloadHash()
+        ) == 1) {
+            request.setStatus("PROCESSING");
+            request.setErrorCode(null);
+            request.setErrorMessage(null);
+            request.setConflictsJson(null);
+            request.setSaleOrderId(null);
+            return new ClaimResult(true, request);
+        }
+        OutboundRequest current = requestMapper.selectById(
+            request.getHouseId(),
+            request.getRequestId()
+        );
+        if (current == null) {
+            throw new BizException(409, "REQUEST_ID_SCOPE_MISMATCH");
+        }
+        return new ClaimResult(false, current);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markConflict(Long houseId, String requestId, String errorCode,
                              String errorMessage, String conflictsJson) {
         int updated = requestMapper.markConflict(houseId, requestId, truncate(errorCode, MAX_ERROR_CODE_LENGTH),

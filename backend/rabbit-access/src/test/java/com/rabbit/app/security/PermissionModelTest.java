@@ -21,6 +21,7 @@ class PermissionModelTest {
         List<String> owner = PermissionCode.granted(PermissionScope.HOUSE, HouseRole.OWNER);
 
         assertTrue(viewer.contains("rabbit:rabbits:list"));
+        assertTrue(viewer.contains("rabbit:reports:export"));
         assertFalse(viewer.contains("rabbit:rabbits:add"));
         assertTrue(staff.contains("rabbit:rabbits:add"));
         assertFalse(staff.contains("rabbit:houses:edit"));

@@ -27,6 +27,7 @@ import com.rabbit.app.modules.batch.entity.Batch;
 import com.rabbit.app.modules.batch.entity.BatchRabbit;
 import com.rabbit.app.modules.batch.mapper.BatchMapper;
 import com.rabbit.app.modules.batch.mapper.BatchRabbitMapper;
+import com.rabbit.app.modules.batch.service.BatchStatisticsLegacyWriteService;
 import com.rabbit.app.modules.file.service.BusinessFileService;
 import com.rabbit.app.modules.rabbit.entity.Rabbit;
 import com.rabbit.app.modules.rabbit.mapper.RabbitMapper;
@@ -53,6 +54,7 @@ import com.rabbit.app.modules.repro.mapper.RabbitStageProjectionMapper;
 import com.rabbit.app.modules.repro.mapper.ReproCycleMapper;
 import com.rabbit.app.modules.repro.mapper.ReproEventMapper;
 import com.rabbit.app.util.DateUtil;
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,6 +107,7 @@ class ReproStateMachineServiceTest {
     private ReproSettingResolver settingResolver;
     private BreedingEligibilityValidator eligibilityValidator;
     private BusinessFileService businessFileService;
+    private BatchStatisticsLegacyWriteService legacyWriteService;
     private ReproStateMachineService service;
 
     @BeforeEach
@@ -122,6 +125,7 @@ class ReproStateMachineServiceTest {
         settingResolver = mock(ReproSettingResolver.class);
         eligibilityValidator = mock(BreedingEligibilityValidator.class);
         businessFileService = mock(BusinessFileService.class);
+        legacyWriteService = mock(BatchStatisticsLegacyWriteService.class);
 
         service = new ReproStateMachineService(
             reproCycleMapper,
@@ -137,7 +141,8 @@ class ReproStateMachineServiceTest {
             settingResolver,
             eligibilityValidator,
             new ObjectMapper(),
-            businessFileService
+            businessFileService,
+            legacyWriteService
         );
 
         when(settingResolver.resolve(any(), any())).thenReturn(SETTINGS);
@@ -180,7 +185,8 @@ class ReproStateMachineServiceTest {
     @Test
     void aReplayedRequestReturnsTheFirstResultAndTouchesNoState() {
         ReproEvent first = replayEvent("{\"resultHasNextTask\":false}");
-        when(reproEventMapper.selectByRequestId(HOUSE_ID, "req-1")).thenReturn(first);
+        when(reproEventMapper.selectStateMachineByRequestId(HOUSE_ID, "req-1"))
+            .thenReturn(first);
 
         ReproResult result = service.apply(command(ReproAction.ESTRUS).requestId("req-1").build());
 
@@ -206,7 +212,7 @@ class ReproStateMachineServiceTest {
 
         assertEquals(400, error.getCode());
         assertEquals("requestId不能为空", error.getMessage());
-        verify(reproEventMapper, never()).selectByRequestId(anyLong(), anyString());
+        verify(reproEventMapper, never()).selectStateMachineByRequestId(anyLong(), anyString());
     }
 
     /**
@@ -215,7 +221,7 @@ class ReproStateMachineServiceTest {
      */
     @Test
     void aReplayThatRecordedNoFollowUpTaskReportsNoDueTime() {
-        when(reproEventMapper.selectByRequestId(HOUSE_ID, "req-1"))
+        when(reproEventMapper.selectStateMachineByRequestId(HOUSE_ID, "req-1"))
             .thenReturn(replayEvent("{\"resultHasNextTask\":false}"));
 
         ReproResult result = service.apply(command(ReproAction.RETIRE).requestId("req-1").build());
@@ -237,7 +243,7 @@ class ReproStateMachineServiceTest {
         successor.setId(101L);
         Date due = daysFromNow(10);
 
-        when(reproEventMapper.selectByRequestId(HOUSE_ID, "req-1"))
+        when(reproEventMapper.selectStateMachineByRequestId(HOUSE_ID, "req-1"))
             .thenReturn(replayEvent("{\"resultHasNextTask\":true}"));
         when(reproCycleMapper.selectById(HOUSE_ID, CYCLE_ID)).thenReturn(closed);
         when(reproCycleMapper.selectOpenByMother(HOUSE_ID, MOTHER_ID)).thenReturn(List.of(successor));
@@ -758,6 +764,125 @@ class ReproStateMachineServiceTest {
         assertEquals(6, litter.getValue().getWeanedCount());
         assertEquals(0, capturedCycle().getCurrentNursingKits());
         assertEquals(6, capturedCycle().getWeanedKits());
+        verify(legacyWriteService).recordGap(
+            USER_ID,
+            HOUSE_ID,
+            BATCH_ID,
+            "req-1",
+            "repro:state-machine",
+            BatchStatisticsLegacyWriteService.LEGACY_WEANING_WEIGHT_GAP
+        );
+    }
+
+    @Test
+    void weaningStoresMeasuredTotalAndDerivesTheCompatibilityAverage() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+        when(litterMapper.selectByCycleIdForUpdate(HOUSE_ID, CYCLE_ID)).thenReturn(nursingLitter());
+
+        service.apply(command(ReproAction.WEANING)
+            .weanedCount(6)
+            .weaningTotalWeightKg(new BigDecimal("4.410"))
+            .build());
+
+        ArgumentCaptor<Litter> litter = ArgumentCaptor.forClass(Litter.class);
+        verify(litterMapper).update(litter.capture());
+        assertEquals(new BigDecimal("4.410"), litter.getValue().getWeaningTotalWeightKg());
+        assertEquals(0.735, litter.getValue().getAvgWeaningWeight());
+        verify(legacyWriteService, never()).recordGap(
+            anyLong(), anyLong(), anyLong(), anyString(), anyString(), anyString()
+        );
+    }
+
+    @Test
+    void weaningReplayRejectsAChangedMeasuredWeight() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+        when(litterMapper.selectByCycleIdForUpdate(HOUSE_ID, CYCLE_ID)).thenReturn(nursingLitter());
+
+        service.apply(command(ReproAction.WEANING)
+            .weanedCount(6)
+            .weaningTotalWeightKg(new BigDecimal("4.410"))
+            .build());
+        ArgumentCaptor<ReproEvent> event = ArgumentCaptor.forClass(ReproEvent.class);
+        verify(reproEventMapper).insert(event.capture());
+        when(reproEventMapper.selectStateMachineByRequestId(HOUSE_ID, "req-1"))
+            .thenReturn(event.getValue());
+
+        BizException error = assertThrows(BizException.class, () -> service.apply(
+            command(ReproAction.WEANING)
+                .weanedCount(6)
+                .weaningTotalWeightKg(new BigDecimal("4.500"))
+                .build()
+        ));
+
+        assertEquals(409, error.getCode());
+        assertEquals("requestId已用于不同的请求载荷", error.getMessage());
+    }
+
+    @Test
+    void weaningRejectsAnAverageThatConflictsWithTheMeasuredTotal() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+
+        BizException error = assertThrows(BizException.class, () -> service.apply(
+            command(ReproAction.WEANING)
+                .weanedCount(6)
+                .avgWeaningWeight(0.70)
+                .weaningTotalWeightKg(new BigDecimal("4.410"))
+                .build()
+        ));
+
+        assertEquals("断奶均重必须由断奶总重和只数计算", error.getMessage());
+        verify(litterMapper, never()).update(any());
+    }
+
+    @Test
+    void compatibilityCheckRejectsANewLegacyWeaningBeforeStateTransition() {
+        doThrow(new BizException(409, BatchStatisticsLegacyWriteService.UPGRADE_MESSAGE))
+            .when(legacyWriteService).requireLegacyWriteEnabled();
+
+        BizException error = assertThrows(BizException.class, () ->
+            service.assertLegacyWeaningAllowed(
+                HOUSE_ID,
+                "new-legacy-weaning",
+                ReproAction.WEANING,
+                6,
+                null
+            )
+        );
+
+        assertEquals(BatchStatisticsLegacyWriteService.UPGRADE_MESSAGE, error.getMessage());
+        verify(reproCycleMapper, never()).selectByIdForUpdate(anyLong(), anyLong());
+    }
+
+    @Test
+    void completedLegacyWeaningReplayBypassesTheDisabledCompatibilitySwitch() {
+        when(reproEventMapper.selectStateMachineByRequestId(HOUSE_ID, "legacy-weaning"))
+            .thenReturn(new ReproEvent());
+        doThrow(new BizException(409, BatchStatisticsLegacyWriteService.UPGRADE_MESSAGE))
+            .when(legacyWriteService).requireLegacyWriteEnabled();
+
+        assertDoesNotThrow(() -> service.assertLegacyWeaningAllowed(
+            HOUSE_ID,
+            "legacy-weaning",
+            ReproAction.WEANING,
+            6,
+            null
+        ));
+
+        verify(legacyWriteService, never()).requireLegacyWriteEnabled();
+    }
+
+    @Test
+    void weaningRejectsLegacyPayloadWhenCompatibilityIsDisabled() {
+        stubCycle(openCycle(ReproStage.AWAIT_WEANING, BATCH_ID));
+        doThrow(new BizException(409, BatchStatisticsLegacyWriteService.UPGRADE_MESSAGE))
+            .when(legacyWriteService).requireLegacyWriteEnabled();
+
+        BizException error = assertThrows(BizException.class, () -> service.apply(
+            command(ReproAction.WEANING).weanedCount(6).avgWeaningWeight(0.62).build()
+        ));
+
+        assertEquals(BatchStatisticsLegacyWriteService.UPGRADE_MESSAGE, error.getMessage());
+        verify(litterMapper, never()).update(any());
     }
 
     // ------------------------------------------------------------------ 关闭语义

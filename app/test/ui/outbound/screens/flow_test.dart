@@ -242,6 +242,14 @@ void main() {
       find.byKey(const ValueKey('outbound-total-weight')),
       '2.5',
     );
+    await _scrollConfirmUntilVisible(
+      tester,
+      find.byKey(const ValueKey('outbound-unit-price')),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('outbound-unit-price')),
+      '18',
+    );
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
     await tester.pumpAndSettle();
 

@@ -72,23 +72,91 @@ final batchDetailProvider =
   },
 );
 
-final batchStatisticsProvider =
-    FutureProvider.autoDispose.family<BatchStatistics, BatchDetailRequest>(
-  (ref, request) async {
-    final userId = ref.watch(authenticatedUserIdProvider);
-    if (userId <= 0) {
-      return const BatchStatistics.empty();
+class BatchStatisticsState {
+  const BatchStatisticsState({
+    this.statistics,
+    this.isLoading = false,
+    this.error,
+    this.stackTrace,
+  });
+
+  final BatchStatistics? statistics;
+  final bool isLoading;
+  final Object? error;
+  final StackTrace? stackTrace;
+
+  bool get hasData => statistics != null;
+}
+
+typedef BatchStatisticsLoader = Future<BatchStatistics> Function(
+  CancelToken cancelToken,
+);
+
+class BatchStatisticsController extends StateNotifier<BatchStatisticsState> {
+  BatchStatisticsController({
+    required BatchStatisticsLoader load,
+    bool enabled = true,
+  })  : _load = load,
+        super(BatchStatisticsState(isLoading: enabled)) {
+    if (enabled) {
+      Future<void>.microtask(refresh);
     }
+  }
+
+  final BatchStatisticsLoader _load;
+  CancelToken? _cancelToken;
+  var _requestSequence = 0;
+
+  Future<void> refresh() async {
+    final sequence = ++_requestSequence;
+    _cancelToken?.cancel('statistics refreshed');
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+    state = BatchStatisticsState(
+      statistics: state.statistics,
+      isLoading: true,
+    );
+    try {
+      final statistics = await _load(cancelToken);
+      if (!mounted || sequence != _requestSequence) return;
+      state = BatchStatisticsState(statistics: statistics);
+    } catch (error, stackTrace) {
+      if (!mounted ||
+          sequence != _requestSequence ||
+          (error is DioException && CancelToken.isCancel(error))) {
+        return;
+      }
+      state = BatchStatisticsState(
+        statistics: state.statistics,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel('statistics provider disposed');
+    super.dispose();
+  }
+}
+
+final batchStatisticsProvider = StateNotifierProvider.autoDispose.family<
+    BatchStatisticsController, BatchStatisticsState, BatchDetailRequest>(
+  (ref, request) {
+    final userId = ref.watch(authenticatedUserIdProvider);
     if (request.houseId <= 0 || request.batchId <= 0) {
       throw ArgumentError('批次路径参数不正确');
     }
-    final cancelToken = CancelToken();
-    ref.onDispose(cancelToken.cancel);
-    return ref.watch(batchRepositoryProvider).getBatchStatistics(
-          houseId: request.houseId,
-          batchId: request.batchId,
-          cancelToken: cancelToken,
-        );
+    final repository = ref.watch(batchRepositoryProvider);
+    return BatchStatisticsController(
+      enabled: userId > 0,
+      load: (cancelToken) => repository.getBatchStatistics(
+        houseId: request.houseId,
+        batchId: request.batchId,
+        cancelToken: cancelToken,
+      ),
+    );
   },
 );
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ActivityIcon,
@@ -6,11 +6,12 @@ import {
   MarsIcon,
   RabbitIcon,
   RefreshCwIcon,
+  Rows3Icon,
   TruckIcon,
   VenusIcon,
   WarehouseIcon,
 } from "lucide-react";
-import { getDashboard, listReproTasks } from "@/api/workspace";
+import { getDashboard, listBatches, listReproTasks } from "@/api/workspace";
 import {
   commodityCareTaskTypes,
   summarizeCommodityCareTasks,
@@ -18,7 +19,8 @@ import {
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { HousePermissionBadge } from "@/components/permission-badge";
-import { useWorkspace } from "@/lib/workspace";
+import { batchStatusLabel } from "@/lib/batch-workflow";
+import { hasPermission, useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,7 +31,12 @@ import {
 } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DashboardSummary, ReproTask, ReproTaskPage } from "@/types/api";
+import type {
+  DashboardSummary,
+  ProductionBatch,
+  ReproTask,
+  ReproTaskPage,
+} from "@/types/api";
 
 export function WorkspaceDashboardPage() {
   const workspace = useWorkspace();
@@ -37,34 +44,50 @@ export function WorkspaceDashboardPage() {
   const [saleTasks, setSaleTasks] = useState<ReproTaskPage | null>(null);
   const [commodityCareTasks, setCommodityCareTasks] =
     useState<ReproTaskPage | null>(null);
+  const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadVersion = useRef(0);
+  const canReadBatches = hasPermission(
+    workspace.permission,
+    "rabbit:batches:query",
+  );
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     const houseId = workspace.selectedHouse?.id;
     if (!houseId) {
       setSummary(null);
       setSaleTasks(null);
       setCommodityCareTasks(null);
+      setBatches([]);
+      setLoading(false);
       return;
     }
     setSummary(null);
     setSaleTasks(null);
     setCommodityCareTasks(null);
+    setBatches([]);
     setLoading(true);
     try {
       const results = await Promise.allSettled([
         getDashboard(houseId),
         listReproTasks(houseId, { type: "SALE_READY", size: 1 }),
+        canReadBatches ? listBatches(houseId) : Promise.resolve([]),
         ...commodityCareTaskTypes.map((type) =>
           listReproTasks(houseId, { type, size: 1 }),
         ),
       ]);
-      const [summaryResult, saleTasksResult, ...careResults] = results;
+      const [summaryResult, saleTasksResult, batchesResult, ...careResults] =
+        results;
+      if (version !== loadVersion.current) return;
       setSummary(
         summaryResult.status === "fulfilled" ? summaryResult.value : null,
       );
       setSaleTasks(
         saleTasksResult.status === "fulfilled" ? saleTasksResult.value : null,
+      );
+      setBatches(
+        batchesResult.status === "fulfilled" ? batchesResult.value : [],
       );
       const carePages = careResults.filter(
         (result): result is PromiseFulfilledResult<ReproTaskPage> =>
@@ -76,9 +99,9 @@ export function WorkspaceDashboardPage() {
           : null,
       );
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
-  }, [workspace.selectedHouse]);
+  }, [canReadBatches, workspace.selectedHouse]);
 
   useEffect(() => {
     void load();
@@ -167,6 +190,57 @@ export function WorkspaceDashboardPage() {
               icon={BabyIcon}
             />
           </section>
+
+          {canReadBatches ? (
+            <Card>
+              <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <CardTitle className="flex items-center gap-2">
+                    <Rows3Icon className="size-4" aria-hidden="true" />
+                    批次统计
+                  </CardTitle>
+                  <CardDescription>
+                    从当前兔舍的批次进入完整 28 项统计。
+                  </CardDescription>
+                </div>
+                <Button variant="outline" asChild>
+                  <Link to="/workspace/production">查看全部批次</Link>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {batches.length > 0 ? (
+                  <div className="divide-y">
+                    {batches.slice(0, 4).map((batch) => (
+                      <div
+                        key={batch.id}
+                        className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {batch.batchCode}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {batchStatusLabel(batch.status)} · ID {batch.id}
+                          </p>
+                        </div>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link
+                            to={`/workspace/production/batches/${batch.id}`}
+                          >
+                            查看完整统计
+                          </Link>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    当前兔舍还没有批次。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <section className="grid gap-4 xl:grid-cols-2">
             <Card>
