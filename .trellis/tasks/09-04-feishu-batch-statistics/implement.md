@@ -157,6 +157,16 @@
 - [x] 对照数据库快照、API 原始值、Admin 展示值、Flutter 展示值和 Excel 单元格，确认五层一致。
 - [x] `verification.md` 已记录本地 MySQL、浏览器、APK 和实体设备证据，以及未完成的完整批次生命周期和发布门禁。
 
+### H. 共享真实验收数据与跨端验证
+
+- [x] 新增 V56 兼容、按 `run_id` 隔离的 `batch_statistics_acceptance_fixture.sql` 和定向清理脚本；使用附件规模数据使 28 项全部为 `AVAILABLE`，并输出运行器所需 ID 与账号。
+- [x] 增加可复用的 Java 夹具加载辅助代码，扩展 MySQL 统计与导出集成测试；先断言 28 项 API 精确值，再逐项核对同一统计快照生成的 `.xlsx`。
+- [x] 新增 Admin 实际后端浏览器脚本和 package 命令，验证业务登录、兔舍上下文、28 项展示值、八组布局、真实 Excel 下载、控制台错误和桌面截图；保留现有模拟脚本不变。
+- [x] 新增 Flutter 批次统计 Android 集成测试，按稳定 key 遍历八组和 28 项，验证精确展示值、出肉率操作和导出入口，并在实体设备生成分组截图。
+- [x] 新增根级跨端运行器：检查 V56、后端和设备连通性、验证码状态与浏览器；加载一次夹具，执行 API 前置断言、Admin、Android、数据库断言和文件哈希。
+- [x] 所有成功、失败和中断路径都恢复验证码配置并默认清理夹具；调试保留必须显式开启，产物不得记录 token 或密码。
+- [x] 重新运行现有后端、Admin 模拟浏览器和 Flutter 检查，确认新增真实流程没有替代边界、权限和响应式覆盖；把结果与截图路径写入 `verification.md`。
+
 ## 3. 主要文件与风险点
 
 | 区域 | 主要触点 | 风险 |
@@ -201,6 +211,7 @@ pnpm --dir admin lint
 pnpm --dir admin test
 pnpm --dir admin build
 pnpm --dir admin e2e:browser:batch-statistics
+pnpm --dir admin e2e:browser:batch-statistics:real
 ```
 
 可见改动还要在真实浏览器检查 `1440x900` 和 `390x844`，记录控制台错误、水平溢出、文字重叠、焦点和对话框操作可达性。
@@ -215,12 +226,19 @@ cd app
 ./rabbit check
 ```
 
-需要真实设备时再运行对应批次生命周期与出库脚本，并明确记录设备、后端和 MySQL 前置条件。
+需要真实设备时运行共享实际后端验收：
+
+```bash
+RABBIT_ANDROID_E2E_DEVICE_ID=<device-id> \
+  bash scripts/batch-statistics-cross-client-e2e.sh
+```
+
+运行器负责记录设备、后端、MySQL、验证码和产物前置条件，并在退出时恢复环境。
 
 ## 5. 最终检查
 
-- [x] `task.py validate` 通过，两个 manifest 各 41 项，无缺失或重复路径。
-- [x] `lens_diagnostics mode=all` 没有本任务引入的阻塞错误；14 个既有阻断项均位于未修改文件，关键后端和 Admin 主 LSP 为 0，Dart LSP 超时由无问题的完整 `flutter analyze` 补充。
+- [x] `task.py validate` 通过，两个 manifest 各 42 项，无缺失或重复路径；manifest 只注入 spec/research 文档，代码由代理按变更清单读取。
+- [x] `lens_diagnostics mode=all` 对本次 18 个文件返回 0 问题；8 个关键文件的主 LSP 有 7 个确认无错误，Dart LSP 超时由无问题的完整 `flutter analyze` 补充。
 - [x] 后端 1,094 项完整单元和架构测试、Checkstyle 与 package 通过。
 - [x] Admin lint、85 项测试、242 模块 build 和批次统计浏览器脚本通过；补充畸形 schema-v1 响应及下载文件名参数回归。
 - [x] Flutter `./rabbit check` 通过 628 项测试和分析，debug APK 构建成功。
@@ -229,3 +247,6 @@ cd app
 - [x] 28 项 code、顺序、原始值、展示值和四种状态在后端、Admin、Flutter 和 Excel 一致。
 - [x] Excel 可正常打开，文件名和响应头正确，未授权或跨兔舍请求被拒绝。
 - [x] 没有自动回填历史数据，没有修改任务范围外的业务。
+- [x] 附件规模 MySQL 夹具在 V56 新鲜 schema 上生成 28 项全 `AVAILABLE` 的精确 API 结果。
+- [x] 实际 `.xlsx`、Admin 页面和 Android 真机与同一夹具的 API 值一致，八组截图和运行清单齐全。
+- [x] 跨端运行结束后业务 fixture 已清理、验证码配置已恢复、Git 工作树不含生成产物。

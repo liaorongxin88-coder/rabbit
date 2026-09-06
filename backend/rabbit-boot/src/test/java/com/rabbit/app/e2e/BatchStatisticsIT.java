@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.rabbit.app.security.JwtUtil;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +19,25 @@ class BatchStatisticsIT extends E2eTestSupport {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
     private long nextFixtureCycleId = 1L;
+
+    @Test
+    void returnsAllAttachmentScaleMetricsFromTheSharedMysqlFixture() {
+        BatchStatisticsAcceptanceFixture.Fixture fixture =
+                BatchStatisticsAcceptanceFixture.load(jdbc);
+        String token = jwtUtil.generateToken(fixture.userId());
+
+        JsonNode statistics = api.getOk(
+                "/api/batches/" + fixture.batchId() + "/statistics",
+                token,
+                fixture.houseId()
+        );
+
+        BatchStatisticsAcceptanceFixture.assertApiStatistics(statistics, fixture);
+    }
 
     @Test
     void returnsTheOrderedMetricContractAndLegacyBatchCounts() {

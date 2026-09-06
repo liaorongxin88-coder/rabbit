@@ -184,3 +184,24 @@
 - `口径与状态` 恰好有 28 个指标数据行，顺序和 `metric-catalog.md` 一致，并保留全部缺失原因机器码和中文说明。
 - `CONCEPTION_RATE`、`FULL_FEED_CONVERSION_RATIO`、`CARCASS_YIELD_RATE` 分别断言原始值、展示值和 Excel 数字格式。
 - 文件响应断言 OOXML MIME、UTF-8 `filename*`、ASCII 文件名回退、非空正文、兔舍隔离和 `rabbit:reports:export` 权限。
+
+## 7. 共享真实夹具与跨端执行
+
+### 7.1 文件与数据所有权
+
+`backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture.sql` 是跨端真实验收数据的唯一可执行定义，第 3 节仍是精确值的唯一人工期望。夹具按 `run_id` 创建 OWNER 测试账号、目标兔舍、隔离兔舍和目标批次，所有业务键都带运行前缀。它不得进入 Flyway、demo 数据或生产启动流程。
+
+数据规模保持第 5.2 节的附件数值，不另建缩小版 UI 数据。Java 集成测试可以在数据库重置后重新加载同一 SQL；Admin 和 Android 必须消费同一次加载产生的 `house_id`、`batch_id` 和账号。
+
+### 7.2 运行顺序
+
+1. 验证 MySQL 已成功执行到 V56，后端与真机可访问，并确认自动登录环境的验证码接口返回业务码 `501`。
+2. 加载夹具并读取 `run_id`、`house_id`、`batch_id`、隔离兔舍 ID、账号和密码标识。
+3. 通过真实业务登录取得 token，带 `Authorization` 和 `X-House-Id` 请求统计 API；逐项断言 28 个 code、顺序、`AVAILABLE` 状态和第 3 节精确值，失败时不启动 UI。
+4. 下载真实 `.xlsx` 并执行第 6 节断言；Admin 不拦截统计或导出请求，检查桌面页面和下载；Android 通过稳定 key 遍历八组和 28 项并截图。
+5. 保存环境摘要、API 响应、数据库断言、工作簿、两端日志、截图清单和 SHA-256。清单不记录 token 或密码。
+6. 按外键逆序删除本次 `run_id` 数据并验证账号、兔舍和批次不存在；无论成功、失败或中断都恢复原验证码配置。只有显式调试开关可以保留 fixture。
+
+### 7.3 必须保留的既有覆盖
+
+共享真实夹具证明正常链路的数据一致性，不能代替小型边界夹具。现有 MySQL 测试继续覆盖同兔多周期、混批、散养、零或负分母、历史缺字段、未录入出肉率、权限和兔舍隔离；Admin 模拟脚本继续覆盖首次失败、刷新失败保留数据、只读权限、窄屏和 200% 字号。

@@ -419,3 +419,15 @@ ORDER BY business_date, event_type;
 ## 10. 验收数据
 
 附件真实样例、补充输入、28 项原始值与展示值、混批、散养、同兔多周期、分母为零、历史缺字段、权限和刷新失败场景见 `research/acceptance-fixture.md`。
+
+### 10.1 共享真实夹具
+
+新增 `backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture.sql`，以 `research/acceptance-fixture.md` 第 3 节为唯一数值来源。夹具保留附件规模的 1,230 个配种周期、1,004 窝和 6,834 个销售兔明细，使 28 项都为 `AVAILABLE`；不能为了减少行数另设一套跨端期望值。所有用户名、兔舍、批次、兔只和业务 `requestId` 由 `run_id` 派生，长度和唯一性符合当前 schema。
+
+夹具只位于测试资源，不进入 Flyway 或 demo 数据。它必须兼容 V53 至 V56：非商品兔不写 `growth_stage`，历史繁殖周期使用 `CLOSED`，断奶总重大于零且只用于正数断奶窝，所有分配记录保持复合兔舍外键一致，出肉率和金额字段满足配对及范围约束。执行结果输出 `run_id`、`house_id`、`batch_id`、账号和必要的隔离测试 ID，供 Java、浏览器和 Android 运行器读取。
+
+### 10.2 执行与证据
+
+Java MySQL 集成测试每次重置数据库，因此统计 API 和 Excel 可以分别重载同一夹具定义；在同一次导出测试中，先断言 API，再用该结果逐项核对工作簿。跨端脚本只加载一次夹具，先校验 28 项 code、顺序、`AVAILABLE` 状态和精确值，然后依次运行 Admin 实际后端脚本与 Android 真机流程。现有 Admin 模拟脚本继续覆盖加载失败、刷新失败、只读权限、窄屏和 200% 字号，不增加双模式分支。
+
+自动登录要求后端临时返回验证码业务码 `501`。运行器必须在任何退出路径恢复 Compose 的原验证码配置。夹具默认按外键逆序清理；显式调试开关可以暂时保留数据。运行产物统一保存清单、环境摘要、API 响应、数据库断言、真实 `.xlsx`、两端日志、八组截图和 SHA-256，不记录 token 或密码。

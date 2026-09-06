@@ -5,17 +5,114 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.rabbit.app.security.JwtUtil;
 import java.io.ByteArrayInputStream;
+import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 class BatchStatisticsExportIT extends E2eTestSupport {
     private static final String XLSX_MEDIA_TYPE =
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Test
+    void exportsEveryAttachmentScaleApiValueFromTheSharedMysqlFixture() throws Exception {
+        BatchStatisticsAcceptanceFixture.Fixture fixture =
+                BatchStatisticsAcceptanceFixture.load(jdbc);
+        String token = jwtUtil.generateToken(fixture.userId());
+        JsonNode statistics = api.getOk(
+                "/api/batches/" + fixture.batchId() + "/statistics",
+                token,
+                fixture.houseId()
+        );
+        BatchStatisticsAcceptanceFixture.assertApiStatistics(statistics, fixture);
+
+        E2eApiClient.Download download = api.download(
+                endpoint(fixture.batchId()),
+                token,
+                fixture.houseId()
+        );
+
+        assertEquals(XLSX_MEDIA_TYPE, download.contentType.toString());
+        assertTrue(download.contentDisposition.contains(
+                "filename=\"batch-" + fixture.batchCode() + "-statistics-"
+        ));
+        assertTrue(download.contentDisposition.contains(
+                "filename*=UTF-8''%E6%89%B9%E6%AC%A1-" + fixture.batchCode()
+                        + "-%E7%BB%9F%E8%AE%A1-"
+        ));
+        assertTrue(download.bytes.length > 0);
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(download.bytes))) {
+            assertEquals(2, workbook.getNumberOfSheets());
+            assertEquals("批次统计", workbook.getSheetName(0));
+            assertEquals("口径与状态", workbook.getSheetName(1));
+            assertFalse(workbook.isSheetHidden(0));
+            assertFalse(workbook.isSheetHidden(1));
+
+            Sheet summary = workbook.getSheetAt(0);
+            Row summaryHeader = summary.getRow(0);
+            Row summaryValues = summary.getRow(1);
+            Sheet detail = workbook.getSheetAt(1);
+            assertEquals(31, summaryHeader.getLastCellNum());
+            assertEquals(29, detail.getPhysicalNumberOfRows());
+
+            for (int index = 0; index < statistics.get("metrics").size(); index++) {
+                JsonNode apiMetric = statistics.get("metrics").get(index);
+                BatchStatisticsAcceptanceFixture.ExpectedMetric expected =
+                        BatchStatisticsAcceptanceFixture.expectedMetrics().get(index);
+                int summaryColumn = index + 3;
+                Row detailRow = detail.getRow(index + 1);
+
+                assertEquals(
+                        apiMetric.get("excelColumnName").asText(),
+                        summaryHeader.getCell(summaryColumn).getStringCellValue()
+                );
+                assertEquals(apiMetric.get("order").asInt(), detailRow.getCell(0)
+                        .getNumericCellValue());
+                assertEquals(apiMetric.get("code").asText(), detailRow.getCell(1)
+                        .getStringCellValue());
+                assertEquals(apiMetric.get("displayValue").asText(), detailRow.getCell(6)
+                        .getStringCellValue());
+                assertEquals("AVAILABLE", detailRow.getCell(7).getStringCellValue());
+
+                Cell summaryCell = summaryValues.getCell(summaryColumn);
+                Cell detailRawCell = detailRow.getCell(5);
+                if (expected.dateValue() != null) {
+                    assertEquals(CellType.NUMERIC, summaryCell.getCellType());
+                    assertEquals(expected.dateValue(), summaryCell.getLocalDateTimeCellValue()
+                            .toLocalDate());
+                    assertEquals("yyyy-mm-dd", summaryCell.getCellStyle()
+                            .getDataFormatString());
+                    assertEquals(CellType.STRING, detailRawCell.getCellType());
+                    assertEquals(expected.dateValue().toString(),
+                            detailRawCell.getStringCellValue());
+                } else {
+                    double apiValue = apiMetric.get("numericValue").doubleValue();
+                    assertEquals(CellType.NUMERIC, summaryCell.getCellType());
+                    assertEquals(apiValue, summaryCell.getNumericCellValue(), expected.code());
+                    assertEquals(expectedNumberFormat(apiMetric), summaryCell.getCellStyle()
+                            .getDataFormatString());
+                    assertEquals(CellType.NUMERIC, detailRawCell.getCellType());
+                    assertEquals(apiValue, detailRawCell.getNumericCellValue(), expected.code());
+                    assertEquals(expectedNumberFormat(apiMetric), detailRawCell.getCellStyle()
+                            .getDataFormatString());
+                }
+            }
+        }
+    }
 
     @Test
     void exportsTheHouseScopedStatisticsSnapshotAsARealWorkbook() throws Exception {
@@ -155,5 +252,17 @@ class BatchStatisticsExportIT extends E2eTestSupport {
             types[index] = header.getCell(index).getCellType();
         }
         return types;
+    }
+
+    private String expectedNumberFormat(JsonNode metric) {
+        return switch (metric.get("format").asText()) {
+            case "INTEGER" -> "#,##0";
+            case "PERCENT_2" -> "0.00%";
+            case "RATIO_TO_ONE" -> "#,##0.00\":1\"";
+            case "DECIMAL_2" -> "#,##0.00";
+            default -> throw new AssertionError(
+                    "Unexpected numeric metric format " + metric.get("format").asText()
+            );
+        };
     }
 }

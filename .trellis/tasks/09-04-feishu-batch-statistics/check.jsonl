@@ -39,3 +39,4 @@
 {"file":"docs/features/batch-statistics/interaction.md","reason":"核对两端 16 行响应式交互"}
 {"file":"backend/rabbit-boot/src/main/resources/db/migration/V55__batch_statistics_write_snapshots.sql","reason":"检查不可变快照和复合租户外键"}
 {"file":"backend/rabbit-boot/src/main/resources/db/migration/V56__outbound_draft_batch_allocations.sql","reason":"检查出库草稿批次分配约束"}
+{"file": ".trellis/tasks/09-04-feishu-batch-statistics/research/executable-acceptance-fixture.md", "reason": "核对真实数据与 API、Excel、Admin、Android 同源验收"}

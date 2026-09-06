@@ -203,3 +203,128 @@ measured batch weights -> persist immutable allocation -> calculate metrics
 (batch_id, house_id) -> composite FK -> batches(id, house_id)
 locked persisted draft + frozen items -> compare submit -> create sales
 ```
+
+## Scenario: Shared real-data cross-client acceptance
+
+### 1. Scope / Trigger
+
+Use this scenario when changing the 28-metric query, workbook, Admin batch page,
+Flutter batch page, or any immutable write source used by those consumers. It
+proves one attachment-scale MySQL dataset across the API, XLSX, Admin, and a
+physical Android device. Mocked client tests remain required for failure,
+permission, narrow-screen, and text-scale boundaries.
+
+### 2. Signatures
+
+```text
+backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture.sql
+backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture_cleanup.sql
+
+RABBIT_ANDROID_E2E_DEVICE_ID=<ready-device> \
+  bash scripts/batch-statistics-cross-client-e2e.sh
+
+pnpm --dir admin e2e:browser:batch-statistics:real
+flutter drive \
+  --driver=test_driver/android_e2e_driver.dart \
+  --target=integration_test/batches/statistics_android_test.dart \
+  --flavor=dev \
+  --dart-define-from-file=<0600-runtime-file>
+```
+
+### 3. Contracts
+
+The SQL fixture is the only executable definition of the populated dataset. A
+20-character lowercase hex `run_id` owns the user, target/isolation houses,
+batches, cycles, litters, allocations, sale rows, and carcass version. Its JSON
+manifest returns IDs and a credential profile, never a password or token.
+
+The runner requires Flyway V56 or newer and one ready portrait Android device.
+It rebuilds the current backend with captcha disabled, LAN binding, and the one
+random Vite origin appended to the existing CORS list. It must capture and
+restore the prior running state, captcha setting, bind address, CORS list,
+rotation, and stay-awake setting. Docker Compose and podman-compose must be
+resolved without hard-coded container names.
+
+Client credentials live in one mode-0600 temporary JSON file. Admin reads its
+fixture fields through `RABBIT_E2E_DEFINES_FILE`; Flutter receives the same file
+through `--dart-define-from-file`. Login bodies and bearer headers go to curl
+through stdin, and the MySQL password goes through process environment. The
+runtime file is deleted on success and every catchable exit path.
+
+Artifacts are written under
+`artifacts/batch-statistics-cross-client/<run_id>/`. Keep the API response,
+validation proof, real workbook and headers, database assertions, Admin and
+Android logs, one desktop image, eight group images, action images,
+`manifest.json`, and `SHA256SUMS`. Do not keep tokens, passwords, Docker secret
+environment, or screenshot byte arrays inside the Android result JSON.
+
+Admin must select the target house through the real workspace selector before
+opening the batch. Direct localStorage replacement races `WorkspaceProvider`
+and can be overwritten by its first house load. The live workspace may create
+`reminder_preferences` rows; cleanup owns those rows along with the static
+fixture rows.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Flyway version is below 56 or not numeric | Stop before loading the fixture |
+| Captcha endpoint is not business code `501` during the run | Stop before login or UI execution |
+| Temporary Admin Origin is absent from CORS | Fail the real browser login; do not bypass CORS |
+| Fixture manifest has the wrong run, profile, IDs, or scale totals | Stop before API and clients |
+| Any API metric is missing, reordered, unavailable, or numerically different | Stop before launching either client |
+| XLSX is JSON, empty, wrong MIME, wrong filename, or not a valid ZIP | Stop before launching either client |
+| Admin uses the isolation/default house | Fail the `X-House-Id` assertion |
+| Android wait exceeds its explicit deadline | Fail with visible text; never use default ten-minute `pumpAndSettle` waits |
+| Client, redaction, or log pipeline stage fails | Fail the run even if the client process returned zero |
+| Cleanup or backend/device restoration fails | Turn an otherwise successful run into failure |
+| `RABBIT_BATCH_STATISTICS_KEEP_FIXTURE=1` | Keep rows only for debugging and print a password-free cleanup command |
+
+### 5. Good / Base / Bad Cases
+
+- Good: one run-scoped fixture feeds the API precheck, workbook, Admin, and
+  Android; every layer reports the same 28 values before cleanup.
+- Base: a client assertion fails. Capture available database evidence, delete
+  fixture and runtime-created reminder preferences, restore the environment,
+  and keep a failed manifest.
+- Bad: point Admin at intercepted JSON while calling the run a backend test.
+- Bad: write the target house to localStorage after login and navigate before
+  `WorkspaceProvider` finishes loading.
+- Bad: terminate only the pnpm parent process; start Vite through its Node entry
+  so the owned child can be awaited and stopped.
+
+### 6. Tests Required
+
+- Fresh-schema `BatchStatisticsIT` and `BatchStatisticsExportIT`: all 28 exact
+  API values, two workbook sheets, formats, filenames, permissions, and tenant
+  isolation from the shared SQL fixture.
+- Admin real-browser test: captcha fallback, business login, real house
+  selection, proxied CORS, 28 display values, eight groups, `X-House-Id`,
+  workbook download, overflow, console errors, and Vite process cleanup.
+- Android physical-device test: bounded waits, 28 display values, eight group
+  screenshots, export entrance, carcass form/history, and no fixture mutation.
+- Runner postconditions: zero fixture user/house/batch/reminder residue, restored
+  captcha/bind/CORS/device state, no runtime credential file or Vite listener,
+  no secret patterns in text artifacts, and valid hashes for every artifact.
+- Keep the mocked Admin browser suite and focused Flutter widget/repository
+  suites; the populated happy path does not replace their boundary coverage.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+independent synthetic payloads -> API, Admin, Flutter, and XLSX all "pass"
+random Vite port -> unchanged backend CORS -> Invalid CORS request
+pumpAndSettle() -> continuous frame scheduling -> ten-minute device-test stall
+static fixture cleanup only -> runtime reminder_preferences -> FK failure
+```
+
+#### Correct
+
+```text
+one run-scoped MySQL fixture -> exact API -> XLSX + Admin + Android
+selected Vite origin -> temporary exact CORS entry -> restore original list
+bounded frame pumps + condition waits -> deterministic Android deadline
+fixture rows + runtime-owned rows -> FK-ordered cleanup -> zero residue
+```

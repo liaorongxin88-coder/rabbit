@@ -53,12 +53,30 @@ actual=1 2 2 1 1 1 0 1
 
 此前批次生命周期脚本只完成登录和创建批次，后端夹具没有生成后续繁殖周期、任务或 `AWAIT_ESTRUS`/`ESTRUS` 状态，因此未到达断奶。旧产物位于 `app/build/android-batch-lifecycle-e2e/20260905234019483093/`，不作为当前 APK 的完整生命周期证据。
 
+## 附件规模共享真实夹具验收
+
+2026-09-06 在同一 V56 夹具 run `059e0fec2e6fe953963b` 上完成 API、Excel、Admin 和 Android 真机验收。产物位于：
+
+```text
+artifacts/batch-statistics-cross-client/059e0fec2e6fe953963b/
+```
+
+- 新鲜隔离 schema 上的 `BatchStatisticsIT` 7 项和 `BatchStatisticsExportIT` 3 项全部通过。API 恰好返回 28 项，全部为 `AVAILABLE`，顺序、原始值和展示值与 `research/acceptance-fixture.md` 第 3 节一致；同一响应生成的两个 Excel 页签逐项一致。
+- 根级运行器重新构建当前后端，临时关闭验证码并加入单一 Admin Origin。真实登录、`Authorization`、`X-House-Id`、MIME、ASCII/UTF-8 文件名和 OOXML ZIP 校验通过。
+- Admin 使用真实业务登录和兔舍选择进入目标批次，28 项展示值、八组布局、Excel 下载、控制台和请求错误检查通过；桌面截图为 `admin/desktop-detail.png`，尺寸 1440x2899。
+- Android 15 实体设备 `00152155M000372` 使用同一账号、兔舍和批次完成 28 项展示值、八组、导出入口、出肉率表单及版本历史检查；11 张截图均为 1080x2392，Flutter 报告 2 个步骤全部通过。
+- 数据库断言确认 1,230 个周期、1,059 个怀孕周期、60 只公兔、21 个流产周期、1,004 窝、8,604 只断奶、6,834 只销售、13,095 kg 销售重量、157,140 元销售额、600 只转后备、52,120 kg 饲料和 56% 出肉率。
+- `manifest.json` 中 API、XLSX、Admin、Android、数据库、夹具清理、后端恢复和设备恢复全部为 `true`。清理后本次用户、兔舍、批次和提醒偏好残留均为 0；验证码恢复为业务码 0，CORS 与绑定恢复原值，Vite 无残留监听，临时凭据文件为 0。
+- `SHA256SUMS` 覆盖 35 个最终产物并校验通过。21 个文本产物未发现明文密码、Bearer token、JWT 或 secret 赋值；12 张 PNG 哈希均不同。Android 结果保留 28 项展示值和 11 个截图名称，不重复嵌入 PNG 字节。
+- 既有回归保持通过：Admin lint、85 项测试、生产构建和模拟批次统计浏览器脚本；Flutter 分析及统计、出肉率、架构相关 62 项测试；后端上述 10 项真实 MySQL 集成测试。
+
+实施期间的失败路径发现并修复了 Excel 时间戳正则、随机 Vite Origin 的 CORS、默认兔舍竞态、运行时 `reminder_preferences` 清理、Vite 子进程回收和 Android 无界 `pumpAndSettle`。每个有效失败 run 都核验了 fixture 清理和后端恢复；工具强制终止绕过 trap 的两次 run 已手动清理并恢复，不作为通过证据。
+
 ## 契约与诊断
 
 - 最终跨端审查已核对数据库、API、Admin、Flutter 和 Excel 的固定 28 项元数据、值、状态与顺序。
-- 主 LSP：8 个关键后端 Java 文件为 0 诊断；8 个关键 Admin 文件为 0 诊断。
-- Dart LSP 对 7 个关键文件在 60 秒预算内超时，不能记为 LSP 通过；同一工作树的完整 `flutter analyze` 已通过。
-- `lens_diagnostics mode=all` 的 14 个阻断项均位于本任务未修改的既有 Java、JSONC 和 Docker 文件；已由前序审查确认是规则误报、合法 JSONC 注释或任务外 Docker root 用户问题。本任务文件只有既有重复代码类警告，没有新增阻断诊断。
+- 本次新增验收代码的 8 个关键文件中，主 LSP 有 7 个确认无错误；Dart LSP 在 60 秒预算内超时，不能记为 LSP 通过，同一工作树的完整 `flutter analyze` 已通过。
+- `lens_diagnostics mode=all` 对本次诊断的 18 个文件返回 0 问题。此前 Flutter package 解析和本地 NFC 示例密钥告警已确认是工具缓存或固定本地测试值，不需要改动业务代码。
 
 ## 尚未完成的生产发布门禁
 
