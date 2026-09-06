@@ -222,7 +222,7 @@ cd app
 - [x] `task.py validate` 通过，两个 manifest 各 41 项，无缺失或重复路径。
 - [x] `lens_diagnostics mode=all` 没有本任务引入的阻塞错误；14 个既有阻断项均位于未修改文件，关键后端和 Admin 主 LSP 为 0，Dart LSP 超时由无问题的完整 `flutter analyze` 补充。
 - [x] 后端 1,094 项完整单元和架构测试、Checkstyle 与 package 通过。
-- [x] Admin lint、83 项测试、242 模块 build 和批次统计浏览器脚本通过。
+- [x] Admin lint、85 项测试、242 模块 build 和批次统计浏览器脚本通过；补充畸形 schema-v1 响应及下载文件名参数回归。
 - [x] Flutter `./rabbit check` 通过 628 项测试和分析，debug APK 构建成功。
 - [x] 数据库迁移、权限、兔舍隔离、幂等和历史兼容有 25 项新鲜 schema 自动化证据。
 - [ ] 固定 SQL 尚需证明生产全部兔舍在 7 个完整自然日内没有 `LEGACY_*_GAP`，发布检查记录需包含窗口、执行人和结果。

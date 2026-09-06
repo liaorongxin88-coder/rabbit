@@ -2,7 +2,7 @@
 
 ## 本地实现门禁
 
-记录时间：2026-09-06 01:40-02:00 CST。
+记录时间：2026-09-06 01:40-02:00 CST；Admin 补充验证：2026-09-06 12:47 CST。
 
 ### Backend
 
@@ -19,9 +19,9 @@
 ### Admin
 
 - `corepack pnpm --dir admin lint`：通过。
-- `corepack pnpm --dir admin test`：83/83 通过。
+- `corepack pnpm --dir admin test`：85/85 通过，包含畸形顶层响应、operand、缺失原因、非法日期、百分比和整数格式，以及 `Content-Disposition` 参数边界与转义回归。
 - `corepack pnpm --dir admin build`：242 个模块构建通过。
-- `node admin/scripts/batch-statistics-browser-e2e.mjs`：通过，无控制台错误。
+- `corepack pnpm --dir admin e2e:browser:batch-statistics`：通过，无控制台错误。
 - 浏览器产物：`admin/build/browser-e2e/batch-statistics/`，包括桌面、窄屏、200% 字号、无权限、首次失败、重试恢复和刷新失败保留数据。
 - Admin 开发服务：`http://127.0.0.1:5174/`。
 

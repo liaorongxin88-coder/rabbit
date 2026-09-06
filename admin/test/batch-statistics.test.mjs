@@ -100,6 +100,8 @@ test("pins all 28 metrics to the approved eight-group desktop layout", () => {
 
 test("validates the fixed contract while ignoring unknown additive metrics", () => {
   assert.equal(batchStatisticsContractError(statistics()), null);
+  assert.match(batchStatisticsContractError(null), /升级服务/);
+  assert.match(batchStatisticsContractError("invalid"), /升级服务/);
   assert.equal(
     batchStatisticsContractError(
       statistics([
@@ -158,6 +160,36 @@ test("rejects fixed metadata, order, UTC, and status-shape drift", () => {
   assert.match(batchStatisticsContractError(availableWithCause), /值或状态/);
 });
 
+test("rejects malformed nested values and impossible dates without throwing", () => {
+  for (const [field, value] of [
+    ["numerator", undefined],
+    ["components", [42]],
+    ["missingCauses", [null]],
+  ]) {
+    const malformed = statistics();
+    malformed.metrics[0][field] = value;
+    assert.doesNotThrow(() => batchStatisticsContractError(malformed));
+    assert.match(batchStatisticsContractError(malformed), /值或状态/);
+  }
+
+  const impossibleDate = statistics();
+  impossibleDate.metrics[0].dateValue = {
+    firstDate: "2024-02-31",
+    lastDate: "2024-02-31",
+    dateCount: 1,
+    dailyCycleCounts: [{ date: "2024-02-31", cycleCount: 1 }],
+  };
+  assert.match(batchStatisticsContractError(impossibleDate), /值或状态/);
+
+  const invalidPercentage = statistics();
+  invalidPercentage.metrics[2].numericValue = 1.01;
+  assert.match(batchStatisticsContractError(invalidPercentage), /值或状态/);
+
+  const fractionalCount = statistics();
+  fractionalCount.metrics[1].numericValue = 1.5;
+  assert.match(batchStatisticsContractError(fractionalCount), /值或状态/);
+});
+
 test("keeps real zero values distinct from unavailable statuses", () => {
   const available = metric(BATCH_METRIC_CONTRACTS[1]);
   assert.equal(metricDisplayValue(available), "0");
@@ -167,9 +199,7 @@ test("keeps real zero values distinct from unavailable statuses", () => {
       status: "NOT_APPLICABLE",
       numericValue: null,
       displayValue: null,
-      missingCauses: [
-        { code: "ZERO_DENOMINATOR", message: "计算分母为零" },
-      ],
+      missingCauses: [{ code: "ZERO_DENOMINATOR", message: "计算分母为零" }],
     }),
     "暂无可计算数据",
   );

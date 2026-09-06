@@ -19,34 +19,343 @@ export interface BatchMetricContract {
 }
 
 export const BATCH_METRIC_CONTRACTS: BatchMetricContract[] = [
-  { code: "MATING_DATE", name: "配种日期", stage: "MATING", stageName: "配种", order: 10, excelColumnName: "配种日期", valueType: "DATE_RANGE", unit: "DATE", format: "DATE_RANGE", formula: "配种日期按业务自然日去重" },
-  { code: "MATED_DOE_COUNT", name: "配种母兔数", stage: "MATING", stageName: "配种", order: 20, excelColumnName: "配种母兔数", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "已配种周期中的去重母兔数" },
-  { code: "CONCEPTION_RATE", name: "受胎率", stage: "MATING", stageName: "配种", order: 30, excelColumnName: "受胎率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "确认怀孕周期数 / 已配种周期数" },
-  { code: "DOE_BUCK_RATIO", name: "配种母兔/公兔比例", stage: "MATING", stageName: "配种", order: 40, excelColumnName: "配种母兔/公兔比例", valueType: "NUMBER", unit: "RATIO", format: "RATIO_TO_ONE", formula: "去重配种母兔数 / 去重参与配种公兔数" },
-  { code: "PREGNANT_DOE_COUNT", name: "怀孕数量", stage: "PREGNANCY", stageName: "怀孕", order: 50, excelColumnName: "怀孕数量", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "确认怀孕周期中的去重母兔数" },
-  { code: "ABORTION_RATE", name: "流产率", stage: "PREGNANCY", stageName: "怀孕", order: 60, excelColumnName: "流产率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "已怀孕流产周期数 / 确认怀孕周期数" },
-  { code: "DELIVERED_LITTER_COUNT", name: "产崽窝数", stage: "BIRTH", stageName: "产崽", order: 70, excelColumnName: "产崽窝数", valueType: "NUMBER", unit: "LITTER", format: "INTEGER", formula: "批次内产崽窝数" },
-  { code: "TOTAL_KIT_COUNT", name: "产崽总数", stage: "BIRTH", stageName: "产崽", order: 80, excelColumnName: "产崽总数", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "批次内产崽数之和" },
-  { code: "AVERAGE_KITS_PER_LITTER", name: "平均窝产数", stage: "BIRTH", stageName: "产崽", order: 90, excelColumnName: "平均窝产数", valueType: "NUMBER", unit: "COUNT_PER_LITTER", format: "DECIMAL_2", formula: "产崽总数 / 产崽窝数" },
-  { code: "LIVE_KIT_COUNT", name: "活崽总数", stage: "BIRTH", stageName: "产崽", order: 100, excelColumnName: "活崽总数", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "批次内活崽数之和" },
-  { code: "LIVE_BIRTH_RATE", name: "平均活崽率", stage: "BIRTH", stageName: "产崽", order: 110, excelColumnName: "平均活崽率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "活崽总数 / 产崽总数" },
-  { code: "KEPT_LITTER_COUNT", name: "选留窝数", stage: "SELECTION", stageName: "选留", order: 120, excelColumnName: "选留窝数", valueType: "NUMBER", unit: "LITTER", format: "INTEGER", formula: "留崽数大于零的窝数" },
-  { code: "KEPT_KIT_COUNT", name: "选留总数", stage: "SELECTION", stageName: "选留", order: 130, excelColumnName: "选留总数", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "批次内选留数之和" },
-  { code: "KEPT_LIVE_RATE", name: "选留活崽率", stage: "SELECTION", stageName: "选留", order: 140, excelColumnName: "选留活崽率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "选留总数 / 活崽总数" },
-  { code: "AVERAGE_KEPT_PER_LITTER", name: "窝均选留", stage: "SELECTION", stageName: "选留", order: 150, excelColumnName: "窝均选留", valueType: "NUMBER", unit: "COUNT_PER_LITTER", format: "DECIMAL_2", formula: "选留总数 / 选留窝数" },
-  { code: "WEANED_KIT_COUNT", name: "断奶数量", stage: "WEANING", stageName: "断奶", order: 160, excelColumnName: "断奶数量", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "批次内断奶数之和" },
-  { code: "AVERAGE_WEANING_WEIGHT", name: "断奶均重", stage: "WEANING", stageName: "断奶", order: 170, excelColumnName: "断奶均重", valueType: "NUMBER", unit: "KG_PER_RABBIT", format: "DECIMAL_2", formula: "断奶总重快照之和 / 断奶数量" },
-  { code: "WEANING_SURVIVAL_RATE", name: "断奶成活率", stage: "WEANING", stageName: "断奶", order: 180, excelColumnName: "断奶成活率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "断奶数量 / 选留总数" },
-  { code: "SOLD_RABBIT_COUNT", name: "出栏数量", stage: "OUTBOUND", stageName: "出栏", order: 190, excelColumnName: "出栏数量", valueType: "NUMBER", unit: "COUNT", format: "INTEGER", formula: "批次快照匹配的已销售兔只数" },
-  { code: "OUTBOUND_SURVIVAL_RATE", name: "出栏成活率", stage: "OUTBOUND", stageName: "出栏", order: 200, excelColumnName: "出栏成活率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "出栏数量 / 断奶数量" },
-  { code: "SOLD_WEIGHT", name: "出栏总重", stage: "OUTBOUND", stageName: "出栏", order: 210, excelColumnName: "出栏总重", valueType: "NUMBER", unit: "KG", format: "DECIMAL_2", formula: "批次销售实际重量之和" },
-  { code: "AVERAGE_SOLD_WEIGHT", name: "出栏均重", stage: "OUTBOUND", stageName: "出栏", order: 220, excelColumnName: "出栏均重", valueType: "NUMBER", unit: "KG_PER_RABBIT", format: "DECIMAL_2", formula: "出栏总重 / 出栏数量" },
-  { code: "TOTAL_SALES_AMOUNT", name: "总销售金额", stage: "SALES", stageName: "销售", order: 230, excelColumnName: "总销售金额", valueType: "NUMBER", unit: "CNY", format: "DECIMAL_2", formula: "批次销售金额快照之和" },
-  { code: "SALES_PRICE_PER_KG", name: "销售单价（重量口径）", stage: "SALES", stageName: "销售", order: 240, excelColumnName: "销售单价（重量口径）", valueType: "NUMBER", unit: "CNY_PER_KG", format: "DECIMAL_2", formula: "总销售金额 / 出栏总重" },
-  { code: "SALES_PRICE_PER_RABBIT", name: "销售单价（只数口径）", stage: "SALES", stageName: "销售", order: 250, excelColumnName: "销售单价（只数口径）", valueType: "NUMBER", unit: "CNY_PER_RABBIT", format: "DECIMAL_2", formula: "总销售金额 / 出栏数量" },
-  { code: "FULL_FEED_CONVERSION_RATIO", name: "全程料肉比", stage: "FEED_CONVERSION", stageName: "料肉比", order: 260, excelColumnName: "全程料肉比", valueType: "NUMBER", unit: "RATIO", format: "DECIMAL_2", formula: "批次全程饲料量 /（商品兔实际销售重量 + 转后备兔实测总重）" },
-  { code: "FATTENING_FEED_CONVERSION_RATIO", name: "育肥期料肉比", stage: "FEED_CONVERSION", stageName: "料肉比", order: 270, excelColumnName: "育肥期料肉比", valueType: "NUMBER", unit: "RATIO", format: "DECIMAL_2", formula: "批次育肥饲料量 /（商品兔实际销售重量 + 转后备兔实测总重 - 断奶总重）" },
-  { code: "CARCASS_YIELD_RATE", name: "出肉率", stage: "FEED_CONVERSION", stageName: "料肉比", order: 280, excelColumnName: "出肉率", valueType: "NUMBER", unit: "PERCENT", format: "PERCENT_2", formula: "最新出肉率版本" },
+  {
+    code: "MATING_DATE",
+    name: "配种日期",
+    stage: "MATING",
+    stageName: "配种",
+    order: 10,
+    excelColumnName: "配种日期",
+    valueType: "DATE_RANGE",
+    unit: "DATE",
+    format: "DATE_RANGE",
+    formula: "配种日期按业务自然日去重",
+  },
+  {
+    code: "MATED_DOE_COUNT",
+    name: "配种母兔数",
+    stage: "MATING",
+    stageName: "配种",
+    order: 20,
+    excelColumnName: "配种母兔数",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "已配种周期中的去重母兔数",
+  },
+  {
+    code: "CONCEPTION_RATE",
+    name: "受胎率",
+    stage: "MATING",
+    stageName: "配种",
+    order: 30,
+    excelColumnName: "受胎率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "确认怀孕周期数 / 已配种周期数",
+  },
+  {
+    code: "DOE_BUCK_RATIO",
+    name: "配种母兔/公兔比例",
+    stage: "MATING",
+    stageName: "配种",
+    order: 40,
+    excelColumnName: "配种母兔/公兔比例",
+    valueType: "NUMBER",
+    unit: "RATIO",
+    format: "RATIO_TO_ONE",
+    formula: "去重配种母兔数 / 去重参与配种公兔数",
+  },
+  {
+    code: "PREGNANT_DOE_COUNT",
+    name: "怀孕数量",
+    stage: "PREGNANCY",
+    stageName: "怀孕",
+    order: 50,
+    excelColumnName: "怀孕数量",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "确认怀孕周期中的去重母兔数",
+  },
+  {
+    code: "ABORTION_RATE",
+    name: "流产率",
+    stage: "PREGNANCY",
+    stageName: "怀孕",
+    order: 60,
+    excelColumnName: "流产率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "已怀孕流产周期数 / 确认怀孕周期数",
+  },
+  {
+    code: "DELIVERED_LITTER_COUNT",
+    name: "产崽窝数",
+    stage: "BIRTH",
+    stageName: "产崽",
+    order: 70,
+    excelColumnName: "产崽窝数",
+    valueType: "NUMBER",
+    unit: "LITTER",
+    format: "INTEGER",
+    formula: "批次内产崽窝数",
+  },
+  {
+    code: "TOTAL_KIT_COUNT",
+    name: "产崽总数",
+    stage: "BIRTH",
+    stageName: "产崽",
+    order: 80,
+    excelColumnName: "产崽总数",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "批次内产崽数之和",
+  },
+  {
+    code: "AVERAGE_KITS_PER_LITTER",
+    name: "平均窝产数",
+    stage: "BIRTH",
+    stageName: "产崽",
+    order: 90,
+    excelColumnName: "平均窝产数",
+    valueType: "NUMBER",
+    unit: "COUNT_PER_LITTER",
+    format: "DECIMAL_2",
+    formula: "产崽总数 / 产崽窝数",
+  },
+  {
+    code: "LIVE_KIT_COUNT",
+    name: "活崽总数",
+    stage: "BIRTH",
+    stageName: "产崽",
+    order: 100,
+    excelColumnName: "活崽总数",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "批次内活崽数之和",
+  },
+  {
+    code: "LIVE_BIRTH_RATE",
+    name: "平均活崽率",
+    stage: "BIRTH",
+    stageName: "产崽",
+    order: 110,
+    excelColumnName: "平均活崽率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "活崽总数 / 产崽总数",
+  },
+  {
+    code: "KEPT_LITTER_COUNT",
+    name: "选留窝数",
+    stage: "SELECTION",
+    stageName: "选留",
+    order: 120,
+    excelColumnName: "选留窝数",
+    valueType: "NUMBER",
+    unit: "LITTER",
+    format: "INTEGER",
+    formula: "留崽数大于零的窝数",
+  },
+  {
+    code: "KEPT_KIT_COUNT",
+    name: "选留总数",
+    stage: "SELECTION",
+    stageName: "选留",
+    order: 130,
+    excelColumnName: "选留总数",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "批次内选留数之和",
+  },
+  {
+    code: "KEPT_LIVE_RATE",
+    name: "选留活崽率",
+    stage: "SELECTION",
+    stageName: "选留",
+    order: 140,
+    excelColumnName: "选留活崽率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "选留总数 / 活崽总数",
+  },
+  {
+    code: "AVERAGE_KEPT_PER_LITTER",
+    name: "窝均选留",
+    stage: "SELECTION",
+    stageName: "选留",
+    order: 150,
+    excelColumnName: "窝均选留",
+    valueType: "NUMBER",
+    unit: "COUNT_PER_LITTER",
+    format: "DECIMAL_2",
+    formula: "选留总数 / 选留窝数",
+  },
+  {
+    code: "WEANED_KIT_COUNT",
+    name: "断奶数量",
+    stage: "WEANING",
+    stageName: "断奶",
+    order: 160,
+    excelColumnName: "断奶数量",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "批次内断奶数之和",
+  },
+  {
+    code: "AVERAGE_WEANING_WEIGHT",
+    name: "断奶均重",
+    stage: "WEANING",
+    stageName: "断奶",
+    order: 170,
+    excelColumnName: "断奶均重",
+    valueType: "NUMBER",
+    unit: "KG_PER_RABBIT",
+    format: "DECIMAL_2",
+    formula: "断奶总重快照之和 / 断奶数量",
+  },
+  {
+    code: "WEANING_SURVIVAL_RATE",
+    name: "断奶成活率",
+    stage: "WEANING",
+    stageName: "断奶",
+    order: 180,
+    excelColumnName: "断奶成活率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "断奶数量 / 选留总数",
+  },
+  {
+    code: "SOLD_RABBIT_COUNT",
+    name: "出栏数量",
+    stage: "OUTBOUND",
+    stageName: "出栏",
+    order: 190,
+    excelColumnName: "出栏数量",
+    valueType: "NUMBER",
+    unit: "COUNT",
+    format: "INTEGER",
+    formula: "批次快照匹配的已销售兔只数",
+  },
+  {
+    code: "OUTBOUND_SURVIVAL_RATE",
+    name: "出栏成活率",
+    stage: "OUTBOUND",
+    stageName: "出栏",
+    order: 200,
+    excelColumnName: "出栏成活率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "出栏数量 / 断奶数量",
+  },
+  {
+    code: "SOLD_WEIGHT",
+    name: "出栏总重",
+    stage: "OUTBOUND",
+    stageName: "出栏",
+    order: 210,
+    excelColumnName: "出栏总重",
+    valueType: "NUMBER",
+    unit: "KG",
+    format: "DECIMAL_2",
+    formula: "批次销售实际重量之和",
+  },
+  {
+    code: "AVERAGE_SOLD_WEIGHT",
+    name: "出栏均重",
+    stage: "OUTBOUND",
+    stageName: "出栏",
+    order: 220,
+    excelColumnName: "出栏均重",
+    valueType: "NUMBER",
+    unit: "KG_PER_RABBIT",
+    format: "DECIMAL_2",
+    formula: "出栏总重 / 出栏数量",
+  },
+  {
+    code: "TOTAL_SALES_AMOUNT",
+    name: "总销售金额",
+    stage: "SALES",
+    stageName: "销售",
+    order: 230,
+    excelColumnName: "总销售金额",
+    valueType: "NUMBER",
+    unit: "CNY",
+    format: "DECIMAL_2",
+    formula: "批次销售金额快照之和",
+  },
+  {
+    code: "SALES_PRICE_PER_KG",
+    name: "销售单价（重量口径）",
+    stage: "SALES",
+    stageName: "销售",
+    order: 240,
+    excelColumnName: "销售单价（重量口径）",
+    valueType: "NUMBER",
+    unit: "CNY_PER_KG",
+    format: "DECIMAL_2",
+    formula: "总销售金额 / 出栏总重",
+  },
+  {
+    code: "SALES_PRICE_PER_RABBIT",
+    name: "销售单价（只数口径）",
+    stage: "SALES",
+    stageName: "销售",
+    order: 250,
+    excelColumnName: "销售单价（只数口径）",
+    valueType: "NUMBER",
+    unit: "CNY_PER_RABBIT",
+    format: "DECIMAL_2",
+    formula: "总销售金额 / 出栏数量",
+  },
+  {
+    code: "FULL_FEED_CONVERSION_RATIO",
+    name: "全程料肉比",
+    stage: "FEED_CONVERSION",
+    stageName: "料肉比",
+    order: 260,
+    excelColumnName: "全程料肉比",
+    valueType: "NUMBER",
+    unit: "RATIO",
+    format: "DECIMAL_2",
+    formula: "批次全程饲料量 /（商品兔实际销售重量 + 转后备兔实测总重）",
+  },
+  {
+    code: "FATTENING_FEED_CONVERSION_RATIO",
+    name: "育肥期料肉比",
+    stage: "FEED_CONVERSION",
+    stageName: "料肉比",
+    order: 270,
+    excelColumnName: "育肥期料肉比",
+    valueType: "NUMBER",
+    unit: "RATIO",
+    format: "DECIMAL_2",
+    formula:
+      "批次育肥饲料量 /（商品兔实际销售重量 + 转后备兔实测总重 - 断奶总重）",
+  },
+  {
+    code: "CARCASS_YIELD_RATE",
+    name: "出肉率",
+    stage: "FEED_CONVERSION",
+    stageName: "料肉比",
+    order: 280,
+    excelColumnName: "出肉率",
+    valueType: "NUMBER",
+    unit: "PERCENT",
+    format: "PERCENT_2",
+    formula: "最新出肉率版本",
+  },
 ];
 
 export const BATCH_METRIC_CODES = BATCH_METRIC_CONTRACTS.map(
@@ -161,7 +470,12 @@ const metricValueTypes = new Set(["NUMBER", "DATE_RANGE"]);
 export function batchStatisticsContractError(
   statistics: BatchStatistics,
 ): string | null {
-  if (statistics.schemaVersion !== 1 || !Array.isArray(statistics.metrics)) {
+  if (
+    !statistics ||
+    typeof statistics !== "object" ||
+    statistics.schemaVersion !== 1 ||
+    !Array.isArray(statistics.metrics)
+  ) {
     return "当前服务尚未提供完整批次统计，请升级服务后重试。";
   }
   if (
@@ -244,22 +558,25 @@ function hasMetricDetailShape(metric: BatchStatisticMetric) {
     "components",
     "missingCauses",
   ];
-  return (
-    fields.every((field) => Object.hasOwn(metric, field)) &&
-    Array.isArray(metric.components) &&
-    Array.isArray(metric.missingCauses) &&
-    [metric.numerator, metric.denominator, ...metric.components].every(
-      (operand) =>
-        operand === null ||
-        (typeof operand.code === "string" &&
-          operand.code.trim().length > 0 &&
-          typeof operand.label === "string" &&
-          operand.label.trim().length > 0 &&
-          typeof operand.unit === "string" &&
-          (operand.value === null ||
-            (typeof operand.value === "number" &&
-              Number.isFinite(operand.value)))),
-    )
+  if (
+    !fields.every((field) => Object.hasOwn(metric, field)) ||
+    !Array.isArray(metric.components) ||
+    !Array.isArray(metric.missingCauses)
+  ) {
+    return false;
+  }
+  return [metric.numerator, metric.denominator, ...metric.components].every(
+    (operand) =>
+      operand === null ||
+      (typeof operand === "object" &&
+        typeof operand.code === "string" &&
+        operand.code.trim().length > 0 &&
+        typeof operand.label === "string" &&
+        operand.label.trim().length > 0 &&
+        typeof operand.unit === "string" &&
+        (operand.value === null ||
+          (typeof operand.value === "number" &&
+            Number.isFinite(operand.value)))),
   );
 }
 
@@ -269,7 +586,8 @@ function metricShapeError(metric: BatchStatisticMetric) {
     Number.isFinite(metric.numericValue) &&
     metric.numericValue >= 0;
   const hasDisplayValue =
-    typeof metric.displayValue === "string" && metric.displayValue.trim() !== "";
+    typeof metric.displayValue === "string" &&
+    metric.displayValue.trim() !== "";
   if (metric.status !== "AVAILABLE") {
     return (
       metric.numericValue !== null ||
@@ -280,7 +598,10 @@ function metricShapeError(metric: BatchStatisticMetric) {
   if (!hasDisplayValue) return true;
   if (metric.valueType === "NUMBER") {
     if (!hasNumericValue || metric.dateValue !== null) return true;
-    if (metric.format === "INTEGER" && !Number.isSafeInteger(metric.numericValue)) {
+    if (
+      metric.format === "INTEGER" &&
+      !Number.isSafeInteger(metric.numericValue)
+    ) {
       return true;
     }
     if (
@@ -296,15 +617,27 @@ function metricShapeError(metric: BatchStatisticMetric) {
 
 function validDateValue(value: BatchStatisticMetric["dateValue"]) {
   if (!value || !Array.isArray(value.dailyCycleCounts)) return false;
-  const validDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const validDate = (date: unknown) => {
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return false;
+    }
+    const timestamp = Date.parse(`${date}T00:00:00Z`);
+    return (
+      Number.isFinite(timestamp) &&
+      new Date(timestamp).toISOString().slice(0, 10) === date
+    );
+  };
   return (
     validDate(value.firstDate) &&
     validDate(value.lastDate) &&
+    value.firstDate <= value.lastDate &&
     Number.isSafeInteger(value.dateCount) &&
     value.dateCount > 0 &&
     value.dailyCycleCounts.length === value.dateCount &&
     value.dailyCycleCounts.every(
       (item, index, items) =>
+        item !== null &&
+        typeof item === "object" &&
         validDate(item.date) &&
         Number.isSafeInteger(item.cycleCount) &&
         item.cycleCount > 0 &&
@@ -319,12 +652,19 @@ function missingCauseShapeError(metric: BatchStatisticMetric) {
   let previousOrder = -1;
   const seen = new Set<string>();
   for (const cause of metric.missingCauses) {
+    if (
+      cause === null ||
+      typeof cause !== "object" ||
+      typeof cause.code !== "string" ||
+      typeof cause.message !== "string"
+    ) {
+      return true;
+    }
     const order = missingCauseOrder.get(cause.code);
     if (
       order === undefined ||
       order <= previousOrder ||
       seen.has(cause.code) ||
-      typeof cause.message !== "string" ||
       cause.message.trim() === ""
     ) {
       return true;
@@ -343,12 +683,17 @@ function missingCauseShapeError(metric: BatchStatisticMetric) {
         : metric.code === "CARCASS_YIELD_RATE"
           ? "CARCASS_YIELD_NOT_RECORDED"
           : null;
-    return expected === null || metric.missingCauses.length !== 1 || !seen.has(expected);
+    return (
+      expected === null ||
+      metric.missingCauses.length !== 1 ||
+      !seen.has(expected)
+    );
   }
   return (
     metric.missingCauses.length === 0 ||
     metric.missingCauses.some(
-      (cause) => (missingCauseOrder.get(cause.code) ?? Number.MAX_SAFE_INTEGER) > 9,
+      (cause) =>
+        (missingCauseOrder.get(cause.code) ?? Number.MAX_SAFE_INTEGER) > 9,
     )
   );
 }

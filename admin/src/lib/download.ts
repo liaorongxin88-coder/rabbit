@@ -11,7 +11,9 @@ export function sanitizeDownloadFilename(filename: string, fallback: string) {
       return code > 31 && code !== 127;
     })
     .join("");
-  const sanitized = printable.replace(SAFE_FILENAME, "_").replace(/[. ]+$/g, "");
+  const sanitized = printable
+    .replace(SAFE_FILENAME, "_")
+    .replace(/[. ]+$/g, "");
   if (!sanitized || sanitized === "." || sanitized === "..") return fallback;
   const stem = sanitized.split(".")[0].toUpperCase();
   return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem)
@@ -26,9 +28,11 @@ export function parseContentDispositionFilename(
   if (!contentDisposition) return fallback;
 
   const encodedMatch = contentDisposition.match(
-    /filename\*\s*=\s*(?:"([^"]*)"|([^;]+))/i,
+    /(?:^|;)\s*filename\*\s*=\s*(?:"((?:\\.|[^"])*)"|([^;]*))/i,
   );
-  const encoded = (encodedMatch?.[1] ?? encodedMatch?.[2] ?? "").trim();
+  const encoded = (encodedMatch?.[1] ?? encodedMatch?.[2] ?? "")
+    .replace(/\\(["\\])/g, "$1")
+    .trim();
   if (encoded) {
     try {
       const extended = encoded.match(/^([^']*)'[^']*'(.*)$/);
@@ -46,10 +50,12 @@ export function parseContentDispositionFilename(
   }
 
   const ascii = contentDisposition.match(
-    /filename\s*=\s*(?:"([^"]+)"|([^;]+))/i,
+    /(?:^|;)\s*filename\s*=\s*(?:"((?:\\.|[^"])*)"|([^;]*))/i,
   );
   return sanitizeDownloadFilename(
-    (ascii?.[1] ?? ascii?.[2] ?? "").trim(),
+    (ascii?.[1] ?? ascii?.[2] ?? "")
+      .replace(/\\(["\\])/g, "$1")
+      .trim(),
     fallback,
   );
 }

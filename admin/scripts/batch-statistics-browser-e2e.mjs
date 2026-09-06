@@ -45,34 +45,258 @@ const batch = {
 };
 
 const metricCatalog = [
-  ["MATING_DATE", "配种日期", "MATING", "配种", "DATE", "DATE_RANGE", "配种日期按业务自然日去重"],
-  ["MATED_DOE_COUNT", "配种母兔数", "MATING", "配种", "COUNT", "INTEGER", "已配种周期中的去重母兔数"],
-  ["CONCEPTION_RATE", "受胎率", "MATING", "配种", "PERCENT", "PERCENT_2", "确认怀孕周期数 / 已配种周期数"],
-  ["DOE_BUCK_RATIO", "配种母兔/公兔比例", "MATING", "配种", "RATIO", "RATIO_TO_ONE", "去重配种母兔数 / 去重参与配种公兔数"],
-  ["PREGNANT_DOE_COUNT", "怀孕数量", "PREGNANCY", "怀孕", "COUNT", "INTEGER", "确认怀孕周期中的去重母兔数"],
-  ["ABORTION_RATE", "流产率", "PREGNANCY", "怀孕", "PERCENT", "PERCENT_2", "已怀孕流产周期数 / 确认怀孕周期数"],
-  ["DELIVERED_LITTER_COUNT", "产崽窝数", "BIRTH", "产崽", "LITTER", "INTEGER", "批次内产崽窝数"],
-  ["TOTAL_KIT_COUNT", "产崽总数", "BIRTH", "产崽", "COUNT", "INTEGER", "批次内产崽数之和"],
-  ["AVERAGE_KITS_PER_LITTER", "平均窝产数", "BIRTH", "产崽", "COUNT_PER_LITTER", "DECIMAL_2", "产崽总数 / 产崽窝数"],
-  ["LIVE_KIT_COUNT", "活崽总数", "BIRTH", "产崽", "COUNT", "INTEGER", "批次内活崽数之和"],
-  ["LIVE_BIRTH_RATE", "平均活崽率", "BIRTH", "产崽", "PERCENT", "PERCENT_2", "活崽总数 / 产崽总数"],
-  ["KEPT_LITTER_COUNT", "选留窝数", "SELECTION", "选留", "LITTER", "INTEGER", "留崽数大于零的窝数"],
-  ["KEPT_KIT_COUNT", "选留总数", "SELECTION", "选留", "COUNT", "INTEGER", "批次内选留数之和"],
-  ["KEPT_LIVE_RATE", "选留活崽率", "SELECTION", "选留", "PERCENT", "PERCENT_2", "选留总数 / 活崽总数"],
-  ["AVERAGE_KEPT_PER_LITTER", "窝均选留", "SELECTION", "选留", "COUNT_PER_LITTER", "DECIMAL_2", "选留总数 / 选留窝数"],
-  ["WEANED_KIT_COUNT", "断奶数量", "WEANING", "断奶", "COUNT", "INTEGER", "批次内断奶数之和"],
-  ["AVERAGE_WEANING_WEIGHT", "断奶均重", "WEANING", "断奶", "KG_PER_RABBIT", "DECIMAL_2", "断奶总重快照之和 / 断奶数量"],
-  ["WEANING_SURVIVAL_RATE", "断奶成活率", "WEANING", "断奶", "PERCENT", "PERCENT_2", "断奶数量 / 选留总数"],
-  ["SOLD_RABBIT_COUNT", "出栏数量", "OUTBOUND", "出栏", "COUNT", "INTEGER", "批次快照匹配的已销售兔只数"],
-  ["OUTBOUND_SURVIVAL_RATE", "出栏成活率", "OUTBOUND", "出栏", "PERCENT", "PERCENT_2", "出栏数量 / 断奶数量"],
-  ["SOLD_WEIGHT", "出栏总重", "OUTBOUND", "出栏", "KG", "DECIMAL_2", "批次销售实际重量之和"],
-  ["AVERAGE_SOLD_WEIGHT", "出栏均重", "OUTBOUND", "出栏", "KG_PER_RABBIT", "DECIMAL_2", "出栏总重 / 出栏数量"],
-  ["TOTAL_SALES_AMOUNT", "总销售金额", "SALES", "销售", "CNY", "DECIMAL_2", "批次销售金额快照之和"],
-  ["SALES_PRICE_PER_KG", "销售单价（重量口径）", "SALES", "销售", "CNY_PER_KG", "DECIMAL_2", "总销售金额 / 出栏总重"],
-  ["SALES_PRICE_PER_RABBIT", "销售单价（只数口径）", "SALES", "销售", "CNY_PER_RABBIT", "DECIMAL_2", "总销售金额 / 出栏数量"],
-  ["FULL_FEED_CONVERSION_RATIO", "全程料肉比", "FEED_CONVERSION", "料肉比", "RATIO", "DECIMAL_2", "批次全程饲料量 /（商品兔实际销售重量 + 转后备兔实测总重）"],
-  ["FATTENING_FEED_CONVERSION_RATIO", "育肥期料肉比", "FEED_CONVERSION", "料肉比", "RATIO", "DECIMAL_2", "批次育肥饲料量 /（商品兔实际销售重量 + 转后备兔实测总重 - 断奶总重）"],
-  ["CARCASS_YIELD_RATE", "出肉率", "FEED_CONVERSION", "料肉比", "PERCENT", "PERCENT_2", "最新出肉率版本"],
+  [
+    "MATING_DATE",
+    "配种日期",
+    "MATING",
+    "配种",
+    "DATE",
+    "DATE_RANGE",
+    "配种日期按业务自然日去重",
+  ],
+  [
+    "MATED_DOE_COUNT",
+    "配种母兔数",
+    "MATING",
+    "配种",
+    "COUNT",
+    "INTEGER",
+    "已配种周期中的去重母兔数",
+  ],
+  [
+    "CONCEPTION_RATE",
+    "受胎率",
+    "MATING",
+    "配种",
+    "PERCENT",
+    "PERCENT_2",
+    "确认怀孕周期数 / 已配种周期数",
+  ],
+  [
+    "DOE_BUCK_RATIO",
+    "配种母兔/公兔比例",
+    "MATING",
+    "配种",
+    "RATIO",
+    "RATIO_TO_ONE",
+    "去重配种母兔数 / 去重参与配种公兔数",
+  ],
+  [
+    "PREGNANT_DOE_COUNT",
+    "怀孕数量",
+    "PREGNANCY",
+    "怀孕",
+    "COUNT",
+    "INTEGER",
+    "确认怀孕周期中的去重母兔数",
+  ],
+  [
+    "ABORTION_RATE",
+    "流产率",
+    "PREGNANCY",
+    "怀孕",
+    "PERCENT",
+    "PERCENT_2",
+    "已怀孕流产周期数 / 确认怀孕周期数",
+  ],
+  [
+    "DELIVERED_LITTER_COUNT",
+    "产崽窝数",
+    "BIRTH",
+    "产崽",
+    "LITTER",
+    "INTEGER",
+    "批次内产崽窝数",
+  ],
+  [
+    "TOTAL_KIT_COUNT",
+    "产崽总数",
+    "BIRTH",
+    "产崽",
+    "COUNT",
+    "INTEGER",
+    "批次内产崽数之和",
+  ],
+  [
+    "AVERAGE_KITS_PER_LITTER",
+    "平均窝产数",
+    "BIRTH",
+    "产崽",
+    "COUNT_PER_LITTER",
+    "DECIMAL_2",
+    "产崽总数 / 产崽窝数",
+  ],
+  [
+    "LIVE_KIT_COUNT",
+    "活崽总数",
+    "BIRTH",
+    "产崽",
+    "COUNT",
+    "INTEGER",
+    "批次内活崽数之和",
+  ],
+  [
+    "LIVE_BIRTH_RATE",
+    "平均活崽率",
+    "BIRTH",
+    "产崽",
+    "PERCENT",
+    "PERCENT_2",
+    "活崽总数 / 产崽总数",
+  ],
+  [
+    "KEPT_LITTER_COUNT",
+    "选留窝数",
+    "SELECTION",
+    "选留",
+    "LITTER",
+    "INTEGER",
+    "留崽数大于零的窝数",
+  ],
+  [
+    "KEPT_KIT_COUNT",
+    "选留总数",
+    "SELECTION",
+    "选留",
+    "COUNT",
+    "INTEGER",
+    "批次内选留数之和",
+  ],
+  [
+    "KEPT_LIVE_RATE",
+    "选留活崽率",
+    "SELECTION",
+    "选留",
+    "PERCENT",
+    "PERCENT_2",
+    "选留总数 / 活崽总数",
+  ],
+  [
+    "AVERAGE_KEPT_PER_LITTER",
+    "窝均选留",
+    "SELECTION",
+    "选留",
+    "COUNT_PER_LITTER",
+    "DECIMAL_2",
+    "选留总数 / 选留窝数",
+  ],
+  [
+    "WEANED_KIT_COUNT",
+    "断奶数量",
+    "WEANING",
+    "断奶",
+    "COUNT",
+    "INTEGER",
+    "批次内断奶数之和",
+  ],
+  [
+    "AVERAGE_WEANING_WEIGHT",
+    "断奶均重",
+    "WEANING",
+    "断奶",
+    "KG_PER_RABBIT",
+    "DECIMAL_2",
+    "断奶总重快照之和 / 断奶数量",
+  ],
+  [
+    "WEANING_SURVIVAL_RATE",
+    "断奶成活率",
+    "WEANING",
+    "断奶",
+    "PERCENT",
+    "PERCENT_2",
+    "断奶数量 / 选留总数",
+  ],
+  [
+    "SOLD_RABBIT_COUNT",
+    "出栏数量",
+    "OUTBOUND",
+    "出栏",
+    "COUNT",
+    "INTEGER",
+    "批次快照匹配的已销售兔只数",
+  ],
+  [
+    "OUTBOUND_SURVIVAL_RATE",
+    "出栏成活率",
+    "OUTBOUND",
+    "出栏",
+    "PERCENT",
+    "PERCENT_2",
+    "出栏数量 / 断奶数量",
+  ],
+  [
+    "SOLD_WEIGHT",
+    "出栏总重",
+    "OUTBOUND",
+    "出栏",
+    "KG",
+    "DECIMAL_2",
+    "批次销售实际重量之和",
+  ],
+  [
+    "AVERAGE_SOLD_WEIGHT",
+    "出栏均重",
+    "OUTBOUND",
+    "出栏",
+    "KG_PER_RABBIT",
+    "DECIMAL_2",
+    "出栏总重 / 出栏数量",
+  ],
+  [
+    "TOTAL_SALES_AMOUNT",
+    "总销售金额",
+    "SALES",
+    "销售",
+    "CNY",
+    "DECIMAL_2",
+    "批次销售金额快照之和",
+  ],
+  [
+    "SALES_PRICE_PER_KG",
+    "销售单价（重量口径）",
+    "SALES",
+    "销售",
+    "CNY_PER_KG",
+    "DECIMAL_2",
+    "总销售金额 / 出栏总重",
+  ],
+  [
+    "SALES_PRICE_PER_RABBIT",
+    "销售单价（只数口径）",
+    "SALES",
+    "销售",
+    "CNY_PER_RABBIT",
+    "DECIMAL_2",
+    "总销售金额 / 出栏数量",
+  ],
+  [
+    "FULL_FEED_CONVERSION_RATIO",
+    "全程料肉比",
+    "FEED_CONVERSION",
+    "料肉比",
+    "RATIO",
+    "DECIMAL_2",
+    "批次全程饲料量 /（商品兔实际销售重量 + 转后备兔实测总重）",
+  ],
+  [
+    "FATTENING_FEED_CONVERSION_RATIO",
+    "育肥期料肉比",
+    "FEED_CONVERSION",
+    "料肉比",
+    "RATIO",
+    "DECIMAL_2",
+    "批次育肥饲料量 /（商品兔实际销售重量 + 转后备兔实测总重 - 断奶总重）",
+  ],
+  [
+    "CARCASS_YIELD_RATE",
+    "出肉率",
+    "FEED_CONVERSION",
+    "料肉比",
+    "PERCENT",
+    "PERCENT_2",
+    "最新出肉率版本",
+  ],
 ];
 
 function metricStatus(code) {
@@ -110,50 +334,50 @@ function metricFixtureCauses(status) {
 function buildMetrics() {
   return metricCatalog.map(
     ([code, name, stage, stageName, unit, format, formula], index) => {
-    const status = metricStatus(code);
-    const dateValue =
-      code === "MATING_DATE"
-        ? {
-            firstDate: "2024-04-22",
-            lastDate: "2024-04-23",
-            dateCount: 2,
-            dailyCycleCounts: [
-              { date: "2024-04-22", cycleCount: 8 },
-              { date: "2024-04-23", cycleCount: 4 },
-            ],
-          }
-        : null;
-    const displayValue = metricFixtureDisplay(code, index, status);
-    return {
-      code,
-      name,
-      stage,
-      stageName,
-      order: (index + 1) * 10,
-      excelColumnName: name,
-      valueType: code === "MATING_DATE" ? "DATE_RANGE" : "NUMBER",
-      unit,
-      format,
-      formula,
-      status,
-      numericValue:
-        status === "AVAILABLE" && code !== "MATING_DATE"
-          ? format === "PERCENT_2"
-            ? 0.5
-            : index + 1
+      const status = metricStatus(code);
+      const dateValue =
+        code === "MATING_DATE"
+          ? {
+              firstDate: "2024-04-22",
+              lastDate: "2024-04-23",
+              dateCount: 2,
+              dailyCycleCounts: [
+                { date: "2024-04-22", cycleCount: 8 },
+                { date: "2024-04-23", cycleCount: 4 },
+              ],
+            }
+          : null;
+      const displayValue = metricFixtureDisplay(code, index, status);
+      return {
+        code,
+        name,
+        stage,
+        stageName,
+        order: (index + 1) * 10,
+        excelColumnName: name,
+        valueType: code === "MATING_DATE" ? "DATE_RANGE" : "NUMBER",
+        unit,
+        format,
+        formula,
+        status,
+        numericValue:
+          status === "AVAILABLE" && code !== "MATING_DATE"
+            ? format === "PERCENT_2"
+              ? 0.5
+              : index + 1
+            : null,
+        displayValue,
+        dateValue,
+        numerator: code.includes("RATE")
+          ? { code: "NUMERATOR", label: "分子", value: 1, unit: "COUNT" }
           : null,
-      displayValue,
-      dateValue,
-      numerator: code.includes("RATE")
-        ? { code: "NUMERATOR", label: "分子", value: 1, unit: "COUNT" }
-        : null,
-      denominator: code.includes("RATE")
-        ? { code: "DENOMINATOR", label: "分母", value: 2, unit: "COUNT" }
-        : null,
-      components: [],
-      missingCauses: metricFixtureCauses(status),
-    };
-  },
+        denominator: code.includes("RATE")
+          ? { code: "DENOMINATOR", label: "分母", value: 2, unit: "COUNT" }
+          : null,
+        components: [],
+        missingCauses: metricFixtureCauses(status),
+      };
+    },
   );
 }
 
@@ -538,7 +762,10 @@ async function main() {
       await page.locator('[data-metric-code="SERVER_ADDED_METRIC"]').count(),
       0,
     );
-    assert.equal(await page.getByRole("heading", { name: "其他指标" }).count(), 0);
+    assert.equal(
+      await page.getByRole("heading", { name: "其他指标" }).count(),
+      0,
+    );
     await assertMetric(page, "MATED_DOE_COUNT", "0");
     await assertMetric(page, "DOE_BUCK_RATIO", "暂无可计算数据");
     await assertMetric(page, "SOLD_WEIGHT", "历史数据缺失");

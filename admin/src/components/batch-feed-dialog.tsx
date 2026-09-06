@@ -340,8 +340,7 @@ export function BatchFeedDialog({
                           step="0.01"
                           value={allocationAmounts[key] ?? ""}
                           disabled={
-                            saving ||
-                            canAutoAssignFeedGroup(preview.groups)
+                            saving || canAutoAssignFeedGroup(preview.groups)
                           }
                           required
                           onChange={(event) =>

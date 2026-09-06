@@ -67,12 +67,7 @@ import {
   rabbitStageSummary,
   rabbitTypeLabel,
 } from "@/lib/rabbits";
-import type {
-  BatchRabbit,
-  Cage,
-  ProductionBatch,
-  Rabbit,
-} from "@/types/api";
+import type { BatchRabbit, Cage, ProductionBatch, Rabbit } from "@/types/api";
 import type { VaccinationRecord } from "@/types/rabbit-vaccination";
 
 export function WorkspaceRabbitDetailPage() {
@@ -85,9 +80,9 @@ export function WorkspaceRabbitDetailPage() {
     Record<string, string>
   >({});
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
-  const [batchMemberships, setBatchMemberships] = useState<BatchRabbit[] | null>(
-    null,
-  );
+  const [batchMemberships, setBatchMemberships] = useState<
+    BatchRabbit[] | null
+  >(null);
   const [vaccinations, setVaccinations] = useState<VaccinationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const loadVersion = useRef(0);
@@ -122,11 +117,7 @@ export function WorkspaceRabbitDetailPage() {
   const load = useCallback(async () => {
     if (activeHouseId !== activeHouseIdRef.current) return;
     const version = ++loadVersion.current;
-    if (
-      !activeHouseId ||
-      !Number.isSafeInteger(rabbitId) ||
-      rabbitId <= 0
-    ) {
+    if (!activeHouseId || !Number.isSafeInteger(rabbitId) || rabbitId <= 0) {
       setRabbit(null);
       setCages([]);
       setReproStageLabels({});

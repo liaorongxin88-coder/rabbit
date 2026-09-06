@@ -29,6 +29,30 @@ test("prefers the RFC 5987 UTF-8 filename and strips path components", () => {
   );
 });
 
+test("matches exact parameters and safely handles quoted values", () => {
+  assert.equal(
+    parseContentDispositionFilename(
+      "attachment; xfilename=evil.xlsx; notfilename*=UTF-8''evil.xlsx",
+      "fallback.xlsx",
+    ),
+    "fallback.xlsx",
+  );
+  assert.equal(
+    parseContentDispositionFilename(
+      "attachment; filename=ascii.xlsx; filename*=ISO-8859-1''caf%E9.xlsx",
+      "fallback.xlsx",
+    ),
+    "ascii.xlsx",
+  );
+  assert.equal(
+    parseContentDispositionFilename(
+      'attachment; filename="batch\\"report.xlsx"',
+      "fallback.xlsx",
+    ),
+    "batch_report.xlsx",
+  );
+});
+
 test("falls back for missing or unusable filenames", () => {
   assert.equal(
     parseContentDispositionFilename(null, "fallback.xlsx"),
@@ -38,7 +62,10 @@ test("falls back for missing or unusable filenames", () => {
     sanitizeDownloadFilename("../", "fallback.xlsx"),
     "fallback.xlsx",
   );
-  assert.equal(sanitizeDownloadFilename("CON.xlsx", "fallback.xlsx"), "_CON.xlsx");
+  assert.equal(
+    sanitizeDownloadFilename("CON.xlsx", "fallback.xlsx"),
+    "_CON.xlsx",
+  );
   assert.equal(
     sanitizeDownloadFilename("batch-statistics.xlsx. ", "fallback.xlsx"),
     "batch-statistics.xlsx",

@@ -14,18 +14,18 @@ test("resolves replacement source from birth batch or active fattening membershi
     isActive: true,
   });
 
-  assert.deepEqual(
-    rabbitReplacementSource({ birthBatchId: 7 }, [active(8)]),
-    { status: "ready", batchId: 7 },
-  );
+  assert.deepEqual(rabbitReplacementSource({ birthBatchId: 7 }, [active(8)]), {
+    status: "ready",
+    batchId: 7,
+  });
   assert.deepEqual(
     rabbitReplacementSource({ birthBatchId: null }, [active(8)]),
     { status: "ready", batchId: 8 },
   );
-  assert.deepEqual(
-    rabbitReplacementSource({ birthBatchId: null }, []),
-    { status: "ready", batchId: null },
-  );
+  assert.deepEqual(rabbitReplacementSource({ birthBatchId: null }, []), {
+    status: "ready",
+    batchId: null,
+  });
   assert.equal(
     rabbitReplacementSource({ birthBatchId: null }, [active(8), active(9)])
       .status,
