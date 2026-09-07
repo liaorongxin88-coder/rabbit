@@ -108,6 +108,17 @@ artifacts/batch-statistics-cross-client/932481d900bb90978433/
 
 最终回归包括：新鲜 schema 的复杂矩阵 3 项集成测试；后端 1,094 项测试、Checkstyle 和 package；Admin lint、93 项测试、242 模块 build、8 项复杂定义契约和 mocked 浏览器；Flutter analyzer 与 628 项测试；shell、三个 Node 入口及四个嵌入 Node heredoc 语法检查。全部通过。
 
+## Main CI 修复
+
+2026-09-07 推送 `9725dcd` 后，GitHub Actions run `34116740251` 的 backend E2E shard 3 和 shard 4 失败。其他实际质量 job 已通过，聚合 job 因分片失败而失败。
+
+- `BatchStatisticsIT` 和 `BatchStatisticsExportIT` 首先在 `CONCEPTION_RATE` 失败。`E2eApiClient` 已启用 `USE_BIG_DECIMAL_FOR_FLOATS`，API 返回 DECIMAL128 原始值 `0.860975609756097560975609756097561`，共享附件 fixture 仍保存从 double 截断的 `0.8609756097560975`。修复把全部 15 项比率或均值复算，其中 11 个非终止小数改为完整 DECIMAL128 字符串，展示值、整数、终止小数、日期和指标顺序不变。
+- `ReproDeliveryIT.replayedDeliveryDoesNotDoubleCountPerformance` 和 `ReproStateMachineIT.repeatedRequestIdReplaysInsteadOfAdvancingTwice` 每次重试分别调用 `now()` 或 `new Date()`。`requestPayloadHash` 正确包含 `occurredAt`，所以本地同毫秒执行可能通过，CI 跨毫秒执行会把第二次请求识别为变更载荷并返回 409。修复让两次提交复用同一个时间值。
+- `ReproRequiredFieldsIT` 的重放用例也改为复用完整 adjustment body。当前入口按 request ID 和操作类型回放，但测试现在明确表达“不变载荷重试”，不会在未来增加 payload 绑定时引入同类时钟抖动。
+- 没有修改生产 metric 计算、`requestPayloadHash`、API 或 CI workflow。同 requestId 加不同时间仍是不同载荷，生产 409 行为保持不变。
+
+修复后使用隔离 schema `_ci_fix_review` 运行 `BatchStatisticsIT`、`BatchStatisticsExportIT`、`ReproDeliveryIT`、`ReproStateMachineIT` 和 `ReproRequiredFieldsIT`，共 34 项测试，结果为零失败、零错误、零跳过。15 项独立 DECIMAL128 复算无差异，Maven Checkstyle 和四个 Java 文件主 LSP 均为 0。短审查未发现测试弱化或遗漏。新的远端 CI 结果需在修复提交推送后确认。
+
 ## 契约与诊断
 
 - 最终跨端审查已核对数据库、API、Admin、Flutter 和 Excel 的固定 28 项元数据、值、状态与顺序。

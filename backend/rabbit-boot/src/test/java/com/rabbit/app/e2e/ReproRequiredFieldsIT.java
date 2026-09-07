@@ -111,15 +111,16 @@ public class ReproRequiredFieldsIT extends E2eTestSupport {
         );
 
         String requestId = requestId("increase_with_source");
+        var adjustmentBody = obj(
+            "occurredAt", now(),
+            "keptKits", 7,
+            "sourceMotherRabbitId", f.sourceDoeId,
+            "remark", "寄养转入 1 只",
+            "requestId", requestId
+        );
         JsonNode adjusted = api.postOk(
             adjustmentPath(f.cycleId), f.owner.token, f.houseId,
-            obj(
-                "occurredAt", now(),
-                "keptKits", 7,
-                "sourceMotherRabbitId", f.sourceDoeId,
-                "remark", "寄养转入 1 只",
-                "requestId", requestId
-            )
+            adjustmentBody
         );
         Assertions.assertEquals(6, adjusted.get("previousKeptKits").asInt());
         Assertions.assertEquals(7, adjusted.get("keptKits").asInt());
@@ -133,13 +134,7 @@ public class ReproRequiredFieldsIT extends E2eTestSupport {
 
         JsonNode replayed = api.postOk(
             adjustmentPath(f.cycleId), f.owner.token, f.houseId,
-            obj(
-                "occurredAt", now(),
-                "keptKits", 7,
-                "sourceMotherRabbitId", f.sourceDoeId,
-                "remark", "寄养转入 1 只",
-                "requestId", requestId
-            )
+            adjustmentBody
         );
         Assertions.assertTrue(replayed.get("replayed").asBoolean());
         Assertions.assertEquals(1, jdbc.queryForObject(

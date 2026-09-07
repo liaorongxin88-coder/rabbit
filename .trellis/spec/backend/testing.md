@@ -21,6 +21,25 @@ The Maven `e2e` profile skips Surefire and runs `**/*IT.java` through Failsafe w
 
 Use `bash scripts/e2e-local.sh` instead of a raw local `-Pe2e verify`. The script protects against unsafe default database URLs and supplies the documented environment. E2E MySQL uses `Asia/Shanghai` because date assertions compare application time with database `now()`.
 
+### Payload-sensitive replay tests
+
+When a test expects the same `requestId` to replay successfully, construct the request body once or capture every hash-bound value before the first submission. Do not call `now()`, `new Date()`, or another clock separately for each attempt when `occurredAt`, `nextRemindAt`, or that field's epoch value participates in the payload hash. Fast local calls can land in one millisecond and pass while CI produces distinct hashes and correctly returns 409.
+
+A changed-payload conflict test must keep all unrelated fields fixed and change only the field named by the test. This proves the conflict comes from the intended input rather than a regenerated timestamp.
+
+```java
+// Wrong: each retry can carry a different hash-bound timestamp.
+for (int attempt = 0; attempt < 2; attempt++) {
+    post(body("occurredAt", now(), "requestId", requestId));
+}
+
+// Correct: both attempts are the same logical request.
+long occurredAt = now();
+Map<String, Object> body = body("occurredAt", occurredAt, "requestId", requestId);
+post(body);
+post(body);
+```
+
 ## Commands
 
 ```bash

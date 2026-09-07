@@ -388,6 +388,12 @@ and otherwise equals the localized status text. This distinction prevents a
 correct UI state such as `DATA_MISSING` from being compared with API
 `displayValue: null`.
 
+`E2eApiClient` enables Jackson `USE_BIG_DECIMAL_FOR_FLOATS`. Baseline and
+complex fixtures must therefore store nonterminating calculated values as exact
+`MathContext.DECIMAL128` decimal strings and compare them with
+`BigDecimal.compareTo`. A 16-digit decimal copied from a `double` is not the raw
+metric value, even when both values round to the same two-decimal display text.
+
 The named scenarios are:
 
 ```text
@@ -439,6 +445,7 @@ writing empty objects or misleading `false` values.
 | Condition | Required behavior |
 | --- | --- |
 | Catalog is missing a scenario, metric, status, or cause | Stop before clients; never derive the missing expectation from API output |
+| Expected ratio was copied from `double` output | Reject the truncated value; store and compare the exact DECIMAL128 result |
 | Completed-batch feed occurs at end-day 23:59:59 | Include it |
 | Feed occurs at the next natural day 00:00:00 | Exclude it |
 | Mixed sale amount has a rounding remainder | Apply the production deterministic group order and conserve the order total |
@@ -474,7 +481,9 @@ writing empty objects or misleading `false` values.
   `BatchStatisticsComplexMatrixExportIT` on a fresh V56-or-newer schema. Assert
   six ordered scenarios, 28 metrics each, exact `BigDecimal` values, XLSX cell
   types and formats, collision-safe cleanup, VIEWER permissions, 58% replay,
-  and 59% conflict.
+  and 59% conflict. Keep the attachment-scale expectations at the same
+  DECIMAL128 precision so `BatchStatisticsIT` and `BatchStatisticsExportIT`
+  validate all 28 raw values after BigDecimal JSON decoding.
 - Run the complex cross-client command on an unlocked physical device. Require
   six Admin scenario workbooks, one Admin VIEWER workbook, five full-page Admin
   scenario images, at least 40 Android group images, support-batch evidence,
@@ -491,6 +500,7 @@ writing empty objects or misleading `false` values.
 
 ```text
 end_date timestamp + 1 day -> partial next-day feed included
+16-digit double literal -> exact BigDecimal API value mismatch
 API displayValue null == rendered UI text -> client evidence mismatch
 takeScreenshot -> delete reportData screenshots -> driver has no PNG
 passed baseline + security:false -> ambiguous manifest
@@ -500,6 +510,7 @@ passed baseline + security:false -> ambiguous manifest
 
 ```text
 DATE(end_date) + 1 day -> exclusive next-midnight boundary
+DECIMAL128 string + BigDecimal.compareTo -> exact raw-value evidence
 nullable displayValue + explicit visibleValue -> exact API and UI evidence
 takeScreenshot -> driver writes PNG -> verify names -> sanitize result JSON
 passed baseline -> omit complex-only validation keys

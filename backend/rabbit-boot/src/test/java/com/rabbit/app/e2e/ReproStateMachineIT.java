@@ -325,14 +325,17 @@ public class ReproStateMachineIT extends E2eTestSupport {
         ReproResult opened = openAtEstrus(fixture, "idem_open");
 
         String requestId = requestId("idem_estrus");
+        Date occurredAt = new Date();
         Date override = new Date(System.currentTimeMillis() + 7L * 24 * 3600 * 1000);
         ReproResult first = stateMachine.apply(
             command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId)
+                .occurredAt(occurredAt)
                 .nextRemindAt(override)
                 .build()
         );
         ReproResult second = stateMachine.apply(
             command(fixture, opened.cycleId(), ReproAction.ESTRUS, requestId)
+                .occurredAt(occurredAt)
                 .nextRemindAt(override)
                 .build()
         );

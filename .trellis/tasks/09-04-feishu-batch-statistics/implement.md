@@ -268,6 +268,7 @@ RABBIT_BATCH_STATISTICS_SUITE=complex \
 - [x] Admin lint、93 项测试、242 模块 build、复杂定义契约 8 项和批次统计浏览器脚本通过；补充畸形 schema-v1 响应及下载文件名参数回归。
 - [x] Flutter `./rabbit check` 通过 628 项测试和分析，debug APK 构建成功。
 - [x] 数据库迁移、权限、兔舍隔离、幂等和历史兼容有 25 项新鲜 schema 自动化证据。
+- [x] 修复 main CI run `34116740251` 暴露的测试契约问题：附件 fixture 的非终止比率使用 DECIMAL128 完整精度，三个重放测试复用相同时间或完整请求体；隔离 schema 下相关 34 项 E2E、Checkstyle、精确值复算和 Java LSP 通过，等待推送后的远端 CI 复核。
 - [ ] 固定 SQL 尚需证明生产全部兔舍在 7 个完整自然日内没有 `LEGACY_*_GAP`，发布检查记录需包含窗口、执行人和结果。
 - [x] 28 项 code、顺序、原始值、展示值和四种状态在后端、Admin、Flutter 和 Excel 一致。
 - [x] Excel 可正常打开，文件名和响应头正确，未授权或跨兔舍请求被拒绝。

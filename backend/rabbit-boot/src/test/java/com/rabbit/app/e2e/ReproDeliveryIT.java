@@ -159,12 +159,13 @@ public class ReproDeliveryIT extends E2eTestSupport {
     void replayedDeliveryDoesNotDoubleCountPerformance() {
         Fixture f = pregnantDoe("deliv_replay");
         String rid = requestId("dup");
+        long occurredAt = now();
 
         for (int i = 0; i < 2; i++) {
             api.postOk("/api/repro/cycles/" + f.cycleId + "/actions", f.owner.token, f.houseId, obj(
                 "action", "DELIVERY",
                 "outcome", "BORN",
-                "occurredAt", now(),
+                "occurredAt", occurredAt,
                 "totalKits", 8,
                 "liveKits", 6,
                 "keptKits", 6,
