@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -6,8 +9,15 @@ import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rabbit_flutter/main.dart' as app;
+import 'package:rabbit_flutter/src/data/repositories/batches/repository.dart';
 
 const _runId = String.fromEnvironment('RABBIT_E2E_RUN_ID');
+const _suite = String.fromEnvironment(
+  'RABBIT_E2E_SUITE',
+  defaultValue: 'baseline',
+);
+const _scenariosJson = String.fromEnvironment('RABBIT_E2E_SCENARIOS_JSON');
+const _usersJson = String.fromEnvironment('RABBIT_E2E_USERS_JSON');
 const _userName = String.fromEnvironment('RABBIT_E2E_USERNAME');
 const _password = String.fromEnvironment('RABBIT_E2E_PASSWORD');
 const _houseId = int.fromEnvironment('RABBIT_E2E_HOUSE_ID');
@@ -102,61 +112,220 @@ void main() {
   testWidgets(
     'Android renders the acceptance fixture batch statistics',
     (tester) async {
-      _assertFixtureDefines();
-      await _clearLocalAppState();
-      await app.main();
-      await binding.convertFlutterSurfaceToImage();
+      if (_suite == 'complex') {
+        await _runComplexMatrix(binding, tester);
+        return;
+      }
+      if (_suite != 'baseline') {
+        fail('Unsupported RABBIT_E2E_SUITE: $_suite');
+      }
+      await _runBaseline(binding, tester);
+    },
+  );
+}
 
-      _assertPortrait(tester);
-      await _waitFor(tester, find.byKey(const ValueKey('login-mode-selector')));
-      await _login(tester);
-      await _goTo(tester, '/houses/$_houseId/batches/$_batchId');
+Future<void> _runBaseline(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+) async {
+  _assertFixtureDefines();
+  await _clearLocalAppState();
+  await app.main();
+  await binding.convertFlutterSurfaceToImage();
 
-      final detailList = find.byKey(const ValueKey('batch-detail-member-list'));
-      await _waitFor(tester, detailList, timeout: const Duration(seconds: 40));
-      await _revealInDetail(tester, find.text('批次统计'));
-      await _waitForStatistics(tester);
+  _assertPortrait(tester);
+  await _waitFor(tester, find.byKey(const ValueKey('login-mode-selector')));
+  await _login(
+    tester,
+    const _TestUser(
+      role: 'OWNER',
+      userName: _userName,
+      password: _password,
+      houseId: _houseId,
+    ),
+  );
+  await _openBatchStatistics(tester, houseId: _houseId, batchId: _batchId);
 
-      _expectMetricOrderAndValues();
+  await _expectMetricOrderValuesAndCauses(tester, _metrics);
 
-      final screenshotNames = <String>[];
-      final actionEvidence = await _inspectAuthorizedActions(
-        binding,
-        tester,
-        screenshotNames,
-      );
+  final screenshotNames = <String>[];
+  final actionEvidence = await _inspectAuthorizedActions(
+    binding,
+    tester,
+    screenshotNames,
+  );
 
-      for (final group in _groups) {
+  for (final group in _groups) {
+    final groupFinder = find.byKey(
+      ValueKey('batch-statistics-group-${group.stage}'),
+    );
+    await _alignAtTop(tester, groupFinder);
+    _expectGroup(group, groupFinder);
+    await _takeScreenshot(binding, tester, group.screenshotName);
+    screenshotNames.add(group.screenshotName);
+  }
+
+  expect(tester.takeException(), isNull);
+  binding.reportData ??= <String, dynamic>{};
+  binding.reportData!.addAll(<String, dynamic>{
+    'runId': _runId,
+    'houseId': _houseId,
+    'batchId': _batchId,
+    'metricCodes': _metrics.map((metric) => metric.code).toList(),
+    'metricDisplayValues': <String, String>{
+      for (final metric in _metrics) metric.code: metric.displayValue!,
+    },
+    'groupStages': _groups.map((group) => group.stage).toList(),
+    'screenshotNames': screenshotNames,
+    'fixtureMutated': false,
+    ...actionEvidence,
+  });
+}
+
+Future<void> _runComplexMatrix(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+) async {
+  if (_runId.isEmpty) {
+    fail('Missing --dart-define=RABBIT_E2E_RUN_ID');
+  }
+  final scenarios = _parseComplexScenarios();
+  final users = _parseComplexUsers(scenarios.first.houseId);
+  final owner = users.singleWhere((user) => user.role == 'OWNER');
+  final readOnly = users.singleWhere((user) => user.role == 'READ_ONLY');
+  final outsider = users.singleWhere((user) => user.role == 'OUTSIDER');
+  final securityScenario = scenarios.singleWhere(
+    (scenario) => scenario.id == 'security-and-retry',
+  );
+  final supportScenario = scenarios.singleWhere(
+    (scenario) => scenario.batchRole == 'support',
+  );
+
+  await _clearLocalAppState();
+  await app.main();
+  await binding.convertFlutterSurfaceToImage();
+  _assertPortrait(tester);
+  await _waitFor(tester, find.byKey(const ValueKey('login-mode-selector')));
+  await _login(tester, owner);
+
+  final screenshotNames = <String>[];
+  final scenarioResults = <Map<String, dynamic>>[];
+  Map<String, dynamic>? ownerSecurityEvidence;
+  for (final scenario in scenarios) {
+    await _openScenario(tester, scenario);
+    await _expectScenario(tester, scenario);
+
+    final scenarioScreenshots = <String>[];
+    if (scenario.batchRole == 'primary') {
+      for (final group in scenario.groups) {
         final groupFinder = find.byKey(
           ValueKey('batch-statistics-group-${group.stage}'),
         );
         await _alignAtTop(tester, groupFinder);
         _expectGroup(group, groupFinder);
-        await _takeScreenshot(
+        final name = '${scenario.id}-${group.screenshotName}';
+        await _takeComplexScreenshot(binding, tester, name);
+        screenshotNames.add(name);
+        scenarioScreenshots.add(name);
+      }
+      if (scenario.id == 'mixed-data-quality') {
+        final name = await _captureMissingCauseEvidence(
           binding,
           tester,
-          group.screenshotName,
+          scenario,
         );
-        screenshotNames.add(group.screenshotName);
+        screenshotNames.add(name);
+        scenarioScreenshots.add(name);
       }
+    } else {
+      final salesGroup = scenario.groups.singleWhere(
+        (group) => group.stage == 'SALES',
+      );
+      final groupFinder = find.byKey(
+        ValueKey('batch-statistics-group-${salesGroup.stage}'),
+      );
+      await _alignAtTop(tester, groupFinder);
+      _expectGroup(salesGroup, groupFinder);
+      final name = '${scenario.id}-support-sales';
+      await _takeComplexScreenshot(binding, tester, name);
+      screenshotNames.add(name);
+      scenarioScreenshots.add(name);
+    }
 
-      expect(tester.takeException(), isNull);
-      binding.reportData ??= <String, dynamic>{};
-      binding.reportData!.addAll(<String, dynamic>{
-        'runId': _runId,
-        'houseId': _houseId,
-        'batchId': _batchId,
-        'metricCodes': _metrics.map((metric) => metric.code).toList(),
-        'metricDisplayValues': <String, String>{
-          for (final metric in _metrics) metric.code: metric.displayValue,
-        },
-        'groupStages': _groups.map((group) => group.stage).toList(),
-        'screenshotNames': screenshotNames,
-        'fixtureMutated': false,
-        ...actionEvidence,
-      });
-    },
+    if (scenario.id == securityScenario.id) {
+      ownerSecurityEvidence = await _inspectOwnerSecurity(
+        binding,
+        tester,
+        scenario,
+        screenshotNames,
+        scenarioScreenshots,
+      );
+    }
+    scenarioResults.add(_scenarioResult(scenario, scenarioScreenshots));
+  }
+
+  await _logoutAndClearLocalAuth(tester);
+  await _login(tester, readOnly);
+  await _openScenario(tester, securityScenario);
+  await _expectScenario(tester, securityScenario);
+  _expectReadOnlyActions();
+  final readOnlyWorkbookEvidence = await _downloadReadOnlyWorkbook(
+    tester,
+    securityScenario,
   );
+  const readOnlyScreenshot = 'security-read-only';
+  await _takeComplexScreenshot(binding, tester, readOnlyScreenshot);
+  screenshotNames.add(readOnlyScreenshot);
+
+  await _logoutAndClearLocalAuth(tester);
+  await _login(tester, outsider);
+  await _goTo(
+    tester,
+    '/houses/${securityScenario.houseId}/batches/${securityScenario.batchId}',
+  );
+  await _waitFor(
+    tester,
+    find.text('加载失败'),
+    timeout: const Duration(seconds: 40),
+  );
+  expect(find.text('无兔场权限'), findsOneWidget);
+  expect(find.byKey(const ValueKey('batch-statistics-content')), findsNothing);
+  expect(find.text(securityScenario.batchCode), findsNothing);
+  const outsiderScreenshot = 'security-outsider-denied';
+  await _takeComplexScreenshot(binding, tester, outsiderScreenshot);
+  screenshotNames.add(outsiderScreenshot);
+
+  expect(tester.takeException(), isNull);
+  binding.reportData ??= <String, dynamic>{};
+  binding.reportData!.addAll(<String, dynamic>{
+    'runId': _runId,
+    'suite': 'complex',
+    'houseId': securityScenario.houseId,
+    'batchId': securityScenario.batchId,
+    'metricCodes': _metrics.map((metric) => metric.code).toList(),
+    'groupStages': _groups.map((group) => group.stage).toList(),
+    'scenarioResults': scenarioResults,
+    'screenshotNames': screenshotNames,
+    'supportScenarioId': supportScenario.id,
+    'securityEvidence': <String, dynamic>{
+      'owner': ownerSecurityEvidence,
+      'readOnly': <String, dynamic>{
+        'statisticsVisible': true,
+        'editVisible': false,
+        'historyVisible': false,
+        'exportVisible': true,
+        ...readOnlyWorkbookEvidence,
+        'screenshotName': readOnlyScreenshot,
+      },
+      'outsider': <String, dynamic>{
+        'accessDenied': true,
+        'message': '无兔场权限',
+        'targetDataVisible': false,
+        'screenshotName': outsiderScreenshot,
+      },
+    },
+    'fixtureMutated': false,
+  });
 }
 
 void _assertFixtureDefines() {
@@ -177,14 +346,148 @@ void _assertFixtureDefines() {
   }
 }
 
+const _primaryScenarioIds = <String>[
+  'complex-available',
+  'mixed-data-quality',
+  'mixed-batch-rounding',
+  'time-and-cycle-boundaries',
+  'security-and-retry',
+];
+const _supportScenarioId = 'mixed-batch-rounding-support';
+
+List<_ComplexScenario> _parseComplexScenarios() {
+  final decoded = _decodeJsonList(
+    _scenariosJson,
+    'RABBIT_E2E_SCENARIOS_JSON',
+  );
+  final scenarios = decoded
+      .map((item) => _ComplexScenario.fromJson(_jsonObject(item, 'scenario')))
+      .toList(growable: false);
+  if (scenarios.length != 6) {
+    fail('RABBIT_E2E_SCENARIOS_JSON must contain exactly 6 scenarios');
+  }
+  final byId = <String, _ComplexScenario>{};
+  for (final scenario in scenarios) {
+    if (byId[scenario.id] != null) {
+      fail('Duplicate complex scenario id: ${scenario.id}');
+    }
+    byId[scenario.id] = scenario;
+  }
+  final ordered = <_ComplexScenario>[];
+  for (final id in _primaryScenarioIds) {
+    final scenario = byId[id];
+    if (scenario == null || scenario.batchRole != 'primary') {
+      fail('Missing primary complex scenario: $id');
+    }
+    ordered.add(scenario);
+  }
+  final support = byId[_supportScenarioId];
+  if (support == null || support.batchRole != 'support') {
+    fail('Missing rounding support scenario: $_supportScenarioId');
+  }
+  ordered.add(support);
+  if (byId.length != ordered.length) {
+    fail('RABBIT_E2E_SCENARIOS_JSON contains an unknown scenario');
+  }
+
+  final targetHouseId = ordered.first.houseId;
+  if (ordered.any((scenario) => scenario.houseId != targetHouseId)) {
+    fail('All complex scenarios must belong to one target house');
+  }
+  final batchIds = ordered.map((scenario) => scenario.batchId).toSet();
+  if (batchIds.length != ordered.length) {
+    fail('Complex scenarios must use 6 distinct batch IDs');
+  }
+  return ordered;
+}
+
+List<_TestUser> _parseComplexUsers(int targetHouseId) {
+  final decoded = _decodeJsonList(_usersJson, 'RABBIT_E2E_USERS_JSON');
+  final users = decoded
+      .map((item) => _TestUser.fromJson(_jsonObject(item, 'user')))
+      .toList(growable: false);
+  const expectedRoles = {'OWNER', 'READ_ONLY', 'OUTSIDER'};
+  if (users.length != expectedRoles.length ||
+      users.map((user) => user.role).toSet().length != expectedRoles.length ||
+      !users.map((user) => user.role).toSet().containsAll(expectedRoles)) {
+    fail('RABBIT_E2E_USERS_JSON must contain OWNER, READ_ONLY, and OUTSIDER');
+  }
+  final owner = users.singleWhere((user) => user.role == 'OWNER');
+  final readOnly = users.singleWhere((user) => user.role == 'READ_ONLY');
+  final outsider = users.singleWhere((user) => user.role == 'OUTSIDER');
+  if (owner.houseId != targetHouseId || readOnly.houseId != targetHouseId) {
+    fail('OWNER and READ_ONLY must use the complex target house');
+  }
+  if (outsider.houseId == targetHouseId) {
+    fail('OUTSIDER must use the isolation house');
+  }
+  return users;
+}
+
+List<dynamic> _decodeJsonList(String source, String defineName) {
+  if (source.isEmpty) {
+    fail('Missing --dart-define=$defineName');
+  }
+  Object? decoded;
+  try {
+    decoded = jsonDecode(source);
+  } catch (_) {
+    fail('$defineName must contain valid JSON');
+  }
+  if (decoded is! List) {
+    fail('$defineName must contain a JSON array');
+  }
+  return decoded;
+}
+
+Map<String, dynamic> _jsonObject(Object? value, String label) {
+  if (value is! Map) {
+    fail('Complex $label must be a JSON object');
+  }
+  return Map<String, dynamic>.from(value);
+}
+
+String _requiredJsonText(
+  Map<String, dynamic> json,
+  String field,
+  String label,
+) {
+  final value = json[field];
+  if (value is! String || value.trim().isEmpty) {
+    fail('Complex $label requires non-empty $field');
+  }
+  return value.trim();
+}
+
+int _requiredJsonId(
+  Map<String, dynamic> json,
+  String field,
+  String label,
+) {
+  final value = json[field];
+  if (value is! num || !value.isFinite || value != value.roundToDouble()) {
+    fail('Complex $label requires integer $field');
+  }
+  final parsed = value.toInt();
+  if (parsed <= 0) {
+    fail('Complex $label requires positive $field');
+  }
+  return parsed;
+}
+
 Future<void> _clearLocalAppState() async {
   final preferences = await SharedPreferences.getInstance();
   await preferences.clear();
   await const FlutterSecureStorage().deleteAll();
 }
 
-Future<void> _login(WidgetTester tester) async {
-  await tester.tap(find.text('账号'));
+Future<void> _login(WidgetTester tester, _TestUser user) async {
+  await tester.tap(
+    find.descendant(
+      of: find.byKey(const ValueKey('login-mode-selector')),
+      matching: find.text('账号'),
+    ),
+  );
   await _pumpFrames(tester);
   await _waitFor(
     tester,
@@ -194,11 +497,11 @@ Future<void> _login(WidgetTester tester) async {
 
   await tester.enterText(
     find.byKey(const ValueKey('account-username-field')),
-    _userName,
+    user.userName,
   );
   await tester.enterText(
     find.byKey(const ValueKey('account-password-field')),
-    _password,
+    user.password,
   );
   FocusManager.instance.primaryFocus?.unfocus();
   await _pumpFrames(tester);
@@ -294,7 +597,10 @@ Future<void> _waitForStatistics(WidgetTester tester) async {
   fail('Timed out waiting for batch statistics. ${_visibleTexts()}');
 }
 
-void _expectMetricOrderAndValues() {
+Future<void> _expectMetricOrderValuesAndCauses(
+  WidgetTester tester,
+  List<_ExpectedMetric> metrics,
+) async {
   final renderedMetricKeys = find
       .byWidgetPredicate((widget) {
         final key = widget.key;
@@ -308,30 +614,65 @@ void _expectMetricOrderAndValues() {
 
   expect(
     renderedMetricKeys,
-    _metrics.map((metric) => 'batch-statistic-${metric.code}').toList(),
+    metrics.map((metric) => 'batch-statistic-${metric.code}').toList(),
     reason: 'The 28 fixed metrics must render in the approved order',
   );
 
-  for (final metric in _metrics) {
+  for (final metric in metrics) {
     final metricFinder = find.byKey(ValueKey('batch-statistic-${metric.code}'));
     expect(metricFinder, findsOneWidget, reason: metric.code);
-    expect(
-      find.descendant(
-        of: metricFinder,
-        matching: find.text('数据可用'),
-      ),
-      findsOneWidget,
-      reason: '${metric.code} must be AVAILABLE',
+    final statusText = find.descendant(
+      of: metricFinder,
+      matching: find.text(_statusLabel(metric.status)),
     );
+    // Unavailable metrics repeat the state in the badge and primary value.
     expect(
-      find.descendant(
-        of: metricFinder,
-        matching: find.text(metric.displayValue),
-      ),
-      findsOneWidget,
-      reason: '${metric.code} display value',
+      statusText,
+      findsNWidgets(metric.status == 'AVAILABLE' ? 1 : 2),
+      reason: '${metric.code} status',
     );
+    if (metric.status == 'AVAILABLE') {
+      expect(
+        find.descendant(
+          of: metricFinder,
+          matching: find.text(metric.visibleValue),
+        ),
+        findsOneWidget,
+        reason: '${metric.code} visible value',
+      );
+    }
+    if (metric.missingCauses.isNotEmpty) {
+      await _expectMetricMissingCauses(tester, metric);
+    }
   }
+}
+
+Future<void> _expectMetricMissingCauses(
+  WidgetTester tester,
+  _ExpectedMetric metric,
+) async {
+  final details = find.byKey(
+    ValueKey('batch-statistic-details-${metric.code}'),
+  );
+  await _alignAtTop(tester, details);
+  await tester.tap(details);
+  await _pumpFrames(tester);
+  final causeTexts = find
+      .descendant(of: details, matching: find.byType(Text))
+      .evaluate()
+      .map((element) {
+        final text = element.widget as Text;
+        return text.data ?? text.textSpan?.toPlainText() ?? '';
+      })
+      .where((text) => RegExp(r'（[A-Z_]+）$').hasMatch(text))
+      .toList(growable: false);
+  expect(
+    causeTexts,
+    metric.missingCauses.map((cause) => cause.visibleText).toList(),
+    reason: '${metric.code} missing cause order',
+  );
+  await tester.tap(details);
+  await _pumpFrames(tester);
 }
 
 void _expectGroup(_ExpectedGroup group, Finder groupFinder) {
@@ -358,6 +699,250 @@ void _expectGroup(_ExpectedGroup group, Finder groupFinder) {
     group.metrics.map((metric) => metric.code).toList(),
     reason: '${group.stage} metric order',
   );
+}
+
+Future<void> _openBatchStatistics(
+  WidgetTester tester, {
+  required int houseId,
+  required int batchId,
+}) async {
+  await _goTo(tester, '/houses/$houseId/batches/$batchId');
+  final detailList = find.byKey(const ValueKey('batch-detail-member-list'));
+  await _waitFor(tester, detailList, timeout: const Duration(seconds: 40));
+  await _revealInDetail(tester, find.text('批次统计'));
+  await _waitForStatistics(tester);
+}
+
+Future<void> _openScenario(
+  WidgetTester tester,
+  _ComplexScenario scenario,
+) async {
+  await _openBatchStatistics(
+    tester,
+    houseId: scenario.houseId,
+    batchId: scenario.batchId,
+  );
+  final content = find.byKey(const ValueKey('batch-statistics-content'));
+  expect(
+    find.descendant(
+      of: content,
+      matching: find.textContaining(scenario.batchCode),
+    ),
+    findsOneWidget,
+    reason: '${scenario.id} batch code',
+  );
+}
+
+Future<void> _expectScenario(
+  WidgetTester tester,
+  _ComplexScenario scenario,
+) async {
+  final renderedGroupKeys = find
+      .byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> &&
+            key.value.startsWith('batch-statistics-group-');
+      })
+      .evaluate()
+      .map((element) => (element.widget.key! as ValueKey<String>).value)
+      .toList(growable: false);
+  expect(
+    renderedGroupKeys,
+    scenario.groups
+        .map((group) => 'batch-statistics-group-${group.stage}')
+        .toList(),
+    reason: '${scenario.id} group order',
+  );
+  await _expectMetricOrderValuesAndCauses(tester, scenario.metrics);
+}
+
+Future<String> _captureMissingCauseEvidence(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+  _ComplexScenario scenario,
+) async {
+  final candidates = scenario.metrics
+      .where((metric) => metric.missingCauses.isNotEmpty)
+      .toList(growable: false)
+    ..sort(
+      (first, second) =>
+          second.missingCauses.length.compareTo(first.missingCauses.length),
+    );
+  if (candidates.isEmpty) {
+    fail('${scenario.id} must include unavailable metrics');
+  }
+  final metric = candidates.first;
+  final details = find.byKey(
+    ValueKey('batch-statistic-details-${metric.code}'),
+  );
+  await _alignAtTop(tester, details);
+  await tester.tap(details);
+  await _pumpFrames(tester);
+  for (final cause in metric.missingCauses) {
+    expect(
+      find.descendant(of: details, matching: find.text(cause.visibleText)),
+      findsOneWidget,
+    );
+  }
+  final name = '${scenario.id}-missing-causes';
+  await _takeComplexScreenshot(binding, tester, name);
+  await tester.tap(details);
+  await _pumpFrames(tester);
+  return name;
+}
+
+Future<Map<String, dynamic>> _inspectOwnerSecurity(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+  _ComplexScenario scenario,
+  List<String> allScreenshotNames,
+  List<String> scenarioScreenshotNames,
+) async {
+  final edit = find.byKey(const ValueKey('batch-carcass-yield-edit'));
+  final history = find.byKey(const ValueKey('batch-carcass-yield-history'));
+  final export = find.byKey(const ValueKey('batch-statistics-export'));
+  expect(edit, findsOneWidget);
+  expect(history, findsOneWidget);
+  expect(export, findsOneWidget);
+
+  await _alignAtTop(tester, edit);
+  const actionsScreenshot = 'security-owner-actions';
+  await _takeComplexScreenshot(binding, tester, actionsScreenshot);
+  allScreenshotNames.add(actionsScreenshot);
+  scenarioScreenshotNames.add(actionsScreenshot);
+
+  await tester.tap(history);
+  await _waitFor(tester, find.text('出肉率版本历史'));
+  await _waitFor(tester, find.textContaining('共 1 条'));
+  final carcassMetric = scenario.metrics.singleWhere(
+    (metric) => metric.code == 'CARCASS_YIELD_RATE',
+  );
+  expect(
+    find.textContaining('${carcassMetric.visibleValue} ·'),
+    findsOneWidget,
+    reason: 'OWNER must see the unique security carcass-yield version',
+  );
+  const historyScreenshot = 'security-owner-history';
+  await _takeComplexScreenshot(binding, tester, historyScreenshot);
+  allScreenshotNames.add(historyScreenshot);
+  scenarioScreenshotNames.add(historyScreenshot);
+  await tester.tap(find.byTooltip('关闭').last);
+  await _pumpFrames(tester);
+  await _waitFor(tester, history);
+
+  return <String, dynamic>{
+    'editVisible': true,
+    'historyVisible': true,
+    'exportVisible': true,
+    'historyVersionCount': 1,
+    'screenshotNames': <String>[
+      actionsScreenshot,
+      historyScreenshot,
+    ],
+  };
+}
+
+void _expectReadOnlyActions() {
+  for (final key in <String>[
+    'batch-carcass-yield-edit',
+    'batch-carcass-yield-history',
+    'batch-rename-button',
+    'batch-add-members-button',
+    'batch-complete-button',
+  ]) {
+    expect(find.byKey(ValueKey(key)), findsNothing,
+        reason: '$key is read-only');
+  }
+  expect(
+    find.byKey(const ValueKey('batch-statistics-export')),
+    findsOneWidget,
+    reason: 'READ_ONLY must see the statistics export entrance',
+  );
+}
+
+Future<Map<String, dynamic>> _downloadReadOnlyWorkbook(
+  WidgetTester tester,
+  _ComplexScenario scenario,
+) async {
+  final content = find.byKey(const ValueKey('batch-statistics-content'));
+  await _waitFor(tester, content);
+  final container = ProviderScope.containerOf(tester.element(content));
+  final evidence = await tester.runAsync<Map<String, dynamic>>(() async {
+    final file =
+        await container.read(batchRepositoryProvider).downloadBatchStatistics(
+              houseId: scenario.houseId,
+              batchId: scenario.batchId,
+            );
+    try {
+      final bytes = await file.readAsBytes();
+      if (bytes.length < 2 || ascii.decode(bytes.sublist(0, 2)) != 'PK') {
+        fail('READ_ONLY batch statistics export is not an OOXML workbook');
+      }
+      return <String, dynamic>{
+        'xlsxDownloaded': true,
+        'xlsxByteLength': bytes.length,
+        'xlsxZipSignature': 'PK',
+      };
+    } finally {
+      if (await file.exists()) await file.delete();
+    }
+  });
+  if (evidence == null) {
+    fail('READ_ONLY batch statistics export did not complete');
+  }
+  return evidence;
+}
+
+Future<void> _logoutAndClearLocalAuth(WidgetTester tester) async {
+  final profile = find.byKey(const ValueKey('nav-profile'));
+  await _waitFor(tester, profile);
+  await tester.tap(profile);
+  await _pumpFrames(tester);
+  final logout = find.byKey(const ValueKey('profile-logout-button'));
+  await _waitFor(tester, logout);
+  await tester.ensureVisible(logout);
+  await tester.tap(logout);
+  await _waitFor(tester, find.byKey(const ValueKey('login-mode-selector')));
+  await _clearLocalAppState();
+}
+
+Map<String, dynamic> _scenarioResult(
+  _ComplexScenario scenario,
+  List<String> screenshotNames,
+) {
+  return <String, dynamic>{
+    'id': scenario.id,
+    'batchRole': scenario.batchRole,
+    'houseId': scenario.houseId,
+    'batchId': scenario.batchId,
+    'batchCode': scenario.batchCode,
+    'metricCodes': scenario.metrics.map((metric) => metric.code).toList(),
+    'metricDisplayValues': <String, String?>{
+      for (final metric in scenario.metrics) metric.code: metric.displayValue,
+    },
+    'metricVisibleValues': <String, String>{
+      for (final metric in scenario.metrics) metric.code: metric.visibleValue,
+    },
+    'metricStatuses': <String, String>{
+      for (final metric in scenario.metrics) metric.code: metric.status,
+    },
+    'metricMissingCauses': <String, List<Map<String, String>>>{
+      for (final metric in scenario.metrics)
+        metric.code: metric.missingCauses
+            .map((cause) => cause.toJson())
+            .toList(growable: false),
+    },
+    'groupStages': scenario.groups.map((group) => group.stage).toList(),
+    'screenshotNames': screenshotNames,
+  };
+}
+
+Future<void> _takeComplexScreenshot(
+  IntegrationTestWidgetsFlutterBinding binding,
+  WidgetTester tester,
+  String name,
+) async {
+  await _takeScreenshot(binding, tester, name);
 }
 
 Future<Map<String, dynamic>> _inspectAuthorizedActions(
@@ -507,8 +1092,191 @@ class _ExpectedGroup {
 }
 
 class _ExpectedMetric {
-  const _ExpectedMetric(this.code, this.displayValue);
+  const _ExpectedMetric(
+    this.code,
+    this.displayValue, {
+    this.status = 'AVAILABLE',
+    this.missingCauses = const [],
+  });
+
+  factory _ExpectedMetric.fromJson(Map<String, dynamic> json) {
+    final code = _requiredJsonText(json, 'code', 'metric');
+    final status = _requiredJsonText(json, 'status', 'metric $code');
+    const statuses = {
+      'AVAILABLE',
+      'NOT_APPLICABLE',
+      'NOT_RECORDED',
+      'DATA_MISSING',
+    };
+    if (!statuses.contains(status)) {
+      fail('Complex metric $code has unknown status $status');
+    }
+    final displayValue = json['displayValue'];
+    if (displayValue != null && displayValue is! String) {
+      fail('Complex metric $code displayValue must be a string or null');
+    }
+    final rawCauses = json['missingCauses'];
+    if (rawCauses is! List) {
+      fail('Complex metric $code requires missingCauses');
+    }
+    final causes = rawCauses
+        .map(
+          (item) => _ExpectedCause.fromJson(
+            _jsonObject(item, 'metric $code missing cause'),
+          ),
+        )
+        .toList(growable: false);
+    if (status == 'AVAILABLE') {
+      if (displayValue is! String || displayValue.trim().isEmpty) {
+        fail('AVAILABLE metric $code requires displayValue');
+      }
+      if (causes.isNotEmpty) {
+        fail('AVAILABLE metric $code cannot contain missingCauses');
+      }
+    } else if (displayValue != null) {
+      fail('Unavailable metric $code must use null displayValue');
+    } else if (causes.isEmpty) {
+      fail('Unavailable metric $code requires missingCauses');
+    }
+    return _ExpectedMetric(
+      code,
+      displayValue as String?,
+      status: status,
+      missingCauses: List.unmodifiable(causes),
+    );
+  }
 
   final String code;
-  final String displayValue;
+  final String? displayValue;
+  final String status;
+  final List<_ExpectedCause> missingCauses;
+
+  String get visibleValue => displayValue ?? _statusLabel(status);
 }
+
+class _ExpectedCause {
+  const _ExpectedCause({required this.code, required this.message});
+
+  factory _ExpectedCause.fromJson(Map<String, dynamic> json) {
+    return _ExpectedCause(
+      code: _requiredJsonText(json, 'code', 'missing cause'),
+      message: _requiredJsonText(json, 'message', 'missing cause'),
+    );
+  }
+
+  final String code;
+  final String message;
+
+  String get visibleText => '$message（$code）';
+
+  Map<String, String> toJson() => <String, String>{
+        'code': code,
+        'message': message,
+      };
+}
+
+class _ComplexScenario {
+  const _ComplexScenario({
+    required this.id,
+    required this.batchRole,
+    required this.houseId,
+    required this.batchId,
+    required this.batchCode,
+    required this.metrics,
+  });
+
+  factory _ComplexScenario.fromJson(Map<String, dynamic> json) {
+    final id = _requiredJsonText(json, 'id', 'scenario');
+    final batchRole = _requiredJsonText(json, 'batchRole', 'scenario $id');
+    if (batchRole != 'primary' && batchRole != 'support') {
+      fail('Complex scenario $id has invalid batchRole');
+    }
+    final rawMetrics = json['metrics'];
+    if (rawMetrics is! List) {
+      fail('Complex scenario $id requires metrics');
+    }
+    final metrics = rawMetrics
+        .map(
+          (item) => _ExpectedMetric.fromJson(
+            _jsonObject(item, 'scenario $id metric'),
+          ),
+        )
+        .toList(growable: false);
+    final expectedCodes = _metrics.map((metric) => metric.code).toList();
+    final actualCodes = metrics.map((metric) => metric.code).toList();
+    if (!_sameStrings(actualCodes, expectedCodes)) {
+      fail('Complex scenario $id must contain the ordered 28 metric codes');
+    }
+    return _ComplexScenario(
+      id: id,
+      batchRole: batchRole,
+      houseId: _requiredJsonId(json, 'houseId', 'scenario $id'),
+      batchId: _requiredJsonId(json, 'batchId', 'scenario $id'),
+      batchCode: _requiredJsonText(json, 'batchCode', 'scenario $id'),
+      metrics: List.unmodifiable(metrics),
+    );
+  }
+
+  final String id;
+  final String batchRole;
+  final int houseId;
+  final int batchId;
+  final String batchCode;
+  final List<_ExpectedMetric> metrics;
+
+  List<_ExpectedGroup> get groups {
+    final byCode = <String, _ExpectedMetric>{
+      for (final metric in metrics) metric.code: metric,
+    };
+    return [
+      for (final group in _groups)
+        _ExpectedGroup(
+          stage: group.stage,
+          screenshotName: group.screenshotName,
+          metrics: [
+            for (final metric in group.metrics) byCode[metric.code]!,
+          ],
+        ),
+    ];
+  }
+}
+
+class _TestUser {
+  const _TestUser({
+    required this.role,
+    required this.userName,
+    required this.password,
+    required this.houseId,
+  });
+
+  factory _TestUser.fromJson(Map<String, dynamic> json) {
+    final role = _requiredJsonText(json, 'role', 'user');
+    return _TestUser(
+      role: role,
+      userName: _requiredJsonText(json, 'userName', 'user $role'),
+      password: _requiredJsonText(json, 'password', 'user $role'),
+      houseId: _requiredJsonId(json, 'houseId', 'user $role'),
+    );
+  }
+
+  final String role;
+  final String userName;
+  final String password;
+  final int houseId;
+}
+
+bool _sameStrings(List<String> first, List<String> second) {
+  if (first.length != second.length) return false;
+  for (var index = 0; index < first.length; index++) {
+    if (first[index] != second[index]) return false;
+  }
+  return true;
+}
+
+String _statusLabel(String status) => switch (status) {
+      'AVAILABLE' => '数据可用',
+      'NOT_APPLICABLE' => '暂无可计算数据',
+      'NOT_RECORDED' => '未录入',
+      'DATA_MISSING' => '历史数据缺失',
+      _ => throw StateError('Unknown expected metric status'),
+    };

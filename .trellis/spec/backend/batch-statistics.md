@@ -104,8 +104,10 @@ never return a partial total.
 Mating queries use the persisted Chinese result `怀孕`. `PREGNANT_DOE_COUNT`
 deduplicates `mother_rabbit_id`; conception and abortion rates deduplicate
 cycles. Feed windows start at the earliest mating date and use a half-open end
-boundary: the day after a completed batch `end_date`, or query time for an
-active batch.
+boundary. For a completed batch, every feed predicate uses
+`logged_at < DATE_ADD(DATE(end_date), INTERVAL 1 DAY)` so the complete natural
+end day is included and the next midnight is excluded. An active batch uses
+query time as its upper bound.
 
 Outbound confirmation is server-authoritative. `PUT` persists sale fields,
 frozen rabbit items, and `batchAllocations`; final submit must flush the draft,
@@ -327,4 +329,178 @@ one run-scoped MySQL fixture -> exact API -> XLSX + Admin + Android
 selected Vite origin -> temporary exact CORS entry -> restore original list
 bounded frame pumps + condition waits -> deterministic Android deadline
 fixture rows + runtime-owned rows -> FK-ordered cleanup -> zero residue
+```
+
+## Scenario: Complex cross-client interaction matrix
+
+### 1. Scope / Trigger
+
+Use this scenario after a change can alter interactions among metric grain,
+missing-source propagation, cross-batch allocation, completed-batch time
+windows, permissions, or idempotent writes. It extends the attachment-scale
+all-available fixture; it does not replace that baseline and is not a load or
+capacity test.
+
+The matrix must run through the real API, XLSX writer, Admin, and a physical
+Android device. Keep expected values independent of production responses and
+workbooks. A reproducible formula or authorization mismatch is a product defect;
+do not edit the frozen expectation to make the test pass.
+
+### 2. Signatures
+
+```text
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix_fixture.sql
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix_cleanup.sql
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix.json
+
+BatchStatisticsComplexMatrixIT
+BatchStatisticsComplexMatrixExportIT
+
+RABBIT_BATCH_STATISTICS_SUITE=complex \
+RABBIT_ANDROID_E2E_DEVICE_ID=<ready-device> \
+  bash scripts/batch-statistics-cross-client-e2e.sh
+```
+
+The mode-0600 client define file uses scalar values only:
+
+```text
+RABBIT_E2E_SUITE=complex
+RABBIT_E2E_SCENARIOS_JSON=<JSON string>
+RABBIT_E2E_USERS_JSON=<JSON string>
+```
+
+User entries use the canonical `userName` field. Do not add a parallel
+`username` alias for one client.
+
+### 3. Contracts
+
+One run owns one target house, one isolation house, five primary batches, one
+same-house rounding-support batch, and exactly three users: `OWNER`,
+`READ_ONLY`, and `UNRELATED_HOUSE`. Resolve cleanup ownership from the run ID,
+fixture actor IDs, and owned house IDs; a colliding `request_id` from another
+actor must survive cleanup.
+
+The independent catalog contains six ordered scenarios and exactly 28 metrics
+per scenario. Each expected metric fixes its code, order, nullable numeric/date
+raw value, nullable backend `displayValue`, status, and ordered missing causes.
+Clients also record `visibleValue`: it equals `displayValue` for `AVAILABLE`
+and otherwise equals the localized status text. This distinction prevents a
+correct UI state such as `DATA_MISSING` from being compared with API
+`displayValue: null`.
+
+The named scenarios are:
+
+```text
+complex-available
+mixed-data-quality
+mixed-batch-rounding
+mixed-batch-rounding-support
+security-and-retry
+time-and-cycle-boundaries
+```
+
+Every completed-batch feed aggregate uses this exclusive upper bound:
+
+```sql
+feed.logged_at < DATE_ADD(DATE(batches.end_date), INTERVAL 1 DAY)
+```
+
+Do not use `DATE_ADD(batches.end_date, INTERVAL 1 DAY)`: if `end_date` contains
+a non-midnight time, that expression leaks part of the next day into the
+statistics window.
+
+`READ_ONLY` preserves the production VIEWER contract: statistics query and
+XLSX export are allowed; carcass-yield edit and full history are denied.
+`security-and-retry` writes 58%, replays the same request ID and payload without
+a second version, then submits 59% under that request ID and requires a conflict
+with no extra write. `UNRELATED_HOUSE` cannot read target-house data.
+
+Android screenshots must remain in `IntegrationTestWidgetsFlutterBinding`
+report data until the driver has called `onScreenshot`. After standalone PNGs
+exist, the root runner compares embedded screenshot names with
+`screenshotNames`, removes the byte arrays from the result JSON, and then runs
+the client validator. Removing `reportData.screenshots` inside the widget test
+prevents the driver from writing any PNG.
+
+The retained proof distinguishes workbook locations:
+
+```text
+scenarioWorkbookCount = 6   # direct API/XLSX validation
+securityWorkbookCount = 1   # backend READ_ONLY export
+adminWorkbookCount = 7      # six scenarios plus READ_ONLY export
+```
+
+A complex manifest records `scenarioValidations`, `security`, and `secretScan`.
+A baseline manifest omits those complex-only validation fields instead of
+writing empty objects or misleading `false` values.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Catalog is missing a scenario, metric, status, or cause | Stop before clients; never derive the missing expectation from API output |
+| Completed-batch feed occurs at end-day 23:59:59 | Include it |
+| Feed occurs at the next natural day 00:00:00 | Exclude it |
+| Mixed sale amount has a rounding remainder | Apply the production deterministic group order and conserve the order total |
+| UI metric is unavailable | API `displayValue` remains null; client `visibleValue` is the localized status text |
+| Same request ID replays the same 58% payload | Return the existing success and keep one version |
+| Same request ID changes 58% to 59% | Return conflict and keep one version |
+| VIEWER requests statistics or XLSX | Allow with the target `X-House-Id` |
+| VIEWER requests carcass edit or full history | Deny in the backend and hide the client action |
+| Unrelated-house user requests the target batch | Deny without rendering target data |
+| Screenshot name is unsafe, missing, reordered, or has no PNG | Fail artifact validation |
+| Android result still contains screenshot bytes after sanitization | Fail artifact validation |
+| Cleanup leaves fixture users, houses, batches, dedup rows, or events | Fail the run after attempting environment restoration |
+| Baseline suite is selected | Preserve the original single-scenario contract and omit complex-only manifest stages |
+
+### 5. Good / Base / Bad Cases
+
+- Good: load all six batches once, validate every API and workbook, traverse one
+  Admin session and one Flutter installation, then validate database state and
+  clean the run-owned rows.
+- Base: `mixed-data-quality` combines valid values with `NOT_APPLICABLE`,
+  `NOT_RECORDED`, and `DATA_MISSING`; each client shows every ordered cause
+  without replacing null with numeric zero.
+- Bad: use a global text finder for a cause that can appear under several
+  expanded metrics. Scope the assertion to the selected metric detail.
+- Bad: use `find.text('账号')` for repeated role login. Scope the account mode to
+  `ValueKey('login-mode-selector')` because the account field has the same text.
+- Bad: remove embedded screenshots immediately after `takeScreenshot`; the host
+  driver has not received them yet.
+
+### 6. Tests Required
+
+- Run `BatchStatisticsComplexMatrixIT` and
+  `BatchStatisticsComplexMatrixExportIT` on a fresh V56-or-newer schema. Assert
+  six ordered scenarios, 28 metrics each, exact `BigDecimal` values, XLSX cell
+  types and formats, collision-safe cleanup, VIEWER permissions, 58% replay,
+  and 59% conflict.
+- Run the complex cross-client command on an unlocked physical device. Require
+  six Admin scenario workbooks, one Admin VIEWER workbook, five full-page Admin
+  scenario images, at least 40 Android group images, support-batch evidence,
+  OWNER history/actions, READ_ONLY export bytes, and unrelated-house denial.
+- Validate `metricDisplayValues`, `metricVisibleValues`, statuses, ordered causes,
+  screenshot names, PNG existence, database topology, zero residue, environment
+  restoration, secret scanning, and SHA-256 checksums.
+- After complex passes, rerun the default baseline command, the mocked Admin
+  browser suite, full Admin gates, full Flutter check, and full backend gates.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```text
+end_date timestamp + 1 day -> partial next-day feed included
+API displayValue null == rendered UI text -> client evidence mismatch
+takeScreenshot -> delete reportData screenshots -> driver has no PNG
+passed baseline + security:false -> ambiguous manifest
+```
+
+#### Correct
+
+```text
+DATE(end_date) + 1 day -> exclusive next-midnight boundary
+nullable displayValue + explicit visibleValue -> exact API and UI evidence
+takeScreenshot -> driver writes PNG -> verify names -> sanitize result JSON
+passed baseline -> omit complex-only validation keys
 ```

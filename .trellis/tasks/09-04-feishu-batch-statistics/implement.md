@@ -167,6 +167,23 @@
 - [x] 所有成功、失败和中断路径都恢复验证码配置并默认清理夹具；调试保留必须显式开启，产物不得记录 token 或密码。
 - [x] 重新运行现有后端、Admin 模拟浏览器和 Flutter 检查，确认新增真实流程没有替代边界、权限和响应式覆盖；把结果与截图路径写入 `verification.md`。
 
+### I. 复杂场景全跨端矩阵
+
+独立复杂夹具已经稳定复现生产饲料查询的结束上界缺陷。用户选择将修复纳入本轮，范围确认门禁已经解除。冻结的 `time-and-cycle-boundaries` 期望保持不变；VIEWER 继续使用现有查询和导出权限。本节新增实现与验证项在对应命令实际通过前保持未完成。
+
+- [x] 新增 `research/complex-fixture-matrix.md`，冻结五个场景的输入、五个主批次与一个混批辅助批次关系、三类账号、28 项期望、状态和有序缺失原因；期望不得由被测生产代码生成。
+- [x] 修正饲料聚合的完成批次上界：把 `end_date` 归一为 `DATE` 后再加 1 天，以该下一自然日零点作为排他上界；不改 28 项公式、V55/V56 或其他迁移。
+- [x] 新增 `batch_statistics_complex_matrix_fixture.sql`、对应 cleanup 和机器可读 JSON 目录；按一个 `run_id` 创建目标/隔离兔舍，满足 V56 约束并输出场景 batch ID 数组和无密码账号角色清单。
+- [x] 新增 Java 矩阵加载器、`BatchStatisticsComplexMatrixIT` 和 `BatchStatisticsComplexMatrixExportIT`；在新鲜 schema 上逐场景核对 API、两个 XLSX 页签、日期/周期粒度、混批守恒、金额尾差、时间边界、状态传播、权限和幂等零部分写入。
+- [x] 扩展 Node 校验器和根运行器支持 `RABBIT_BATCH_STATISTICS_SUITE=baseline|complex`，默认继续运行 baseline；complex 模式一次启动后端并在客户端前验证所有场景 API、XLSX、数据库和安全/重试前置条件。
+- [x] 扩展 Admin 实际后端脚本兼容场景数组；在一次 Chrome/Vite 会话中通过真实兔舍和批次导航遍历五个主批次与混批辅助批次，核对 28 项、八组、状态原因、六份下载和三类账号权限。VIEWER 必须能查询并导出 XLSX，但不能编辑出肉率或读取完整历史。保存逐场景完整页面截图。
+- [x] 扩展 Flutter Android 集成测试兼容场景数组；一次安装中遍历五个主批次和混批辅助批次，为每个主场景保存八组截图并保留辅助批次销售组证据，再切换 VIEWER 和无关账号。VIEWER 必须保留查询和导出入口，同时隐藏出肉率录入和完整历史；无关账号继续验证拒绝路径。
+- [x] 运行器逐场景保存 API、XLSX、数据库断言、Admin/Android 截图与 metric/status/cause 证据；删除 Android 内嵌 PNG 数组，生成总 manifest 和 `SHA256SUMS`，扫描文本产物中的密码、token 和 secret。
+- [x] 验证复杂矩阵成功、失败和中断路径均清理静态及运行时副作用，并恢复验证码、CORS、绑定、Vite 和设备状态；显式 KEEP_FIXTURE 调试仍提供无密码清理命令。
+- [x] 复杂矩阵通过后重跑当前附件 baseline 跨端套件、Admin 模拟浏览器、Flutter 聚焦测试和后端完整门禁，把每个场景的 run ID、截图数量、精确结果和恢复证据写入 `verification.md`。
+- [x] 使用冻结的 `time-and-cycle-boundaries` 期望验证结束日饲料被计入、结束次日饲料被排除，并确认 API、XLSX、Admin 和 Android 一致；不得通过放宽期望、删除场景或改写口径使测试转绿。
+- [x] 使用现有 VIEWER 角色验证 API、Admin 和 Android 的查询与 XLSX 导出成功，出肉率编辑和完整历史被拒绝；OWNER 与无关兔舍账号预期保持不变，不修改 `PermissionCode` 或生产角色等级。
+
 ## 3. 主要文件与风险点
 
 | 区域 | 主要触点 | 风险 |
@@ -195,6 +212,10 @@ mvn --file backend/pom.xml -pl rabbit-reporting -am \
 E2E_SCHEMA_SUFFIX=_batchstats \
   bash scripts/e2e-local.sh \
   -Dit.test=BatchStatisticsIT,BatchStatisticsWritePathIT,BatchStatisticsLegacyWriteDisabledIT,OutboundDraftAllocationIT,BatchStatisticsExportIT
+
+E2E_SCHEMA_SUFFIX=_batchstats_complex \
+  bash scripts/e2e-local.sh \
+  -Dit.test=BatchStatisticsComplexMatrixIT,BatchStatisticsComplexMatrixExportIT
 
 mvn --file backend/pom.xml test
 mvn --file backend/pom.xml checkstyle:check
@@ -231,16 +252,20 @@ cd app
 ```bash
 RABBIT_ANDROID_E2E_DEVICE_ID=<device-id> \
   bash scripts/batch-statistics-cross-client-e2e.sh
+
+RABBIT_ANDROID_E2E_DEVICE_ID=<device-id> \
+RABBIT_BATCH_STATISTICS_SUITE=complex \
+  bash scripts/batch-statistics-cross-client-e2e.sh
 ```
 
 运行器负责记录设备、后端、MySQL、验证码和产物前置条件，并在退出时恢复环境。
 
 ## 5. 最终检查
 
-- [x] `task.py validate` 通过，两个 manifest 各 42 项，无缺失或重复路径；manifest 只注入 spec/research 文档，代码由代理按变更清单读取。
-- [x] `lens_diagnostics mode=all` 对本次 18 个文件返回 0 问题；8 个关键文件的主 LSP 有 7 个确认无错误，Dart LSP 超时由无问题的完整 `flutter analyze` 补充。
+- [x] `task.py validate` 通过，两个 manifest 各 43 项，无缺失或重复路径；每项均有文件理由，实际变更代码由代理按变更清单完整读取。`design.md` 超过单文件注入上限会触发警告，检查代理按任务工件加载流程另行读取全文。
+- [x] `lens_diagnostics mode=all` 覆盖本次 23 个文件且无阻断错误；16 个 jscpd 重复警告已逐项审查并 defer，均为并行统计 CTE 或独立 fixture/cleanup 的有意重复。4 个 Admin/Node 和 4 个 Java 文件主 LSP 为 0；Dart LSP 超时由针对性与完整 `flutter analyze` 补充，Mapper XML 无 LSP 则由 Maven 门禁覆盖。
 - [x] 后端 1,094 项完整单元和架构测试、Checkstyle 与 package 通过。
-- [x] Admin lint、85 项测试、242 模块 build 和批次统计浏览器脚本通过；补充畸形 schema-v1 响应及下载文件名参数回归。
+- [x] Admin lint、93 项测试、242 模块 build、复杂定义契约 8 项和批次统计浏览器脚本通过；补充畸形 schema-v1 响应及下载文件名参数回归。
 - [x] Flutter `./rabbit check` 通过 628 项测试和分析，debug APK 构建成功。
 - [x] 数据库迁移、权限、兔舍隔离、幂等和历史兼容有 25 项新鲜 schema 自动化证据。
 - [ ] 固定 SQL 尚需证明生产全部兔舍在 7 个完整自然日内没有 `LEGACY_*_GAP`，发布检查记录需包含窗口、执行人和结果。
@@ -250,3 +275,5 @@ RABBIT_ANDROID_E2E_DEVICE_ID=<device-id> \
 - [x] 附件规模 MySQL 夹具在 V56 新鲜 schema 上生成 28 项全 `AVAILABLE` 的精确 API 结果。
 - [x] 实际 `.xlsx`、Admin 页面和 Android 真机与同一夹具的 API 值一致，八组截图和运行清单齐全。
 - [x] 跨端运行结束后业务 fixture 已清理、验证码配置已恢复、Git 工作树不含生成产物。
+- [x] 已完成生产饲料结束上界修复，并由冻结的 `time-and-cycle-boundaries` 期望证明完成批次 `end_date` 整日包含、下一日零点排除。
+- [x] 复杂 VIEWER 账号已在真实 API、XLSX、Admin 和 Android 中证明可查询和导出，但不能编辑出肉率或读取完整历史；OWNER 和无关兔舍账号回归通过。

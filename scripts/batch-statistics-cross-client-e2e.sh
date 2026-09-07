@@ -5,8 +5,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 APP_DIR="$REPO_DIR/app"
 ADMIN_DIR="$REPO_DIR/admin"
-FIXTURE_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture.sql"
-CLEANUP_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture_cleanup.sql"
+BASELINE_FIXTURE_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture.sql"
+BASELINE_CLEANUP_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_acceptance_fixture_cleanup.sql"
+COMPLEX_FIXTURE_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_complex_matrix_fixture.sql"
+COMPLEX_CLEANUP_SQL="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_complex_matrix_cleanup.sql"
+COMPLEX_CATALOG="$REPO_DIR/backend/src/test/resources/fixtures/batch_statistics_complex_matrix.json"
+FIXTURE_SQL="$BASELINE_FIXTURE_SQL"
+CLEANUP_SQL="$BASELINE_CLEANUP_SQL"
 VALIDATOR="$SCRIPT_DIR/batch-statistics-cross-client-validate.mjs"
 APP_ID="com.rabbit.app.flutter.dev"
 XLSX_MEDIA_TYPE="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -21,6 +26,7 @@ DB_NAME="${RABBIT_BATCH_STATISTICS_DB_NAME:-rabbit_app}"
 DB_USER="${RABBIT_BATCH_STATISTICS_DB_USER:-root}"
 DB_PASSWORD="${RABBIT_BATCH_STATISTICS_DB_PASSWORD:-rabbit_root}"
 KEEP_FIXTURE="${RABBIT_BATCH_STATISTICS_KEEP_FIXTURE:-0}"
+SUITE="${RABBIT_BATCH_STATISTICS_SUITE:-baseline}"
 READY_TIMEOUT_SECONDS="${RABBIT_BATCH_STATISTICS_READY_TIMEOUT_SECONDS:-240}"
 DEVICE_ID="${RABBIT_ANDROID_E2E_DEVICE_ID:-}"
 ADB_BIN="${RABBIT_ANDROID_E2E_ADB:-}"
@@ -48,6 +54,8 @@ xlsx_validated=0
 admin_validated=0
 android_validated=0
 database_validated=0
+security_validated=0
+secret_scan_validated=0
 
 die() {
   echo "$*" >&2
@@ -59,6 +67,7 @@ usage() {
 Run the shared MySQL fixture through the batch statistics API, Admin, and Android.
 
 Optional environment:
+  RABBIT_BATCH_STATISTICS_SUITE            baseline (default) or complex.
   RABBIT_ANDROID_E2E_DEVICE_ID             Select one ready adb device. Required when more than one is ready.
   RABBIT_ANDROID_E2E_DEVICE_API_URL         API origin reachable from the selected device. Physical devices default to the host LAN address.
   RABBIT_BATCH_STATISTICS_HOST_API_URL      Host API origin. Default: http://127.0.0.1:8080.
@@ -77,6 +86,23 @@ Flutter and Android SDK discovery also accepts the variables documented by
 app/scripts/toolchain_env.sh, including RABBIT_FLUTTER_BIN,
 RABBIT_FLUTTER_HOME, RABBIT_JAVA_HOME, and RABBIT_ANDROID_SDK_ROOT.
 USAGE
+}
+
+configure_suite() {
+  case "$SUITE" in
+  baseline)
+    FIXTURE_SQL="$BASELINE_FIXTURE_SQL"
+    CLEANUP_SQL="$BASELINE_CLEANUP_SQL"
+    ;;
+  complex)
+    FIXTURE_SQL="$COMPLEX_FIXTURE_SQL"
+    CLEANUP_SQL="$COMPLEX_CLEANUP_SQL"
+    ;;
+  *)
+    echo "RABBIT_BATCH_STATISTICS_SUITE must be baseline or complex" >&2
+    return 64
+    ;;
+  esac
 }
 
 require_command() {
@@ -514,8 +540,9 @@ SQL
 }
 
 cleanup_fixture() {
-  local cleanup_output=""
+  local cleanup_output_file=""
   local cleanup_manifest=""
+  local pipeline_status=()
   [[ "$fixture_attempted" == "1" ]] || return 0
 
   if [[ "$KEEP_FIXTURE" == "1" ]]; then
@@ -529,18 +556,22 @@ cleanup_fixture() {
     return 0
   fi
 
-  cleanup_output="$({
+  cleanup_output_file="$artifact_root/cleanup-output.txt"
+  {
     printf "SET @fixture_run_id = '%s';\n" "$run_id"
     cat "$CLEANUP_SQL"
-  } |
-    mysql_exec)" || return 1
-  cleanup_manifest="$(printf '%s\n' "$cleanup_output" | awk 'NF { value = $0 } END { print value }')"
+  } | mysql_exec >"$cleanup_output_file"
+  pipeline_status=("${PIPESTATUS[@]}")
+  [[ "${pipeline_status[0]}" == "0" && "${pipeline_status[1]}" == "0" ]] || return 1
+  cleanup_manifest="$(awk 'NF { value = $0 } END { print value }' "$cleanup_output_file")"
   printf '%s\n' "$cleanup_manifest" | jq '.' >"$artifact_root/cleanup-result.json" || return 1
-  if ! jq -e --arg run_id "$run_id" '
+  if ! jq -e --arg run_id "$run_id" --arg suite "$SUITE" '
     .run_id == $run_id and
     .remaining_users == 0 and
     .remaining_houses == 0 and
-    .remaining_batches == 0
+    .remaining_batches == 0 and
+    ($suite != "complex" or
+      (.remaining_dedup == 0 and .remaining_events == 0))
   ' "$artifact_root/cleanup-result.json" >/dev/null; then
     return 1
   fi
@@ -604,10 +635,17 @@ restore_device() {
 }
 
 redact_stream() {
-  local secret="$1"
+  local secret=""
   local line=""
+  local redacted=""
   while IFS= read -r line || [[ -n "$line" ]]; do
-    printf '%s\n' "${line//$secret/[REDACTED]}"
+    redacted="$line"
+    for secret in "$@"; do
+      if [[ -n "$secret" ]]; then
+        redacted="${redacted//$secret/[REDACTED]}"
+      fi
+    done
+    printf '%s\n' "$redacted"
   done
 }
 
@@ -638,8 +676,13 @@ write_manifest() {
   local cleanup_ok="$3"
   local backend_restore_ok="$4"
   local device_restore_ok="$5"
+  local scenario_validations='{}'
+  if [[ "$SUITE" == "complex" && -s "$artifact_root/validation-proof.json" ]]; then
+    scenario_validations="$(jq -c '.scenarios // {}' "$artifact_root/validation-proof.json")"
+  fi
   jq -n \
     --arg run_id "$run_id" \
+    --arg suite "$SUITE" \
     --arg status "$final_status" \
     --argjson exit_code "$final_code" \
     --argjson fixture_kept "$(bool_json "$KEEP_FIXTURE")" \
@@ -649,19 +692,25 @@ write_manifest() {
     --argjson admin "$(bool_json "$admin_validated")" \
     --argjson android "$(bool_json "$android_validated")" \
     --argjson database "$(bool_json "$database_validated")" \
+    --argjson security "$(bool_json "$security_validated")" \
+    --argjson secret_scan "$(bool_json "$secret_scan_validated")" \
+    --argjson scenarios "$scenario_validations" \
     --argjson cleanup "$cleanup_ok" \
     --argjson backend_restored "$backend_restore_ok" \
     --argjson device_restored "$device_restore_ok" '
-    {
+    ({
       schemaVersion:1,
       runId:$run_id,
+      suite:$suite,
       status:$status,
       exitCode:$exit_code,
       fixtureKept:$fixture_kept,
       backendOriginallyRunning:$backend_originally_running,
-      validations:{api:$api,xlsx:$xlsx,admin:$admin,android:$android,database:$database},
+      validations:({api:$api,xlsx:$xlsx,admin:$admin,android:$android,database:$database} +
+        (if $suite == "complex" then {security:$security,secretScan:$secret_scan} else {} end))
+    } + (if $suite == "complex" then {scenarioValidations:$scenarios} else {} end) + {
       cleanup:{fixture:$cleanup,backendRestored:$backend_restored,deviceRestored:$device_restored}
-    }
+    })
   ' >"$artifact_root/manifest.json"
 }
 
@@ -690,6 +739,7 @@ on_exit() {
   local backend_restore_ok=true
   local device_restore_ok=true
   local result="failed"
+  local final_scan_status=()
 
   trap - EXIT INT TERM
   set +e
@@ -699,7 +749,7 @@ on_exit() {
     fi
     runtime_defines_file=""
   fi
-  if [[ "$fixture_loaded" == "1" && ! -s "$artifact_root/database-assertions.json" ]]; then
+  if [[ "$SUITE" == "baseline" && "$fixture_loaded" == "1" && ! -s "$artifact_root/database-assertions.json" ]]; then
     capture_database_assertions
     if [[ $? -ne 0 && "$final_status" -eq 0 ]]; then
       final_status=1
@@ -728,6 +778,17 @@ on_exit() {
   if ! write_manifest "$result" "$final_status" "$cleanup_ok" "$backend_restore_ok" "$device_restore_ok"; then
     [[ "$final_status" -ne 0 ]] || final_status=1
     result="failed"
+  fi
+  if [[ "$SUITE" == "complex" ]]; then
+    printf '%s' '["123456"]' |
+      node "$VALIDATOR" complex-secret-scan "$artifact_root" "$artifact_root/secret-scan.json"
+    final_scan_status=("${PIPESTATUS[@]}")
+    if [[ "${final_scan_status[0]}" != "0" || "${final_scan_status[1]}" != "0" ]]; then
+      secret_scan_validated=0
+      [[ "$final_status" -ne 0 ]] || final_status=1
+      result="failed"
+      write_manifest "$result" "$final_status" "$cleanup_ok" "$backend_restore_ok" "$device_restore_ok" || true
+    fi
   fi
   if ! write_checksums; then
     [[ "$final_status" -ne 0 ]] || final_status=1
@@ -763,6 +824,458 @@ header_value() {
     }
     END { print value }
   ' "$file"
+}
+
+fixture_password_for_profile() {
+  case "$1" in
+  e2e-default) printf '%s' '123456' ;;
+  *) die "Unsupported fixture credential profile: $1" ;;
+  esac
+}
+
+complex_login() {
+  local user_name="$1"
+  local password="$2"
+  local payload=""
+  local response=""
+  payload="$(LOGIN_USER_NAME="$user_name" LOGIN_PASSWORD="$password" jq -nc \
+    '{userName:env.LOGIN_USER_NAME,password:env.LOGIN_PASSWORD}')"
+  response="$(curl -fsS --max-time 20 -X POST "$HOST_API_URL/api/auth/login" \
+    -H 'Content-Type: application/json' --data-binary @- <<<"$payload")"
+  jq -er 'select(.code == 0) | .data.token | select(type == "string" and length > 0)' \
+    <<<"$response"
+}
+
+complex_request() {
+  local token="$1"
+  local house_id="$2"
+  local method="$3"
+  local url="$4"
+  local output="$5"
+  local body="${6:-}"
+  local headers_file="${7:-}"
+  local config=""
+  local curl_args=(-sS --max-time 60 -X "$method" -o "$output" -w '%{http_code}')
+  config="$(printf 'header = "Authorization: Bearer %s"\nheader = "X-House-Id: %s"\n' \
+    "$token" "$house_id")"
+  if [[ -n "$headers_file" ]]; then
+    curl_args+=(-D "$headers_file")
+  fi
+  if [[ -n "$body" ]]; then
+    curl_args+=(-H 'Content-Type: application/json' --data-binary @-)
+    curl --config /dev/fd/3 "${curl_args[@]}" "$url" 3<<<"$config" <<<"$body"
+  else
+    curl --config /dev/fd/3 "${curl_args[@]}" "$url" 3<<<"$config"
+  fi
+}
+
+complex_business_code() {
+  jq -er '.code | select(type == "number")' "$1"
+}
+
+run_complex_suite() {
+  local chrome_bin="$1"
+  local admin_dev_port="$2"
+  local admin_origin="$3"
+  local device_characteristics="$4"
+  local flyway_version="$5"
+  local pnpm_version="$6"
+  local fixture_output_file="$artifact_root/fixture-output.txt"
+  local fixture_manifest_raw="$artifact_root/fixture-manifest.raw.json"
+  local fixture_manifest_enriched="$artifact_root/fixture-manifest.enriched.json"
+  local fixture_manifest="$artifact_root/fixture-manifest.json"
+  local fixture_password=""
+  local scenarios_json=""
+  local users_json=""
+  local owner_name=""
+  local read_only_name=""
+  local outsider_name=""
+  local account_name=""
+  local owner_id=""
+  local read_only_id=""
+  local outsider_id=""
+  local owner_password=""
+  local read_only_password=""
+  local outsider_password=""
+  local house_id=""
+  local house_name=""
+  local isolation_house_id=""
+  local isolation_house_name=""
+  local owner_token=""
+  local read_only_token=""
+  local outsider_token=""
+  local scenario_id=""
+  local batch_id=""
+  local batch_code=""
+  local scenario_dir=""
+  local http_status=""
+  local pipeline_status=()
+  local admin_status=0
+  local drive_status=0
+  local security_dir="$artifact_root/security"
+  local security_batch_id=""
+  local replay_payload=""
+  local conflict_payload=""
+  local replay_request_id=""
+  local before_version_count=""
+  local before_dedup_count=""
+  local first_version_count=""
+  local first_dedup_count=""
+  local after_version_count=""
+  local after_dedup_count=""
+  local read_only_export_http_status=""
+  local read_only_export_media_type=""
+  local read_only_export_size=""
+  local security_result="$security_dir/result.json"
+  local database_raw="$artifact_root/database-assertions.raw.json"
+  local api_scenarios='{}'
+  local xlsx_scenarios='{}'
+  local scenario_validations='{}'
+
+  [[ -f "$COMPLEX_CATALOG" ]] || die "Complex catalog not found: $COMPLEX_CATALOG"
+  mkdir -p "$artifact_root/scenarios" "$artifact_root/roles" "$security_dir"
+
+  fixture_attempted=1
+  set +e
+  {
+    printf "SET @fixture_run_id = '%s';\n" "$run_id"
+    cat "$FIXTURE_SQL"
+  } | mysql_exec >"$fixture_output_file"
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -e
+  [[ "${pipeline_status[0]}" == "0" ]] || die "Failed to stream the complex fixture SQL"
+  [[ "${pipeline_status[1]}" == "0" ]] || die "Complex fixture SQL failed"
+  awk 'NF { value = $0 } END { print value }' "$fixture_output_file" >"$fixture_manifest_raw"
+  jq -e --arg run_id "$run_id" '
+    .run_id == $run_id and (.target_house_id | type == "number") and
+    (.isolation_house_id | type == "number") and (.accounts | length == 3)
+  ' "$fixture_manifest_raw" >/dev/null || die "Complex SQL manifest is malformed"
+  house_id="$(jq -er '.target_house_id' "$fixture_manifest_raw")"
+  isolation_house_id="$(jq -er '.isolation_house_id' "$fixture_manifest_raw")"
+  house_name="$(mysql_exec -e "SELECT name FROM rabbit_houses WHERE id = $house_id;")"
+  isolation_house_name="$(mysql_exec -e "SELECT name FROM rabbit_houses WHERE id = $isolation_house_id;")"
+  [[ -n "$house_name" ]] || die "Complex target house name is missing"
+  [[ -n "$isolation_house_name" ]] || die "Complex isolation house name is missing"
+  owner_name="$(jq -er '.accounts[] | select(.role == "OWNER") | .user_name' "$fixture_manifest_raw")"
+  read_only_name="$(jq -er '.accounts[] | select(.role == "READ_ONLY") | .user_name' "$fixture_manifest_raw")"
+  outsider_name="$(jq -er '.accounts[] | select(.role == "OUTSIDER") | .user_name' "$fixture_manifest_raw")"
+  for account_name in "$owner_name" "$read_only_name" "$outsider_name"; do
+    [[ "$account_name" =~ ^[A-Za-z0-9_]+$ ]] || die "Complex fixture username is unsafe"
+  done
+  owner_id="$(mysql_exec -e "SELECT user_id FROM sys_user WHERE user_name = '$owner_name';")"
+  read_only_id="$(mysql_exec -e "SELECT user_id FROM sys_user WHERE user_name = '$read_only_name';")"
+  outsider_id="$(mysql_exec -e "SELECT user_id FROM sys_user WHERE user_name = '$outsider_name';")"
+  jq --arg house_name "$house_name" --arg isolation_house_name "$isolation_house_name" \
+    --argjson target "$house_id" --argjson isolation "$isolation_house_id" \
+    --argjson owner_id "$owner_id" --argjson read_only_id "$read_only_id" --argjson outsider_id "$outsider_id" '
+    . + {house_name:$house_name,isolation_house_name:$isolation_house_name} |
+    .accounts |= map(. + {
+      user_id:(if .role == "OWNER" then $owner_id elif .role == "READ_ONLY" then $read_only_id else $outsider_id end),
+      house_id:(if .role == "OUTSIDER" then $isolation else $target end),
+      house_name:(if .role == "OUTSIDER" then $isolation_house_name else $house_name end)
+    })
+  ' "$fixture_manifest_raw" >"$fixture_manifest_enriched"
+  node "$VALIDATOR" complex-manifest "$fixture_manifest_enriched" "$COMPLEX_CATALOG" \
+    "$run_id" "$fixture_manifest"
+  fixture_loaded=1
+
+  house_id="$(jq -er '.houseId' "$fixture_manifest")"
+  house_name="$(jq -er '.houseName' "$fixture_manifest")"
+  isolation_house_id="$(jq -er '.isolationHouseId' "$fixture_manifest")"
+  fixture_password="$(fixture_password_for_profile "$(jq -er '.credentialProfile' "$fixture_manifest")")"
+  owner_name="$(jq -er '.users[] | select(.role == "OWNER") | .userName' "$fixture_manifest")"
+  read_only_name="$(jq -er '.users[] | select(.role == "READ_ONLY") | .userName' "$fixture_manifest")"
+  outsider_name="$(jq -er '.users[] | select(.role == "UNRELATED_HOUSE") | .userName' "$fixture_manifest")"
+  owner_password="$fixture_password"
+  read_only_password="$fixture_password"
+  outsider_password="$fixture_password"
+
+  owner_token="$(complex_login "$owner_name" "$owner_password")" || die "Complex OWNER login failed"
+  read_only_token="$(complex_login "$read_only_name" "$read_only_password")" || die "Complex READ_ONLY login failed"
+  outsider_token="$(complex_login "$outsider_name" "$outsider_password")" || die "Complex OUTSIDER login failed"
+
+  for scenario_id in \
+    complex-available mixed-data-quality mixed-batch-rounding \
+    time-and-cycle-boundaries mixed-batch-rounding-support; do
+    scenario_dir="$artifact_root/scenarios/$scenario_id"
+    mkdir -p "$scenario_dir/api" "$scenario_dir/xlsx"
+    batch_id="$(jq -er --arg id "$scenario_id" '.scenarios[] | select(.id == $id) | .batchId' "$fixture_manifest")"
+    batch_code="$(jq -er --arg id "$scenario_id" '.scenarios[] | select(.id == $id) | .batchCode' "$fixture_manifest")"
+    http_status="$(complex_request "$owner_token" "$house_id" GET \
+      "$HOST_API_URL/api/batches/$batch_id/statistics" "$scenario_dir/api/response.json")"
+    [[ "$http_status" == "200" ]] || die "$scenario_id statistics returned HTTP $http_status"
+    node "$VALIDATOR" complex-api "$scenario_dir/api/response.json" "$scenario_id" \
+      "$batch_id" "$COMPLEX_CATALOG" "$scenario_dir/api/validation.json"
+
+    http_status="$(complex_request "$owner_token" "$house_id" GET \
+      "$HOST_API_URL/api/reports/batches/$batch_id/statistics.xlsx" \
+      "$scenario_dir/xlsx/batch-statistics.xlsx" "" "$scenario_dir/xlsx/headers.txt")"
+    [[ "$http_status" == "200" ]] || die "$scenario_id workbook returned HTTP $http_status"
+    [[ "$(dd if="$scenario_dir/xlsx/batch-statistics.xlsx" bs=1 count=2 2>/dev/null)" == "PK" ]] ||
+      die "$scenario_id workbook is not an OOXML ZIP"
+    unzip -t "$scenario_dir/xlsx/batch-statistics.xlsx" >"$scenario_dir/xlsx/unzip.txt"
+    node "$VALIDATOR" complex-xlsx "$scenario_dir/xlsx/batch-statistics.xlsx" \
+      "$scenario_dir/xlsx/headers.txt" "$scenario_id" "$batch_code" "$COMPLEX_CATALOG" \
+      "$scenario_dir/xlsx/validation.json"
+  done
+
+  security_batch_id="$(jq -er '.scenarios[] | select(.id == "security-and-retry") | .batchId' "$fixture_manifest")"
+  complex_request "$owner_token" "$house_id" GET \
+    "$HOST_API_URL/api/batches/$security_batch_id/statistics" "$security_dir/owner-statistics.json" >/dev/null
+  complex_request "$read_only_token" "$house_id" GET \
+    "$HOST_API_URL/api/batches/$security_batch_id/statistics" "$security_dir/read-only-statistics.json" >/dev/null
+  read_only_export_http_status="$(complex_request "$read_only_token" "$house_id" GET \
+    "$HOST_API_URL/api/reports/batches/$security_batch_id/statistics.xlsx" \
+    "$security_dir/read-only-export.xlsx" "" "$security_dir/read-only-export.headers.txt")"
+  [[ "$read_only_export_http_status" == "200" ]] ||
+    die "READ_ONLY workbook returned HTTP $read_only_export_http_status"
+  read_only_export_media_type="$(header_value Content-Type "$security_dir/read-only-export.headers.txt")"
+  read_only_export_media_type="${read_only_export_media_type%%;*}"
+  [[ "$read_only_export_media_type" == "$XLSX_MEDIA_TYPE" ]] ||
+    die "READ_ONLY workbook has unexpected Content-Type: $read_only_export_media_type"
+  [[ "$(dd if="$security_dir/read-only-export.xlsx" bs=1 count=2 2>/dev/null)" == "PK" ]] ||
+    die "READ_ONLY workbook is not an OOXML ZIP"
+  unzip -t "$security_dir/read-only-export.xlsx" >"$security_dir/read-only-export-unzip.txt"
+  read_only_export_size="$(wc -c <"$security_dir/read-only-export.xlsx" | tr -d '[:space:]')"
+  complex_request "$read_only_token" "$house_id" GET \
+    "$HOST_API_URL/api/batches/$security_batch_id/carcass-yields" "$security_dir/read-only-history.json" >/dev/null
+  complex_request "$outsider_token" "$house_id" GET \
+    "$HOST_API_URL/api/batches/$security_batch_id/statistics" "$security_dir/outsider-statistics.json" >/dev/null
+
+  replay_request_id="bsx-carcass-$run_id-security"
+  replay_payload="$(jq -nc --arg request_id "$replay_request_id" '
+    {yieldRate:0.58,sourceUnit:"复杂矩阵测试场",measuredDate:"2024-08-20",
+     reportNumber:"SECURITY-RETRY",evidenceFileId:null,remark:"幂等验证",
+     changeReason:"复杂矩阵首次录入",requestId:$request_id}')"
+  before_version_count="$(mysql_exec -e "SELECT COUNT(*) FROM batch_carcass_yield_versions WHERE house_id = $house_id AND batch_id = $security_batch_id;")"
+  before_dedup_count="$(mysql_exec -e "SELECT COUNT(*) FROM request_dedup WHERE house_id = $house_id AND api = 'batch:carcass-yield' AND request_id = '$replay_request_id';")"
+  complex_request "$read_only_token" "$house_id" POST \
+    "$HOST_API_URL/api/batches/$security_batch_id/carcass-yields" "$security_dir/read-only-edit.json" "$replay_payload" >/dev/null
+  complex_request "$owner_token" "$house_id" POST \
+    "$HOST_API_URL/api/batches/$security_batch_id/carcass-yields" "$security_dir/replay-first.json" "$replay_payload" >/dev/null
+  first_version_count="$(mysql_exec -e "SELECT COUNT(*) FROM batch_carcass_yield_versions WHERE house_id = $house_id AND batch_id = $security_batch_id;")"
+  first_dedup_count="$(mysql_exec -e "SELECT COUNT(*) FROM request_dedup WHERE house_id = $house_id AND api = 'batch:carcass-yield' AND request_id = '$replay_request_id';")"
+  complex_request "$owner_token" "$house_id" POST \
+    "$HOST_API_URL/api/batches/$security_batch_id/carcass-yields" "$security_dir/replay-second.json" "$replay_payload" >/dev/null
+  conflict_payload="$(jq -c '.remark = ((.remark // "") + " changed")' <<<"$replay_payload")"
+  complex_request "$owner_token" "$house_id" POST \
+    "$HOST_API_URL/api/batches/$security_batch_id/carcass-yields" "$security_dir/replay-conflict.json" "$conflict_payload" >/dev/null
+  after_version_count="$(mysql_exec -e "SELECT COUNT(*) FROM batch_carcass_yield_versions WHERE house_id = $house_id AND batch_id = $security_batch_id;")"
+  after_dedup_count="$(mysql_exec -e "SELECT COUNT(*) FROM request_dedup WHERE house_id = $house_id AND api = 'batch:carcass-yield' AND request_id = '$replay_request_id';")"
+  jq -n \
+    --arg run_id "$run_id" --arg scenario_id security-and-retry \
+    --slurpfile owner "$security_dir/owner-statistics.json" \
+    --slurpfile read_only "$security_dir/read-only-statistics.json" \
+    --slurpfile read_only_edit "$security_dir/read-only-edit.json" \
+    --slurpfile read_only_history "$security_dir/read-only-history.json" \
+    --slurpfile outsider "$security_dir/outsider-statistics.json" \
+    --slurpfile first "$security_dir/replay-first.json" \
+    --slurpfile second "$security_dir/replay-second.json" \
+    --slurpfile conflict "$security_dir/replay-conflict.json" \
+    --arg read_only_export_media_type "$read_only_export_media_type" \
+    --argjson read_only_export_http_status "$read_only_export_http_status" \
+    --argjson read_only_export_house_id "$house_id" \
+    --argjson read_only_export_size "$read_only_export_size" \
+    --argjson before_versions "$before_version_count" --argjson first_versions "$first_version_count" --argjson after_versions "$after_version_count" \
+    --argjson before_dedup "$before_dedup_count" --argjson first_dedup "$first_dedup_count" --argjson after_dedup "$after_dedup_count" '
+    {
+      runId:$run_id,scenarioId:$scenario_id,
+      ownerStatistics:$owner[0],readOnlyStatistics:$read_only[0],
+      readOnlyExport:{allowed:true,httpStatus:$read_only_export_http_status,
+        houseId:$read_only_export_house_id,mediaType:$read_only_export_media_type,
+        file:"security/read-only-export.xlsx",headersFile:"security/read-only-export.headers.txt",
+        byteLength:$read_only_export_size,zipSignature:"PK"},
+      readOnlyEdit:$read_only_edit[0],
+      readOnlyHistory:$read_only_history[0],unrelatedStatistics:$outsider[0],
+      replay:{first:$first[0],second:$second[0],conflict:$conflict[0],
+        beforeVersionCount:$before_versions,firstVersionCount:$first_versions,afterVersionCount:$after_versions,
+        beforeDedupCount:$before_dedup,firstDedupCount:$first_dedup,afterDedupCount:$after_dedup}
+    }' >"$security_result"
+  node "$VALIDATOR" complex-security "$security_result" "$run_id" security-and-retry \
+    "$house_id" "$artifact_root" "$security_dir/validation.json"
+  security_validated=1
+
+  scenario_id="security-and-retry"
+  scenario_dir="$artifact_root/scenarios/$scenario_id"
+  mkdir -p "$scenario_dir/api" "$scenario_dir/xlsx"
+  batch_code="$(jq -er --arg id "$scenario_id" '.scenarios[] | select(.id == $id) | .batchCode' "$fixture_manifest")"
+  http_status="$(complex_request "$owner_token" "$house_id" GET \
+    "$HOST_API_URL/api/batches/$security_batch_id/statistics" "$scenario_dir/api/response.json")"
+  [[ "$http_status" == "200" ]] || die "$scenario_id statistics returned HTTP $http_status"
+  node "$VALIDATOR" complex-api "$scenario_dir/api/response.json" "$scenario_id" \
+    "$security_batch_id" "$COMPLEX_CATALOG" "$scenario_dir/api/validation.json"
+  http_status="$(complex_request "$owner_token" "$house_id" GET \
+    "$HOST_API_URL/api/reports/batches/$security_batch_id/statistics.xlsx" \
+    "$scenario_dir/xlsx/batch-statistics.xlsx" "" "$scenario_dir/xlsx/headers.txt")"
+  [[ "$http_status" == "200" ]] || die "$scenario_id workbook returned HTTP $http_status"
+  [[ "$(dd if="$scenario_dir/xlsx/batch-statistics.xlsx" bs=1 count=2 2>/dev/null)" == "PK" ]] ||
+    die "$scenario_id workbook is not an OOXML ZIP"
+  unzip -t "$scenario_dir/xlsx/batch-statistics.xlsx" >"$scenario_dir/xlsx/unzip.txt"
+  node "$VALIDATOR" complex-xlsx "$scenario_dir/xlsx/batch-statistics.xlsx" \
+    "$scenario_dir/xlsx/headers.txt" "$scenario_id" "$batch_code" "$COMPLEX_CATALOG" \
+    "$scenario_dir/xlsx/validation.json"
+  api_validated=1
+  xlsx_validated=1
+
+  scenarios_json="$(jq -c '.scenarios | map({id,batchRole,houseId,batchId,batchCode,metrics})' "$fixture_manifest")"
+  users_json="$(OWNER_PASSWORD="$owner_password" READ_ONLY_PASSWORD="$read_only_password" \
+    OUTSIDER_PASSWORD="$outsider_password" jq -c '
+      .users | map({
+        role:(if .role == "UNRELATED_HOUSE" then "OUTSIDER" else .role end),
+        userName:.userName,
+        password:(if .role == "OWNER" then env.OWNER_PASSWORD elif .role == "READ_ONLY" then env.READ_ONLY_PASSWORD else env.OUTSIDER_PASSWORD end),
+        houseId,houseName
+      })' "$fixture_manifest")"
+  runtime_defines_file="$(mktemp "${TMPDIR:-/tmp}/rabbit-batch-statistics-defines.XXXXXX")" ||
+    die "Cannot create the temporary client define file"
+  chmod 600 "$runtime_defines_file"
+  RABBIT_DEFINES_PASSWORD="$owner_password" RABBIT_DEFINES_USERS="$users_json" \
+    jq -n --arg build_env dev --arg api_base_url "$DEVICE_API_URL" --arg run_id "$run_id" \
+    --arg suite complex --arg scenarios "$scenarios_json" \
+    --arg user_name "$owner_name" --arg house_name "$house_name" \
+    --argjson house_id "$house_id" --argjson batch_id "$security_batch_id" \
+    --argjson isolation_house_id "$isolation_house_id" '
+    {
+      RABBIT_BUILD_ENV:$build_env,RABBIT_API_BASE_URL:$api_base_url,
+      RABBIT_E2E_RUN_ID:$run_id,RABBIT_E2E_SUITE:$suite,
+      RABBIT_E2E_SCENARIOS_JSON:$scenarios,RABBIT_E2E_USERS_JSON:env.RABBIT_DEFINES_USERS,
+      RABBIT_E2E_USERNAME:$user_name,RABBIT_E2E_PASSWORD:env.RABBIT_DEFINES_PASSWORD,
+      RABBIT_E2E_HOUSE_NAME:$house_name,RABBIT_E2E_HOUSE_ID:$house_id,
+      RABBIT_E2E_BATCH_ID:$batch_id,RABBIT_E2E_ISOLATION_HOUSE_ID:$isolation_house_id
+    }' >"$runtime_defines_file"
+  [[ "$(stat -f '%Lp' "$runtime_defines_file" 2>/dev/null || stat -c '%a' "$runtime_defines_file")" == "600" ]] ||
+    die "Complex define file must have mode 0600"
+
+  printf 'suite=complex\nrun_id=%s\nhost_api_url=%s\ndevice_api_url=%s\nadmin_origin=%s\ndevice_id=%s\ndevice_characteristics=%s\nflyway_version=%s\npnpm_version=%s\nflutter_bin=%s\nadb_bin=%s\nchrome_bin=%s\n' \
+    "$run_id" "$HOST_API_URL" "$DEVICE_API_URL" "$admin_origin" "$DEVICE_ID" \
+    "${device_characteristics:-unknown}" "$flyway_version" "$pnpm_version" \
+    "$RABBIT_FLUTTER_BIN" "$ADB_BIN" "$chrome_bin" >"$artifact_root/environment-sanitized.txt"
+
+  set +e
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="${TMPDIR:-/tmp}" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    RABBIT_API_BASE_URL="$HOST_API_URL" ADMIN_DEV_PORT="$admin_dev_port" \
+    RABBIT_E2E_DEFINES_FILE="$runtime_defines_file" RABBIT_ADMIN_E2E_ARTIFACT_DIR="$artifact_root" \
+    RABBIT_CHROME_BIN="$chrome_bin" corepack pnpm --dir "$ADMIN_DIR" e2e:browser:batch-statistics:real \
+    2>&1 | redact_stream "$owner_password" "$read_only_password" "$outsider_password" | tee "$artifact_root/admin/browser-e2e.log"
+  pipeline_status=("${PIPESTATUS[@]}")
+  admin_status="${pipeline_status[0]}"
+  set -e
+  [[ "$admin_status" == "0" && "${pipeline_status[1]}" == "0" && "${pipeline_status[2]}" == "0" ]] ||
+    die "Complex Admin pipeline failed: ${pipeline_status[*]}"
+  node "$VALIDATOR" complex-admin "$artifact_root/result.json" "$run_id" \
+    "$fixture_manifest" "$artifact_root" "$artifact_root/admin/validation.json"
+  admin_validated=1
+
+  android_app_touched=1
+  clear_android_app before || die "Failed to clear $APP_ID before Flutter drive"
+  export RABBIT_ANDROID_E2E_ARTIFACT_DIR="$artifact_root/android"
+  cd "$APP_DIR"
+  set +e
+  "$RABBIT_FLUTTER_BIN" drive --driver=test_driver/android_e2e_driver.dart \
+    --target=integration_test/batches/statistics_android_test.dart --device-id="$DEVICE_ID" \
+    --flavor=dev --dart-define-from-file="$runtime_defines_file" \
+    2>&1 | redact_stream "$owner_password" "$read_only_password" "$outsider_password" | tee "$artifact_root/android/flutter-drive.log"
+  pipeline_status=("${PIPESTATUS[@]}")
+  drive_status="${pipeline_status[0]}"
+  set -e
+  cd "$REPO_DIR"
+  [[ "$drive_status" == "0" && "${pipeline_status[1]}" == "0" && "${pipeline_status[2]}" == "0" ]] ||
+    die "Complex Flutter pipeline failed: ${pipeline_status[*]}"
+  rm -f "$runtime_defines_file" || die "Failed to remove the temporary client define file"
+  runtime_defines_file=""
+  node - "$artifact_root/android/android_e2e_result.json" "$artifact_root" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const [resultFile, artifactRoot] = process.argv.slice(2);
+const result = JSON.parse(fs.readFileSync(resultFile, "utf8"));
+const scenarioIds = new Set([
+  "complex-available", "mixed-data-quality", "mixed-batch-rounding",
+  "time-and-cycle-boundaries", "security-and-retry", "mixed-batch-rounding-support",
+]);
+const safeName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+for (const scenario of result.scenarioResults ?? []) {
+  if (!scenarioIds.has(scenario.id)) throw new Error(`Unsafe scenario id: ${scenario.id}`);
+  const destination = path.join(artifactRoot, "scenarios", scenario.id, "android");
+  fs.mkdirSync(destination, { recursive: true });
+  for (const name of scenario.screenshotNames ?? []) {
+    if (!safeName.test(name)) throw new Error(`Unsafe screenshot name: ${name}`);
+    fs.copyFileSync(
+      path.join(artifactRoot, "android", `${name}.png`),
+      path.join(destination, `${name}.png`),
+    );
+  }
+}
+const roles = path.join(artifactRoot, "roles", "android");
+fs.mkdirSync(roles, { recursive: true });
+for (const evidence of [result.securityEvidence?.readOnly, result.securityEvidence?.outsider]) {
+  if (evidence?.screenshotName) {
+    if (!safeName.test(evidence.screenshotName)) {
+      throw new Error(`Unsafe role screenshot name: ${evidence.screenshotName}`);
+    }
+    fs.copyFileSync(
+      path.join(artifactRoot, "android", `${evidence.screenshotName}.png`),
+      path.join(roles, `${evidence.screenshotName}.png`),
+    );
+  }
+}
+NODE
+  sanitize_android_result "$artifact_root/android/android_e2e_result.json"
+  node "$VALIDATOR" complex-android "$artifact_root/android/android_e2e_result.json" "$run_id" \
+    "$fixture_manifest" "$artifact_root" "$artifact_root/android/validation.json"
+  android_validated=1
+
+  mysql_exec >"$database_raw" <<SQL
+SELECT JSON_OBJECT(
+  'run_id', '$run_id',
+  'target_house_rows', (SELECT COUNT(*) FROM rabbit_houses WHERE id = $house_id),
+  'isolation_house_rows', (SELECT COUNT(*) FROM rabbit_houses WHERE id = $isolation_house_id),
+  'scenario_batch_rows', (SELECT COUNT(*) FROM batches WHERE id IN ($(jq -r '[.scenarios[].batchId] | join(",")' "$fixture_manifest"))),
+  'batch_ids', (SELECT JSON_ARRAYAGG(id) FROM batches WHERE id IN ($(jq -r '[.scenarios[].batchId] | join(",")' "$fixture_manifest"))),
+  'fixture_user_rows', (SELECT COUNT(*) FROM sys_user WHERE user_id IN ($(jq -r '[.users[].userId] | join(",")' "$fixture_manifest"))),
+  'owner_memberships', (SELECT COUNT(*) FROM house_users WHERE user_id = $(jq -r '.users[] | select(.role == "OWNER") | .userId' "$fixture_manifest") AND house_id = $house_id),
+  'read_only_memberships', (SELECT COUNT(*) FROM house_users WHERE user_id = $(jq -r '.users[] | select(.role == "READ_ONLY") | .userId' "$fixture_manifest") AND house_id = $house_id),
+  'unrelated_memberships', (SELECT COUNT(*) FROM house_users WHERE user_id = $(jq -r '.users[] | select(.role == "UNRELATED_HOUSE") | .userId' "$fixture_manifest") AND house_id = $isolation_house_id),
+  'security_version_rows', (SELECT COUNT(*) FROM batch_carcass_yield_versions WHERE house_id = $house_id AND batch_id = $security_batch_id),
+  'security_dedup_rows', (SELECT COUNT(*) FROM request_dedup WHERE house_id = $house_id AND api = 'batch:carcass-yield' AND request_id = '$replay_request_id')
+);
+SQL
+  node "$VALIDATOR" complex-database "$database_raw" "$run_id" "$fixture_manifest" \
+    "$artifact_root/database-assertions.json"
+  database_validated=1
+
+  printf '%s\0%s\0%s' "$owner_password" "$read_only_password" "$outsider_password" |
+    node -e 'const fs=require("node:fs"); const values=fs.readFileSync(0,"utf8").split("\\0"); process.stdout.write(JSON.stringify(values));' |
+    node "$VALIDATOR" complex-secret-scan "$artifact_root" "$artifact_root/secret-scan.json"
+  pipeline_status=("${PIPESTATUS[@]}")
+  [[ "${pipeline_status[0]}" == "0" && "${pipeline_status[1]}" == "0" && "${pipeline_status[2]}" == "0" ]] ||
+    die "Complex secret scan pipeline failed: ${pipeline_status[*]}"
+  secret_scan_validated=1
+  api_scenarios="$(jq -s 'map({key:.scenarioId,value:{api:.passed}}) | from_entries' \
+    "$artifact_root"/scenarios/*/api/validation.json)"
+  xlsx_scenarios="$(jq -s 'map({key:.scenarioId,value:{xlsx:.passed}}) | from_entries' \
+    "$artifact_root"/scenarios/*/xlsx/validation.json)"
+  scenario_validations="$(jq -nc --argjson api "$api_scenarios" --argjson xlsx "$xlsx_scenarios" \
+    '$api * $xlsx | with_entries(.value += {admin:true,android:true,database:true})')"
+  jq -n --arg suite complex --arg run_id "$run_id" --argjson scenarios "$scenario_validations" \
+    --slurpfile security "$security_dir/validation.json" \
+    --slurpfile admin "$artifact_root/admin/validation.json" \
+    --slurpfile android "$artifact_root/android/validation.json" \
+    --slurpfile database "$artifact_root/database-assertions.json" \
+    --slurpfile secret_scan "$artifact_root/secret-scan.json" \
+    '{passed:true,suite:$suite,runId:$run_id,scenarioCount:6,
+      scenarioWorkbookCount:6,securityWorkbookCount:1,adminWorkbookCount:$admin[0].workbookCount,
+      scenarios:$scenarios,
+      apiValidated:true,xlsxValidated:true,security:$security[0],admin:$admin[0],
+      android:$android[0],database:$database[0],secretScan:$secret_scan[0]}' \
+    >"$artifact_root/validation-proof.json"
+
+  owner_token=""
+  read_only_token=""
+  outsider_token=""
+  owner_password=""
+  read_only_password=""
+  outsider_password=""
+  fixture_password=""
 }
 
 main() {
@@ -812,6 +1325,7 @@ main() {
     ;;
   esac
 
+  configure_suite || return $?
   for command_name in jq curl node corepack unzip awk sed grep find sort; do
     require_command "$command_name"
   done
@@ -827,6 +1341,9 @@ main() {
   [[ -f "$FIXTURE_SQL" ]] || die "Fixture SQL not found: $FIXTURE_SQL"
   [[ -f "$CLEANUP_SQL" ]] || die "Cleanup SQL not found: $CLEANUP_SQL"
   [[ -f "$VALIDATOR" ]] || die "Validation helper not found: $VALIDATOR"
+  if [[ "$SUITE" == "complex" ]]; then
+    [[ -f "$COMPLEX_CATALOG" ]] || die "Complex catalog not found: $COMPLEX_CATALOG"
+  fi
   [[ "$DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] ||
     die "RABBIT_BATCH_STATISTICS_DB_NAME must contain only letters, digits, or underscores"
   [[ "$DB_USER" =~ ^[A-Za-z0-9_.-]+$ ]] ||
@@ -942,6 +1459,12 @@ main() {
   [[ "$flyway_version" -ge 56 ]] ||
     die "Flyway schema version $flyway_version is below required V56"
 
+  if [[ "$SUITE" == "complex" ]]; then
+    run_complex_suite "$chrome_bin" "$admin_dev_port" "$admin_origin" \
+      "$device_characteristics" "$flyway_version" "$pnpm_version"
+    return 0
+  fi
+
   fixture_attempted=1
   fixture_output="$({
     printf "SET @fixture_run_id = '%s';\n" "$run_id"
@@ -973,8 +1496,8 @@ main() {
   isolation_house_id="$(jq -r '.isolation_house_id' "$artifact_root/fixture-manifest.json")"
   isolation_batch_id="$(jq -r '.isolation_batch_id' "$artifact_root/fixture-manifest.json")"
 
-  login_payload="$(jq -nc --arg user_name "$user_name" --arg password "$fixture_password" \
-    '{userName:$user_name,password:$password}')"
+  login_payload="$(LOGIN_USER_NAME="$user_name" LOGIN_PASSWORD="$fixture_password" jq -nc \
+    '{userName:env.LOGIN_USER_NAME,password:env.LOGIN_PASSWORD}')"
   login_response="$(printf '%s' "$login_payload" |
     curl -fsS --max-time 20 -X POST "$HOST_API_URL/api/auth/login" \
       -H 'Content-Type: application/json' --data-binary @-)"
@@ -1035,12 +1558,11 @@ main() {
   runtime_defines_file="$(mktemp "${TMPDIR:-/tmp}/rabbit-batch-statistics-defines.XXXXXX")" ||
     die "Cannot create the temporary client define file"
   chmod 600 "$runtime_defines_file"
-  jq -n \
+  RABBIT_DEFINES_PASSWORD="$fixture_password" jq -n \
     --arg build_env dev \
     --arg api_base_url "$DEVICE_API_URL" \
     --arg run_id "$run_id" \
     --arg user_name "$user_name" \
-    --arg password "$fixture_password" \
     --arg house_name "$house_name" \
     --argjson house_id "$house_id" \
     --argjson batch_id "$batch_id" \
@@ -1051,7 +1573,7 @@ main() {
       RABBIT_API_BASE_URL:$api_base_url,
       RABBIT_E2E_RUN_ID:$run_id,
       RABBIT_E2E_USERNAME:$user_name,
-      RABBIT_E2E_PASSWORD:$password,
+      RABBIT_E2E_PASSWORD:env.RABBIT_DEFINES_PASSWORD,
       RABBIT_E2E_HOUSE_NAME:$house_name,
       RABBIT_E2E_HOUSE_ID:$house_id,
       RABBIT_E2E_BATCH_ID:$batch_id,

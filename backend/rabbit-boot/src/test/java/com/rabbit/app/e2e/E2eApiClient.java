@@ -1,5 +1,6 @@
 package com.rabbit.app.e2e;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
@@ -20,7 +21,8 @@ import java.util.Map;
 public class E2eApiClient {
     private final TestRestTemplate restTemplate;
     private final String baseUrl;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     public E2eApiClient(TestRestTemplate restTemplate, String baseUrl) {
         this.restTemplate = restTemplate;

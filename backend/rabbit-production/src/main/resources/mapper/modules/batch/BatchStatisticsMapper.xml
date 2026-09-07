@@ -186,7 +186,7 @@
             where bw.first_mating_at is not null
               and fl.feed_time &gt;= date(bw.first_mating_at)
               and ((bw.end_date is not null
-                    and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                    and fl.feed_time &lt; date_add(date(bw.end_date), interval 1 day))
                    or (bw.end_date is null and fl.feed_time &lt;= now()))
               and (
                   (r.type = '2'
@@ -232,7 +232,7 @@
             where bw.first_mating_at is not null
               and fl.feed_time &gt;= date(bw.first_mating_at)
               and ((bw.end_date is not null
-                    and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                    and fl.feed_time &lt; date_add(date(bw.end_date), interval 1 day))
                    or (bw.end_date is null and fl.feed_time &lt;= now()))
         )
         select coalesce((
@@ -247,7 +247,7 @@
                      and bw.first_mating_at is not null
                      and fl.feed_time &gt;= date(bw.first_mating_at)
                      and ((bw.end_date is not null
-                           and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                           and fl.feed_time &lt; date_add(date(bw.end_date), interval 1 day))
                           or (bw.end_date is null and fl.feed_time &lt;= now()))
                ), 0) as breedingFeedAmountKg,
                coalesce((
@@ -262,7 +262,7 @@
                      and bw.first_mating_at is not null
                      and fl.feed_time &gt;= date(bw.first_mating_at)
                      and ((bw.end_date is not null
-                           and fl.feed_time &lt; date_add(bw.end_date, interval 1 day))
+                           and fl.feed_time &lt; date_add(date(bw.end_date), interval 1 day))
                           or (bw.end_date is null and fl.feed_time &lt;= now()))
                ), 0) as fatteningFeedAmountKg,
                case when exists (

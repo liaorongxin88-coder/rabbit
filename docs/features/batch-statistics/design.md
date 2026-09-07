@@ -92,7 +92,7 @@ status, missingCauses
 - 公母比例显示为 `x.xx:1`。
 - 后端使用原始精度计算，只在生成 `displayValue` 时使用 `HALF_UP`。
 - `calculatedAt` 使用 UTC ISO 8601。现有模型没有兔舍时区，业务日期和饲料时间边界按数据库保存的业务本地时间直接比较，不在本期做时区换算。
-- 饲料统计从 `DATE(最早配种时间)` 开始并包含起点；已结束批次以 `DATE_ADD(end_date, INTERVAL 1 DAY)` 为排他上界，未结束批次包含查询时刻。
+- 饲料统计从 `DATE(最早配种时间)` 开始并包含起点；已结束批次以 `DATE_ADD(DATE(end_date), INTERVAL 1 DAY)` 为排他上界，先把 `end_date` 归一为自然日，确保包含结束日整天并排除次日零点。未结束批次包含查询时刻。
 
 ## 5. 写入快照
 
@@ -128,6 +128,6 @@ status, missingCauses
 
 `app.batch-statistics.legacy-write-enabled` 控制旧投喂、断奶、批量出库、单兔销售和转后备载荷，初始阶段开启。兼容开启时，旧操作可以在原业务事务中完成，但系统不伪造缺失快照。每个受影响批次在同一事务的 `repro_events` 中记录对应事件：`LEGACY_FEED_ALLOCATION_GAP`、`LEGACY_WEANING_WEIGHT_GAP`、`LEGACY_SALE_ALLOCATION_GAP`、`LEGACY_SALE_PRICE_GAP` 或 `LEGACY_REPLACEMENT_WEIGHT_GAP`。事件的 `target_type` 固定为 `BATCH`，`target_id` 和 `batch_id` 都指向受影响批次；事件类型标识来源接口和缺失快照类型。顶层字段保存 `house_id`、接口对应的 `request_id` 和 `occurred_at`，payload 只保存 `clientBuild`；缺少 `X-App-Build` 时写 `UNKNOWN`，不保存请求正文。父操作回滚时，缺口事件也必须回滚。
 
-后端先以兼容开启状态部署，再发布 Admin 和 Flutter。新版 Flutter 通过现有 `force_update` 能力强制升级；生产 Android 真机完成投喂、断奶、混批出库、转后备和 Excel 分享验证后，从下一个数据库业务本地自然日 00:00:00 开始观察。关闭开关要求全部兔舍连续 7 个完整自然日没有上述缺口事件，查询窗口到第八个自然日 00:00:00 为止；任何事件都重新开始观察。关闭后，不完整旧载荷在事务开始前返回“当前版本过低，请升级应用后重试”，不得写入父记录、子记录或缺口事件。
+后端先以兼容开启状态部署，再发布 Admin 和 Flutter。新版 Flutter 通过现有 `force_update` 能力强制升级；生产 Android 真机完成投喂、断奶、混批出库、转后备、出肉率和 Excel 分享验证后，从下一个数据库业务本地自然日 00:00:00 开始观察。关闭开关要求全部兔舍连续 7 个完整自然日没有上述缺口事件，查询窗口到第八个自然日 00:00:00 为止；任何事件都重新开始观察。关闭后，不完整旧载荷在事务开始前返回“当前版本过低，请升级应用后重试”，不得写入父记录、子记录或缺口事件。
 
 新版客户端或强制更新异常时，重新开启开关并下架问题 Flutter 版本，旧写入恢复且缺失指标继续标为 `DATA_MISSING`。统计或 Excel 读路径异常时可以回滚应用代码。两种回退都保留追加数据库结构和已保存快照，不做逆向迁移。

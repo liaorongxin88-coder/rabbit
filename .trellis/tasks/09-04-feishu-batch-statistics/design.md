@@ -302,7 +302,9 @@ Requires: rabbit:audit:list
 
 ### 5.2 时间边界
 
-配种、怀孕、产崽、断奶、销售和转换以记录上的批次归属为准。饲料从 `DATE(最早 breeding_cycles.mating_date)` 开始并包含起点；已结束批次以 `DATE_ADD(batches.end_date, INTERVAL 1 DAY)` 为排他上界，未结束批次包含查询时刻。现有模型没有兔舍时区，本期按数据库保存的业务本地时间比较，不做时区换算。不得用当前成员关系补写历史归属。
+配种、怀孕、产崽、断奶、销售和转换以记录上的批次归属为准。饲料从 `DATE(最早 breeding_cycles.mating_date)` 开始并包含起点。已完成批次的 `end_date` 是包含在统计内的自然结束日，排他上界固定为下一自然日零点，即 `DATE_ADD(DATE(batches.end_date), INTERVAL 1 DAY)`；必须先归一为 `DATE`，不能直接对带时间部分的 `end_date` 加 1 天。未结束批次包含查询时刻。现有模型没有兔舍时区，本期按数据库保存的业务本地时间比较，不做时区换算。不得用当前成员关系补写历史归属。
+
+独立复杂夹具已经稳定复现直接执行 `DATE_ADD(batches.end_date, INTERVAL 1 DAY)` 时误把结束次日饲料计入窗口的生产缺陷。用户已确认本轮修复该查询，范围确认门禁已经解除。修复只调整饲料聚合的上界归一化，不改变 28 项指标公式、V55/V56 或其他数据库迁移。`time-and-cycle-boundaries` 中窗口前、起点、结束日和结束次日的输入与期望保持冻结，用于证明修复。
 
 飞书原表把出肉率归在“屠宰”，产品页面已经确认只使用八组，因此接口和两端 UI 将其放在 `FEED_CONVERSION` 组的末尾，组标题显示“料肉比”。不新增第九组。
 
@@ -399,7 +401,7 @@ ORDER BY business_date, event_type;
 
 1. 部署追加迁移和兼容模式后端，验证旧四字段、新 28 项、Excel 和旧写入均可用。
 2. 发布新版 Admin 和 Flutter。Flutter 发布记录设置 `force_update = true`，确保旧 Android 客户端升级后才能继续使用。
-3. 在生产 Android 设备完成投喂、断奶、混批出库、转后备和 Excel 分享冒烟验证。
+3. 在生产 Android 设备完成投喂、断奶、混批出库、转后备、出肉率和 Excel 分享冒烟验证。
 4. 从真机验证通过后的下一自然日开始观察。连续 7 个完整自然日没有旧载荷缺口事件后，将 `legacy-write-enabled` 设为 `false` 并重新部署后端。
 5. 关闭兼容后，缺少新快照字段的请求在事务开始前返回业务冲突和“当前版本过低，请升级应用后重试”，不得写入父记录或任何子记录。
 
@@ -431,3 +433,103 @@ ORDER BY business_date, event_type;
 Java MySQL 集成测试每次重置数据库，因此统计 API 和 Excel 可以分别重载同一夹具定义；在同一次导出测试中，先断言 API，再用该结果逐项核对工作簿。跨端脚本只加载一次夹具，先校验 28 项 code、顺序、`AVAILABLE` 状态和精确值，然后依次运行 Admin 实际后端脚本与 Android 真机流程。现有 Admin 模拟脚本继续覆盖加载失败、刷新失败、只读权限、窄屏和 200% 字号，不增加双模式分支。
 
 自动登录要求后端临时返回验证码业务码 `501`。运行器必须在任何退出路径恢复 Compose 的原验证码配置。夹具默认按外键逆序清理；显式调试开关可以暂时保留数据。运行产物统一保存清单、环境摘要、API 响应、数据库断言、真实 `.xlsx`、两端日志、八组截图和 SHA-256，不记录 token 或密码。
+
+## 11. 复杂场景矩阵
+
+### 11.1 套件边界
+
+现有附件规模夹具和默认跨端命令保持不变。新增 `complex` 套件，通过同一个运行器入口选择：
+
+```text
+RABBIT_BATCH_STATISTICS_SUITE=baseline  # 默认，现有附件规模场景
+RABBIT_BATCH_STATISTICS_SUITE=complex   # 新增五场景矩阵
+```
+
+复杂套件在一个 `run_id` 下创建一个目标兔舍、一个隔离兔舍、五个主统计批次、一个同兔舍混批辅助批次，以及 OWNER、只读、无关兔舍三类账号。`security-and-retry` 使用独立的小型全量批次，避免幂等写入改变其他场景的期望。一次运行只重建一次临时后端、启动一次 Vite/Chrome，并执行一次 `flutter drive`。
+
+### 11.2 场景定义
+
+| 场景 | 数据组合 | API/XLSX 重点 | Admin/Android 证据 |
+| --- | --- | --- | --- |
+| `complex-available` | 多配种日、同兔多周期、自然与人工授精、多笔饲料、多张销售单、转后备、两版出肉率 | 28 项全部 `AVAILABLE`；兔只与周期去重、最新出肉率、多记录求和正确 | 两端逐项核对 28 个展示值并各保存八组证据 |
+| `mixed-data-quality` | 部分断奶总重缺失、历史销售缺分配或单价、未分配和非 kg 饲料、转后备重量缺失、无出肉率 | 一个批次同时出现四种状态；依赖项整项不可用，多原因按固定顺序返回，独立指标仍可用 | 两端展开缺失原因，状态文案和值不互相替代 |
+| `mixed-batch-rounding` | 一张订单分到目标批次、同兔舍辅助批次和未归批次组，金额出现分币尾差 | 三组重量和金额守恒；尾差只落到固定首组；任一批次不吸收其他组数据 | 两端分别进入主批次和辅助批次，核对各自销售结果 |
+| `time-and-cycle-boundaries` | 多自然日配种、同兔重复周期、窗口前、起点、结束日和结束次日饲料 | 日期范围和每日周期数有序；母兔按兔只去重、比率按周期去重；完成批次先把 `end_date` 归一为 `DATE`，再取下一日零点作为排他上界 | 两端显示日期范围、明细和窗口内料肉比；冻结期望不变并证明生产边界修复 |
+| `security-and-retry` | OWNER、VIEWER、无关兔舍账号；相同 requestId 重放及不同载荷冲突 | 重放只产生一次结果，冲突零部分写入；跨兔舍拒绝；VIEWER 可查询和导出，编辑与完整历史仍被拒绝 | OWNER 可见导出、录入和历史；VIEWER 可见并可执行导出，但隐藏录入和完整历史；无关账号不能进入目标批次 |
+
+每个数据场景都必须明确列出输入行和 28 项期望，不能只写公式或让测试调用生产统计代码计算 expected。`mixed-data-quality` 还要列出每项 `missingCauses` 的完整顺序。场景规模以形成重复、分摊和边界为准，不复制四份 6,834 条销售明细。
+
+### 11.3 夹具与期望目录
+
+新增测试资源：
+
+```text
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix_fixture.sql
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix_cleanup.sql
+backend/src/test/resources/fixtures/batch_statistics_complex_matrix.json
+```
+
+SQL 负责创建关系正确、符合 V56 约束的行，并输出不含密码的 manifest。JSON 是独立期望源，至少包含：
+
+```json
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "complex-available",
+      "batchRole": "primary",
+      "metrics": [
+        {
+          "code": "MATING_DATE",
+          "status": "AVAILABLE",
+          "numericValue": null,
+          "dateValue": {},
+          "displayValue": "...",
+          "missingCauses": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+Java 从 classpath 同时读取 SQL 和 JSON。根运行器用 fixture manifest 把运行时 ID 合并进 JSON，再生成 mode `0600` 的客户端 defines 文件。Admin 和 Flutter 只读取已冻结的 `displayValue`、状态和缺失原因，不从 API numericValue 重新格式化 expected。运行时文件仍通过 `RABBIT_E2E_DEFINES_FILE` 和 `--dart-define-from-file` 传递，并在正常或异常退出时删除。
+
+### 11.4 后端与导出
+
+新增 `BatchStatisticsComplexMatrixIT`，在一次新鲜 schema 生命周期中加载矩阵并遍历五个主批次及混批辅助批次：
+
+1. 逐项比较 28 个 code、顺序、raw/date/display 值、状态和原因。
+2. 单独断言周期去重、日期明细、饲料窗口、分配守恒、尾差位置和最新出肉率版本。
+3. 使用三类账号验证查询、导出、跨兔舍和越权写入。VIEWER 沿用现有 `rabbit:batches:query` 和 `rabbit:reports:export`，可以查询并导出；由于没有 `rabbit:batches:edit` 和 `rabbit:audit:list`，出肉率写入和完整历史请求必须被拒绝。不得修改 `PermissionCode` 或生产角色等级。
+4. 对同一幂等写请求执行首次、同载荷重放和异载荷冲突，核对业务表、dedup 和版本行数。
+
+`BatchStatisticsComplexMatrixExportIT` 对每个数据批次先取得 API 快照，再下载真实工作簿。两个页签的 28 项值、状态、原因、数字类型和格式逐项与该快照及 JSON 期望一致。任一场景失败时不进入浏览器或真机阶段。
+
+### 11.5 Admin 和 Android
+
+Admin 实际后端脚本扩展为兼容单场景和场景数组。复杂模式登录 OWNER 后通过真实兔舍选择器进入每个批次，不直接写 localStorage 选舍；每个场景检查 28 项、八组、原因详情、真实下载、请求头、控制台、页面错误和水平溢出。随后登录 VIEWER，验证统计查询和真实 XLSX 导出成功，同时隐藏出肉率录入和完整历史；再登录无关兔舍账号验证拒绝路径。每个场景保留一张完整页面截图，混合质量和安全场景另保留展开、导出或拒绝状态截图。
+
+Flutter 集成测试在一次安装中读取同一场景数组。OWNER 会话依次打开五个主批次和混批辅助批次，使用稳定 metric key 检查 28 项并为每个主场景截取八组；混合质量场景还展开缺失原因，辅助批次至少保留销售组证据。之后清空会话并使用 VIEWER、无关账号重新登录。VIEWER 必须能查询统计并导出真实 XLSX，但看不到出肉率录入和完整历史；无关账号仍不能访问目标批次。所有等待都使用有上限的 frame pump 和条件 deadline，禁止恢复无界 `pumpAndSettle()`。
+
+安全场景的幂等请求由根运行器直接调用真实 API，以便稳定复用指定 `requestId`。Admin 和 Android 必须显示其最终唯一版本及权限结果，但不通过网络拦截伪造未知结果。
+
+### 11.6 运行器、产物与恢复
+
+`batch-statistics-cross-client-e2e.sh` 保持 baseline 为默认，并在 `complex` 模式中按以下顺序执行：
+
+```text
+preflight -> load matrix -> validate every API -> validate every XLSX
+-> idempotency/security preflight -> one Admin run -> one Android run
+-> database postconditions -> artifact validation -> cleanup/restore
+```
+
+产物按场景分目录：
+
+```text
+artifacts/batch-statistics-cross-client/<run_id>/scenarios/<scenario_id>/
+```
+
+根目录保留环境、账号角色摘要、客户端日志、总 manifest 和 `SHA256SUMS`；场景目录保留 API、XLSX、验证 JSON 和截图。两端证据同时区分后端可空的 `displayValue` 与客户端实际渲染的 `visibleValue`。Android 结果保留截图名称、`metricDisplayValues`、`metricVisibleValues`、状态与原因；截图在 Flutter Driver 消费前不得从 `reportData` 删除，Driver 写盘后由根运行器核对名称并删除结果 JSON 中的 PNG 字节数组。总 proof 分别记录六份直接场景工作簿、一份后端 VIEWER 权限工作簿和七份 Admin 工作簿，避免用一个含义不明的计数合并不同验证位置。复杂 manifest 记录 `scenarioValidations`、`security` 和 `secretScan`；baseline manifest 省略这些复杂套件专用字段。
+
+清理脚本覆盖矩阵静态数据和运行期间产生的 `reminder_preferences`、幂等记录、出肉率版本及其他 run-owned 副作用。每个场景记录清理前后计数。任一场景、日志脱敏管道、客户端、清理或恢复失败都使总 manifest 为失败；只有显式 `RABBIT_BATCH_STATISTICS_KEEP_FIXTURE=1` 可以保留数据。最后必须再次运行 baseline 套件，证明复杂数组支持没有破坏现有单场景验收。

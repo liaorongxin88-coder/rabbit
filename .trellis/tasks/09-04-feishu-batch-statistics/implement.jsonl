@@ -40,3 +40,4 @@
 {"file":"backend/rabbit-boot/src/main/resources/db/migration/V55__batch_statistics_write_snapshots.sql","reason":"业务统计不可变快照与复合租户外键"}
 {"file":"backend/rabbit-boot/src/main/resources/db/migration/V56__outbound_draft_batch_allocations.sql","reason":"服务端出库草稿批次分配快照"}
 {"file": ".trellis/tasks/09-04-feishu-batch-statistics/research/executable-acceptance-fixture.md", "reason": "共享真实 fixture、跨端执行、约束和文件边界"}
+{"file": ".trellis/tasks/09-04-feishu-batch-statistics/research/complex-fixture-matrix.md", "reason": "复杂场景输入、账号拓扑、状态组合和跨端证据"}

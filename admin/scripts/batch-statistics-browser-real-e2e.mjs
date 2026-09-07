@@ -8,6 +8,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import {
+  COMPLEX_PRIMARY_SCENARIO_IDS,
+  COMPLEX_SUPPORT_SCENARIO_ID,
+  FIXED_METRIC_CODES,
+  validateComplexDefines,
+} from "./batch-statistics-browser-real-e2e-contract.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN_DIR = path.resolve(SCRIPT_DIR, "..");
@@ -429,8 +435,832 @@ function assertProxiedRequest(request, adminUrl, houseId) {
   assert.match(request.headers().authorization ?? "", /^Bearer .+/);
 }
 
-async function main() {
-  const fixture = fixtureValues();
+const STATUS_LABELS = {
+  AVAILABLE: "数据可用",
+  NOT_APPLICABLE: "暂无可计算数据",
+  NOT_RECORDED: "未录入",
+  DATA_MISSING: "历史数据缺失",
+};
+
+function fixtureSuite(fixture) {
+  const value =
+    fixture.RABBIT_E2E_SUITE ?? process.env.RABBIT_E2E_SUITE ?? "baseline";
+  assert.ok(
+    typeof value === "string" || typeof value === "number",
+    "RABBIT_E2E_SUITE must be a scalar value",
+  );
+  const suite = String(value).trim();
+  assert.ok(
+    suite === "baseline" || suite === "complex",
+    "RABBIT_E2E_SUITE must be baseline or complex",
+  );
+  return suite;
+}
+
+function assertComplexDefinesMode() {
+  const file = process.env.RABBIT_E2E_DEFINES_FILE?.trim();
+  assert.ok(file, "Complex mode requires RABBIT_E2E_DEFINES_FILE");
+  assert.equal(
+    statSync(file).mode & 0o077,
+    0,
+    "Complex RABBIT_E2E_DEFINES_FILE must have mode 0600",
+  );
+}
+
+function expectedUiValue(metric) {
+  return metric.status === "AVAILABLE"
+    ? metric.displayValue
+    : STATUS_LABELS[metric.status];
+}
+
+function writeJson(file, value) {
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function artifactPath(artifactDir, file) {
+  return path.relative(artifactDir, file).split(path.sep).join("/");
+}
+
+async function assertComplexStatisticsResponse(response, scenario) {
+  const payload = await response.json();
+  assert.equal(payload.code, 0, `${scenario.id} statistics business code`);
+  assert.equal(
+    payload.data?.batchId,
+    scenario.batchId,
+    `${scenario.id} statistics batch ID`,
+  );
+  assert.equal(
+    payload.data?.batchCode,
+    scenario.batchCode,
+    `${scenario.id} statistics batch code`,
+  );
+  assert.ok(
+    Array.isArray(payload.data?.metrics),
+    `${scenario.id} statistics metrics must be an array`,
+  );
+  assert.deepEqual(
+    payload.data.metrics.map((metric) => ({
+      code: metric.code,
+      status: metric.status,
+      displayValue: metric.displayValue,
+      missingCauses: metric.missingCauses?.map((cause) => ({
+        code: cause.code,
+        message: cause.message,
+      })),
+    })),
+    scenario.metrics,
+    `${scenario.id} API metrics must match the frozen complex fixture`,
+  );
+  return payload.data;
+}
+
+async function assertComplexMetricLayout(page, scenario) {
+  const panel = page.getByTestId("batch-statistics-panel");
+  const metricCodes = await panel
+    .locator("[data-metric-code]")
+    .evaluateAll((elements) =>
+      elements.map((element) => element.dataset.metricCode),
+    );
+  assert.deepEqual(
+    metricCodes,
+    FIXED_METRIC_CODES,
+    `${scenario.id} must render the 28 fixed metrics in order`,
+  );
+
+  const metricEvidence = [];
+  for (const expected of scenario.metrics) {
+    const item = panel.locator(`[data-metric-item="${expected.code}"]`);
+    assert.equal(
+      await item.count(),
+      1,
+      `${scenario.id} ${expected.code} count`,
+    );
+    const displayValue = (
+      await item.locator(`[data-metric-code="${expected.code}"]`).textContent()
+    )?.trim();
+    assert.equal(
+      displayValue,
+      expectedUiValue(expected),
+      `${scenario.id} ${expected.code} UI value`,
+    );
+    const statusLabel = STATUS_LABELS[expected.status];
+    // Unavailable metrics repeat the state in the badge and primary value.
+    const expectedStatusTextCount = expected.status === "AVAILABLE" ? 1 : 2;
+    assert.equal(
+      await item.getByText(statusLabel, { exact: true }).count(),
+      expectedStatusTextCount,
+      `${scenario.id} ${expected.code} status`,
+    );
+    const missingCauses = await item
+      .locator("details li")
+      .evaluateAll((elements) =>
+        elements
+          .map((element) => element.textContent?.trim() ?? "")
+          .filter((text) => /（[^（）]+）$/.test(text)),
+      );
+    const expectedCauses = expected.missingCauses.map(
+      (cause) => `${cause.message}（${cause.code}）`,
+    );
+    assert.deepEqual(
+      missingCauses,
+      expectedCauses,
+      `${scenario.id} ${expected.code} ordered missing causes`,
+    );
+    metricEvidence.push({
+      code: expected.code,
+      displayValue: expected.displayValue,
+      visibleValue: displayValue,
+      status: expected.status,
+      missingCauses: expected.missingCauses,
+    });
+  }
+
+  const groups = panel.locator(":scope > section");
+  assert.equal(
+    await groups.count(),
+    EXPECTED_GROUPS.length,
+    `${scenario.id} metric group count`,
+  );
+  const groupEvidence = [];
+  for (let index = 0; index < EXPECTED_GROUPS.length; index += 1) {
+    const [expectedName, expectedCodes] = EXPECTED_GROUPS[index];
+    const group = groups.nth(index);
+    const name = (
+      await group.getByRole("heading", { level: 2 }).textContent()
+    )?.trim();
+    const codes = await group
+      .locator("[data-metric-code]")
+      .evaluateAll((elements) =>
+        elements.map((element) => element.dataset.metricCode),
+      );
+    assert.equal(name, expectedName, `${scenario.id} group ${index + 1}`);
+    assert.deepEqual(
+      codes,
+      expectedCodes,
+      `${scenario.id} ${expectedName} order`,
+    );
+    groupEvidence.push({ name, codes });
+  }
+
+  assert.deepEqual(
+    await panel
+      .locator("[data-metric-row]")
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          element.getAttribute("data-metric-row")?.split(" "),
+        ),
+      ),
+    EXPECTED_ROWS,
+    `${scenario.id} must retain the 16 approved rows`,
+  );
+  await assertSalesRow(panel.locator("[data-metric-row]").nth(13));
+  return { metrics: metricEvidence, groups: groupEvidence };
+}
+
+function responseMatches(response, method, pathname) {
+  return (
+    response.request().method() === method &&
+    parseUrl(response.url(), "Response URL").pathname === pathname
+  );
+}
+
+async function assertCaptchaFallback(response, adminUrl) {
+  assert.equal(response.ok(), true, "Captcha request must succeed");
+  assert.equal(
+    parseUrl(response.url(), "Captcha response URL").origin,
+    parseUrl(adminUrl, "Admin URL").origin,
+    "Captcha request must use the Vite /api proxy",
+  );
+  const payload = await response.json();
+  assert.equal(
+    payload.code,
+    501,
+    "The proxied captcha request must report that captcha is disabled",
+  );
+}
+
+async function loginComplexUser(page, adminUrl, user, openLoginPage) {
+  const captchaResponsePromise = page.waitForResponse(
+    (response) => responseMatches(response, "GET", "/api/auth/captcha"),
+    { timeout: 30_000 },
+  );
+  await openLoginPage();
+  await page.waitForURL((url) => url.pathname === "/workspace/login", {
+    timeout: 30_000,
+  });
+  await assertCaptchaFallback(await captchaResponsePromise, adminUrl);
+  await page
+    .locator("#workspace-captcha-code")
+    .waitFor({ state: "detached", timeout: 30_000 });
+  await page.locator("#workspace-user-name").fill(user.userName);
+  await page.locator("#workspace-password").fill(user.password);
+  const loginResponsePromise = page.waitForResponse(
+    (response) => responseMatches(response, "POST", "/api/auth/login"),
+    { timeout: 30_000 },
+  );
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  const loginResponse = await loginResponsePromise;
+  const loginBody = await loginResponse.json();
+  assert.equal(loginResponse.status(), 200, `${user.role} login HTTP status`);
+  assert.equal(
+    parseUrl(loginResponse.url(), "Login response URL").origin,
+    parseUrl(adminUrl, "Admin URL").origin,
+    `${user.role} login must use the Vite /api proxy`,
+  );
+  assert.equal(loginBody.code, 0, `${user.role} login business code`);
+  await page.waitForURL((url) => url.pathname === "/workspace/dashboard", {
+    timeout: 30_000,
+  });
+  const session = await page.evaluate(() => {
+    const raw = localStorage.getItem("rabbit_workspace_session_v2");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
+  assert.ok(session?.token, `${user.role} login did not establish a session`);
+  assert.ok(
+    Number.isSafeInteger(session.userId),
+    `${user.role} session user ID`,
+  );
+  assert.equal(
+    session.userName,
+    user.userName,
+    `${user.role} session username`,
+  );
+}
+
+async function loginInitialComplexUser(page, adminUrl, user) {
+  await loginComplexUser(page, adminUrl, user, () =>
+    page.goto(`${adminUrl}/workspace/login`, { waitUntil: "domcontentloaded" }),
+  );
+}
+
+async function switchComplexUser(page, adminUrl, user) {
+  await loginComplexUser(page, adminUrl, user, () =>
+    page.getByRole("button", { name: "退出兔场工作台", exact: true }).click(),
+  );
+}
+
+async function selectVisibleHouse(page, user) {
+  const selector = page.locator('[aria-label="选择兔场"]:visible');
+  await selector.waitFor({ state: "visible", timeout: 30_000 });
+  await selector.click();
+  await page.getByRole("option", { name: user.houseName, exact: true }).click();
+  await page.waitForFunction(
+    (expectedName) =>
+      [...document.querySelectorAll('[aria-label="选择兔场"]')].some(
+        (element) =>
+          element instanceof HTMLElement &&
+          element.offsetParent !== null &&
+          element.textContent?.trim() === expectedName,
+      ),
+    user.houseName,
+  );
+}
+
+async function gotoProduction(page, adminUrl, houseId) {
+  const responsePromise = page.waitForResponse(
+    (response) => responseMatches(response, "GET", "/api/batches"),
+    { timeout: 30_000 },
+  );
+  if (
+    parseUrl(page.url(), "Current page URL").pathname ===
+    "/workspace/production"
+  ) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+  } else {
+    await page
+      .locator("aside")
+      .getByRole("link", { name: "生产批次", exact: true })
+      .click();
+  }
+  await page.waitForURL((url) => url.pathname === "/workspace/production", {
+    timeout: 30_000,
+  });
+  const response = await responsePromise;
+  assert.equal(response.ok(), true, "Production batch list must load");
+  assertProxiedRequest(response.request(), adminUrl, houseId);
+}
+
+function scenarioRow(page, scenario) {
+  return page
+    .getByRole("row")
+    .filter({ hasText: scenario.batchCode })
+    .filter({ hasText: `ID ${scenario.batchId}` });
+}
+
+async function openScenarioDetail(page, adminUrl, houseId, scenario) {
+  const row = scenarioRow(page, scenario);
+  await row.waitFor({ state: "visible", timeout: 30_000 });
+  const statisticsResponsePromise = page.waitForResponse(
+    (response) =>
+      responseMatches(
+        response,
+        "GET",
+        `/api/batches/${scenario.batchId}/statistics`,
+      ),
+    { timeout: 30_000 },
+  );
+  await row.getByRole("link", { name: "详情", exact: true }).click();
+  await page.waitForURL(
+    (url) =>
+      url.pathname === `/workspace/production/batches/${scenario.batchId}`,
+    { timeout: 30_000 },
+  );
+  const statisticsResponse = await statisticsResponsePromise;
+  assert.equal(
+    statisticsResponse.ok(),
+    true,
+    `${scenario.id} statistics request must succeed`,
+  );
+  assertProxiedRequest(statisticsResponse.request(), adminUrl, houseId);
+  const statistics = await assertComplexStatisticsResponse(
+    statisticsResponse,
+    scenario,
+  );
+  await page
+    .getByTestId("batch-statistics-panel")
+    .waitFor({ state: "visible", timeout: 30_000 });
+  assert.equal(
+    (
+      await page.locator('[aria-label="选择兔场"]:visible').textContent()
+    )?.trim(),
+    statistics.houseName,
+    `${scenario.id} workspace house selection`,
+  );
+  return assertComplexMetricLayout(page, scenario);
+}
+
+async function downloadScenarioWorkbook(
+  page,
+  adminUrl,
+  houseId,
+  scenario,
+  targetPath,
+) {
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      responseMatches(
+        response,
+        "GET",
+        `/api/reports/batches/${scenario.batchId}/statistics.xlsx`,
+      ),
+    { timeout: 30_000 },
+  );
+  const downloadPromise = page.waitForEvent("download", { timeout: 30_000 });
+  await page.getByRole("button", { name: "导出 Excel" }).click();
+  const [response, download] = await Promise.all([
+    responsePromise,
+    downloadPromise,
+  ]);
+  assert.equal(
+    response.ok(),
+    true,
+    `${scenario.id} Excel request must succeed`,
+  );
+  assertProxiedRequest(response.request(), adminUrl, houseId);
+  assert.equal(
+    response.headers()["content-type"]?.split(";", 1)[0],
+    XLSX_MEDIA_TYPE,
+    `${scenario.id} Excel response Content-Type`,
+  );
+  assert.match(download.suggestedFilename(), /\.xlsx$/i);
+  assert.equal(
+    await download.failure(),
+    null,
+    `${scenario.id} download failure`,
+  );
+  await download.saveAs(targetPath);
+  assert.ok(
+    statSync(targetPath).size > 0,
+    `${scenario.id} XLSX must not be empty`,
+  );
+  assert.equal(
+    readFileSync(targetPath).subarray(0, 2).toString("ascii"),
+    "PK",
+    `${scenario.id} workbook must be an OOXML ZIP file`,
+  );
+  return download.suggestedFilename();
+}
+
+async function assertOwnerSecurity(
+  page,
+  adminUrl,
+  houseId,
+  scenario,
+  rolesDir,
+) {
+  await page
+    .getByRole("button", { name: "修正出肉率", exact: true })
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await page
+    .getByRole("button", { name: "出肉率历史", exact: true })
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await page
+    .getByRole("button", { name: "导出 Excel", exact: true })
+    .waitFor({ state: "visible", timeout: 30_000 });
+  const historyResponsePromise = page.waitForResponse(
+    (response) =>
+      responseMatches(
+        response,
+        "GET",
+        `/api/batches/${scenario.batchId}/carcass-yields`,
+      ),
+    { timeout: 30_000 },
+  );
+  await page.getByRole("button", { name: "出肉率历史", exact: true }).click();
+  const historyResponse = await historyResponsePromise;
+  assert.equal(
+    historyResponse.ok(),
+    true,
+    "OWNER history request must succeed",
+  );
+  assertProxiedRequest(historyResponse.request(), adminUrl, houseId);
+  const historyPayload = await historyResponse.json();
+  assert.equal(historyPayload.code, 0, "OWNER history business code");
+  assert.equal(historyPayload.data?.total, 1, "OWNER history version count");
+  assert.equal(
+    historyPayload.data?.items?.length,
+    1,
+    "OWNER history item count",
+  );
+  assert.equal(
+    historyPayload.data.items[0]?.yieldRate,
+    0.58,
+    "OWNER history yield",
+  );
+  const dialog = page.getByRole("dialog", { name: "出肉率版本历史" });
+  await dialog.waitFor({ state: "visible", timeout: 30_000 });
+  assert.equal(await dialog.getByText("58.00%", { exact: true }).count(), 1);
+  const screenshot = path.join(rolesDir, "owner-history.png");
+  await page.screenshot({ path: screenshot, fullPage: true });
+  await dialog
+    .getByRole("button", { name: "关闭", exact: true })
+    .first()
+    .click();
+  await dialog.waitFor({ state: "hidden", timeout: 30_000 });
+  return { historyVersionCount: 1, historyYieldRate: 0.58, screenshot };
+}
+
+async function startComplexAdmin(apiUrl, artifactDir) {
+  let adminUrl = process.env.ADMIN_BASE_URL?.trim();
+  const viteLog = [];
+  if (adminUrl) {
+    adminUrl = baseUrl(adminUrl, "ADMIN_BASE_URL");
+    assert.equal(
+      await servesThisAdmin(adminUrl),
+      true,
+      `ADMIN_BASE_URL does not serve this Admin app: ${adminUrl}`,
+    );
+    return { adminUrl, devServer: null, viteLog };
+  }
+  const configuredPort = process.env.ADMIN_DEV_PORT?.trim();
+  const port = configuredPort
+    ? positiveInteger(configuredPort, "ADMIN_DEV_PORT")
+    : await freePort();
+  adminUrl = `http://127.0.0.1:${port}`;
+  const viteEntry = path.join(
+    ADMIN_DIR,
+    "node_modules",
+    "vite",
+    "bin",
+    "vite.js",
+  );
+  const devServer = spawn(
+    process.execPath,
+    [viteEntry, "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+    {
+      cwd: ADMIN_DIR,
+      env: {
+        ...process.env,
+        RABBIT_API_BASE_URL: apiUrl,
+        VITE_API_BASE_URL: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  devServer.stdout.on("data", (chunk) => viteLog.push(chunk.toString()));
+  devServer.stderr.on("data", (chunk) => viteLog.push(chunk.toString()));
+  try {
+    await waitForAdmin(adminUrl, devServer, viteLog);
+  } catch (error) {
+    await stopDevServer(devServer);
+    writeFileSync(path.join(artifactDir, "vite.log"), viteLog.join(""));
+    throw error;
+  }
+  return { adminUrl, devServer, viteLog };
+}
+
+async function runComplex(config) {
+  const apiUrl = baseUrl(
+    process.env.RABBIT_API_BASE_URL?.trim() ||
+      `http://${DEFAULT_API_HOST}:${DEFAULT_API_PORT}`,
+    "RABBIT_API_BASE_URL",
+  );
+  const artifactDir = artifactDirectory();
+  const scenariosDir = path.join(artifactDir, "scenarios");
+  const rolesDir = path.join(artifactDir, "roles");
+  const headed = process.env.HEADED === "1";
+  mkdirSync(scenariosDir, { recursive: true });
+  mkdirSync(rolesDir, { recursive: true });
+  await checkBackend(apiUrl);
+  const { adminUrl, devServer, viteLog } = await startComplexAdmin(
+    apiUrl,
+    artifactDir,
+  );
+
+  let browser;
+  try {
+    const chromeExecutable = process.env.RABBIT_CHROME_BIN?.trim();
+    browser = await chromium.launch({
+      ...(chromeExecutable
+        ? { executablePath: chromeExecutable }
+        : { channel: "chrome" }),
+      headless: !headed,
+    });
+    const context = await browser.newContext({
+      viewport: DESKTOP,
+      locale: "zh-CN",
+      acceptDownloads: true,
+    });
+    const page = await context.newPage();
+    const consoleErrors = [];
+    const pageErrors = [];
+    const failedApiRequests = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    page.on("requestfailed", (request) => {
+      if (
+        parseUrl(request.url(), "Failed request URL").pathname.startsWith(
+          "/api/",
+        )
+      ) {
+        failedApiRequests.push(
+          `${request.method()} ${request.url()}: ${request.failure()?.errorText ?? "failed"}`,
+        );
+      }
+    });
+
+    const owner = config.users.OWNER;
+    await loginInitialComplexUser(page, adminUrl, owner);
+    await selectVisibleHouse(page, owner);
+    await gotoProduction(page, adminUrl, config.houseId);
+
+    const scenarioResults = [];
+    let ownerSecurity;
+    for (const scenario of config.scenarios) {
+      const scenarioDir = path.join(scenariosDir, scenario.id);
+      mkdirSync(scenarioDir, { recursive: true });
+      const detailEvidence = await openScenarioDetail(
+        page,
+        adminUrl,
+        config.houseId,
+        scenario,
+      );
+      if (scenario.id === "security-and-retry") {
+        ownerSecurity = await assertOwnerSecurity(
+          page,
+          adminUrl,
+          config.houseId,
+          scenario,
+          rolesDir,
+        );
+      }
+      await assertNoOverflow(page);
+      const fullPageScreenshot = path.join(scenarioDir, "full-page.png");
+      await page.screenshot({ path: fullPageScreenshot, fullPage: true });
+      await page
+        .getByTestId("batch-statistics-panel")
+        .locator("details")
+        .evaluateAll((elements) => {
+          for (const element of elements) element.open = true;
+        });
+      await assertNoOverflow(page);
+      const detailsScreenshot = path.join(scenarioDir, "details.png");
+      await page.screenshot({ path: detailsScreenshot, fullPage: true });
+      await page
+        .getByTestId("batch-statistics-panel")
+        .locator("details")
+        .evaluateAll((elements) => {
+          for (const element of elements) element.open = false;
+        });
+      const workbook = path.join(scenarioDir, "batch-statistics.xlsx");
+      const suggestedFilename = await downloadScenarioWorkbook(
+        page,
+        adminUrl,
+        config.houseId,
+        scenario,
+        workbook,
+      );
+      const result = {
+        id: scenario.id,
+        batchRole: scenario.batchRole,
+        batchId: scenario.batchId,
+        batchCode: scenario.batchCode,
+        metrics: detailEvidence.metrics,
+        groups: detailEvidence.groups,
+        screenshots: {
+          fullPage: artifactPath(artifactDir, fullPageScreenshot),
+          details: artifactPath(artifactDir, detailsScreenshot),
+        },
+        workbook: {
+          file: artifactPath(artifactDir, workbook),
+          suggestedFilename,
+          mediaType: XLSX_MEDIA_TYPE,
+          zipSignature: "PK",
+        },
+      };
+      writeJson(path.join(scenarioDir, "detail-evidence.json"), result);
+      scenarioResults.push(result);
+      await page.getByRole("link", { name: "返回列表", exact: true }).click();
+      await page.waitForURL((url) => url.pathname === "/workspace/production", {
+        timeout: 30_000,
+      });
+      if (scenario !== config.scenarios.at(-1)) {
+        await scenarioRow(
+          page,
+          config.scenarios[config.scenarios.indexOf(scenario) + 1],
+        ).waitFor({ state: "visible", timeout: 30_000 });
+      }
+    }
+
+    const securityScenario = config.scenarios.find(
+      (scenario) => scenario.id === "security-and-retry",
+    );
+    assert.ok(securityScenario, "security-and-retry scenario is required");
+    const readOnly = config.users.READ_ONLY;
+    await switchComplexUser(page, adminUrl, readOnly);
+    await selectVisibleHouse(page, readOnly);
+    await gotoProduction(page, adminUrl, config.houseId);
+    const readOnlyEvidence = await openScenarioDetail(
+      page,
+      adminUrl,
+      config.houseId,
+      securityScenario,
+    );
+    await page
+      .getByText("权限加载中", { exact: true })
+      .waitFor({ state: "hidden", timeout: 30_000 });
+    assert.equal(
+      await page.getByRole("button", { name: /录入出肉率|修正出肉率/ }).count(),
+      0,
+      "READ_ONLY must not see carcass yield editing",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "出肉率历史" }).count(),
+      0,
+      "READ_ONLY must not see carcass yield history",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "导出 Excel" }).count(),
+      1,
+      "READ_ONLY must see workbook export",
+    );
+    const readOnlyWorkbook = path.join(
+      rolesDir,
+      "read-only-batch-statistics.xlsx",
+    );
+    const readOnlySuggestedFilename = await downloadScenarioWorkbook(
+      page,
+      adminUrl,
+      config.houseId,
+      securityScenario,
+      readOnlyWorkbook,
+    );
+    await assertNoOverflow(page);
+    const readOnlyScreenshot = path.join(rolesDir, "read-only.png");
+    await page.screenshot({ path: readOnlyScreenshot, fullPage: true });
+
+    const outsider = config.users.OUTSIDER;
+    await switchComplexUser(page, adminUrl, outsider);
+    await selectVisibleHouse(page, outsider);
+    const houseSelector = page.locator('[aria-label="选择兔场"]:visible');
+    await houseSelector.click();
+    assert.equal(
+      await page
+        .getByRole("option", { name: config.houseName, exact: true })
+        .count(),
+      0,
+      "OUTSIDER must not see the target house in the visible selector",
+    );
+    await page.keyboard.press("Escape");
+    await gotoProduction(page, adminUrl, outsider.houseId);
+    for (const scenario of config.scenarios) {
+      assert.equal(
+        await scenarioRow(page, scenario).count(),
+        0,
+        `OUTSIDER must not see ${scenario.id}`,
+      );
+    }
+    assert.equal(
+      await page.getByTestId("batch-statistics-panel").count(),
+      0,
+      "OUTSIDER must remain in the authorized batch list",
+    );
+    await assertNoOverflow(page);
+    const outsiderScreenshot = path.join(rolesDir, "outsider.png");
+    await page.screenshot({ path: outsiderScreenshot, fullPage: true });
+
+    assert.equal(
+      scenarioResults.length,
+      COMPLEX_PRIMARY_SCENARIO_IDS.length + 1,
+      "Complex scenario evidence count",
+    );
+    assert.equal(
+      scenarioResults.filter((scenario) => scenario.batchRole === "primary")
+        .length,
+      COMPLEX_PRIMARY_SCENARIO_IDS.length,
+      "Complex primary scenario evidence count",
+    );
+    assert.equal(
+      scenarioResults.filter(
+        (scenario) => scenario.id === COMPLEX_SUPPORT_SCENARIO_ID,
+      ).length,
+      1,
+      "Complex rounding support evidence count",
+    );
+    assert.deepEqual(
+      consoleErrors,
+      [],
+      `Browser console errors:\n${consoleErrors.join("\n")}`,
+    );
+    assert.deepEqual(pageErrors, [], `Page errors:\n${pageErrors.join("\n")}`);
+    assert.deepEqual(
+      failedApiRequests,
+      [],
+      `Failed API requests:\n${failedApiRequests.join("\n")}`,
+    );
+
+    assert.ok(ownerSecurity, "OWNER security evidence is required");
+    const result = {
+      schemaVersion: 1,
+      suite: "complex",
+      passed: true,
+      targetHouse: { id: config.houseId, name: config.houseName },
+      primaryScenarioIds: [...COMPLEX_PRIMARY_SCENARIO_IDS],
+      supportScenarioId: COMPLEX_SUPPORT_SCENARIO_ID,
+      scenarioCount: scenarioResults.length,
+      scenarioWorkbookCount: scenarioResults.length,
+      roleWorkbookCount: 1,
+      workbookCount: scenarioResults.length + 1,
+      scenarios: scenarioResults,
+      roles: {
+        OWNER: {
+          targetHouseSelected: true,
+          canEditCarcassYield: true,
+          canReadCarcassYieldHistory: true,
+          canExport: true,
+          historyVersionCount: ownerSecurity.historyVersionCount,
+          historyYieldRate: ownerSecurity.historyYieldRate,
+          screenshot: artifactPath(artifactDir, ownerSecurity.screenshot),
+        },
+        READ_ONLY: {
+          targetHouseSelected: true,
+          canViewStatistics: readOnlyEvidence.metrics.length === 28,
+          canEditCarcassYield: false,
+          canReadCarcassYieldHistory: false,
+          canExport: true,
+          workbook: {
+            file: artifactPath(artifactDir, readOnlyWorkbook),
+            suggestedFilename: readOnlySuggestedFilename,
+            mediaType: XLSX_MEDIA_TYPE,
+            zipSignature: "PK",
+          },
+          screenshot: artifactPath(artifactDir, readOnlyScreenshot),
+        },
+        OUTSIDER: {
+          selectedHouseId: outsider.houseId,
+          targetHouseVisible: false,
+          targetBatchesVisible: false,
+          screenshot: artifactPath(artifactDir, outsiderScreenshot),
+        },
+      },
+      diagnostics: {
+        consoleErrors,
+        pageErrors,
+        failedApiRequests,
+        horizontalOverflow: false,
+      },
+    };
+    writeJson(path.join(artifactDir, "result.json"), result);
+    process.stdout.write(
+      `Admin batch statistics complex E2E passed. Artifacts: ${artifactDir}\n`,
+    );
+  } finally {
+    await browser?.close();
+    if (devServer) {
+      await stopDevServer(devServer);
+      writeFileSync(path.join(artifactDir, "vite.log"), viteLog.join(""));
+    }
+  }
+}
+
+async function runBaseline(fixture) {
   const apiUrl = baseUrl(
     process.env.RABBIT_API_BASE_URL?.trim() ||
       `http://${DEFAULT_API_HOST}:${DEFAULT_API_PORT}`,
@@ -762,6 +1592,25 @@ async function main() {
       writeFileSync(path.join(artifactDir, "vite.log"), viteLog.join(""));
     }
   }
+}
+
+async function main() {
+  const fixture = fixtureValues();
+  const suite = fixtureSuite(fixture);
+  if (suite === "baseline") {
+    await runBaseline(fixture);
+    return;
+  }
+
+  assertComplexDefinesMode();
+  const config = validateComplexDefines(fixture);
+  if (process.argv.includes("--validate-defines")) {
+    process.stdout.write(
+      `Complex Admin defines are valid: ${config.scenarios.length} scenarios, 3 roles.\n`,
+    );
+    return;
+  }
+  await runComplex(config);
 }
 
 main().catch((error) => {
